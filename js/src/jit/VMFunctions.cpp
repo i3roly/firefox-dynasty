@@ -10,7 +10,6 @@
 
 #include "builtin/MapObject.h"
 #include "builtin/String.h"
-#include "ds/OrderedHashTable.h"
 #include "gc/Cell.h"
 #include "gc/GC.h"
 #include "jit/arm/Simulator-arm.h"
@@ -3111,30 +3110,68 @@ JSAtom* AtomizeStringNoGC(JSContext* cx, JSString* str) {
   return atom;
 }
 
-bool SetObjectHas(JSContext* cx, HandleObject obj, HandleValue key,
+bool SetObjectHas(JSContext* cx, Handle<SetObject*> obj, HandleValue key,
                   bool* rval) {
-  return SetObject::has(cx, obj, key, rval);
+  return obj->has(cx, key, rval);
 }
 
-bool MapObjectHas(JSContext* cx, HandleObject obj, HandleValue key,
-                  bool* rval) {
-  return MapObject::has(cx, obj, key, rval);
+bool SetObjectDelete(JSContext* cx, Handle<SetObject*> obj, HandleValue key,
+                     bool* rval) {
+  return obj->delete_(cx, key, rval);
 }
 
-bool MapObjectGet(JSContext* cx, HandleObject obj, HandleValue key,
+bool SetObjectAdd(JSContext* cx, Handle<SetObject*> obj, HandleValue key) {
+  return obj->add(cx, key);
+}
+
+bool SetObjectAddFromIC(JSContext* cx, Handle<SetObject*> obj, HandleValue key,
+                        MutableHandleValue rval) {
+  if (!SetObjectAdd(cx, obj, key)) {
+    return false;
+  }
+  rval.setObject(*obj);
+  return true;
+}
+
+bool MapObjectHas(JSContext* cx, Handle<MapObject*> obj, HandleValue key,
+                  bool* rval) {
+  return obj->has(cx, key, rval);
+}
+
+bool MapObjectGet(JSContext* cx, Handle<MapObject*> obj, HandleValue key,
                   MutableHandleValue rval) {
-  return MapObject::get(cx, obj, key, rval);
+  return obj->get(cx, key, rval);
+}
+
+bool MapObjectDelete(JSContext* cx, Handle<MapObject*> obj, HandleValue key,
+                     bool* rval) {
+  return obj->delete_(cx, key, rval);
+}
+
+bool MapObjectSet(JSContext* cx, Handle<MapObject*> obj, HandleValue key,
+                  HandleValue val) {
+  return obj->set(cx, key, val);
+}
+
+bool MapObjectSetFromIC(JSContext* cx, Handle<MapObject*> obj, HandleValue key,
+                        HandleValue val, MutableHandleValue rval) {
+  if (!MapObjectSet(cx, obj, key, val)) {
+    return false;
+  }
+  rval.setObject(*obj);
+  return true;
 }
 
 #ifdef DEBUG
-template <class OrderedHashTable>
-static mozilla::HashNumber HashValue(JSContext* cx, OrderedHashTable* hashTable,
+template <class T>
+static mozilla::HashNumber HashValue(JSContext* cx, T* obj,
                                      const Value* value) {
   RootedValue rootedValue(cx, *value);
   HashableValue hashable;
   MOZ_ALWAYS_TRUE(hashable.setValue(cx, rootedValue));
 
-  return hashTable->hash(hashable);
+  using Table = typename T::Table;
+  return Table(obj).hash(hashable);
 }
 #endif
 
@@ -3142,14 +3179,14 @@ void AssertSetObjectHash(JSContext* cx, SetObject* obj, const Value* value,
                          mozilla::HashNumber actualHash) {
   AutoUnsafeCallWithABI unsafe;
 
-  MOZ_ASSERT(actualHash == HashValue(cx, obj->getData(), value));
+  MOZ_ASSERT(actualHash == HashValue(cx, obj, value));
 }
 
 void AssertMapObjectHash(JSContext* cx, MapObject* obj, const Value* value,
                          mozilla::HashNumber actualHash) {
   AutoUnsafeCallWithABI unsafe;
 
-  MOZ_ASSERT(actualHash == HashValue(cx, obj->getData(), value));
+  MOZ_ASSERT(actualHash == HashValue(cx, obj, value));
 }
 
 void AssertPropertyLookup(NativeObject* obj, PropertyKey id, uint32_t slot) {

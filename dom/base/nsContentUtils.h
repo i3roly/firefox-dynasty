@@ -1199,11 +1199,6 @@ class nsContentUtils {
                                const char*** aArgNames);
 
   /**
-   * Returns true if this document is in a Private Browsing window.
-   */
-  static bool IsInPrivateBrowsing(const Document* aDoc);
-
-  /**
    * Returns true if this loadGroup uses Private Browsing.
    */
   static bool IsInPrivateBrowsing(nsILoadGroup* aLoadGroup);
@@ -1320,6 +1315,7 @@ class nsContentUtils {
   static void LogMessageToConsole(const char* aMsg);
 
   static bool SpoofLocaleEnglish();
+  static bool SpoofLocaleEnglish(const Document* aDocument);
 
   /**
    * Get the localized string named |aKey| in properties file |aFile|.
@@ -2140,12 +2136,9 @@ class nsContentUtils {
    * @param aTargetSpec the target (like target=, may be empty).
    * @param aClick whether this was a click or not (if false, this method
    *               assumes you just hovered over the link).
-   * @param aIsTrusted If false, JS Context will be pushed to stack
-   *                   when the link is triggered.
    */
   static void TriggerLink(nsIContent* aContent, nsIURI* aLinkURI,
-                          const nsString& aTargetSpec, bool aClick,
-                          bool aIsTrusted);
+                          const nsString& aTargetSpec, bool aClick);
 
   /**
    * Get the link location.
@@ -3262,8 +3255,10 @@ class nsContentUtils {
    * take that into account.
    *
    * @param aMIMEType  The MIME type of the document being loaded.
+   * @param aIsSandboxed  If the document is loaded in an iframe sandbox.
    */
-  static uint32_t HtmlObjectContentTypeForMIMEType(const nsCString& aMIMEType);
+  static uint32_t HtmlObjectContentTypeForMIMEType(const nsCString& aMIMEType,
+                                                   bool aIsSandboxed);
 
   /**
    * Detect whether a string is a local-url.
@@ -3427,8 +3422,8 @@ class nsContentUtils {
    * Return safe area insets of window that defines as
    * https://drafts.csswg.org/css-env-1/#safe-area-insets.
    */
-  static mozilla::ScreenIntMargin GetWindowSafeAreaInsets(
-      nsIScreen* aScreen, const mozilla::ScreenIntMargin& aSafeareaInsets,
+  static mozilla::LayoutDeviceIntMargin GetWindowSafeAreaInsets(
+      nsIScreen* aScreen, const mozilla::LayoutDeviceIntMargin& aSafeareaInsets,
       const mozilla::LayoutDeviceIntRect& aWindowRect);
 
   struct SubresourceCacheValidationInfo {

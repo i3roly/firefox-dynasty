@@ -1,4 +1,5 @@
 {%- let object = ci.get_object_definition(name).unwrap() -%}
+{{ object.js_docstring(0) -}}
 export class {{ object.js_name() }} {
     // Use `init` to instantiate this class.
     // DO NOT USE THIS CONSTRUCTOR DIRECTLY
@@ -14,29 +15,17 @@ export class {{ object.js_name() }} {
     }
 
     {%- for cons in object.constructors() %}
-    {%- if object.is_constructor_async(config) %}
-    /**
-     * An async constructor for {{ object.js_name() }}.
-     * 
-     * @returns {Promise<{{ object.js_name() }}>}: A promise that resolves
-     *      to a newly constructed {{ object.js_name() }}
-     */
-    {%- else %}
-    /**
-     * A constructor for {{ object.js_name() }}.
-     * 
-     * @returns { {{ object.js_name() }} }
-     */
-    {%- endif %}
+    {{ cons.js_docstring(4) -}}
     static {{ cons.js_name() }}({{cons.js_arg_names()}}) {
-        {%- call js::call_constructor(cons, type_, object.is_constructor_async(config)) -%}
+        {%- call js::call_constructor(cons, type_, object.use_async_wrapper_for_constructor(config)) -%}
     }
     {%- endfor %}
 
     {%- for meth in object.methods() %}
 
+    {{ meth.js_docstring(4) -}}
     {{ meth.js_name() }}({{ meth.js_arg_names() }}) {
-        {%- call js::call_method(meth, type_, object.is_method_async(meth, config)) %}
+        {%- call js::call_method(meth, type_, object.use_async_wrapper_for_method(meth, config)) %}
     }
     {%- endfor %}
 

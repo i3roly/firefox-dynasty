@@ -330,7 +330,6 @@ iframe {
   border: none;
   border-radius: 2px;
   color: var(--theme-body-color);
-  transition: background-color 0.05s ease-in-out;
   align-items: center;
   text-shadow: none;
   padding: 2px;
@@ -366,7 +365,6 @@ iframe {
   width: 16px;
   height: 16px;
   margin: 0 3px;
-  transition: opacity 0.05s ease-in-out;
   color: var(--theme-icon-color);
   font-size: 11px;
   -moz-context-properties: fill;
@@ -393,11 +391,23 @@ iframe {
 /* Button states */
 .devtools-button:disabled {
   pointer-events: none;
-  opacity: 0.5 !important;
+
+  &::before {
+    fill: var(--theme-icon-disabled-color);
+  }
 }
 
-.devtools-button:empty:not([aria-expanded="true"]):hover {
+.devtools-button:empty:not(
+  [aria-expanded="true"],
+  [aria-pressed="true"],
+  .checked
+):hover {
   background: var(--toolbarbutton-hover-background);
+  color: var(--toolbarbutton-hover-color);
+
+  &::before {
+    color: var(--theme-icon-hover-color);
+  }
 }
 
 /* Standalone buttons */
@@ -415,18 +425,17 @@ iframe {
 /* Selectable button which is unchecked. */
 
 .devtools-button:not(:empty, .checked, [aria-pressed="true"]):hover,
-.devtools-button:empty:is(:hover:active,.checked, [aria-pressed="true"]),
 .devtools-button[aria-haspopup="menu"][aria-expanded="true"] {
   background-color: var(--toolbarbutton-hover-background);
+  color: var(--toolbarbutton-hover-color);
+}
+
+.devtools-button:empty:is(.checked, [aria-pressed="true"]) {
+  background-color: var(--toolbarbutton-checked-background);
 }
 
 .devtools-button:not(:empty, .checked, [aria-pressed="true"]):hover:active {
   background-color: var(--theme-selection-background-hover);
-}
-
-.devtools-button:not(:empty, .checked, [aria-pressed="true"]):focus {
-  background-color: var(--toolbarbutton-focus-background);
-  color: var(--toolbarbutton-focus-color);
 }
 
 .devtools-togglebutton:not([aria-pressed="true"]) {
@@ -443,10 +452,6 @@ iframe {
 .devtools-button:not(:empty):is(.checked, [aria-pressed="true"]) {
   background: var(--toolbarbutton-checked-background);
   color: var(--toolbarbutton-checked-color);
-
-  &:focus {
-    background-color: var(--toolbarbutton-checked-focus-background);
-  }
 }
 
 .devtools-togglebutton[aria-pressed="true"] {
@@ -744,6 +749,10 @@ iframe {
   transition: transform 250ms var(--animation-curve), opacity 250ms var(--animation-curve);
   opacity: 0;
   transform: scaleX(0);
+
+  :root[forced-colors-active] & {
+    display: none;
+  }
 }
 
 .devtools-tab:hover .devtools-tab-line,
@@ -798,8 +807,6 @@ iframe {
   border-radius: 1em;
   border: 1px solid var(--toggle-track-border-color);
   box-sizing: content-box;
-  /* Animate the background color between states of the checkbox. */
-  transition: background-color .1s ease-out;
 
   &:checked {
     --x-pos: 1.15em;

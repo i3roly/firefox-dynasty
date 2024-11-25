@@ -95,6 +95,7 @@ EXPORTS.mozilla.dom.quota += [
     "StorageHelpers.h",
     "StreamUtils.h",
     "StringifyUtils.h",
+    "TargetPtrHolder.h",
     "ThreadUtils.h",
     "UniversalDirectoryLock.h",
     "UsageInfo.h",

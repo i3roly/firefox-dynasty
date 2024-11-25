@@ -79,26 +79,33 @@ class ToolbarView(
 
         binding.toolbarWrapper.increaseTapAreaVertically(TOOLBAR_WRAPPER_INCREASE_HEIGHT_DPS)
 
-        updateButtonVisibility(browserState)
+        updateButtonVisibility(browserState, context.shouldAddNavigationBar())
     }
 
     /**
      * Updates the visibility of the tab counter and menu buttons.
      *
      * @param browserState [BrowserState] is used to update tab counter's state.
+     * @param shouldAddNavigationBar [Boolean] is used to update menu button's and tab counter's state.
      */
-    fun updateButtonVisibility(browserState: BrowserState) {
-        val showTabCounterAndMenu = !context.shouldAddNavigationBar()
-        binding.menuButton.isVisible = showTabCounterAndMenu
-        binding.tabButton.isVisible = showTabCounterAndMenu
+    fun updateButtonVisibility(browserState: BrowserState, shouldAddNavigationBar: Boolean) {
+        val showMenu = !shouldAddNavigationBar
+        val showTabCounter = !(shouldAddNavigationBar || context.isTabStripEnabled())
+        binding.menuButton.isVisible = showMenu
+        binding.tabButton.isVisible = showTabCounter
 
-        if (showTabCounterAndMenu) {
-            homeMenuView = buildHomeMenu()
-            tabCounterView = buildTabCounter()
-            tabCounterView?.update(browserState)
+        tabCounterView = if (showTabCounter) {
+            buildTabCounter().also {
+                it.update(browserState)
+            }
         } else {
-            homeMenuView = null
-            tabCounterView = null
+            null
+        }
+
+        homeMenuView = if (showMenu) {
+            buildHomeMenu()
+        } else {
+            null
         }
     }
 

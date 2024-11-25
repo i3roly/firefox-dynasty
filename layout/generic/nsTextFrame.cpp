@@ -802,8 +802,9 @@ static bool IsSelectionInlineWhitespace(const nsTextFragment* aFrag,
   NS_ASSERTION(aPos < aFrag->GetLength(),
                "No text for IsSelectionInlineWhitespace!");
   char16_t ch = aFrag->CharAt(aPos);
-  if (ch == ' ' || ch == CH_NBSP)
+  if (ch == ' ' || ch == CH_NBSP) {
     return !IsSpaceCombiningSequenceTail(aFrag, aPos + 1);
+  }
   return ch == '\t' || ch == '\f';
 }
 
@@ -857,8 +858,10 @@ static bool IsAllWhitespace(const nsTextFragment* aFrag, bool aAllowNewline) {
   const char* str = aFrag->Get1b();
   for (int32_t i = 0; i < len; ++i) {
     char ch = str[i];
-    if (ch == ' ' || ch == '\t' || ch == '\r' || (ch == '\n' && aAllowNewline))
+    if (ch == ' ' || ch == '\t' || ch == '\r' ||
+        (ch == '\n' && aAllowNewline)) {
       continue;
+    }
     return false;
   }
   return true;
@@ -939,6 +942,8 @@ static void CreateObserversForAnimatedGlyphs(gfxTextRun* aTextRun) {
 
   aTextRun->SetFlagBits(nsTextFrameUtils::Flags::MightHaveGlyphChanges);
 
+  observers->SetCapacity(observers->Length() +
+                         fontsWithAnimatedGlyphs.Length());
   for (auto font : fontsWithAnimatedGlyphs) {
     observers->AppendElement(MakeUnique<GlyphObserver>(font, aTextRun));
   }
@@ -1135,12 +1140,17 @@ class BuildTextRunsScanner {
   uint8_t mCurrentRunContextInfo;
 };
 
-static nsIFrame* FindLineContainer(nsIFrame* aFrame) {
+static const nsIFrame* FindLineContainer(const nsIFrame* aFrame) {
   while (aFrame &&
          (aFrame->IsLineParticipant() || aFrame->CanContinueTextRun())) {
     aFrame = aFrame->GetParent();
   }
   return aFrame;
+}
+
+static nsIFrame* FindLineContainer(nsIFrame* aFrame) {
+  return const_cast<nsIFrame*>(
+      FindLineContainer(const_cast<const nsIFrame*>(aFrame)));
 }
 
 static bool IsLineBreakingWhiteSpace(char16_t aChar) {
@@ -1290,8 +1300,9 @@ BuildTextRunsScanner::FindBoundaryResult BuildTextRunsScanner::FindBoundaries(
         textFrame != aState->mLastTextFrame->GetNextInFlow() &&
         !ContinueTextRunAcrossFrames(aState->mLastTextFrame, textFrame)) {
       aState->mSeenTextRunBoundaryOnThisLine = true;
-      if (aState->mSeenSpaceForLineBreakingOnThisLine)
+      if (aState->mSeenSpaceForLineBreakingOnThisLine) {
         return FB_FOUND_VALID_TEXTRUN_BOUNDARY;
+      }
     }
     if (!aState->mFirstTextFrame) {
       aState->mFirstTextFrame = textFrame;
@@ -1348,8 +1359,9 @@ BuildTextRunsScanner::FindBoundaryResult BuildTextRunsScanner::FindBoundaries(
   FrameTextTraversal traversal = CanTextCrossFrameBoundary(aFrame);
   if (!traversal.mTextRunCanCrossFrameBoundary) {
     aState->mSeenTextRunBoundaryOnThisLine = true;
-    if (aState->mSeenSpaceForLineBreakingOnThisLine)
+    if (aState->mSeenSpaceForLineBreakingOnThisLine) {
       return FB_FOUND_VALID_TEXTRUN_BOUNDARY;
+    }
   }
 
   for (nsIFrame* f = traversal.NextFrameToScan(); f;
@@ -1362,8 +1374,9 @@ BuildTextRunsScanner::FindBoundaryResult BuildTextRunsScanner::FindBoundaries(
 
   if (!traversal.mTextRunCanCrossFrameBoundary) {
     aState->mSeenTextRunBoundaryOnThisLine = true;
-    if (aState->mSeenSpaceForLineBreakingOnThisLine)
+    if (aState->mSeenSpaceForLineBreakingOnThisLine) {
       return FB_FOUND_VALID_TEXTRUN_BOUNDARY;
+    }
   }
 
   return FB_CONTINUE;
@@ -3075,8 +3088,9 @@ static uint32_t GetEndOfTrimmedText(const nsTextFragment* aFrag,
   while (aIterator->GetSkippedOffset() > aStart) {
     aIterator->AdvanceSkipped(-1);
     if (!IsTrimmableSpace(aFrag, aIterator->GetOriginalOffset(), aStyleText,
-                          aAllowHangingWS))
+                          aAllowHangingWS)) {
       return aIterator->GetSkippedOffset() + 1;
+    }
   }
   return aStart;
 }
@@ -5447,8 +5461,9 @@ void nsTextFrame::UnionAdditionalOverflow(nsPresContext* aPresContext,
   // When this frame is not selected, the text-decoration area must be in
   // frame bounds.
   if (!IsSelected() ||
-      !CombineSelectionUnderlineRect(aPresContext, *aInkOverflowRect))
+      !CombineSelectionUnderlineRect(aPresContext, *aInkOverflowRect)) {
     return;
+  }
   AddStateBits(TEXT_SELECTION_UNDERLINE_OVERFLOWED);
 }
 
@@ -6496,7 +6511,7 @@ bool nsTextFrame::PaintTextWithSelection(
   MOZ_ASSERT(kPresentSelectionTypes[0] == SelectionType::eNormal,
              "The following for loop assumes that the first item of "
              "kPresentSelectionTypes is SelectionType::eNormal");
-  for (size_t i = ArrayLength(kPresentSelectionTypes) - 1; i >= 1; --i) {
+  for (size_t i = std::size(kPresentSelectionTypes) - 1; i >= 1; --i) {
     SelectionType selectionType = kPresentSelectionTypes[i];
     if (ToSelectionTypeMask(selectionType) & allSelectionTypeMask) {
       // There is some selection of this selectionType. Try to paint its
@@ -7266,8 +7281,9 @@ int16_t nsTextFrame::GetSelectionStatus(int16_t* aSelectionFlags) {
   nsCOMPtr<nsISelectionController> selectionController;
   nsresult rv = GetSelectionController(PresContext(),
                                        getter_AddRefs(selectionController));
-  if (NS_FAILED(rv) || !selectionController)
+  if (NS_FAILED(rv) || !selectionController) {
     return nsISelectionController::SELECTION_OFF;
+  }
 
   selectionController->GetSelectionFlags(aSelectionFlags);
 
@@ -7532,9 +7548,9 @@ bool nsTextFrame::IsFrameSelected() const {
     // Assert that the selection caching works.
     const bool isReallySelected =
         GetContent()->IsSelected(GetContentOffset(), GetContentEnd());
-    NS_ASSERTION((mIsSelected == nsTextFrame::SelectionState::Selected) ==
-                     isReallySelected,
-                 "Should have called InvalidateSelectionState()");
+    MOZ_ASSERT((mIsSelected == nsTextFrame::SelectionState::Selected) ==
+                   isReallySelected,
+               "Should have called InvalidateSelectionState()");
 #endif
   }
 
@@ -8904,7 +8920,7 @@ void nsTextFrame::AddInlineMinISize(const IntrinsicSizeInput& aInput,
     if (f == this || f->GetTextRun(trtype) != lastTextRun) {
       nsIFrame* lc;
       if (aData->LineContainer() &&
-          aData->LineContainer() != (lc = FindLineContainer(f))) {
+          aData->LineContainer() != (lc = f->FindLineContainer())) {
         NS_ASSERTION(f != this,
                      "wrong InlineMinISizeData container"
                      " for first continuation");
@@ -9064,7 +9080,7 @@ void nsTextFrame::AddInlinePrefISize(const IntrinsicSizeInput& aInput,
     if (f == this || f->GetTextRun(trtype) != lastTextRun) {
       nsIFrame* lc;
       if (aData->LineContainer() &&
-          aData->LineContainer() != (lc = FindLineContainer(f))) {
+          aData->LineContainer() != (lc = f->FindLineContainer())) {
         NS_ASSERTION(f != this,
                      "wrong InlinePrefISizeData container"
                      " for first continuation");
@@ -10343,7 +10359,7 @@ bool nsTextFrame::AppendRenderedText(AppendRenderedTextState& aState,
   bool startsAtHardBreak, endsAtHardBreak;
   if (!HasAnyStateBits(TEXT_START_OF_LINE | TEXT_END_OF_LINE)) {
     startsAtHardBreak = endsAtHardBreak = false;
-  } else if (nsBlockFrame* thisLc = do_QueryFrame(FindLineContainer(this))) {
+  } else if (nsBlockFrame* thisLc = do_QueryFrame(FindLineContainer())) {
     if (thisLc != aState.mLineContainer) {
       // Setup line cursor when needed.
       aState.mLineContainer = thisLc;
@@ -10374,8 +10390,12 @@ bool nsTextFrame::AppendRenderedText(AppendRenderedTextState& aState,
 
   TrimmedOffsets trimmedOffsets =
       GetTrimmedOffsets(aState.mTextFrag, trimFlags);
-  bool trimmedSignificantNewline = trimmedOffsets.GetEnd() < GetContentEnd() &&
-                                   HasSignificantTerminalNewline();
+  bool trimmedSignificantNewline =
+      (trimmedOffsets.GetEnd() < GetContentEnd() ||
+       (aState.mTrimTrailingWhitespace == TrailingWhitespace::Trim &&
+        StyleText()->mWhiteSpaceCollapse ==
+            StyleWhiteSpaceCollapse::PreserveBreaks)) &&
+      HasSignificantTerminalNewline();
   uint32_t skippedToRenderedStringOffset =
       aState.mOffsetInRenderedString -
       tmpIter.ConvertOriginalToSkipped(trimmedOffsets.mStart);
@@ -10441,34 +10461,32 @@ bool nsTextFrame::AppendRenderedText(AppendRenderedTextState& aState,
   trimmedOffsets.mLength =
       std::min<uint32_t>(origTrimmedOffsetsEnd, endOffset) -
       trimmedOffsets.mStart;
-  if (trimmedOffsets.mLength <= 0) {
-    aState.mOffsetInRenderedString = nextOffsetInRenderedString;
-    return true;
-  }
 
-  const nsStyleText* textStyle = StyleText();
-  iter.SetOriginalOffset(trimmedOffsets.mStart);
-  while (iter.GetOriginalOffset() < trimmedOffsets.GetEnd()) {
-    int32_t runLength;
-    bool isSkipped = iter.IsOriginalCharSkipped(&runLength);
-    runLength =
-        std::min(runLength, trimmedOffsets.GetEnd() - iter.GetOriginalOffset());
-    if (isSkipped) {
-      MOZ_ASSERT(runLength >= 0);
-      for (uint32_t i = 0; i < static_cast<uint32_t>(runLength); ++i) {
-        const char16_t ch = aState.mTextFrag->CharAt(
-            AssertedCast<uint32_t>(iter.GetOriginalOffset() + i));
-        if (ch == CH_SHY) {
-          // We should preserve soft hyphens. They can't be transformed.
-          aResult.mString.Append(ch);
+  if (trimmedOffsets.mLength > 0) {
+    const nsStyleText* textStyle = StyleText();
+    iter.SetOriginalOffset(trimmedOffsets.mStart);
+    while (iter.GetOriginalOffset() < trimmedOffsets.GetEnd()) {
+      int32_t runLength;
+      bool isSkipped = iter.IsOriginalCharSkipped(&runLength);
+      runLength = std::min(runLength,
+                           trimmedOffsets.GetEnd() - iter.GetOriginalOffset());
+      if (isSkipped) {
+        MOZ_ASSERT(runLength >= 0);
+        for (uint32_t i = 0; i < static_cast<uint32_t>(runLength); ++i) {
+          const char16_t ch = aState.mTextFrag->CharAt(
+              AssertedCast<uint32_t>(iter.GetOriginalOffset() + i));
+          if (ch == CH_SHY) {
+            // We should preserve soft hyphens. They can't be transformed.
+            aResult.mString.Append(ch);
+          }
         }
+      } else {
+        TransformChars(this, textStyle, mTextRun, iter.GetSkippedOffset(),
+                       aState.mTextFrag, iter.GetOriginalOffset(), runLength,
+                       aResult.mString);
       }
-    } else {
-      TransformChars(this, textStyle, mTextRun, iter.GetSkippedOffset(),
-                     aState.mTextFrag, iter.GetOriginalOffset(), runLength,
-                     aResult.mString);
+      iter.AdvanceOriginal(runLength);
     }
-    iter.AdvanceOriginal(runLength);
   }
 
   if (trimmedSignificantNewline && GetContentEnd() <= endOffset) {
@@ -10523,11 +10541,8 @@ bool nsTextFrame::IsEmpty() {
   if (textStyle->WhiteSpaceIsSignificant()) {
     // When WhiteSpaceIsSignificant styles are in effect, we only treat the
     // frame as empty if its content really is entirely *empty* (not just
-    // whitespace), AND it is NOT editable or within an <input> element.
-    // In these cases we consider that the whitespace-preserving style makes
-    // the frame behave as non-empty so that its height doesn't become zero.
-    return GetContentLength() == 0 && !GetContent()->IsEditable() &&
-           !GetContent()->GetParent()->IsHTMLElement(nsGkAtoms::input);
+    // whitespace).
+    return !GetContentLength();
   }
 
   if (HasAnyStateBits(TEXT_ISNOT_ONLY_WHITESPACE)) {
@@ -10681,6 +10696,21 @@ Maybe<nscoord> nsTextFrame::GetNaturalBaselineBOffset(
     return Some(GetSize().width - descent);
   }
   return Some(parentAscent - (aWM.IsVertical() ? position.x : position.y));
+}
+
+nscoord nsTextFrame::GetCaretBaseline() const {
+  if (mAscent == 0 && HasAnyStateBits(TEXT_NO_RENDERED_GLYPHS)) {
+    nsBlockFrame* container = do_QueryFrame(FindLineContainer());
+    // TODO(emilio): Ideally we'd want to find out if only our line is empty,
+    // but that's non-trivial to do, and realistically empty inlines and text
+    // will get placed into a non-empty line unless all lines are empty, I
+    // believe...
+    if (container && container->LinesAreEmpty()) {
+      nscoord blockSize = container->ContentBSize(GetWritingMode());
+      return GetFontMetricsDerivedCaretBaseline(blockSize);
+    }
+  }
+  return nsIFrame::GetCaretBaseline();
 }
 
 bool nsTextFrame::HasAnyNoncollapsedCharacters() {

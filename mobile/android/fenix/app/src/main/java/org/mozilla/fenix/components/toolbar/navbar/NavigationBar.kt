@@ -5,10 +5,10 @@
 package org.mozilla.fenix.components.toolbar.navbar
 
 import android.content.res.Configuration
-import androidx.annotation.ColorInt
+import android.view.View
+import android.view.accessibility.AccessibilityNodeInfo
+import android.widget.Button
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -17,14 +17,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.Icon
-import androidx.compose.material.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.dimensionResource
@@ -46,6 +43,7 @@ import org.mozilla.fenix.R
 import org.mozilla.fenix.browser.browsingmode.BrowsingMode
 import org.mozilla.fenix.components.components
 import org.mozilla.fenix.components.toolbar.NewTabMenu
+import org.mozilla.fenix.compose.IconButton
 import org.mozilla.fenix.compose.LongPressIconButton
 import org.mozilla.fenix.compose.annotation.LightDarkPreview
 import org.mozilla.fenix.compose.utils.KeyboardState
@@ -241,11 +239,7 @@ fun HomeNavBar(
  * @param onForwardButtonLongPress Invoked when the user long-presses the forward button in the nav bar.
  * @param onOpenInBrowserButtonClick Invoked when the user clicks the open in fenix button in the nav bar.
  * @param onMenuButtonClick Invoked when the user clicks on the menu button in the navigation bar.
- * @param backgroundColor Custom background color of the navigation bar.
- * When `null`, [FirefoxTheme.layer1] will be used.
- * @param buttonTint Custom button tint color of the navigation bar. When `null`, [Color.White] will be used.
- * @param buttonDisabledTint Custom disabled button tint color of the navigation bar.
- * When `null`, [FirefoxTheme.iconDisabled] will be used.
+ * @param isSandboxCustomTab If true, navigation bar should disable "Open in Firefox" icon.
  * @param onVisibilityUpdated Invoked when the visibility of the navigation bar changes
  * informing if the navigation bar is visible.
  * @param isMenuRedesignEnabled Whether or not the menu redesign is enabled.
@@ -262,9 +256,7 @@ fun CustomTabNavBar(
     onForwardButtonLongPress: () -> Unit,
     onOpenInBrowserButtonClick: () -> Unit,
     onMenuButtonClick: () -> Unit,
-    backgroundColor: Color,
-    @ColorInt buttonTint: Int? = null,
-    @ColorInt buttonDisabledTint: Int? = null,
+    isSandboxCustomTab: Boolean,
     onVisibilityUpdated: (Boolean) -> Unit,
     isMenuRedesignEnabled: Boolean = components.settings.enableMenuRedesign,
 ) {
@@ -275,39 +267,32 @@ fun CustomTabNavBar(
     val canGoForward by browserStore.observeAsState(initialValue = false) {
         it.findCustomTab(customTabSessionId)?.content?.canGoForward ?: false
     }
-    val iconTint = buttonTint?.let { Color(it) } ?: FirefoxTheme.colors.iconPrimary
-    val disabledIconTint = buttonDisabledTint?.let { Color(it) } ?: FirefoxTheme.colors.iconDisabled
+    val canOpenInFirefox = !isSandboxCustomTab
 
     NavBar(
-        background = backgroundColor,
         onVisibilityUpdated = onVisibilityUpdated,
     ) {
         BackButton(
             onBackButtonClick = onBackButtonClick,
             onBackButtonLongPress = onBackButtonLongPress,
             enabled = canGoBack,
-            buttonEnabledTint = iconTint,
-            buttonDisabledTint = disabledIconTint,
         )
 
         ForwardButton(
             onForwardButtonClick = onForwardButtonClick,
             onForwardButtonLongPress = onForwardButtonLongPress,
             enabled = canGoForward,
-            buttonEnabledTint = iconTint,
-            buttonDisabledTint = disabledIconTint,
         )
 
         OpenInBrowserButton(
             onOpenInBrowserButtonClick = onOpenInBrowserButtonClick,
-            tint = iconTint,
+            enabled = canOpenInFirefox,
         )
 
         MenuButton(
             menuButton = menuButton,
             isMenuRedesignEnabled = isMenuRedesignEnabled,
             onMenuButtonClick = onMenuButtonClick,
-            tint = iconTint,
         )
     }
 }
@@ -334,10 +319,6 @@ private fun NavBar(
                 .height(dimensionResource(id = R.dimen.browser_navbar_height))
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp)
-                .clickable(
-                    indication = null,
-                    interactionSource = remember { MutableInteractionSource() },
-                ) {}
                 .testTag(NavBarTestTags.navbar),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
@@ -438,25 +419,39 @@ private fun MenuButton(
             modifier = Modifier
                 .size(48.dp)
                 .testTag(NavBarTestTags.menuButton),
-            factory = { _ -> menuButton },
+            factory = { _ ->
+                menuButton.apply {
+                    contentDescription = context.getString(R.string.mozac_browser_menu_button)
+
+                    accessibilityDelegate = object : View.AccessibilityDelegate() {
+                        override fun onInitializeAccessibilityNodeInfo(host: View, info: AccessibilityNodeInfo) {
+                            super.onInitializeAccessibilityNodeInfo(host, info)
+                            info.className = Button::class.java.name
+                        }
+                    }
+                }
+            },
         )
     }
 }
 
 @Composable
 private fun OpenInBrowserButton(
-    tint: Color = FirefoxTheme.colors.iconPrimary,
     onOpenInBrowserButtonClick: () -> Unit,
+    enabled: Boolean,
+    buttonEnabledTint: Color = FirefoxTheme.colors.iconPrimary,
+    buttonDisabledTint: Color = FirefoxTheme.colors.iconDisabled,
 ) {
     IconButton(
         onClick = onOpenInBrowserButtonClick,
+        enabled = enabled,
         modifier = Modifier
             .testTag(NavBarTestTags.openInBrowserButton),
     ) {
         Icon(
             painter = painterResource(R.drawable.mozac_ic_open_in),
-            stringResource(R.string.browser_menu_open_in_fenix, R.string.app_name),
-            tint = tint,
+            stringResource(R.string.browser_menu_open_in_fenix, stringResource(R.string.app_name)),
+            tint = if (enabled) buttonEnabledTint else buttonDisabledTint,
         )
     }
 }
@@ -564,8 +559,7 @@ private fun CustomTabNavBarPreviewRoot(isPrivateMode: Boolean) {
         onOpenInBrowserButtonClick = {},
         onMenuButtonClick = {},
         isMenuRedesignEnabled = false,
-        backgroundColor = FirefoxTheme.colors.layer1,
-        buttonTint = FirefoxTheme.colors.iconPrimary.toArgb(),
+        isSandboxCustomTab = false,
         onVisibilityUpdated = {},
     )
 }

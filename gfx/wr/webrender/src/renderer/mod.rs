@@ -51,14 +51,14 @@ use core::time::Duration;
 use crate::pattern::PatternKind;
 use crate::render_api::{DebugCommand, ApiMsg, MemoryReport};
 use crate::batch::{AlphaBatchContainer, BatchKind, BatchFeatures, BatchTextures, BrushBatchKind, ClipBatchList};
-use crate::batch::{ClipMaskInstanceList};
+use crate::batch::ClipMaskInstanceList;
 #[cfg(any(feature = "capture", feature = "replay"))]
 use crate::capture::{CaptureConfig, ExternalCaptureImage, PlainExternalImage};
 use crate::composite::{CompositeState, CompositeTileSurface, ResolvedExternalSurface, CompositorSurfaceTransform};
 use crate::composite::{CompositorKind, Compositor, NativeTileId, CompositeFeatures, CompositeSurfaceFormat, ResolvedExternalSurfaceColorData};
 use crate::composite::{CompositorConfig, NativeSurfaceOperationDetails, NativeSurfaceId, NativeSurfaceOperation};
-use crate::composite::{TileKind};
-use crate::debug_colors;
+use crate::composite::TileKind;
+use crate::{debug_colors, Compositor2, CompositorInputConfig};
 use crate::device::{DepthFunction, Device, DrawTarget, ExternalTexture, GpuFrameId, UploadPBOPool};
 use crate::device::{ReadTarget, ShaderError, Texture, TextureFilter, TextureFlags, TextureSlot, Texel};
 use crate::device::query::{GpuSampler, GpuTimer};
@@ -82,8 +82,8 @@ use crate::prim_store::DeferredResolve;
 use crate::profiler::{self, GpuProfileTag, TransactionProfile};
 use crate::profiler::{Profiler, add_event_marker, add_text_marker, thread_is_being_profiled};
 use crate::device::query::GpuProfiler;
-use crate::render_target::{ResolveOp};
-use crate::render_task_graph::{RenderTaskGraph};
+use crate::render_target::ResolveOp;
+use crate::render_task_graph::RenderTaskGraph;
 use crate::render_task::{RenderTask, RenderTaskKind, ReadbackTask};
 use crate::screen_capture::AsyncScreenshotGrabber;
 use crate::render_target::{RenderTarget, PictureCacheTarget, PictureCacheTargetKind};
@@ -863,8 +863,8 @@ pub struct Renderer {
 
     /// The compositing config, affecting how WR composites into the final scene.
     compositor_config: CompositorConfig,
-
     current_compositor_kind: CompositorKind,
+    compositor2: Option<Box<dyn Compositor2>>,
 
     /// Maintains a set of allocated native composite surfaces. This allows any
     /// currently allocated surfaces to be cleaned up as soon as deinit() is
@@ -3117,7 +3117,7 @@ impl Renderer {
     }
 
     /// Draw a list of tiles to the framebuffer
-    fn draw_tile_list<'a, I: Iterator<Item = &'a occlusion::Item>>(
+    fn draw_tile_list<'a, I: Iterator<Item = &'a occlusion::Item<usize>>>(
         &mut self,
         tiles_iter: I,
         composite_state: &CompositeState,
@@ -3327,21 +3327,18 @@ impl Renderer {
         }
     }
 
-    /// Composite picture cache tiles into the framebuffer. This is currently
-    /// the only way that picture cache tiles get drawn. In future, the tiles
-    /// will often be handed to the OS compositor, and this method will be
-    /// rarely used.
-    fn composite_simple(
+    // Composite tiles in a swapchain. When using Compositor2, we may
+    // split the compositing in to multiple swapchains.
+    fn composite_pass(
         &mut self,
         composite_state: &CompositeState,
         draw_target: DrawTarget,
         projection: &default::Transform3D<f32>,
         results: &mut RenderResults,
         partial_present_mode: Option<PartialPresentMode>,
+        occlusion: &occlusion::FrontToBackBuilder<usize>,
+        clear_tiles: &[occlusion::Item<usize>],
     ) {
-        let _gm = self.gpu_profiler.start_marker("framebuffer");
-        let _timer = self.gpu_profiler.start_timer(GPU_TAG_COMPOSITE);
-
         self.device.bind_draw_target(draw_target);
         self.device.disable_depth_write();
         self.device.disable_depth();
@@ -3357,7 +3354,96 @@ impl Renderer {
             }
         }
 
+        // Clear the framebuffer
+        let clear_color = Some(self.clear_color.to_array());
+
+        match partial_present_mode {
+            Some(PartialPresentMode::Single { dirty_rect }) => {
+                // There is no need to clear if the dirty rect is occluded. Additionally,
+                // on Mali-G77 we have observed artefacts when calling glClear (even with
+                // the empty scissor rect set) after calling eglSetDamageRegion with an
+                // empty damage region. So avoid clearing in that case. See bug 1709548.
+                if !dirty_rect.is_empty() && occlusion.test(&dirty_rect) {
+                    // We have a single dirty rect, so clear only that
+                    self.device.clear_target(clear_color,
+                                             None,
+                                             Some(draw_target.to_framebuffer_rect(dirty_rect.to_i32())));
+                }
+            }
+            None => {
+                // Partial present is disabled, so clear the entire framebuffer
+                self.device.clear_target(clear_color,
+                                         None,
+                                         None);
+            }
+        }
+
+        if !occlusion.opaque_items().is_empty() {
+            let opaque_sampler = self.gpu_profiler.start_sampler(GPU_SAMPLER_TAG_OPAQUE);
+            self.set_blend(false, FramebufferKind::Main);
+            self.draw_tile_list(
+                occlusion.opaque_items().iter(),
+                &composite_state,
+                &composite_state.external_surfaces,
+                projection,
+                &mut results.stats,
+            );
+            self.gpu_profiler.finish_sampler(opaque_sampler);
+        }
+
+        if !clear_tiles.is_empty() {
+            let transparent_sampler = self.gpu_profiler.start_sampler(GPU_SAMPLER_TAG_TRANSPARENT);
+            self.set_blend(true, FramebufferKind::Main);
+            self.device.set_blend_mode_premultiplied_dest_out();
+            self.draw_tile_list(
+                clear_tiles.iter(),
+                &composite_state,
+                &composite_state.external_surfaces,
+                projection,
+                &mut results.stats,
+            );
+            self.gpu_profiler.finish_sampler(transparent_sampler);
+        }
+
+        // Draw alpha tiles
+        if !occlusion.alpha_items().is_empty() {
+            let transparent_sampler = self.gpu_profiler.start_sampler(GPU_SAMPLER_TAG_TRANSPARENT);
+            self.set_blend(true, FramebufferKind::Main);
+            self.set_blend_mode_premultiplied_alpha(FramebufferKind::Main);
+            self.draw_tile_list(
+                occlusion.alpha_items().iter().rev(),
+                &composite_state,
+                &composite_state.external_surfaces,
+                projection,
+                &mut results.stats,
+            );
+            self.gpu_profiler.finish_sampler(transparent_sampler);
+        }
+    }
+
+    /// Composite picture cache tiles into the framebuffer. This is currently
+    /// the only way that picture cache tiles get drawn. In future, the tiles
+    /// will often be handed to the OS compositor, and this method will be
+    /// rarely used.
+    fn composite_simple(
+        &mut self,
+        composite_state: &CompositeState,
+        draw_target: DrawTarget,
+        projection: &default::Transform3D<f32>,
+        results: &mut RenderResults,
+        partial_present_mode: Option<PartialPresentMode>,
+    ) {
+        let _gm = self.gpu_profiler.start_marker("framebuffer");
+        let _timer = self.gpu_profiler.start_timer(GPU_TAG_COMPOSITE);
+
         let cap = composite_state.tiles.len();
+
+        // We are only interested in tiles backed with actual cached pixels so we don't
+        // count clear tiles here.
+        let num_tiles = composite_state.tiles
+            .iter()
+            .filter(|tile| tile.kind != TileKind::Clear).count();
+        self.profile.set(profiler::PICTURE_TILES, num_tiles);
 
         let mut occlusion = occlusion::FrontToBackBuilder::with_capacity(cap, cap);
         let mut clear_tiles = Vec::new();
@@ -3403,77 +3489,170 @@ impl Renderer {
             occlusion.add(&rect, is_opaque, idx);
         }
 
-        // Clear the framebuffer
-        let clear_color = Some(self.clear_color.to_array());
+        // If experimental compositor is enabled, notify it that we are beginning
+        // a frame composite. As this expands, we'll likely split it in to a different
+        // function that `composite_simple`, as it begins to diverge.
+        if let Some(ref mut compositor) = self.compositor2 {
+            let input = CompositorInputConfig {
+                framebuffer_size: draw_target.dimensions(),
+            };
 
-        match partial_present_mode {
-            Some(PartialPresentMode::Single { dirty_rect }) => {
-                // There is no need to clear if the dirty rect is occluded. Additionally,
-                // on Mali-G77 we have observed artefacts when calling glClear (even with
-                // the empty scissor rect set) after calling eglSetDamageRegion with an
-                // empty damage region. So avoid clearing in that case. See bug 1709548.
-                if !dirty_rect.is_empty() && occlusion.test(&dirty_rect) {
-                    // We have a single dirty rect, so clear only that
-                    self.device.clear_target(clear_color,
-                                             None,
-                                             Some(draw_target.to_framebuffer_rect(dirty_rect.to_i32())));
+            compositor.begin_frame(&input);
+        }
+
+        // Draw each compositing pass in to a swap chain
+        self.composite_pass(
+            composite_state,
+            draw_target,
+            projection,
+            results,
+            partial_present_mode,
+            &occlusion,
+            &clear_tiles,
+        );
+
+        // End frame notify for experimental compositor
+        if let Some(ref mut compositor) = self.compositor2 {
+            compositor.end_frame();
+        }
+    }
+
+    fn clear_render_target(
+        &mut self,
+        target: &RenderTarget,
+        draw_target: DrawTarget,
+        framebuffer_kind: FramebufferKind,
+        projection: &default::Transform3D<f32>,
+        stats: &mut RendererStats,
+    ) {
+        let needs_depth = target.needs_depth();
+
+        let clear_depth = if needs_depth {
+            Some(1.0)
+        } else {
+            None
+        };
+
+        let _timer = self.gpu_profiler.start_timer(GPU_TAG_SETUP_TARGET);
+
+        self.device.disable_depth();
+        self.set_blend(false, framebuffer_kind);
+
+        let is_alpha = target.target_kind == RenderTargetKind::Alpha;
+        let require_precise_clear = target.cached;
+
+        // On some Mali-T devices we have observed crashes in subsequent draw calls
+        // immediately after clearing the alpha render target regions with glClear().
+        // Using the shader to clear the regions avoids the crash. See bug 1638593.
+        let clear_with_quads = (target.cached && self.clear_caches_with_quads)
+            || (is_alpha && self.clear_alpha_targets_with_quads);
+
+        let favor_partial_updates = self.device.get_capabilities().supports_render_target_partial_update
+            && self.enable_clear_scissor;
+
+        // On some Adreno 4xx devices we have seen render tasks to alpha targets have no
+        // effect unless the target is fully cleared prior to rendering. See bug 1714227.
+        let full_clears_on_adreno = is_alpha && self.device.get_capabilities().requires_alpha_target_full_clear;
+        let require_full_clear = !require_precise_clear
+            && (full_clears_on_adreno || !favor_partial_updates);
+
+        let clear_color = target
+            .clear_color
+            .map(|color| color.to_array());
+
+        let mut cleared_depth = false;
+        if clear_with_quads {
+            // Will be handled last. Only specific rects will be cleared.
+        } else if require_precise_clear {
+            // Only clear specific rects
+            for (rect, color) in &target.clears {
+                self.device.clear_target(
+                    Some(color.to_array()),
+                    None,
+                    Some(draw_target.to_framebuffer_rect(*rect)),
+                );
+            }
+        } else {
+            // At this point we know we don't require precise clears for correctness.
+            // We may still attempt to restruct the clear rect as an optimization on
+            // some configurations.
+            let clear_rect = if require_full_clear {
+                None
+            } else {
+                match draw_target {
+                    DrawTarget::Default { rect, total_size, .. } => {
+                        if rect.min == FramebufferIntPoint::zero() && rect.size() == total_size {
+                            // Whole screen is covered, no need for scissor
+                            None
+                        } else {
+                            Some(rect)
+                        }
+                    }
+                    DrawTarget::Texture { .. } => {
+                        // TODO(gw): Applying a scissor rect and minimal clear here
+                        // is a very large performance win on the Intel and nVidia
+                        // GPUs that I have tested with. It's possible it may be a
+                        // performance penalty on other GPU types - we should test this
+                        // and consider different code paths.
+                        //
+                        // Note: The above measurements were taken when render
+                        // target slices were minimum 2048x2048. Now that we size
+                        // them adaptively, this may be less of a win (except perhaps
+                        // on a mostly-unused last slice of a large texture array).
+                        target.used_rect.map(|rect| draw_target.to_framebuffer_rect(rect))
+                    }
+                    // Full clear.
+                    _ => None,
                 }
+            };
+
+            self.device.clear_target(
+                clear_color,
+                clear_depth,
+                clear_rect,
+            );
+            cleared_depth = true;
+        }
+
+        // Make sure to clear the depth buffer if it is used.
+        if needs_depth && !cleared_depth {
+            // TODO: We could also clear the depth buffer via ps_clear. This
+            // is done by picture cache targets in some cases.
+            self.device.clear_target(None, clear_depth, None);
+        }
+
+        // Finally, if we decided to clear with quads or if we need to clear
+        // some areas with specific colors that don't match the global clear
+        // color, clear more areas using a draw call.
+
+        let mut clear_instances = Vec::with_capacity(target.clears.len());
+        for (rect, color) in &target.clears {
+            if clear_with_quads || (!require_precise_clear && target.clear_color != Some(*color)) {
+                let rect = rect.to_f32();
+                clear_instances.push(ClearInstance {
+                    rect: [
+                        rect.min.x, rect.min.y,
+                        rect.max.x, rect.max.y,
+                    ],
+                    color: color.to_array(),
+                })
             }
-            None => {
-                // Partial present is disabled, so clear the entire framebuffer
-                self.device.clear_target(clear_color,
-                                         None,
-                                         None);
-            }
         }
 
-        // We are only interested in tiles backed with actual cached pixels so we don't
-        // count clear tiles here.
-        let num_tiles = composite_state.tiles
-            .iter()
-            .filter(|tile| tile.kind != TileKind::Clear).count();
-        self.profile.set(profiler::PICTURE_TILES, num_tiles);
-
-        if !occlusion.opaque_items().is_empty() {
-            let opaque_sampler = self.gpu_profiler.start_sampler(GPU_SAMPLER_TAG_OPAQUE);
-            self.set_blend(false, FramebufferKind::Main);
-            self.draw_tile_list(
-                occlusion.opaque_items().iter(),
-                &composite_state,
-                &composite_state.external_surfaces,
-                projection,
-                &mut results.stats,
+        if !clear_instances.is_empty() {
+            self.shaders.borrow_mut().ps_clear.bind(
+                &mut self.device,
+                &projection,
+                None,
+                &mut self.renderer_errors,
+                &mut self.profile,
             );
-            self.gpu_profiler.finish_sampler(opaque_sampler);
-        }
-
-        if !clear_tiles.is_empty() {
-            let transparent_sampler = self.gpu_profiler.start_sampler(GPU_SAMPLER_TAG_TRANSPARENT);
-            self.set_blend(true, FramebufferKind::Main);
-            self.device.set_blend_mode_premultiplied_dest_out();
-            self.draw_tile_list(
-                clear_tiles.iter(),
-                &composite_state,
-                &composite_state.external_surfaces,
-                projection,
-                &mut results.stats,
+            self.draw_instanced_batch(
+                &clear_instances,
+                VertexArrayKind::Clear,
+                &BatchTextures::empty(),
+                stats,
             );
-            self.gpu_profiler.finish_sampler(transparent_sampler);
-        }
-
-        // Draw alpha tiles
-        if !occlusion.alpha_items().is_empty() {
-            let transparent_sampler = self.gpu_profiler.start_sampler(GPU_SAMPLER_TAG_TRANSPARENT);
-            self.set_blend(true, FramebufferKind::Main);
-            self.set_blend_mode_premultiplied_alpha(FramebufferKind::Main);
-            self.draw_tile_list(
-                occlusion.alpha_items().iter().rev(),
-                &composite_state,
-                &composite_state.external_surfaces,
-                projection,
-                &mut results.stats,
-            );
-            self.gpu_profiler.finish_sampler(transparent_sampler);
         }
     }
 
@@ -3498,12 +3677,6 @@ impl Renderer {
             texture,
             needs_depth,
         );
-
-        let clear_depth = if needs_depth {
-            Some(1.0)
-        } else {
-            None
-        };
 
         let projection = Transform3D::ortho(
             0.0,
@@ -3539,194 +3712,37 @@ impl Renderer {
             FramebufferKind::Other
         };
 
-        {
-            let _timer = self.gpu_profiler.start_timer(GPU_TAG_SETUP_TARGET);
-            self.device.bind_draw_target(draw_target);
+        self.device.bind_draw_target(draw_target);
 
-            if self.device.get_capabilities().supports_qcom_tiled_rendering {
-                let preserve_mask = match target.clear_color {
-                    Some(_) => 0,
-                    None => gl::COLOR_BUFFER_BIT0_QCOM,
-                };
-                if let Some(used_rect) = target.used_rect {
-                    self.device.gl().start_tiling_qcom(
-                        used_rect.min.x.max(0) as _,
-                        used_rect.min.y.max(0) as _,
-                        used_rect.width() as _,
-                        used_rect.height() as _,
-                        preserve_mask,
-                    );
-                }
-            }
-
-            self.device.disable_depth();
-            self.set_blend(false, framebuffer_kind);
-
-            if needs_depth {
-                self.device.enable_depth_write();
-            } else {
-                self.device.disable_depth_write();
-            }
-
-            let zero_color = [0.0, 0.0, 0.0, 0.0];
-            let one_color = [1.0, 1.0, 1.0, 1.0];
-
-            // On some Adreno 4xx devices we have seen render tasks to alpha targets have no
-            // effect unless the target is fully cleared prior to rendering. See bug 1714227.
-            if target.target_kind == RenderTargetKind::Alpha
-                && !target.cached
-                && self.device.get_capabilities().requires_alpha_target_full_clear {
-
-                self.device.clear_target(
-                    Some(zero_color),
-                    clear_depth,
-                    None,
-                );
-            } else if target.cached && needs_depth {
-                // Make sure to clear the depth buffer if it used in a cached target.
-                self.device.clear_target(None, clear_depth, None);
-            }
-
-            // On some Mali-T devices we have observed crashes in subsequent draw calls
-            // immediately after clearing the alpha render target regions with glClear().
-            // Using the shader to clear the regions avoids the crash. See bug 1638593.
-            let clear_with_quads = (target.cached && self.clear_caches_with_quads)
-                || (target.target_kind == RenderTargetKind::Alpha && self.clear_alpha_targets_with_quads);
-
-            let has_clear_instances = !(target.zero_clears.is_empty() && target.one_clears.is_empty() && target.clears.is_empty());
-
-            if has_clear_instances {
-                if clear_with_quads {
-                    let zeroes = target.zero_clears
-                        .iter()
-                        .map(|task_id| {
-                            let rect = render_tasks[*task_id].get_target_rect().to_f32();
-                            ClearInstance {
-                                rect: [
-                                    rect.min.x, rect.min.y,
-                                    rect.max.x, rect.max.y,
-                                ],
-                                color: zero_color,
-                            }
-                        });
-
-                    let ones = target.one_clears
-                        .iter()
-                        .map(|task_id| {
-                            let rect = render_tasks[*task_id].get_target_rect().to_f32();
-                            ClearInstance {
-                                rect: [
-                                    rect.min.x, rect.min.y,
-                                    rect.max.x, rect.max.y,
-                                ],
-                                color: one_color,
-                            }
-                        });
-
-                    let other_zeroes = target.clears
-                        .iter()
-                        .map(|r| ClearInstance {
-                            rect: [
-                                r.min.x as f32, r.min.y as f32,
-                                r.max.x as f32, r.max.y as f32,
-                            ],
-                            color: zero_color,
-                        })
-                        .collect::<Vec<_>>();
-
-                    let instances = zeroes.chain(ones).chain(other_zeroes).collect::<Vec<_>>();
-                    self.shaders.borrow_mut().ps_clear.bind(
-                        &mut self.device,
-                        &projection,
-                        None,
-                        &mut self.renderer_errors,
-                        &mut self.profile,
-                    );
-                    self.draw_instanced_batch(
-                        &instances,
-                        VertexArrayKind::Clear,
-                        &BatchTextures::empty(),
-                        stats,
-                    );
-                } else {
-                    // TODO(gw): Applying a scissor rect and minimal clear here
-                    // is a very large performance win on the Intel and nVidia
-                    // GPUs that I have tested with. It's possible it may be a
-                    // performance penalty on other GPU types - we should test this
-                    // and consider different code paths.
-                    for &task_id in &target.zero_clears {
-                        let rect = render_tasks[task_id].get_target_rect();
-                        self.device.clear_target(
-                            Some(zero_color),
-                            clear_depth,
-                            Some(draw_target.to_framebuffer_rect(rect)),
-                        );
-                    }
-
-                    for &task_id in &target.one_clears {
-                        let rect = render_tasks[task_id].get_target_rect();
-                        self.device.clear_target(
-                            Some(one_color),
-                            clear_depth,
-                            Some(draw_target.to_framebuffer_rect(rect)),
-                        );
-                    }
-
-                    for rect in &target.clears {
-                        self.device.clear_target(
-                            Some(zero_color),
-                            clear_depth,
-                            Some(draw_target.to_framebuffer_rect(*rect)),
-                        );
-                    }
-                }
-            } else if !target.cached && target.target_kind == RenderTargetKind::Color {
-                // TODO: There is an implicit assumption that non-cached color targets
-                // need to be cleared, unless they have clear instances.
-                // This is error-prone, and will probably mesh poorly with pictures
-                // soon being optionally cached. We should instead have the code that
-                // builds the target specify whether this single-clear code path is needed.
-
-                let clear_color = target
-                    .clear_color
-                    .map(|color| color.to_array());
-
-                let clear_rect = match draw_target {
-                    DrawTarget::NativeSurface { .. } => {
-                        unreachable!("bug: native compositor surface in child target");
-                    }
-                    DrawTarget::Default { rect, total_size, .. } if rect.min == FramebufferIntPoint::zero() && rect.size() == total_size => {
-                        // whole screen is covered, no need for scissor
-                        None
-                    }
-                    DrawTarget::Default { rect, .. } => {
-                        Some(rect)
-                    }
-                    DrawTarget::Texture { .. } if self.enable_clear_scissor => {
-                        // TODO(gw): Applying a scissor rect and minimal clear here
-                        // is a very large performance win on the Intel and nVidia
-                        // GPUs that I have tested with. It's possible it may be a
-                        // performance penalty on other GPU types - we should test this
-                        // and consider different code paths.
-                        //
-                        // Note: The above measurements were taken when render
-                        // target slices were minimum 2048x2048. Now that we size
-                        // them adaptively, this may be less of a win (except perhaps
-                        // on a mostly-unused last slice of a large texture array).
-                        target.used_rect.map(|rect| draw_target.to_framebuffer_rect(rect))
-                    }
-                    DrawTarget::Texture { .. } | DrawTarget::External { .. } => {
-                        None
-                    }
-                };
-
-                self.device.clear_target(
-                    clear_color,
-                    clear_depth,
-                    clear_rect,
+        if self.device.get_capabilities().supports_qcom_tiled_rendering {
+            let preserve_mask = match target.clear_color {
+                Some(_) => 0,
+                None => gl::COLOR_BUFFER_BIT0_QCOM,
+            };
+            if let Some(used_rect) = target.used_rect {
+                self.device.gl().start_tiling_qcom(
+                    used_rect.min.x.max(0) as _,
+                    used_rect.min.y.max(0) as _,
+                    used_rect.width() as _,
+                    used_rect.height() as _,
+                    preserve_mask,
                 );
             }
         }
+
+        if needs_depth {
+            self.device.enable_depth_write();
+        } else {
+            self.device.disable_depth_write();
+        }
+
+        self.clear_render_target(
+            target,
+            draw_target,
+            framebuffer_kind,
+            &projection,
+            stats,
+        );
 
         if needs_depth {
             self.device.disable_depth_write();

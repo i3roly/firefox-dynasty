@@ -55,15 +55,19 @@ def register(graph_config):
 
     del registry["skip-unless-changed"]
 
-    from gecko_taskgraph import (  # noqa: trigger target task method registration
-        morph,  # noqa: trigger morph registration
+    from gecko_taskgraph import (  # noqa
+        # trigger target task method registration
+        morph,  # noqa
+        filter_tasks,
         target_tasks,
     )
 
     android_taskgraph.register(graph_config)
 
     from gecko_taskgraph.parameters import register_parameters
-    from gecko_taskgraph.util import dependencies  # noqa: trigger group_by registration
+
+    # trigger group_by registration
+    from gecko_taskgraph.util import dependencies  # noqa
     from gecko_taskgraph.util.verify import verifications
 
     # Don't use the upstream verifications, and replace them with our own.

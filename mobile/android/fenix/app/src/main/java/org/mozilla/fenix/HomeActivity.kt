@@ -67,6 +67,7 @@ import mozilla.components.feature.search.BrowserStoreSearchAdapter
 import mozilla.components.service.fxa.sync.SyncReason
 import mozilla.components.support.base.feature.ActivityResultHandler
 import mozilla.components.support.base.feature.UserInteractionHandler
+import mozilla.components.support.base.feature.UserInteractionOnBackPressedCallback
 import mozilla.components.support.base.log.logger.Logger
 import mozilla.components.support.ktx.android.arch.lifecycle.addObservers
 import mozilla.components.support.ktx.android.content.call
@@ -121,6 +122,7 @@ import org.mozilla.fenix.ext.setNavigationIcon
 import org.mozilla.fenix.ext.settings
 import org.mozilla.fenix.ext.systemGesturesInsets
 import org.mozilla.fenix.extension.WebExtensionPromptFeature
+import org.mozilla.fenix.home.HomeFragment
 import org.mozilla.fenix.home.intent.AssistIntentProcessor
 import org.mozilla.fenix.home.intent.CrashReporterIntentProcessor
 import org.mozilla.fenix.home.intent.HomeDeepLinkIntentProcessor
@@ -259,6 +261,11 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity {
 
     private val startupPathProvider = StartupPathProvider()
     private lateinit var startupTypeTelemetry: StartupTypeTelemetry
+
+    private val onBackPressedCallback = UserInteractionOnBackPressedCallback(
+        fragmentManager = supportFragmentManager,
+        dispatcher = onBackPressedDispatcher,
+    )
 
     @Suppress("ComplexMethod")
     final override fun onCreate(savedInstanceState: Bundle?) {
@@ -492,6 +499,11 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity {
             ),
         )
 
+        onBackPressedDispatcher.addCallback(
+            owner = this,
+            onBackPressedCallback = onBackPressedCallback,
+        )
+
         StartupTimeline.onActivityCreateEndHome(this) // DO NOT MOVE ANYTHING BELOW HERE.
     }
 
@@ -568,6 +580,9 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity {
             }
 
             if (settings().checkIfFenixIsDefaultBrowserOnAppResume()) {
+                if (components.appStore.state.wasNativeDefaultBrowserPromptShown) {
+                    Metrics.defaultBrowserChangedViaNativeSystemPrompt.record(NoExtras())
+                }
                 Events.defaultBrowserChanged.record(NoExtras())
             }
 
@@ -577,6 +592,8 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity {
             ReEngagementNotificationWorker.setReEngagementNotificationIfNeeded(applicationContext)
             MessageNotificationWorker.setMessageNotificationWorker(applicationContext)
         }
+
+        onBackPressedCallback.isEnabled = true
 
         // This was done in order to refresh search engines when app is running in background
         // and the user changes the system language
@@ -620,7 +637,7 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity {
             // User has been enrolled in alternative app icon experiment.
             with(applicationContext) {
                 changeAppLauncherIconBackgroundColor(
-                    packageManager = applicationContext.packageManager,
+                    context = this,
                     appAlias = ComponentName(this, "$packageName.App"),
                     alternativeAppAlias = ComponentName(this, "$packageName.AlternativeApp"),
                     resetToDefault = FxNimbus.features.alternativeAppLauncherIcon.value().resetToDefault,
@@ -828,16 +845,6 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity {
             // Sort the actions in our preferred order, putting "other" actions unsorted at the end
             order[actionName] ?: actions.size
         }.toTypedArray()
-    }
-
-    @Suppress("MissingSuperCall", "OVERRIDE_DEPRECATION")
-    final override fun onBackPressed() {
-        supportFragmentManager.primaryNavigationFragment?.childFragmentManager?.fragments?.forEach {
-            if (it is UserInteractionHandler && it.onBackPressed()) {
-                return
-            }
-        }
-        onBackPressedDispatcher.onBackPressed()
     }
 
     @Deprecated("Deprecated in Java")
@@ -1051,7 +1058,7 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity {
         )
 
         navigationToolbar.setNavigationOnClickListener {
-            onBackPressed()
+            onBackPressedDispatcher.onBackPressed()
         }
     }
 

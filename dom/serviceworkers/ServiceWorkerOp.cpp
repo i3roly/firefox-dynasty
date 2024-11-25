@@ -50,6 +50,7 @@
 #include "mozilla/dom/PerformanceStorage.h"
 #include "mozilla/dom/PushEventBinding.h"
 #include "mozilla/dom/RemoteWorkerChild.h"
+#include "mozilla/dom/RemoteWorkerNonLifeCycleOpControllerChild.h"
 #include "mozilla/dom/RemoteWorkerService.h"
 #include "mozilla/dom/Request.h"
 #include "mozilla/dom/Response.h"
@@ -65,6 +66,11 @@
 #include "mozilla/ipc/IPCStreamUtils.h"
 
 namespace mozilla::dom {
+
+using remoteworker::Canceled;
+using remoteworker::Killed;
+using remoteworker::Pending;
+using remoteworker::Running;
 
 namespace {
 
@@ -280,7 +286,6 @@ class ServiceWorkerOp::ServiceWorkerOpRunnable final
                           WorkerPrivate* aWorkerPrivate)
       : WorkerDebuggeeRunnable("ServiceWorkerOpRunnable"),
         mOwner(std::move(aOwner)) {
-    AssertIsOnMainThread();
     MOZ_ASSERT(mOwner);
     MOZ_ASSERT(aWorkerPrivate);
   }
@@ -306,6 +311,12 @@ class ServiceWorkerOp::ServiceWorkerOpRunnable final
     return rv;
   }
 
+  // Silent PreDispatch and PostDispatch, since ServiceWorkerOpRunnable can be
+  // from the main thread or from the worker thread.
+  bool PreDispatch(WorkerPrivate* WorkerPrivate) override { return true; }
+  void PostDispatch(WorkerPrivate* WorkerPrivate,
+                    bool aDispatchResult) override {}
+
   nsresult Cancel() override {
     MOZ_ASSERT(mOwner);
 
@@ -322,7 +333,7 @@ NS_IMPL_ISUPPORTS_INHERITED0(ServiceWorkerOp::ServiceWorkerOpRunnable,
                              WorkerThreadRunnable)
 
 bool ServiceWorkerOp::MaybeStart(RemoteWorkerChild* aOwner,
-                                 RemoteWorkerChild::State& aState) {
+                                 RemoteWorkerState& aState) {
   MOZ_ASSERT(!mStarted);
   MOZ_ASSERT(aOwner);
   MOZ_ASSERT(aOwner->GetActorEventTarget()->IsOnCurrentThread());
@@ -340,14 +351,13 @@ bool ServiceWorkerOp::MaybeStart(RemoteWorkerChild* aOwner,
     return false;
   }
 
-  if (NS_WARN_IF(aState.is<RemoteWorkerChild::Canceled>()) ||
-      NS_WARN_IF(aState.is<RemoteWorkerChild::Killed>())) {
+  if (NS_WARN_IF(aState.is<Canceled>()) || NS_WARN_IF(aState.is<Killed>())) {
     RejectAll(NS_ERROR_DOM_INVALID_STATE_ERR);
     mStarted = true;
     return true;
   }
 
-  MOZ_ASSERT(aState.is<RemoteWorkerChild::Running>() || IsTerminationOp());
+  MOZ_ASSERT(aState.is<Running>() || IsTerminationOp());
 
   RefPtr<ServiceWorkerOp> self = this;
 
@@ -385,6 +395,7 @@ bool ServiceWorkerOp::MaybeStart(RemoteWorkerChild* aOwner,
 }
 
 void ServiceWorkerOp::StartOnMainThread(RefPtr<RemoteWorkerChild>& aOwner) {
+  AssertIsOnMainThread();
   MaybeReportServiceWorkerShutdownProgress(mArgs);
 
   {
@@ -412,14 +423,49 @@ void ServiceWorkerOp::StartOnMainThread(RefPtr<RemoteWorkerChild>& aOwner) {
   }
 }
 
+void ServiceWorkerOp::Start(RemoteWorkerNonLifeCycleOpControllerChild* aOwner,
+                            RemoteWorkerState& aState) {
+  MOZ_ASSERT(!mStarted);
+  MOZ_ASSERT(aOwner);
+
+  if (NS_WARN_IF(!aOwner->CanSend())) {
+    RejectAll(NS_ERROR_DOM_ABORT_ERR);
+    mStarted = true;
+    return;
+  }
+
+  // NonLifeCycle related operations would never start at Pending state.
+  MOZ_ASSERT(!aState.is<Pending>());
+
+  if (NS_WARN_IF(aState.is<Canceled>()) || NS_WARN_IF(aState.is<Killed>())) {
+    RejectAll(NS_ERROR_DOM_INVALID_STATE_ERR);
+    mStarted = true;
+    return;
+  }
+
+  MOZ_ASSERT(aState.is<Running>());
+
+  WorkerPrivate* workerPrivate = GetCurrentThreadWorkerPrivate();
+
+  MOZ_ASSERT_DEBUG_OR_FUZZING(workerPrivate);
+
+  RefPtr<WorkerThreadRunnable> workerRunnable = GetRunnable(workerPrivate);
+
+  if (NS_WARN_IF(!workerRunnable->Dispatch(workerPrivate))) {
+    RejectAll(NS_ERROR_FAILURE);
+  }
+
+  mStarted = true;
+}
+
 void ServiceWorkerOp::Cancel() { RejectAll(NS_ERROR_DOM_ABORT_ERR); }
 
 ServiceWorkerOp::ServiceWorkerOp(
     ServiceWorkerOpArgs&& aArgs,
     std::function<void(const ServiceWorkerOpResult&)>&& aCallback)
     : mArgs(std::move(aArgs)) {
-  MOZ_ASSERT(RemoteWorkerService::Thread()->IsOnCurrentThread());
-
+  // Can be on the Worker Launcher thread for Terminate operations or on the
+  // Worker thread for other operations
   RefPtr<ServiceWorkerOpPromise> promise = mPromiseHolder.Ensure(__func__);
 
   promise->Then(
@@ -443,7 +489,6 @@ ServiceWorkerOp::~ServiceWorkerOp() {
 
 bool ServiceWorkerOp::Started() const {
   MOZ_ASSERT(RemoteWorkerService::Thread()->IsOnCurrentThread());
-
   return mStarted;
 }
 
@@ -454,7 +499,6 @@ bool ServiceWorkerOp::IsTerminationOp() const {
 
 RefPtr<WorkerThreadRunnable> ServiceWorkerOp::GetRunnable(
     WorkerPrivate* aWorkerPrivate) {
-  AssertIsOnMainThread();
   MOZ_ASSERT(aWorkerPrivate);
 
   return new ServiceWorkerOpRunnable(this, aWorkerPrivate);
@@ -516,17 +560,27 @@ class UpdateServiceWorkerStateOp final : public ServiceWorkerOp {
   NS_INLINE_DECL_THREADSAFE_REFCOUNTING(UpdateServiceWorkerStateOp, override);
 
  private:
-  class UpdateStateOpRunnable final : public MainThreadWorkerControlRunnable {
+  class UpdateStateOpRunnable final : public WorkerControlRunnable {
    public:
     NS_DECL_ISUPPORTS_INHERITED
 
     UpdateStateOpRunnable(RefPtr<UpdateServiceWorkerStateOp> aOwner,
                           WorkerPrivate* aWorkerPrivate)
-        : MainThreadWorkerControlRunnable("UpdateStateOpRunnable"),
+        : WorkerControlRunnable("UpdateStateOpRunnable"),
           mOwner(std::move(aOwner)) {
-      AssertIsOnMainThread();
       MOZ_ASSERT(mOwner);
       MOZ_ASSERT(aWorkerPrivate);
+      aWorkerPrivate->AssertIsOnWorkerThread();
+    }
+
+    virtual bool PreDispatch(WorkerPrivate* aWorkerPrivate) override {
+      aWorkerPrivate->AssertIsOnWorkerThread();
+      return true;
+    }
+
+    virtual void PostDispatch(WorkerPrivate* aWorkerPrivate,
+                              bool aDispatchResult) override {
+      aWorkerPrivate->AssertIsOnWorkerThread();
     }
 
    private:
@@ -561,8 +615,8 @@ class UpdateServiceWorkerStateOp final : public ServiceWorkerOp {
 
   RefPtr<WorkerThreadRunnable> GetRunnable(
       WorkerPrivate* aWorkerPrivate) override {
-    AssertIsOnMainThread();
     MOZ_ASSERT(aWorkerPrivate);
+    aWorkerPrivate->IsOnWorkerThread();
     MOZ_ASSERT(mArgs.type() ==
                ServiceWorkerOpArgs::TServiceWorkerUpdateStateOpArgs);
 
@@ -586,7 +640,7 @@ class UpdateServiceWorkerStateOp final : public ServiceWorkerOp {
 };
 
 NS_IMPL_ISUPPORTS_INHERITED0(UpdateServiceWorkerStateOp::UpdateStateOpRunnable,
-                             MainThreadWorkerControlRunnable)
+                             WorkerControlRunnable)
 
 void ExtendableEventOp::FinishedWithResult(ExtendableEventResult aResult) {
   MOZ_ASSERT(IsCurrentThreadRunningWorker());
@@ -1488,7 +1542,7 @@ void FetchEventOp::ResolvedCallback(JSContext* aCx,
   if (NS_WARN_IF((response->Type() == ResponseType::Opaque ||
                   response->Type() == ResponseType::Cors) &&
                  ir->GetUnfilteredURL().IsEmpty())) {
-    MOZ_DIAGNOSTIC_ASSERT(false, "Cors or opaque Response without a URL");
+    MOZ_DIAGNOSTIC_CRASH("Cors or opaque Response without a URL");
     return;
   }
 
@@ -1887,8 +1941,8 @@ class ExtensionAPIEventOp final : public ServiceWorkerOp {
 /* static */ already_AddRefed<ServiceWorkerOp> ServiceWorkerOp::Create(
     ServiceWorkerOpArgs&& aArgs,
     std::function<void(const ServiceWorkerOpResult&)>&& aCallback) {
-  MOZ_ASSERT(RemoteWorkerService::Thread()->IsOnCurrentThread());
-
+  // Can be on the Worker Launcher thread for Terminate operations or on the
+  // Worker thread for other operations.
   RefPtr<ServiceWorkerOp> op;
 
   switch (aArgs.type()) {

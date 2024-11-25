@@ -96,6 +96,8 @@ skip-if = ["os == 'linux' && os_version == '18.04' && processor == 'x86_64' && o
 
 ["browser_cookies_legacy.js"]
 
+["browser_cookies_partitioned.js"]
+
 ["browser_cookies_privacy.js"]
 
 ["browser_cookies_sameSite.js"]
@@ -164,9 +166,12 @@ skip-if = [
 ["browser_label_and_icon.js"]
 https_first_disabled = true
 skip-if = [
-  "os == 'mac' && os_version == '11.20' && arch == 'aarch64'", # Disabled due to bleedover with other tests when run in regular suites; passes in "failures" jobs
-  "os == 'win' && os_version == '11.2009' && processor == 'x86_64' && opt && msix", # Bug 1775605
+  "os == 'linux' && os_version == '18.04' && processor == 'x86_64' && opt", # Bug 1775605
   "os == 'mac' && os_version == '10.15' && processor == 'x86_64' && opt", # Bug 1638958
+  "os == 'mac' && os_version == '11.20' && arch == 'aarch64'", # Disabled due to bleedover with other tests when run in regular suites; passes in "failures" jobs
+  "os == 'win' && os_version == '11.2009' && processor == 'x86' && opt", # Bug 1775605
+  "os == 'win' && os_version == '11.2009' && processor == 'x86_64' && opt", # Bug 1775605
+  "os == 'mac' && os_version == '14.70' && processor == 'x86_64' && opt && socketprocess_networking", # Bug 1868915
 ]
 
 ["browser_movePendingTabToNewWindow.js"]
@@ -272,6 +277,8 @@ tags = "os_integration"
 ["browser_swapDocShells.js"]
 
 ["browser_switch_remoteness.js"]
+
+["browser_tab_groups_closed.js"]
 
 ["browser_tab_groups_empty.js"]
 

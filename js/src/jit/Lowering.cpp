@@ -251,6 +251,18 @@ void LIRGenerator::visitNewCallObject(MNewCallObject* ins) {
   assignSafepoint(lir, ins);
 }
 
+void LIRGenerator::visitNewMapObject(MNewMapObject* ins) {
+  auto* lir = new (alloc()) LNewMapObject(temp());
+  define(lir, ins);
+  assignSafepoint(lir, ins);
+}
+
+void LIRGenerator::visitNewSetObject(MNewSetObject* ins) {
+  auto* lir = new (alloc()) LNewSetObject(temp());
+  define(lir, ins);
+  assignSafepoint(lir, ins);
+}
+
 void LIRGenerator::visitNewStringObject(MNewStringObject* ins) {
   MOZ_ASSERT(ins->input()->type() == MIRType::String);
 
@@ -3523,13 +3535,13 @@ void LIRGenerator::visitWasmWrapU32Index(MWasmWrapU32Index* ins) {
   defineReuseInput(lir, ins, 0);
 }
 
-void LIRGenerator::visitWasmClampTable64Index(MWasmClampTable64Index* ins) {
+void LIRGenerator::visitWasmClampTable64Address(MWasmClampTable64Address* ins) {
   MDefinition* input = ins->input();
   MOZ_ASSERT(input->type() == MIRType::Int64);
   MOZ_ASSERT(ins->type() == MIRType::Int32);
 
   auto* lir =
-      new (alloc()) LWasmClampTable64Index(useInt64RegisterAtStart(input));
+      new (alloc()) LWasmClampTable64Address(useInt64RegisterAtStart(input));
   define(lir, ins);
 }
 
@@ -3718,6 +3730,13 @@ void LIRGenerator::visitWasmTrapIfAnyRefIsNotJSString(
   LWasmTrapIfAnyRefIsNotJSString* lir = new (alloc())
       LWasmTrapIfAnyRefIsNotJSString(useRegisterAtStart(ins->input()), temp());
   add(lir, ins);
+}
+
+void LIRGenerator::visitWasmAnyRefJSStringLength(
+    MWasmAnyRefJSStringLength* ins) {
+  LWasmAnyRefJSStringLength* lir = new (alloc())
+      LWasmAnyRefJSStringLength(useRegisterAtStart(ins->input()), temp());
+  define(lir, ins);
 }
 
 void LIRGenerator::visitWasmNewI31Ref(MWasmNewI31Ref* ins) {
@@ -6885,7 +6904,7 @@ void LIRGenerator::visitWasmStackSwitchToMain(MWasmStackSwitchToMain* ins) {
                              useFixedAtStart(ins->fn(), ABINonArgReg1),
                              useFixedAtStart(ins->data(), ABINonArgReg2));
 
-  add(lir, ins);
+  defineReturn(lir, ins);
   assignWasmSafepoint(lir);
 #else
   MOZ_CRASH("NYI");
@@ -6896,7 +6915,8 @@ void LIRGenerator::visitWasmStackContinueOnSuspendable(
     MWasmStackContinueOnSuspendable* ins) {
 #ifdef ENABLE_WASM_JSPI
   auto* lir = new (alloc()) LWasmStackContinueOnSuspendable(
-      useFixedAtStart(ins->suspender(), ABINonArgReg0));
+      useFixedAtStart(ins->suspender(), ABINonArgReg0),
+      useFixedAtStart(ins->result(), ABINonArgReg2));
 
   add(lir, ins);
   assignWasmSafepoint(lir);
@@ -7119,6 +7139,10 @@ void LIRGenerator::visitDebugger(MDebugger* ins) {
 
 void LIRGenerator::visitAtomicIsLockFree(MAtomicIsLockFree* ins) {
   define(new (alloc()) LAtomicIsLockFree(useRegister(ins->input())), ins);
+}
+
+void LIRGenerator::visitAtomicPause(MAtomicPause* ins) {
+  add(new (alloc()) LAtomicPause());
 }
 
 void LIRGenerator::visitCheckReturn(MCheckReturn* ins) {
@@ -7642,6 +7666,20 @@ void LIRGenerator::visitSetObjectHasValueVMCall(MSetObjectHasValueVMCall* ins) {
   assignSafepoint(lir, ins);
 }
 
+void LIRGenerator::visitSetObjectDelete(MSetObjectDelete* ins) {
+  auto* lir = new (alloc()) LSetObjectDelete(
+      useRegisterAtStart(ins->setObject()), useBoxAtStart(ins->key()));
+  defineReturn(lir, ins);
+  assignSafepoint(lir, ins);
+}
+
+void LIRGenerator::visitSetObjectAdd(MSetObjectAdd* ins) {
+  auto* lir = new (alloc()) LSetObjectAdd(useRegisterAtStart(ins->setObject()),
+                                          useBoxAtStart(ins->key()));
+  add(lir, ins);
+  assignSafepoint(lir, ins);
+}
+
 void LIRGenerator::visitSetObjectSize(MSetObjectSize* ins) {
   auto* lir = new (alloc()) LSetObjectSize(useRegisterAtStart(ins->set()));
   define(lir, ins);
@@ -7700,6 +7738,21 @@ void LIRGenerator::visitMapObjectGetValueVMCall(MMapObjectGetValueVMCall* ins) {
   auto* lir = new (alloc()) LMapObjectGetValueVMCall(
       useRegisterAtStart(ins->map()), useBoxAtStart(ins->value()));
   defineReturn(lir, ins);
+  assignSafepoint(lir, ins);
+}
+
+void LIRGenerator::visitMapObjectDelete(MMapObjectDelete* ins) {
+  auto* lir = new (alloc()) LMapObjectDelete(
+      useRegisterAtStart(ins->mapObject()), useBoxAtStart(ins->key()));
+  defineReturn(lir, ins);
+  assignSafepoint(lir, ins);
+}
+
+void LIRGenerator::visitMapObjectSet(MMapObjectSet* ins) {
+  auto* lir = new (alloc())
+      LMapObjectSet(useRegisterAtStart(ins->mapObject()),
+                    useBoxAtStart(ins->key()), useBoxAtStart(ins->value()));
+  add(lir, ins);
   assignSafepoint(lir, ins);
 }
 

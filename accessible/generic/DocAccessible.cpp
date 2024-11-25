@@ -65,7 +65,7 @@ static nsStaticAtom* const kRelationAttrs[] = {
     nsGkAtoms::aria_errormessage, nsGkAtoms::_for,
     nsGkAtoms::control,           nsGkAtoms::popovertarget};
 
-static const uint32_t kRelationAttrsLen = ArrayLength(kRelationAttrs);
+static const uint32_t kRelationAttrsLen = std::size(kRelationAttrs);
 
 static nsStaticAtom* const kSingleElementRelationIdlAttrs[] = {
     nsGkAtoms::popovertarget};
@@ -863,6 +863,13 @@ void DocAccessible::AttributeChanged(dom::Element* aElement,
     return;
   }
 
+  if (aAttribute == nsGkAtoms::slot &&
+      !aElement->GetFlattenedTreeParentNode() && aElement != mContent) {
+    // Element is inside a shadow host but is no longer slotted.
+    mDoc->ContentRemoved(aElement);
+    return;
+  }
+
   LocalAccessible* accessible = GetAccessible(aElement);
   if (!accessible) {
     if (mContent == aElement) {
@@ -1416,20 +1423,19 @@ bool DocAccessible::PruneOrInsertSubtree(nsIContent* aRoot) {
       return true;
     }
 
-    // This check *must* come before the broken image check below.
     if (frame && frame->IsReplaced() && frame->AccessibleType() == eImageType &&
         !aRoot->IsHTMLElement(nsGkAtoms::img)) {
       // This is an image specified using the CSS content property which
       // replaces the content of the node. Its frame might be reconstructed,
       // which means its alt text might have changed. We expose the alt text
       // as the name, so fire a name change event.
+      // We will schedule this for reinsertion below, and prune any children if
+      // they exist.
       FireDelayedEvent(nsIAccessibleEvent::EVENT_NAME_CHANGE, acc);
-      return false;
-    }
-
-    // It is a broken image that is being reframed because it either got
-    // or lost an `alt` tag that would rerender this node as text.
-    if (frame && (acc->IsImage() != (frame->AccessibleType() == eImageType))) {
+    } else if (frame &&
+               (acc->IsImage() != (frame->AccessibleType() == eImageType))) {
+      // It is a broken image that is being reframed because it either got
+      // or lost an `alt` tag that would rerender this node as text.
       ContentRemoved(aRoot);
       return true;
     }

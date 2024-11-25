@@ -1213,7 +1213,7 @@ nsresult GfxInfoBase::GetInfo(JSContext* aCx,
   return NS_OK;
 }
 
-nsAutoCString gBaseAppVersion;
+MOZ_RUNINIT nsAutoCString gBaseAppVersion;
 
 const nsCString& GfxInfoBase::GetApplicationVersion() {
   static bool versionInitialized = false;
@@ -1610,7 +1610,7 @@ const char* chromebookProductList[] = {
 bool ProductIsChromebook(nsCString product) {
   size_t result;
   return BinarySearchIf(
-      chromebookProductList, 0, ArrayLength(chromebookProductList),
+      chromebookProductList, 0, std::size(chromebookProductList),
       [&](const char* const aValue) -> int {
         return strcmp(product.get(), aValue);
       },

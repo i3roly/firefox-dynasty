@@ -2318,7 +2318,7 @@ nsresult imgLoader::LoadImage(
   bool isPrivate = false;
 
   if (aLoadingDocument) {
-    isPrivate = nsContentUtils::IsInPrivateBrowsing(aLoadingDocument);
+    isPrivate = aLoadingDocument->IsInPrivateBrowsing();
   } else if (aLoadGroup) {
     isPrivate = nsContentUtils::IsInPrivateBrowsing(aLoadGroup);
   }
@@ -2845,7 +2845,7 @@ bool imgLoader::SupportImageWithMimeType(const nsACString& aMimeType,
   ToLowerCase(mimeType);
 
   if (aAccept == AcceptedMimeTypes::IMAGES_AND_DOCUMENTS &&
-      mimeType.EqualsLiteral("image/svg+xml")) {
+      mimeType.EqualsLiteral(IMAGE_SVG_XML)) {
     return true;
   }
 

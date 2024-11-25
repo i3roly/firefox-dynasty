@@ -242,10 +242,16 @@ export class MozBaseInputElement extends MozLitElement {
     supportPage: { type: String, attribute: "support-page" },
     accessKey: { type: String, mapped: true, fluent: true },
   };
+  static inputLayout = "inline";
 
   constructor() {
     super();
     this.disabled = false;
+  }
+
+  connectedCallback() {
+    super.connectedCallback();
+    this.setAttribute("inputlayout", this.constructor.inputLayout);
   }
 
   get inputEl() {
@@ -279,20 +285,25 @@ export class MozBaseInputElement extends MozLitElement {
   }
 
   render() {
+    let isInlineLayout = this.constructor.inputLayout == "inline";
     return html`
       <link
         rel="stylesheet"
         href="chrome://global/content/elements/moz-input-common.css"
       />
-      <label
-        is="moz-label"
-        part="label"
-        for="input"
-        shownaccesskey=${ifDefined(this.accessKey)}
-      >
-        ${this.inputTemplate()}${this.labelTemplate()}
-      </label>
+      <span class="label-wrapper">
+        <label
+          is="moz-label"
+          part="label"
+          for="input"
+          shownaccesskey=${ifDefined(this.accessKey)}
+        >
+          ${isInlineLayout ? this.inputTemplate() : ""}${this.labelTemplate()}
+        </label>
+        ${this.supportLinkTemplate()}
+      </span>
       ${this.descriptionTemplate()}
+      ${!isInlineLayout ? this.inputTemplate() : ""}
     `;
   }
 
@@ -300,7 +311,6 @@ export class MozBaseInputElement extends MozLitElement {
     return html`<span class="label-content">
       ${this.iconTemplate()}
       <span class="text">${this.label}</span>
-      ${this.supportLinkTemplate()}
     </span>`;
   }
 

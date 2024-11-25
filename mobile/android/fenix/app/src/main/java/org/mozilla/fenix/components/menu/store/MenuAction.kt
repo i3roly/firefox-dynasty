@@ -83,16 +83,6 @@ sealed class MenuAction : Action {
     data object FindInPage : MenuAction()
 
     /**
-     * [MenuAction] dispatched to show the menu CFR.
-     */
-    data object ShowCFR : MenuAction()
-
-    /**
-     * [MenuAction] dispatched when the menu CFR is dismissed.
-     */
-    data object DismissCFR : MenuAction()
-
-    /**
      * [MenuAction] dispatched when the extension state is updated.
      *
      * @property recommendedAddons The recommended [Addon]s to suggest.
@@ -119,6 +109,16 @@ sealed class MenuAction : Action {
      */
     data class UpdateWebExtensionPageMenuItems(
         val webExtensionPageMenuItem: List<WebExtensionMenuItem.WebExtensionPageMenuItem>,
+    ) : MenuAction()
+
+    /**
+     * [MenuAction] dispatched when installed addons list is updated.
+     *
+     * @property availableAddons The list of installed and enabled [Addon]s
+     * to be shown in the menu.
+     */
+    data class UpdateAvailableAddons(
+        val availableAddons: List<Addon>,
     ) : MenuAction()
 
     /**

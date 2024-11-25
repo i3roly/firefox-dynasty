@@ -25,10 +25,12 @@ enum class InlineEntryType : uint8_t {
   StackFunctionLeave,
   LabelEnter,
   LabelLeave,
+  Error,
 };
 
-mozilla::Vector<ExecutionTracer*> ExecutionTracer::globalInstances;
-Mutex ExecutionTracer::globalInstanceLock(mutexid::ExecutionTracerGlobalLock);
+MOZ_RUNINIT mozilla::Vector<ExecutionTracer*> ExecutionTracer::globalInstances;
+MOZ_RUNINIT Mutex
+    ExecutionTracer::globalInstanceLock(mutexid::ExecutionTracerGlobalLock);
 
 static JS::ExecutionTrace::ImplementationType GetImplementation(
     AbstractFramePtr frame) {
@@ -91,6 +93,14 @@ static double GetNowMilliseconds() {
       .ToMilliseconds();
 }
 
+void ExecutionTracer::handleError(JSContext* cx) {
+  inlineData_.beginWritingEntry();
+  inlineData_.write(uint8_t(InlineEntryType::Error));
+  inlineData_.finishWritingEntry();
+  cx->clearPendingException();
+  cx->suspendExecutionTracing();
+}
+
 void ExecutionTracer::writeScriptUrl(ScriptSource* scriptSource) {
   outOfLineData_.beginWritingEntry();
   outOfLineData_.write(uint8_t(OutOfLineEntryType::ScriptURL));
@@ -142,6 +152,8 @@ bool ExecutionTracer::writeFunctionFrame(JSContext* cx,
     inlineData_.write(fn->baseScript()->lineno());
     inlineData_.write(fn->baseScript()->column().oneOriginValue());
     inlineData_.write(scriptSourceId);
+    inlineData_.write(
+        fn->baseScript()->realm()->creationOptions().profilerRealmID());
   } else {
     // In the case of no baseScript, we just fill it out with 0s. 0 is an
     // invalid script source ID, so it is distinguishable from a real one
@@ -178,7 +190,7 @@ bool ExecutionTracer::writeFunctionFrame(JSContext* cx,
   return true;
 }
 
-bool ExecutionTracer::onEnterFrame(JSContext* cx, AbstractFramePtr frame) {
+void ExecutionTracer::onEnterFrame(JSContext* cx, AbstractFramePtr frame) {
   LockGuard<Mutex> guard(bufferLock_);
 
   DebuggerFrameType type = GetFrameType(frame);
@@ -187,16 +199,16 @@ bool ExecutionTracer::onEnterFrame(JSContext* cx, AbstractFramePtr frame) {
       inlineData_.beginWritingEntry();
       inlineData_.write(uint8_t(InlineEntryType::StackFunctionEnter));
       if (!writeFunctionFrame(cx, frame)) {
-        return false;
+        handleError(cx);
+        return;
       }
 
       inlineData_.finishWritingEntry();
     }
   }
-  return true;
 }
 
-bool ExecutionTracer::onLeaveFrame(JSContext* cx, AbstractFramePtr frame) {
+void ExecutionTracer::onLeaveFrame(JSContext* cx, AbstractFramePtr frame) {
   LockGuard<Mutex> guard(bufferLock_);
 
   DebuggerFrameType type = GetFrameType(frame);
@@ -205,13 +217,12 @@ bool ExecutionTracer::onLeaveFrame(JSContext* cx, AbstractFramePtr frame) {
       inlineData_.beginWritingEntry();
       inlineData_.write(uint8_t(InlineEntryType::StackFunctionLeave));
       if (!writeFunctionFrame(cx, frame)) {
-        return false;
+        handleError(cx);
+        return;
       }
       inlineData_.finishWritingEntry();
     }
   }
-
-  return true;
 }
 
 template <typename CharType, TracerStringEncoding Encoding>
@@ -248,6 +259,7 @@ bool ExecutionTracer::readFunctionFrame(
   inlineData_.read(&event.functionEvent.lineNumber);
   inlineData_.read(&event.functionEvent.column);
   inlineData_.read(&event.functionEvent.scriptId);
+  inlineData_.read(&event.functionEvent.realmID);
   inlineData_.read(&event.functionEvent.functionNameId);
   inlineData_.read(&implementation);
   inlineData_.read(&event.time);
@@ -317,6 +329,16 @@ bool ExecutionTracer::readInlineEntry(
       if (!readLabel(kind, event, scratchBuffer, stringBuffer)) {
         return false;
       }
+
+      if (!events.append(std::move(event))) {
+        return false;
+      }
+
+      return true;
+    }
+    case InlineEntryType::Error: {
+      JS::ExecutionTrace::TracedEvent event;
+      event.kind = JS::ExecutionTrace::EventKind::Error;
 
       if (!events.append(std::move(event))) {
         return false;

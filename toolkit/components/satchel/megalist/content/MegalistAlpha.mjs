@@ -14,6 +14,8 @@ ChromeUtils.defineESModuleGetters(lazy, {
 // eslint-disable-next-line import/no-unassigned-import
 import "chrome://global/content/megalist/PasswordCard.mjs";
 // eslint-disable-next-line import/no-unassigned-import
+import "chrome://global/content/megalist/LoginFormComponent/login-form.mjs";
+// eslint-disable-next-line import/no-unassigned-import
 import "chrome://global/content/megalist/Dialog.mjs";
 
 // eslint-disable-next-line import/no-unassigned-import
@@ -22,6 +24,11 @@ import "chrome://global/content/megalist/NotificationMessageBar.mjs";
 const DISPLAY_MODES = {
   ALERTS: "SortByAlerts",
   ALL: "SortByName",
+};
+
+const VIEW_MODES = {
+  LIST: "List",
+  ADD: "Add",
 };
 
 const INPUT_CHANGE_DELAY = 300;
@@ -37,6 +44,7 @@ export class MegalistAlpha extends MozLitElement {
     this.reauthResolver = null;
     this.displayMode = DISPLAY_MODES.ALL;
     this.inputChangeTimeout = null;
+    this.viewMode = VIEW_MODES.LIST;
 
     window.addEventListener("MessageFromViewModel", ev =>
       this.#onMessageFromViewModel(ev)
@@ -51,6 +59,7 @@ export class MegalistAlpha extends MozLitElement {
       header: { type: Object },
       notification: { type: Object },
       displayMode: { type: String },
+      viewMode: { type: String },
     };
   }
 
@@ -58,6 +67,14 @@ export class MegalistAlpha extends MozLitElement {
     super.connectedCallback();
     this.#messageToViewModel("Refresh");
     this.#sendCommand(this.displayMode);
+  }
+
+  async getUpdateComplete() {
+    await super.getUpdateComplete();
+    const passwordCards = Array.from(
+      this.shadowRoot.querySelectorAll("password-card")
+    );
+    await Promise.all(passwordCards.map(el => el.updateComplete));
   }
 
   #onMessageFromViewModel({ detail }) {
@@ -79,7 +96,7 @@ export class MegalistAlpha extends MozLitElement {
   }
 
   #onAddButtonClick() {
-    // TODO: implement me!
+    this.viewMode = VIEW_MODES.ADD;
   }
 
   #onRadioButtonChange(e) {
@@ -123,6 +140,9 @@ export class MegalistAlpha extends MozLitElement {
 
   receiveSetNotification(notification) {
     this.notification = notification;
+    if (notification.id === "add-login-success") {
+      this.viewMode = VIEW_MODES.LIST;
+    }
   }
 
   receiveReauthResponse(isAuthorized) {
@@ -245,7 +265,7 @@ export class MegalistAlpha extends MozLitElement {
             ></moz-button>
             <moz-button
               data-l10n-id="passwords-add-manually"
-              @click=${() => {}}
+              @click=${this.#onAddButtonClick}
             ></moz-button>
           </div>
         </div>
@@ -257,13 +277,29 @@ export class MegalistAlpha extends MozLitElement {
     return html` <moz-card
       class="empty-state-card"
       data-l10n-id="passwords-no-passwords-found-header"
-      data-l10n-attrs="heading"
     >
       <div
         class="empty-search-results"
         data-l10n-id="passwords-no-passwords-found-message"
       ></div>
     </moz-card>`;
+  }
+
+  renderLastRow() {
+    switch (this.viewMode) {
+      case VIEW_MODES.LIST:
+        return this.renderList();
+      case VIEW_MODES.ADD:
+        return html` <login-form
+          .onCancelClick=${() => (this.viewMode = VIEW_MODES.LIST)}
+          .onSaveClick=${formData => {
+            this.#sendCommand("AddLogin", { value: formData });
+          }}
+        >
+        </login-form>`;
+      default:
+        return "";
+    }
   }
 
   renderSearch() {
@@ -393,6 +429,18 @@ export class MegalistAlpha extends MozLitElement {
     </div>`;
   }
 
+  async #scrollPasswordCardIntoView(guid) {
+    const matchingRecordIndex = this.records.findIndex(
+      record => record.origin.guid === guid
+    );
+    this.viewMode = VIEW_MODES.LIST;
+    await this.getUpdateComplete();
+    const passwordCard =
+      this.shadowRoot.querySelectorAll("password-card")[matchingRecordIndex];
+    passwordCard.scrollIntoView({ block: "center" });
+    passwordCard.originLine.focus();
+  }
+
   renderNotification() {
     if (!this.notification) {
       return "";
@@ -405,6 +453,7 @@ export class MegalistAlpha extends MozLitElement {
           this.notification = null;
         }}
         .messageHandler=${commandId => this.#sendCommand(commandId)}
+        @view-login=${e => this.#scrollPasswordCardIntoView(e.detail.guid)}
       >
       </notification-message-bar>
     `;
@@ -418,7 +467,7 @@ export class MegalistAlpha extends MozLitElement {
       />
       <div class="container">
         ${this.renderFirstRow()} ${this.renderSecondRow()}
-        ${this.renderNotification()} ${this.renderList()}
+        ${this.renderNotification()} ${this.renderLastRow()}
       </div>
     `;
   }

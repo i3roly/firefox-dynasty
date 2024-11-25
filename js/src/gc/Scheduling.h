@@ -382,11 +382,11 @@
    *                                                                           \
    * Multiple of threshold.bytes() which triggers a non-incremental GC.        \
    *                                                                           \
-   * The small heap limit must be greater than 1.3 to maintain performance on  \
+   * The small heap limit must be at least 1.7 to maintain performance on      \
    * splay-latency.                                                            \
    */                                                                          \
   _(JSGC_SMALL_HEAP_INCREMENTAL_LIMIT, double, smallHeapIncrementalLimit,      \
-    ConvertTimes100, CheckIncrementalLimit, 1.50)                              \
+    ConvertTimes100, CheckIncrementalLimit, 1.70)                              \
   _(JSGC_LARGE_HEAP_INCREMENTAL_LIMIT, double, largeHeapIncrementalLimit,      \
     ConvertTimes100, CheckIncrementalLimit, 1.10)                              \
                                                                                \
@@ -590,7 +590,7 @@ class GCSchedulingState {
    * growth factor is a measure of how large (as a percentage of the last GC)
    * the heap is allowed to grow before we try to schedule another GC.
    */
-  mozilla::Atomic<bool, mozilla::ReleaseAcquire> inHighFrequencyGCMode_;
+  mozilla::Atomic<bool, mozilla::Relaxed> inHighFrequencyGCMode_;
 
  public:
   GCSchedulingState() : inHighFrequencyGCMode_(false) {}
@@ -611,7 +611,7 @@ struct TriggerResult {
   size_t thresholdBytes;
 };
 
-using AtomicByteCount = mozilla::Atomic<size_t, mozilla::ReleaseAcquire>;
+using AtomicByteCount = mozilla::Atomic<size_t, mozilla::Relaxed>;
 
 /*
  * Tracks the size of allocated data. This is used for both GC and malloc data.

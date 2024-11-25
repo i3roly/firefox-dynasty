@@ -136,15 +136,48 @@ let nerResultsMap = {
       word: "ca",
     },
   ],
+  "ramen ra": [
+    {
+      entity: "B-CITY",
+      score: 0.6767462491989136,
+      index: 3,
+      word: "ra",
+    },
+  ],
+  "plumbers in seattle,wa": [
+    {
+      entity: "B-CITYSTATE",
+      index: 4,
+      score: 0.99997478723526,
+      word: "seattle",
+    },
+    {
+      entity: "I-CITYSTATE",
+      index: 5,
+      score: 0.9999989867210388,
+      word: ",",
+    },
+    {
+      entity: "I-CITYSTATE",
+      index: 6,
+      score: 0.9999985098838806,
+      word: "wa",
+    },
+  ],
 };
 
 add_setup(async function () {
   await SpecialPowers.pushPrefEnv({
-    set: [["browser.urlbar.nerThreshold", 0.5]],
+    set: [
+      ["browser.urlbar.nerThreshold", 0.5],
+      ["browser.urlbar.intentThreshold", 0.5],
+    ],
   });
   // Stub these out so we don't end up invoking engine calls for now
   // until end-to-end engine calls work
-  sinon.stub(MLSuggest, "_findIntent").returns("yelp_intent");
+  sinon
+    .stub(MLSuggest, "_findIntent")
+    .returns({ label: "yelp_intent", score: 0.9 });
   sinon.stub(MLSuggest, "_findNER").callsFake(query => {
     return nerResultsMap[query] || [];
   });
@@ -258,6 +291,12 @@ add_task(async function test_MLSuggest() {
   );
 
   await testSuggestion("dumplings in ca", null, "ca", remoteClients);
+  await testSuggestion(
+    "plumbers in seattle,wa",
+    "seattle",
+    "wa",
+    remoteClients
+  );
 
   Assert.strictEqual(
     Services.prefs.getFloatPref("browser.urlbar.nerThreshold"),
@@ -286,6 +325,7 @@ class MLEngineThatFails {
     return [
       {
         label: "yelp_intent",
+        score: 0.9,
       },
     ];
   }
@@ -315,6 +355,89 @@ add_task(async function test_MLSuggest_restart_after_failure() {
   Assert.ok(suggestion2, "Suggestion should be good");
   const expected = { intent: "yelp_intent" };
   Assert.deepEqual(suggestion2.intent, expected.intent);
+
+  await MLSuggest.shutdown();
+  await EngineProcess.destroyMLEngine();
+  await cleanup();
+  sinon.restore();
+});
+
+/**
+ * For Mocking MLEngine with low score
+ */
+class MLEngineWithLowYelpIntent {
+  // prefix with _query avoids lint error
+  async run(_query) {
+    return [
+      {
+        label: "yelp_intent",
+        score: 0.3,
+      },
+    ];
+  }
+}
+
+add_task(async function test_MLSuggest_low_intent_threshold() {
+  // Restore any previous stubs
+  sinon.restore();
+
+  sinon.stub(MLSuggest, "createEngine").callsFake(() => {
+    return new MLEngineWithLowYelpIntent();
+  });
+  const { cleanup } = await setup();
+
+  await MLSuggest.initialize();
+
+  let suggestion = await MLSuggest.makeSuggestions("no yelp");
+  Assert.ok(suggestion, "Suggestion should be good");
+  const expected = { intent: "" };
+  Assert.deepEqual(suggestion.intent, expected.intent);
+
+  await MLSuggest.shutdown();
+  await EngineProcess.destroyMLEngine();
+  await cleanup();
+  sinon.restore();
+});
+
+/**
+ * For Mocking MLEngine with positive yelp itent
+ */
+class MLEngineWithHighYelpIntent {
+  // prefix with _query avoids lint error
+  async run(_query) {
+    return [
+      {
+        label: "yelp_intent",
+        score: 0.9,
+      },
+    ];
+  }
+}
+
+add_task(async function test_MLSuggest_city_dup_in_subject() {
+  // Restore any previous stubs
+  sinon.restore();
+
+  sinon.stub(MLSuggest, "createEngine").callsFake(() => {
+    return new MLEngineWithHighYelpIntent();
+  });
+  sinon.stub(MLSuggest, "_findNER").callsFake(query => {
+    return nerResultsMap[query] || [];
+  });
+  const { cleanup } = await setup();
+
+  await MLSuggest.initialize();
+
+  let suggestion = await MLSuggest.makeSuggestions("ramen ra");
+  Assert.ok(suggestion, "Suggestion should be good");
+  const expected = {
+    intent: "yelp_intent",
+    location: { city: "ra", state: null },
+    subject: "ramen",
+  };
+  Assert.deepEqual(suggestion.intent, expected.intent);
+  Assert.deepEqual(suggestion.location, expected.location);
+  Assert.deepEqual(suggestion.subject, expected.subject);
 
   await MLSuggest.shutdown();
   await EngineProcess.destroyMLEngine();

@@ -186,9 +186,8 @@ static nsresult GetFolderDiskInfo(nsIFile* file, FolderDiskInfo& info) {
   NS_ENSURE_SUCCESS(rv, rv);
   wchar_t volumeMountPoint[MAX_PATH] = {L'\\', L'\\', L'.', L'\\'};
   const size_t PREFIX_LEN = 4;
-  if (!::GetVolumePathNameW(
-          filePath.get(), volumeMountPoint + PREFIX_LEN,
-          mozilla::ArrayLength(volumeMountPoint) - PREFIX_LEN)) {
+  if (!::GetVolumePathNameW(filePath.get(), volumeMountPoint + PREFIX_LEN,
+                            std::size(volumeMountPoint) - PREFIX_LEN)) {
     return NS_ERROR_UNEXPECTED;
   }
   size_t volumeMountPointLen = wcslen(volumeMountPoint);
@@ -499,12 +498,10 @@ static nsresult GetWindowsSecurityCenterInfo(nsAString& aAVInfo,
   // Each output must match the corresponding entry in providerTypes.
   nsAString* outputs[] = {&aAVInfo, &aAntiSpyInfo, &aFirewallInfo};
 
-  static_assert(
-      mozilla::ArrayLength(providerTypes) == mozilla::ArrayLength(outputs),
-      "Length of providerTypes and outputs arrays must match");
+  static_assert(std::size(providerTypes) == std::size(outputs),
+                "Length of providerTypes and outputs arrays must match");
 
-  for (uint32_t index = 0; index < mozilla::ArrayLength(providerTypes);
-       ++index) {
+  for (uint32_t index = 0; index < std::size(providerTypes); ++index) {
     RefPtr<IWSCProductList> prodList;
     HRESULT hr = ::CoCreateInstance(clsid, nullptr, CLSCTX_INPROC_SERVER, iid,
                                     getter_AddRefs(prodList));
@@ -1387,7 +1384,7 @@ nsresult nsSystemInfo::Init() {
 #endif
   if (virtualMem) SetUint64Property(u"virtualmemsize"_ns, virtualMem);
 
-  for (uint32_t i = 0; i < ArrayLength(cpuPropItems); i++) {
+  for (uint32_t i = 0; i < std::size(cpuPropItems); i++) {
     rv = SetPropertyAsBool(NS_ConvertASCIItoUTF16(cpuPropItems[i].name),
                            cpuPropItems[i].propfun());
     if (NS_WARN_IF(NS_FAILED(rv))) {
@@ -1463,15 +1460,20 @@ nsresult nsSystemInfo::Init() {
     return rv;
   }
 
-  if (XRE_IsParentProcess()) {
-    nsString pointerExplanation;
-    widget::WinUtils::GetPointerExplanation(&pointerExplanation);
-    rv = SetPropertyAsAString(u"pointingDevices"_ns, pointerExplanation);
-    if (NS_WARN_IF(NS_FAILED(rv))) {
-      return rv;
-    }
-  }
+#endif
 
+#if defined(XP_WIN) || defined(ANDROID)
+  // TODO(krosylight): Enable this on other platforms too when implemented
+  if (XRE_IsParentProcess()) {
+    auto kinds = static_cast<LookAndFeel::PointingDeviceKinds>(
+        LookAndFeel::GetInt(LookAndFeel::IntID::PointingDeviceKinds, 0));
+    MOZ_TRY(SetPropertyAsBool(
+        u"hasMouse"_ns, !!(kinds & LookAndFeel::PointingDeviceKinds::Mouse)));
+    MOZ_TRY(SetPropertyAsBool(
+        u"hasTouch"_ns, !!(kinds & LookAndFeel::PointingDeviceKinds::Touch)));
+    MOZ_TRY(SetPropertyAsBool(
+        u"hasPen"_ns, !!(kinds & LookAndFeel::PointingDeviceKinds::Pen)));
+  }
 #endif
 
 #if defined(XP_MACOSX)

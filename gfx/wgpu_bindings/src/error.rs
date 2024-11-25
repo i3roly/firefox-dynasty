@@ -162,8 +162,8 @@ mod foreign {
             CreateComputePipelineError, CreateRenderPipelineError, CreateShaderModuleError,
         },
         resource::{
-            BufferAccessError, CreateBufferError, CreateSamplerError, CreateTextureError,
-            CreateTextureViewError, DestroyError,
+            BufferAccessError, CreateBufferError, CreateQuerySetError, CreateSamplerError,
+            CreateTextureError, CreateTextureViewError, DestroyError,
         },
     };
 
@@ -496,12 +496,11 @@ mod foreign {
                 TransferError::MemoryInitFailure(e) => e.error_type(),
 
                 TransferError::SameSourceDestinationBuffer
-                | TransferError::MissingRenderAttachmentUsageFlag(_)
                 | TransferError::BufferOverrun { .. }
                 | TransferError::TextureOverrun { .. }
                 | TransferError::InvalidTextureAspect { .. }
                 | TransferError::InvalidTextureMipLevel { .. }
-                | TransferError::InvalidDimensionExternal(_)
+                | TransferError::InvalidDimensionExternal
                 | TransferError::UnalignedBufferOffset(_)
                 | TransferError::UnalignedCopySize(_)
                 | TransferError::UnalignedCopyWidth
@@ -654,6 +653,19 @@ mod foreign {
     impl HasErrorBufferType for DestroyError {
         fn error_type(&self) -> ErrorBufferType {
             ErrorBufferType::Validation
+        }
+    }
+
+    impl HasErrorBufferType for CreateQuerySetError {
+        fn error_type(&self) -> ErrorBufferType {
+            match self {
+                CreateQuerySetError::Device(e) => e.error_type(),
+                CreateQuerySetError::ZeroCount
+                | CreateQuerySetError::TooManyQueries { .. }
+                | CreateQuerySetError::MissingFeatures(..) => ErrorBufferType::Validation,
+                // N.B: forced non-exhaustiveness
+                _ => ErrorBufferType::Validation,
+            }
         }
     }
 }

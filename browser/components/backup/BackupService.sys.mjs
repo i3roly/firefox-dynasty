@@ -13,7 +13,10 @@ import {
   BYTES_IN_MEBIBYTE,
 } from "resource:///modules/backup/MeasurementUtils.sys.mjs";
 
-import { ERRORS } from "chrome://browser/content/backup/backup-constants.mjs";
+import {
+  ERRORS,
+  STEPS,
+} from "chrome://browser/content/backup/backup-constants.mjs";
 import { BackupError } from "resource:///modules/backup/BackupError.mjs";
 
 const BACKUP_DIR_PREF_NAME = "browser.backup.location";
@@ -133,7 +136,13 @@ XPCOMUtils.defineLazyPreferenceGetter(
    */
   null,
   async function onUpdateLocationDirPath(_pref, _prevVal, newVal) {
-    let bs = BackupService.get();
+    let bs;
+    try {
+      bs = BackupService.get();
+    } catch (e) {
+      // This can throw if the BackupService hasn't initialized yet, which
+      // is a case we're okay to ignore.
+    }
     if (bs) {
       await bs.onUpdateLocationDirPath(newVal);
     }
@@ -678,6 +687,14 @@ export class BackupService extends EventTarget {
   #regenerationDebouncer = null;
 
   /**
+   * True if takeMeasurements has been called and various measurements related
+   * to the BackupService have been taken.
+   *
+   * @type {boolean}
+   */
+  #takenMeasurements = false;
+
+  /**
    * The path of the default parent directory for saving backups.
    * The current default is the Documents directory.
    *
@@ -903,10 +920,7 @@ export class BackupService extends EventTarget {
     }
     this.#instance = new BackupService(DefaultBackupResources);
 
-    this.#instance.checkForPostRecovery().then(() => {
-      this.#instance.takeMeasurements();
-    });
-
+    this.#instance.checkForPostRecovery();
     this.#instance.initBackupScheduler();
     return this.#instance;
   }
@@ -1131,6 +1145,7 @@ export class BackupService extends EventTarget {
       BackupService.WRITE_BACKUP_LOCK_NAME,
       { signal: this.#backupWriteAbortController.signal },
       async () => {
+        let currentStep = STEPS.CREATE_BACKUP_ENTRYPOINT;
         this.#backupInProgress = true;
         const backupTimer = Glean.browserBackup.totalBackupTime.start();
 
@@ -1139,6 +1154,7 @@ export class BackupService extends EventTarget {
             `Creating backup for profile at ${profilePath}`
           );
 
+          currentStep = STEPS.CREATE_BACKUP_RESOLVE_DESTINATION;
           let archiveDestFolderPath = await this.resolveArchiveDestFolderPath(
             lazy.backupDirPref
           );
@@ -1146,8 +1162,10 @@ export class BackupService extends EventTarget {
             `Destination for archive: ${archiveDestFolderPath}`
           );
 
+          currentStep = STEPS.CREATE_BACKUP_CREATE_MANIFEST;
           let manifest = await this.#createBackupManifest();
 
+          currentStep = STEPS.CREATE_BACKUP_CREATE_BACKUPS_FOLDER;
           // First, check to see if a `backups` directory already exists in the
           // profile.
           let backupDirPath = PathUtils.join(
@@ -1164,6 +1182,7 @@ export class BackupService extends EventTarget {
             createAncestors: true,
           });
 
+          currentStep = STEPS.CREATE_BACKUP_CREATE_STAGING_FOLDER;
           let stagingPath = await this.#prepareStagingFolder(backupDirPath);
 
           // Sort resources be priority.
@@ -1173,10 +1192,12 @@ export class BackupService extends EventTarget {
             }
           );
 
+          currentStep = STEPS.CREATE_BACKUP_LOAD_ENCSTATE;
           let encState = await this.loadEncryptionState(profilePath);
           let encryptionEnabled = !!encState;
           lazy.logConsole.debug("Encryption enabled: ", encryptionEnabled);
 
+          currentStep = STEPS.CREATE_BACKUP_RUN_BACKUP;
           // Perform the backup for each resource.
           for (let resourceClass of sortedResources) {
             try {
@@ -1224,6 +1245,7 @@ export class BackupService extends EventTarget {
             }
           }
 
+          currentStep = STEPS.CREATE_BACKUP_VERIFY_MANIFEST;
           // Ensure that the manifest abides by the current schema, and log
           // an error if somehow it doesn't. We'll want to collect telemetry for
           // this case to make sure it's not happening in the wild. We debated
@@ -1246,6 +1268,7 @@ export class BackupService extends EventTarget {
             // TODO: Collect telemetry for this case. (bug 1891817)
           }
 
+          currentStep = STEPS.CREATE_BACKUP_WRITE_MANIFEST;
           // Write the manifest to the staging folder.
           let manifestPath = PathUtils.join(
             stagingPath,
@@ -1253,6 +1276,7 @@ export class BackupService extends EventTarget {
           );
           await IOUtils.writeJSON(manifestPath, manifest);
 
+          currentStep = STEPS.CREATE_BACKUP_FINALIZE_STAGING;
           let renamedStagingPath = await this.#finalizeStagingFolder(
             stagingPath
           );
@@ -1278,6 +1302,7 @@ export class BackupService extends EventTarget {
             totalSizeBytesNearestMebibyte / BYTES_IN_MEBIBYTE
           );
 
+          currentStep = STEPS.CREATE_BACKUP_COMPRESS_STAGING;
           let compressedStagingPath = await this.#compressStagingFolder(
             renamedStagingPath,
             backupDirPath
@@ -1285,6 +1310,7 @@ export class BackupService extends EventTarget {
             await IOUtils.remove(renamedStagingPath, { recursive: true });
           });
 
+          currentStep = STEPS.CREATE_BACKUP_CREATE_ARCHIVE;
           // Now create the single-file archive. For now, we'll stash this in the
           // backups folder while it gets written. Once that's done, we'll attempt
           // to move it to the user's configured backup path.
@@ -1319,6 +1345,7 @@ export class BackupService extends EventTarget {
             archiveSizeBytesNearestMebibyte / BYTES_IN_MEBIBYTE
           );
 
+          currentStep = STEPS.CREATE_BACKUP_FINALIZE_ARCHIVE;
           let archivePath = await this.finalizeSingleFileArchive(
             archiveTmpPath,
             archiveDestFolderPath,
@@ -1333,9 +1360,15 @@ export class BackupService extends EventTarget {
           this.#_state.lastBackupDate = nowSeconds;
           Glean.browserBackup.totalBackupTime.stopAndAccumulate(backupTimer);
 
+          Glean.browserBackup.created.record();
+
           return { manifest, archivePath };
-        } catch {
+        } catch (e) {
           Glean.browserBackup.totalBackupTime.cancel(backupTimer);
+          Glean.browserBackup.error.record({
+            error_code: String(e.cause || ERRORS.UNKNOWN),
+            backup_step: String(currentStep),
+          });
           return null;
         } finally {
           this.#backupInProgress = false;
@@ -2806,6 +2839,8 @@ export class BackupService extends EventTarget {
   async onUpdateLocationDirPath(newDirPath) {
     lazy.logConsole.debug(`Updating backup location to ${newDirPath}`);
 
+    Glean.browserBackup.changeLocation.record();
+
     this.#_state.backupDirPath = newDirPath;
     this.stateUpdate();
   }
@@ -2852,6 +2887,12 @@ export class BackupService extends EventTarget {
    */
   onUpdateScheduledBackups(isScheduledBackupsEnabled) {
     if (this.#_state.scheduledBackupsEnabled != isScheduledBackupsEnabled) {
+      if (isScheduledBackupsEnabled) {
+        Glean.browserBackup.toggleOn.record();
+      } else {
+        Glean.browserBackup.toggleOff.record();
+      }
+
       lazy.logConsole.debug(
         "Updating scheduled backups",
         isScheduledBackupsEnabled
@@ -2869,7 +2910,19 @@ export class BackupService extends EventTarget {
   async takeMeasurements() {
     lazy.logConsole.debug("Taking Telemetry measurements");
 
-    // We'll start by measuring the available disk space on the storage
+    // We'll start by taking some basic BackupService state measurements.
+    Glean.browserBackup.enabled.set(true);
+    Glean.browserBackup.schedulerEnabled.set(lazy.scheduledBackupsPref);
+
+    await this.loadEncryptionState();
+    Glean.browserBackup.pswdEncrypted.set(this.#_state.encryptionEnabled);
+
+    const USING_DEFAULT_DIR_PATH =
+      lazy.backupDirPref ==
+      PathUtils.join(lazy.defaultParentDirPath, BackupService.BACKUP_DIR_NAME);
+    Glean.browserBackup.locationOnDevice.set(USING_DEFAULT_DIR_PATH ? 1 : 2);
+
+    // Next, we'll measure the available disk space on the storage
     // device that the profile directory is on.
     let profileDir = await IOUtils.getFile(PathUtils.profileDir);
 
@@ -3273,9 +3326,14 @@ export class BackupService extends EventTarget {
       // Intentional fall-through
       case "session-cookie-changed": {
         let notification = subject.QueryInterface(Ci.nsICookieNotification);
+        // A browsingContextId value of 0 means that this deletion was caused by
+        // chrome UI cookie deletion, which is what we care about. If it's not
+        // 0, then a site deleted its own cookie, which we ignore.
         if (
-          notification.action == Ci.nsICookieNotification.COOKIE_DELETED ||
-          notification.action == Ci.nsICookieNotification.ALL_COOKIES_CLEARED
+          (notification.action == Ci.nsICookieNotification.COOKIE_DELETED ||
+            notification.action ==
+              Ci.nsICookieNotification.ALL_COOKIES_CLEARED) &&
+          !notification.browsingContextId
         ) {
           this.#debounceRegeneration();
         }
@@ -3301,6 +3359,11 @@ export class BackupService extends EventTarget {
    */
   onIdle() {
     lazy.logConsole.debug("Saw idle callback");
+    if (!this.#takenMeasurements) {
+      this.takeMeasurements();
+      this.#takenMeasurements = true;
+    }
+
     if (lazy.scheduledBackupsPref) {
       lazy.logConsole.debug("Scheduled backups enabled.");
       let now = Math.floor(Date.now() / 1000);

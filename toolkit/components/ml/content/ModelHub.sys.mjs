@@ -15,6 +15,8 @@ ChromeUtils.defineESModuleGetters(lazy, {
   ObjectUtils: "resource://gre/modules/ObjectUtils.sys.mjs",
   setTimeout: "resource://gre/modules/Timer.sys.mjs",
   Progress: "chrome://global/content/ml/Utils.sys.mjs",
+  URLChecker: "chrome://global/content/ml/Utils.sys.mjs",
+  DEFAULT_ENGINE_ID: "chrome://global/content/ml/EngineProcess.sys.mjs",
 });
 
 ChromeUtils.defineLazyGetter(lazy, "console", () => {
@@ -24,14 +26,6 @@ ChromeUtils.defineLazyGetter(lazy, "console", () => {
   });
 });
 
-const ALLOWED_HUBS = [
-  "chrome://*",
-  "resource://*",
-  "http://localhost",
-  "https://localhost",
-  "https://model-hub.mozilla.org",
-];
-
 const ALLOWED_HEADERS_KEYS = [
   "Content-Type",
   "ETag",
@@ -39,10 +33,9 @@ const ALLOWED_HEADERS_KEYS = [
   "fileSize", // the size in bytes we store
   "Content-Length", // the size we download (can be different when gzipped)
 ];
-const DEFAULT_URL_TEMPLATE = "{model}/resolve/{revision}";
 
 // Default indexedDB revision.
-const DEFAULT_MODEL_REVISION = 2;
+const DEFAULT_MODEL_REVISION = 3;
 
 // The origin to use for storage. If null uses system.
 const DEFAULT_PRINCIPAL_ORIGIN = null;
@@ -50,50 +43,36 @@ const DEFAULT_PRINCIPAL_ORIGIN = null;
 XPCOMUtils.defineLazyPreferenceGetter(
   lazy,
   "DEFAULT_MAX_CACHE_SIZE",
-  "browser.ml.modelCacheMaxSizeBytes"
+  "browser.ml.modelCacheMaxSize"
 );
 
+XPCOMUtils.defineLazyPreferenceGetter(
+  lazy,
+  "DEFAULT_URL_TEMPLATE",
+  "browser.ml.modelHubUrlTemplate",
+  "{model}/{revision}"
+);
+
+XPCOMUtils.defineLazyPreferenceGetter(
+  lazy,
+  "DEFAULT_ROOT_URL",
+  "browser.ml.modelHubRootUrl",
+  "https://model-hub.mozilla.org/"
+);
+
+const ONE_GIB = 1024 * 1024 * 1024;
+const NO_ETAG = "NO_ETAG";
+
 /**
- * Checks if a given URL string corresponds to an allowed hub.
- *
- * This function validates a URL against a list of allowed hubs, ensuring that it:
- * - Is well-formed according to the URL standard.
- * - Does not include a username or password.
- * - Matches the allowed scheme and hostname.
- *
- * @param {string} urlString The URL string to validate.
- * @returns {boolean} True if the URL is allowed; false otherwise.
+ * Custom error when a fetch is attempted on a forbidden URL
  */
-function allowedHub(urlString) {
-  if (Services.env.exists("MOZ_ALLOW_EXTERNAL_ML_HUB")) {
-    return true;
-  }
-
-  try {
-    const url = new URL(urlString);
-    // Check for username or password in the URL
-    if (url.username !== "" || url.password !== "") {
-      return false; // Reject URLs with username or password
-    }
-    const scheme = url.protocol;
-    const host = url.hostname;
-    const fullPrefix = `${scheme}//${host}`;
-
-    return ALLOWED_HUBS.some(hubName => {
-      const [allowedScheme, allowedHost] = hubName.split("://");
-      if (allowedHost === "*") {
-        return `${allowedScheme}:` === scheme;
-      }
-      const allowedPrefix = `${allowedScheme}://${allowedHost}`;
-      return fullPrefix === allowedPrefix;
-    });
-  } catch (error) {
-    lazy.console.error("Error parsing URL:", error);
-    return false;
+class ForbiddenURLError extends Error {
+  constructor(url, rejectionType) {
+    super(`Forbidden URL: ${url} (${rejectionType})`);
+    this.name = "ForbiddenURLError";
+    this.url = url;
   }
 }
-
-const NO_ETAG = "NO_ETAG";
 
 /**
  * Class for managing a cache stored in IndexedDB.
@@ -145,6 +124,13 @@ export class IndexedDBCache {
   taskStoreName;
 
   /**
+   * Name of the object store for storing (model, file, revision, engineIds)
+   *
+   * @type {string}
+   */
+  enginesStoreName;
+
+  /**
    * Name and KeyPath for indices to be created on object stores.
    *
    * @type {object}
@@ -164,7 +150,7 @@ export class IndexedDBCache {
     },
   };
   /**
-   * Maximum size of the cache in bytes. Defaults to "browser.ml.modelCacheMaxSizeBytes".
+   * Maximum size of the cache in GiB. Defaults to "browser.ml.modelCacheMaxSize".
    *
    * @type {number}
    */
@@ -177,7 +163,7 @@ export class IndexedDBCache {
    * @param {object} config
    * @param {string} config.dbName - The name of the database file.
    * @param {number} config.version - The version number of the database.
-   * @param {number} config.maxSize Maximum size of the cache in bytes. Defaults to "browser.ml.modelCacheMaxSizeBytes".
+   * @param {number} config.maxSize Maximum size of the cache in GiB. Defaults to "browser.ml.modelCacheMaxSize".
    */
   constructor({
     dbName = "modelFiles",
@@ -189,6 +175,7 @@ export class IndexedDBCache {
     this.fileStoreName = "files";
     this.headersStoreName = "headers";
     this.taskStoreName = "tasks";
+    this.enginesStoreName = "engines";
     this.#maxSize = maxSize;
   }
 
@@ -198,7 +185,7 @@ export class IndexedDBCache {
    * @param {object} config
    * @param {string} [config.dbName="modelFiles"] - The name of the database.
    * @param {number} [config.version] - The version number of the database.
-   * @param {number} config.maxSize Maximum size of the cache in bytes. Defaults to "browser.ml.modelCacheMaxSizeBytes".
+   * @param {number} config.maxSize Maximum size of the cache in bytes. Defaults to "browser.ml.modelCacheMaxSize".
    * @returns {Promise<IndexedDBCache>} An initialized instance of IndexedDBCache.
    */
   static async init({
@@ -229,13 +216,18 @@ export class IndexedDBCache {
 
   #migrateStore(db, oldVersion) {
     const newVersion = db.version;
-    // Delete all existing data when migrating from 1 to 2
-    if (oldVersion == 1 && newVersion == 2) {
-      // Version 1 may contains task depe
+
+    // Delete all existing data when migrating for now
+    if (oldVersion < newVersion) {
+      lazy.console.debug(
+        `Migrating from version ${oldVersion} to ${newVersion}`
+      );
+
       for (const name of [
         this.fileStoreName,
         this.headersStoreName,
         this.taskStoreName,
+        this.enginesStoreName,
       ]) {
         if (db.objectStoreNames.contains(name)) {
           db.deleteObjectStore(name);
@@ -361,6 +353,20 @@ export class IndexedDBCache {
             keyPath: ["taskName", "model", "revision", "file"],
           });
         }
+
+        if (!db.objectStoreNames.contains(this.enginesStoreName)) {
+          db.createObjectStore(this.enginesStoreName, {
+            keyPath: ["model", "revision", "file"],
+          });
+        }
+        const enginesStore = request.transaction.objectStore(
+          this.enginesStoreName
+        );
+        this.#createOrMigrateIndices({
+          store: enginesStore,
+          name: this.#indices.modelRevisionIndex.name,
+          keyPath: this.#indices.modelRevisionIndex.keyPath,
+        });
 
         const taskStore = request.transaction.objectStore(this.taskStoreName);
         for (const { name, keyPath } of Object.values(this.#indices)) {
@@ -585,34 +591,83 @@ export class IndexedDBCache {
    * Retrieves the file for a specific cache entry.
    *
    * @param {object} config
+   * @param {string} config.engineId - The engine Id. Defaults to "default-engine"
    * @param {string} config.model - The model name (organization/name)
    * @param {string} config.revision - The model revision.
    * @param {string} config.file - The file name.
    * @returns {Promise<[ArrayBuffer, object]|null>} The file ArrayBuffer and its headers or null if not found.
    */
-  async getFile({ model, revision, file }) {
+  async getFile({ engineId = lazy.DEFAULT_ENGINE_ID, model, revision, file }) {
     const cacheKey = this.#generatePrimaryKey({ model, revision, file });
     const stored = (
       await this.#getData({ storeName: this.fileStoreName, key: cacheKey })
     )[0];
     if (stored) {
       const headers = await this.getHeaders({ model, revision, file });
+
+      await this.#updateEngines({
+        engineId,
+        model,
+        revision,
+        file,
+      });
+
       return [stored.data, headers];
     }
     return null; // Return null if no file is found
+  }
+
+  async #updateEngines({ engineId, model, revision, file }) {
+    // Add the consumer id to the set of consumer ids
+    const stored = await this.#getData({
+      storeName: this.enginesStoreName,
+      key: [model, revision, file],
+    });
+
+    let engineIds;
+
+    if (stored.length) {
+      engineIds = stored[0].engineIds || [];
+      if (!engineIds.includes(engineId)) {
+        engineIds.push(engineId);
+      }
+    } else {
+      engineIds = [engineId];
+    }
+
+    await this.#updateData(this.enginesStoreName, {
+      engineIds,
+      model,
+      revision,
+      file,
+    });
   }
 
   /**
    * Adds or updates task entry.
    *
    * @param {object} config
+   * @param {string} config.engineId - ID of the engine
    * @param {string} config.taskName - name of the inference task.
    * @param {string} config.model - The model name (organization/name).
    * @param {string} config.revision - The model version.
    * @param {string} config.file - The file name.
    * @returns {Promise<void>}
    */
-  async updateTask({ taskName, model, revision, file }) {
+  async updateTask({
+    engineId = lazy.DEFAULT_ENGINE_ID,
+    taskName,
+    model,
+    revision,
+    file,
+  }) {
+    await this.#updateEngines({
+      engineId,
+      model,
+      revision,
+      file,
+    });
+
     await this.#updateData(this.taskStoreName, {
       taskName,
       model,
@@ -653,6 +708,7 @@ export class IndexedDBCache {
    * Adds or updates a cache entry.
    *
    * @param {object} config
+   * @param {string} config.engineId - ID of the engine.
    * @param {string} config.taskName - name of the inference task.
    * @param {string} config.model - The model name (organization/name).
    * @param {string} config.revision - The model version.
@@ -661,7 +717,15 @@ export class IndexedDBCache {
    * @param {object} [config.headers] - The headers for the file.
    * @returns {Promise<void>}
    */
-  async put({ taskName, model, revision, file, data, headers }) {
+  async put({
+    engineId = lazy.DEFAULT_ENGINE_ID,
+    taskName,
+    model,
+    revision,
+    file,
+    data,
+    headers,
+  }) {
     const updatePromises = [];
     const fileSize = data.size;
     const cacheKey = this.#generatePrimaryKey({ model, revision, file });
@@ -669,8 +733,8 @@ export class IndexedDBCache {
       DEFAULT_PRINCIPAL_ORIGIN
     );
 
-    if (totalSize + fileSize > this.#maxSize) {
-      throw new Error(`Exceeding cache size limit of ${this.#maxSize} bytes"`);
+    if (totalSize + fileSize > this.#maxSize * ONE_GIB) {
+      throw new Error(`Exceeding cache size limit of ${this.#maxSize}GiB"`);
     }
 
     const fileEntry = { id: cacheKey, data };
@@ -682,6 +746,7 @@ export class IndexedDBCache {
     // Store task metadata
     updatePromises.push(
       this.updateTask({
+        engineId,
         taskName,
         model,
         revision,
@@ -718,6 +783,72 @@ export class IndexedDBCache {
 
     await Promise.all(updatePromises);
   }
+
+  /**
+   * Deletes files associated with a specific engine ID.
+   * If the engine ID is the only one associated with a file, the file is deleted.
+   * Otherwise, the engine ID is removed from the file's engine list.
+   *
+   * @async
+   * @param {string} engineId - The ID of the engine whose files are to be deleted.
+   * @returns {Promise<void>} A promise that resolves once the deletion process is complete.
+   */
+  async deleteFilesByEngine(engineId) {
+    // looking at all files for deletion candidates
+    const files = [];
+    const items = await this.#getData({ storeName: this.enginesStoreName });
+    for (const item of items) {
+      if (item.engineIds.includes(engineId)) {
+        // if it's the only one, we delete the file
+        if (item.engineIds.length === 1) {
+          files.push({
+            model: item.model,
+            file: item.file,
+            revision: item.revision,
+          });
+        } else {
+          // we remove the entry
+          const engineIds = new Set(item.engineIds);
+          engineIds.delete(engineId);
+          await this.#updateData(this.enginesStoreName, {
+            engineIds: Array.from(engineIds),
+            model: item.model,
+            revision: item.revision,
+            file: item.file,
+          });
+        }
+      }
+    }
+    // deleting the files from task, engines, files, headers
+    for (const file of files) {
+      await this.#deleteFile(file);
+    }
+  }
+
+  /**
+   * Deletes a file and its associated data across various storage locations.
+   *
+   * @async
+   * @private
+   * @param {object} file - The file object containing model, revision, and file details.
+   * @param {string} file.model - The model associated with the file.
+   * @param {string} file.revision - The revision of the file.
+   * @param {string} file.file - The filename or unique identifier for the file.
+   * @returns {Promise<void>} A promise that resolves once the file and associated data are deleted.
+   */
+  async #deleteFile({ model, revision, file }) {
+    const cacheKey = this.#generatePrimaryKey({ model, revision, file });
+    let deletePromises = [];
+    for (const storage of [
+      this.fileStoreName,
+      this.headersStoreName,
+      this.enginesStoreName,
+    ]) {
+      deletePromises.push(await this.#deleteData(storage, cacheKey));
+    }
+    await Promise.all(deletePromises);
+  }
+
   /**
    * Deletes all data related to the specifed models.
    *
@@ -790,18 +921,13 @@ export class IndexedDBCache {
 
     for (const key of filesToDelete) {
       const [modelValue, revisionValue, fileValue] = JSON.parse(key);
-
-      deletePromises.push(
-        this.#deleteData(
-          this.fileStoreName,
-          this.#generatePrimaryKey({
-            model: modelValue,
-            revision: revisionValue,
-            file: fileValue,
-          })
-        )
-      );
-
+      const primaryKey = this.#generatePrimaryKey({
+        model: modelValue,
+        revision: revisionValue,
+        file: fileValue,
+      });
+      deletePromises.push(this.#deleteData(this.enginesStoreName, primaryKey));
+      deletePromises.push(this.#deleteData(this.fileStoreName, primaryKey));
       deletePromises.push(
         this.#deleteData(this.headersStoreName, [
           modelValue,
@@ -887,12 +1013,13 @@ export class ModelHub {
    * @param {object} config
    * @param {string} config.rootUrl - Root URL used to download models.
    * @param {string} config.urlTemplate - The template to retrieve the full URL using a model name and revision.
+   * @param {Array<{filter: 'ALLOW'|'DENY', urlPrefix: string}>} config.allowDenyList - Array of URL patterns with filters.
    */
-  constructor({ rootUrl, urlTemplate = DEFAULT_URL_TEMPLATE } = {}) {
-    // Early error when the hub is created on a disallowed url - #fileURL also checks this so API calls with custom hubs are also covered.
-    if (!allowedHub(rootUrl)) {
-      throw new Error(`Invalid model hub root url: ${rootUrl}`);
-    }
+  constructor({
+    rootUrl = lazy.DEFAULT_ROOT_URL,
+    urlTemplate = lazy.DEFAULT_URL_TEMPLATE,
+    allowDenyList = null,
+  } = {}) {
     this.rootUrl = rootUrl;
     this.cache = null;
 
@@ -905,6 +1032,11 @@ export class ModelHub {
       throw new Error(`Invalid URL template: ${urlTemplate}`);
     }
     this.urlTemplate = urlTemplate;
+    if (Services.env.exists("MOZ_ALLOW_EXTERNAL_ML_HUB")) {
+      this.allowDenyList = null;
+    } else {
+      this.allowDenyList = new lazy.URLChecker(allowDenyList);
+    }
   }
 
   async #initCache() {
@@ -912,6 +1044,14 @@ export class ModelHub {
       return;
     }
     this.cache = await IndexedDBCache.init();
+  }
+
+  async #fetch(url, options) {
+    const result = this.allowDenyList && this.allowDenyList.allowedURL(url);
+    if (result && !result.allowed) {
+      throw new ForbiddenURLError(url, result.rejectionType);
+    }
+    return fetch(url, options);
   }
 
   /**
@@ -944,7 +1084,7 @@ export class ModelHub {
     let parts;
     const rootUrl = options.rootUrl || this.rootUrl;
     const urlTemplate =
-      options.urlTemplate || this.urlTemplate || DEFAULT_URL_TEMPLATE;
+      options.urlTemplate || this.urlTemplate || lazy.DEFAULT_URL_TEMPLATE;
 
     // Check if the URL is relative or absolute
     if (url.startsWith("/")) {
@@ -1004,9 +1144,6 @@ export class ModelHub {
    */
   #fileUrl({ model, revision, file, modelHubRootUrl, modelHubUrlTemplate }) {
     const rootUrl = modelHubRootUrl || this.rootUrl;
-    if (!allowedHub(rootUrl)) {
-      throw new Error(`Invalid model hub root url: ${rootUrl}`);
-    }
     const urlTemplate = modelHubUrlTemplate || this.urlTemplate;
     const baseUrl = new URL(rootUrl);
 
@@ -1137,13 +1274,16 @@ export class ModelHub {
     const id = lazy.setTimeout(() => controller.abort(), timeout);
 
     try {
-      const headResponse = await fetch(url, {
+      const headResponse = await this.#fetch(url, {
         method: "HEAD",
         signal: controller.signal,
       });
       const currentEtag = headResponse.headers.get("ETag");
       return currentEtag;
     } catch (error) {
+      if (error instanceof ForbiddenURLError) {
+        throw error;
+      }
       lazy.console.warn("An error occurred when calling HEAD:", error);
       return null;
     } finally {
@@ -1155,6 +1295,7 @@ export class ModelHub {
    * Given an organization, model, and version, fetch a model file in the hub as a Response.
    *
    * @param {object} config
+   * @param {string} config.engineId - The model engine id
    * @param {string} config.taskName - name of the inference task.
    * @param {string} config.model - The model name (organization/name).
    * @param {string} config.revision - The model revision.
@@ -1164,6 +1305,7 @@ export class ModelHub {
    * @returns {Promise<Response>} The file content
    */
   async getModelFileAsResponse({
+    engineId,
     taskName,
     model,
     revision,
@@ -1172,6 +1314,7 @@ export class ModelHub {
     modelHubUrlTemplate,
   }) {
     const [blob, headers] = await this.getModelFileAsBlob({
+      engineId,
       taskName,
       model,
       revision,
@@ -1187,6 +1330,7 @@ export class ModelHub {
    * Given an organization, model, and version, fetch a model file in the hub as an blob.
    *
    * @param {object} config
+   * @param {string} config.engineId - The model engine id
    * @param {string} config.taskName - name of the inference task.
    * @param {string} config.model - The model name (organization/name).
    * @param {string} config.revision - The model revision.
@@ -1196,6 +1340,7 @@ export class ModelHub {
    * @returns {Promise<[Blob, object]>} The file content
    */
   async getModelFileAsBlob({
+    engineId,
     taskName,
     model,
     revision,
@@ -1204,6 +1349,7 @@ export class ModelHub {
     modelHubUrlTemplate,
   }) {
     const [buffer, headers] = await this.getModelFileAsArrayBuffer({
+      engineId,
       taskName,
       model,
       revision,
@@ -1219,6 +1365,7 @@ export class ModelHub {
    * while supporting status callback.
    *
    * @param {object} config
+   * @param {string} config.engineId - The model engine id
    * @param {string} config.taskName - name of the inference task.
    * @param {string} config.model - The model name (organization/name).
    * @param {string} config.revision - The model revision.
@@ -1229,6 +1376,7 @@ export class ModelHub {
    * @returns {Promise<[ArrayBuffer, headers]>} The file content
    */
   async getModelFileAsArrayBuffer({
+    engineId,
     taskName,
     model,
     revision,
@@ -1300,13 +1448,20 @@ export class ModelHub {
         })
       );
       const [blob, headers] = await this.cache.getFile({
+        engineId,
         model,
         revision,
         file,
       });
 
       // Ensure that we indicate that the taskName is stored
-      await this.cache.updateTask({ taskName, model, revision, file });
+      await this.cache.updateTask({
+        engineId,
+        taskName,
+        model,
+        revision,
+        file,
+      });
 
       progressCallback?.(
         new lazy.Progress.ProgressAndStatusCallbackParams({
@@ -1330,7 +1485,7 @@ export class ModelHub {
 
     lazy.console.debug(`Fetching ${url}`);
     try {
-      let response = await fetch(url);
+      let response = await this.#fetch(url);
       let isFirstCall = true;
       let responseContentArray = await lazy.Progress.readResponse(
         response,
@@ -1364,6 +1519,7 @@ export class ModelHub {
         };
 
         await this.cache.put({
+          engineId,
           taskName,
           model,
           revision,
@@ -1384,6 +1540,9 @@ export class ModelHub {
         return [responseContent, headers];
       }
     } catch (error) {
+      if (error instanceof ForbiddenURLError) {
+        throw error;
+      }
       lazy.console.error(`Failed to fetch ${url}:`, error);
     }
 

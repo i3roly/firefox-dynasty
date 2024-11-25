@@ -22,6 +22,7 @@
 #  include "builtin/intl/Collator.h"
 #  include "builtin/intl/DateTimeFormat.h"
 #  include "builtin/intl/DisplayNames.h"
+#  include "builtin/intl/DurationFormat.h"
 #  include "builtin/intl/ListFormat.h"
 #  include "builtin/intl/Locale.h"
 #  include "builtin/intl/NumberFormat.h"
@@ -136,11 +137,6 @@ bool GlobalObject::skipDeselectedConstructor(JSContext* cx, JSProtoKey key) {
     case JSProto_InternalError:
     case JSProto_Iterator:
     case JSProto_AggregateError:
-#ifdef ENABLE_EXPLICIT_RESOURCE_MANAGEMENT
-    case JSProto_SuppressedError:
-    case JSProto_DisposableStack:
-    case JSProto_AsyncDisposableStack:
-#endif
     case JSProto_EvalError:
     case JSProto_RangeError:
     case JSProto_ReferenceError:
@@ -220,6 +216,13 @@ bool GlobalObject::skipDeselectedConstructor(JSContext* cx, JSProtoKey key) {
 #  else
       return true;
 #  endif
+
+    case JSProto_DurationFormat:
+#  ifdef NIGHTLY_BUILD
+      return false;
+#  else
+      return true;
+#  endif
 #endif
 
 #ifdef JS_HAS_TEMPORAL_API
@@ -253,6 +256,13 @@ bool GlobalObject::skipDeselectedConstructor(JSContext* cx, JSProtoKey key) {
 
     case JSProto_Float16Array:
       return !JS::Prefs::experimental_float16array();
+
+#ifdef ENABLE_EXPLICIT_RESOURCE_MANAGEMENT
+    case JSProto_SuppressedError:
+    case JSProto_DisposableStack:
+    case JSProto_AsyncDisposableStack:
+      return !JS::Prefs::experimental_explicit_resource_management();
+#endif
 
     default:
       MOZ_CRASH("unexpected JSProtoKey");
@@ -1120,6 +1130,9 @@ void GlobalObjectData::trace(JSTracer* trc, GlobalObject* global) {
   TraceNullableEdge(trc, &mappedArgumentsTemplate, "mapped-arguments-template");
   TraceNullableEdge(trc, &unmappedArgumentsTemplate,
                     "unmapped-arguments-template");
+
+  TraceNullableEdge(trc, &mapObjectTemplate, "map-object-template");
+  TraceNullableEdge(trc, &setObjectTemplate, "set-object-template");
 
   TraceNullableEdge(trc, &iterResultTemplate, "iter-result-template_");
   TraceNullableEdge(trc, &iterResultWithoutPrototypeTemplate,

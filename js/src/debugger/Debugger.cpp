@@ -155,7 +155,6 @@ using namespace js;
 
 using JS::AutoStableStringChars;
 using JS::CompileOptions;
-using JS::dbg::AutoEntryMonitor;
 using JS::dbg::Builder;
 using mozilla::AsVariant;
 using mozilla::DebugOnly;
@@ -906,9 +905,7 @@ bool Debugger::hasAnyLiveHooks() const {
 bool DebugAPI::slowPathOnEnterFrame(JSContext* cx, AbstractFramePtr frame) {
 #ifdef MOZ_EXECUTION_TRACING
   if (cx->hasExecutionTracer()) {
-    if (!cx->getExecutionTracer().onEnterFrame(cx, frame)) {
-      return false;
-    }
+    cx->getExecutionTracer().onEnterFrame(cx, frame);
   }
 #endif
   return Debugger::dispatchResumptionHook(
@@ -924,9 +921,7 @@ bool DebugAPI::slowPathOnEnterFrame(JSContext* cx, AbstractFramePtr frame) {
 bool DebugAPI::slowPathOnResumeFrame(JSContext* cx, AbstractFramePtr frame) {
 #ifdef MOZ_EXECUTION_TRACING
   if (cx->hasExecutionTracer()) {
-    if (!cx->getExecutionTracer().onEnterFrame(cx, frame)) {
-      return false;
-    }
+    cx->getExecutionTracer().onEnterFrame(cx, frame);
   }
 #endif
   // Don't count on this method to be called every time a generator is
@@ -1134,9 +1129,7 @@ bool DebugAPI::slowPathOnLeaveFrame(JSContext* cx, AbstractFramePtr frame,
                                     const jsbytecode* pc, bool frameOk) {
 #ifdef MOZ_EXECUTION_TRACING
   if (cx->hasExecutionTracer()) {
-    if (!cx->getExecutionTracer().onLeaveFrame(cx, frame)) {
-      return false;
-    }
+    cx->getExecutionTracer().onLeaveFrame(cx, frame);
   }
 #endif
   MOZ_ASSERT_IF(!frame.isWasmDebugFrame(), pc);
@@ -7320,15 +7313,6 @@ Builder::Object Builder::newObject(JSContext* cx) {
   // promises.
   return Object(cx, *this, obj);
 }
-
-/*** JS::dbg::AutoEntryMonitor **********************************************/
-
-AutoEntryMonitor::AutoEntryMonitor(JSContext* cx)
-    : cx_(cx), savedMonitor_(cx->entryMonitor) {
-  cx->entryMonitor = this;
-}
-
-AutoEntryMonitor::~AutoEntryMonitor() { cx_->entryMonitor = savedMonitor_; }
 
 /*** Glue *******************************************************************/
 

@@ -29,7 +29,7 @@
 #  include "va/va.h"
 #endif
 
-#if defined(MOZ_AV1) && defined(MOZ_WIDGET_GTK) && \
+#if defined(MOZ_AV1) && \
     (defined(FFVPX_VERSION) || LIBAVCODEC_VERSION_MAJOR >= 59)
 #  define FFMPEG_AV1_DECODE 1
 #  include "AOMDecoder.h"
@@ -88,7 +88,8 @@ typedef mozilla::layers::PlanarYCbCrImage PlanarYCbCrImage;
 namespace mozilla {
 
 #ifdef MOZ_USE_HWDECODE
-nsTArray<AVCodecID> FFmpegVideoDecoder<LIBAV_VER>::mAcceleratedFormats;
+MOZ_RUNINIT nsTArray<AVCodecID>
+    FFmpegVideoDecoder<LIBAV_VER>::mAcceleratedFormats;
 #endif
 
 using media::TimeUnit;
@@ -1180,13 +1181,14 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::DoDecode(
     MediaResult rv;
 #  ifdef MOZ_USE_HWDECODE
     if (IsHardwareAccelerated()) {
-      if (mDecodeStats.IsDecodingSlow()) {
+      if (mDecodeStats.IsDecodingSlow() &&
+          !StaticPrefs::media_ffmpeg_disable_software_fallback()) {
         PROFILER_MARKER_TEXT("FFmpegVideoDecoder::DoDecode", MEDIA_PLAYBACK, {},
                              "Fallback to SW decode");
-        FFMPEG_LOG("  HW decoding is slow, switch back to SW decode");
+        FFMPEG_LOG("  HW decoding is slow, switching back to SW decode");
         return MediaResult(
             NS_ERROR_DOM_MEDIA_DECODE_ERR,
-            RESULT_DETAIL("HW decoding is slow, switch back to SW decode"));
+            RESULT_DETAIL("HW decoding is slow, switching back to SW decode"));
       }
       if (mUsingV4L2) {
         rv = CreateImageV4L2(mFrame->pkt_pos, GetFramePts(mFrame),

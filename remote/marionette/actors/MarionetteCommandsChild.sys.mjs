@@ -119,36 +119,49 @@ export class MarionetteCommandsChild extends JSWindowActorChild {
     const { eventName, details } = options;
     const win = this.contentWindow;
 
-    switch (eventName) {
-      case "synthesizeKeyDown":
-        lazy.event.sendKeyDown(details.eventData, win);
-        break;
-      case "synthesizeKeyUp":
-        lazy.event.sendKeyUp(details.eventData, win);
-        break;
-      case "synthesizeMouseAtPoint":
-        lazy.event.synthesizeMouseAtPoint(
-          details.x,
-          details.y,
-          details.eventData,
-          win
+    try {
+      switch (eventName) {
+        case "synthesizeKeyDown":
+          lazy.event.sendKeyDown(details.eventData, win);
+          break;
+        case "synthesizeKeyUp":
+          lazy.event.sendKeyUp(details.eventData, win);
+          break;
+        case "synthesizeMouseAtPoint":
+          lazy.event.synthesizeMouseAtPoint(
+            details.x,
+            details.y,
+            details.eventData,
+            win
+          );
+          break;
+        case "synthesizeMultiTouch":
+          lazy.event.synthesizeMultiTouch(details.eventData, win);
+          break;
+        case "synthesizeWheelAtPoint":
+          lazy.event.synthesizeWheelAtPoint(
+            details.x,
+            details.y,
+            details.eventData,
+            win
+          );
+          break;
+        default:
+          throw new Error(
+            `${eventName} is not a supported event dispatch method`
+          );
+      }
+    } catch (e) {
+      if (e.message.includes("NS_ERROR_FAILURE")) {
+        // Event dispatch failed. Re-throwing as AbortError to allow retrying
+        // to dispatch the event.
+        throw new DOMException(
+          `Failed to dispatch event "${eventName}": ${e.message}`,
+          "AbortError"
         );
-        break;
-      case "synthesizeMultiTouch":
-        lazy.event.synthesizeMultiTouch(details.eventData, win);
-        break;
-      case "synthesizeWheelAtPoint":
-        lazy.event.synthesizeWheelAtPoint(
-          details.x,
-          details.y,
-          details.eventData,
-          win
-        );
-        break;
-      default:
-        throw new Error(
-          `${eventName} is not a supported event dispatch method`
-        );
+      }
+
+      throw e;
     }
   }
 
@@ -300,8 +313,12 @@ export class MarionetteCommandsChild extends JSWindowActorChild {
         hasSerializedWindows,
       };
     } catch (e) {
-      // Always wrap errors as WebDriverError
-      return { error: lazy.error.wrap(e).toJSON() };
+      if (lazy.error.isWebDriverError(e)) {
+        // If it's a WebDriver error always serialize it because it could
+        // contain objects that are not serializable by default.
+        return { error: e.toJSON(), isWebDriverError: true };
+      }
+      return { error: e, isWebDriverError: false };
     }
   }
 
@@ -683,8 +700,8 @@ export class MarionetteCommandsChild extends JSWindowActorChild {
       }
       browsingContext = childContexts[id];
     } else {
-      const context = childContexts.find(context => {
-        return context.embedderElement === id;
+      const context = childContexts.find(childContext => {
+        return childContext.embedderElement === id;
       });
       if (!context) {
         throw new lazy.error.NoSuchFrameError(

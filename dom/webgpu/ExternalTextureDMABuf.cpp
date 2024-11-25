@@ -52,7 +52,8 @@ UniquePtr<ExternalTextureDMABuf> ExternalTextureDMABuf::Create(
     return nullptr;
   }
 
-  auto fd = mozilla::UniqueFileHandle(rawFd);
+  RefPtr<gfx::FileHandleWrapper> fd =
+      new gfx::FileHandleWrapper(UniqueFileHandle(rawFd));
 
   RefPtr<DMABufSurface> surface = DMABufSurfaceRGBA::CreateDMABufSurface(
       std::move(fd), dmaBufInfo, aWidth, aHeight);
@@ -79,7 +80,7 @@ UniquePtr<ExternalTextureDMABuf> ExternalTextureDMABuf::Create(
 }
 
 ExternalTextureDMABuf::ExternalTextureDMABuf(
-    UniquePtr<ffi::WGPUVkImageHandle> aVkImageHandle, const uint32_t aWidth,
+    UniquePtr<ffi::WGPUVkImageHandle>&& aVkImageHandle, const uint32_t aWidth,
     const uint32_t aHeight, const struct ffi::WGPUTextureFormat aFormat,
     const ffi::WGPUTextureUsages aUsage, RefPtr<DMABufSurface>&& aSurface,
     const layers::SurfaceDescriptorDMABuf& aSurfaceDescriptor)
@@ -110,7 +111,7 @@ void ExternalTextureDMABuf::GetSnapshot(const ipc::Shmem& aDestShmem,
                                         const gfx::IntSize& aSize) {}
 
 UniqueFileHandle ExternalTextureDMABuf::CloneDmaBufFd() {
-  return mSurfaceDescriptor.fds()[0].ClonePlatformHandle();
+  return mSurfaceDescriptor.fds()[0]->ClonePlatformHandle();
 }
 
 }  // namespace mozilla::webgpu

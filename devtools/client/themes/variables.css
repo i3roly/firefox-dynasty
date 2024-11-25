@@ -139,33 +139,41 @@
   /* Toolbar */
   --theme-tab-toolbar-background: light-dark(var(--grey-10), var(--grey-90));
   --theme-toolbar-background: light-dark(var(--grey-10), #18181a);
+  --theme-toolbar-alternate-background: light-dark(var(--grey-10), #232327);
   --theme-toolbar-color: light-dark(var(--grey-90), var(--grey-40));
   --theme-toolbar-selected-color: light-dark(var(--blue-60), white);
+  --theme-toolbar-selected-background: transparent;
   --theme-toolbar-highlighted-color: light-dark(var(--green-60), var(--green-50));
   --theme-toolbar-background-hover: light-dark(rgba(221, 225, 228, 0.66), #232327);
   --theme-toolbar-background-alt: light-dark(#f5f5f5, var(--grey-85));
   --theme-toolbar-background-highlighted: light-dark(#b9dcff, var(--blue-60));
   --theme-toolbar-error-background: light-dark(var(--red-05), var(--red-70));
   --theme-toolbar-hover: light-dark(var(--grey-20), #232327);
+  --theme-toolbar-hover-color: var(--theme-toolbar-color);
+  --theme-toolbar-alternate-hover: light-dark(var(--grey-20), var(--grey-80));
   --theme-toolbar-hover-active: light-dark(var(--grey-20), #252526);
+  --theme-toolbar-selected-hover: var(--theme-toolbar-hover);
+  --theme-toolbar-selected-hover-color: var(--theme-toolbar-selected-color);
   --theme-toolbar-separator: light-dark(var(--grey-90-a10), var(--grey-10-a20));
+  --theme-toolbar-reordering-background: var(--theme-toolbar-hover);
+  --theme-toolbar-reordering-color: var(--theme-toolbar-hover-color);
 
   /* Toolbar buttons */
   --toolbarbutton-background: light-dark(var(--grey-10), var(--grey-70));
   --toolbarbutton-hover-background: light-dark(var(--grey-20), var(--grey-70));
-  --toolbarbutton-focus-background: light-dark(var(--grey-20), var(--grey-60));
-  --toolbarbutton-focus-color: light-dark(var(--grey-70), var(--grey-30));
-  --toolbarbutton-checked-background: light-dark(var(--blue-55), #204e8a);
-  --toolbarbutton-checked-focus-background: var(--blue-60);
-  --toolbarbutton-checked-color: #ffffff;
+  --toolbarbutton-hover-color: inherit;
+  --toolbarbutton-checked-background: var(--toolbarbutton-hover-background);
+  --toolbarbutton-checked-color: var(--theme-icon-checked-color);
 
   /* Buttons */
   --theme-button-background: light-dark(rgba(12, 12, 13, 0.05), rgba(249, 249, 250, 0.1));
   --theme-button-active-background: light-dark(rgba(12, 12, 13, 0.1), rgba(249, 249, 250, 0.15));
 
   /* Accordion headers */
-  --theme-accordion-header-background: light-dark(var(--theme-toolbar-background), #232327);
-  --theme-accordion-header-hover: light-dark(var(--theme-toolbar-hover), #2a2a2e);
+  --theme-accordion-header-background: var(--theme-toolbar-alternate-background);
+  --theme-accordion-header-color: inherit;
+  --theme-accordion-header-hover-background: var(--theme-toolbar-alternate-hover);
+  --theme-accordion-header-hover-color: inherit;
 
   /* Selection */
   --theme-selection-background: light-dark(var(--blue-55), #204e8a);
@@ -197,7 +205,7 @@
   --theme-link-color: light-dark(var(--blue-60), #75bfff);
   --theme-internal-link-color: light-dark(var(--blue-70), var(--blue-40));
   --theme-text-color-alt: light-dark(var(--grey-50), var(--grey-45));
-  --theme-text-color-inactive: light-dark(var(--grey-40), var(--grey-50));
+  --theme-text-color-inactive: light-dark(var(--grey-50), var(--grey-45));
   --theme-text-color-error: light-dark(var(--red-60), var(--grey-10));
   --theme-text-color-strong: light-dark(var(--grey-90), var(--grey-30));
   --theme-stack-trace-text: light-dark(var(--red-70), var(--red-20));
@@ -288,19 +296,51 @@
     --theme-highlight-red: light-dark(#C50042, #FF9AA2);
     --theme-highlight-green: light-dark(#005E5E, #3FE1B0);
     --theme-highlight-purple: #952BB9;
+    --theme-highlight-purple-text: #F7E2FF;
     --theme-highlight-yellow: light-dark(#FFFFCC, #FFEA80);
     --theme-highlight-orange: light-dark(#CC3D00, #FFB587);
     --theme-highlight-pink: light-dark(#FF9AA2, #FFDFE7);
     --theme-highlight-gray: light-dark(#5B5B66, #F0F0F4);
 
+    /* Toolbar */
+    --theme-toolbar-background: ButtonFace;
+    --theme-toolbar-selected-color: SelectedItemText;
+    --theme-toolbar-selected-background: SelectedItem;
+    --theme-toolbar-hover: SelectedItemText;
+    --theme-toolbar-hover-color: SelectedItem;
+    --theme-toolbar-hover-active: var(--theme-toolbar-hover);
+    --theme-toolbar-selected-hover: var(--theme-toolbar-selected-background);
+    --theme-toolbar-selected-hover-color: var(--theme-toolbar-selected-color);
+    --theme-toolbar-reordering-background: var(--theme-toolbar-selected-background);
+    --theme-toolbar-reordering-color: var(--theme-toolbar-selected-color);
 
+    /* Accordion headers */
+    --theme-accordion-header-background: ButtonFace;
+    --theme-accordion-header-color: ButtonText;
+    --theme-accordion-header-hover-background: ButtonFace;
+    --theme-accordion-header-hover-color: SelectedItem;
+
+    /* Toolbar buttons */
+    --toolbarbutton-background: ButtonFace;
+    --toolbarbutton-hover-background: ButtonFace;
+    --toolbarbutton-hover-color: SelectedItem;
+    --toolbarbutton-checked-background: SelectedItem;
+    --toolbarbutton-checked-color: SelectedItemText;
+
+    /* Text color */
     --theme-selection-background: SelectedItem;
     --theme-selection-color: SelectedItemText;
     --theme-text-color-alt: CanvasText;
+    --theme-text-color-strong: CanvasText;
+    --theme-text-color-inactive: GrayText;
     --theme-text-selection-background: Highlight;
     --theme-text-selection-color: HighlightText;
     --theme-text-selection-unfocused-background: Highlight;
     --theme-body-color: CanvasText;
+    --theme-link-color: LinkText;
+    --theme-internal-link-color: LinkText;
+
+
     --theme-focus-outline-color: CanvasText;
     --theme-focus-textinput-outline-color: SelectedItem;
     --theme-icon-color: ButtonText;
@@ -310,6 +350,7 @@
     --theme-icon-disabled-color: GrayText;
     --theme-icon-error-color: ButtonText;
     --theme-icon-warning-color: ButtonText;
+    --theme-icon-checked-color: SelectedItemText;
 
     --theme-search-results-background: Mark;
     --theme-search-results-color: MarkText;
@@ -318,5 +359,14 @@
     /* Menu/Autocomplete items */
     --theme-popup-hover-background: SelectedItem;
     --theme-popup-hover-color: SelectedItemText;
+
+    --theme-splitter-color: CanvasText;
+    --theme-emphasized-splitter-color: CanvasText;
+    --theme-emphasized-splitter-color-hover: SelectedItem;
+
+    /* Flashing colors used to highlight updates */
+    --theme-contrast-background: Mark;
+    --theme-contrast-background-alpha: var(--theme-contrast-background);
+    --theme-contrast-color: MarkText;
   }
 }

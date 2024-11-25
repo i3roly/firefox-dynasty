@@ -268,7 +268,7 @@ class DataTransfer final : public nsISupports, public nsWrapperCache {
    */
   uint32_t DropEffectInt() const { return mDropEffect; }
   void SetDropEffectInt(uint32_t aDropEffectInt) {
-    MOZ_RELEASE_ASSERT(aDropEffectInt < ArrayLength(sEffects),
+    MOZ_RELEASE_ASSERT(aDropEffectInt < std::size(sEffects),
                        "Bogus drop effect value");
     mDropEffect = aDropEffectInt;
   }
@@ -531,9 +531,8 @@ class DataTransfer final : public nsISupports, public nsWrapperCache {
   // drag and drop.
   mozilla::Maybe<nsIClipboard::ClipboardType> mClipboardType;
 
-  // The nsIClipboardDataSnapshot that is used for getting clipboard formats.
-  // XXXedgar we should get the actual data from this in the future, see bug
-  // 1879401.
+  // The nsIClipboardDataSnapshot that is used for getting clipboard formats and
+  // data.
   nsCOMPtr<nsIClipboardDataSnapshot> mClipboardDataSnapshot;
 
   // The items contained with the DataTransfer

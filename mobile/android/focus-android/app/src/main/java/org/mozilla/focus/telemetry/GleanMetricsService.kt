@@ -54,7 +54,6 @@ import org.mozilla.focus.utils.Settings
  */
 class GleanMetricsService(context: Context) : MetricsService {
 
-    @Suppress("UnusedPrivateMember")
     private val activationPing = ActivationPing(context)
 
     companion object {
@@ -113,7 +112,7 @@ class GleanMetricsService(context: Context) : MetricsService {
                     client = lazy(LazyThreadSafetyMode.NONE) { components.client },
                     usePrivateRequest = true,
                 ),
-                pingSchedule = mapOf("baseline" to listOf("dau-reporting")),
+                pingSchedule = mapOf("baseline" to listOf("usage-reporting")),
             ),
             buildInfo = GleanBuildInfo.buildInfo,
         )

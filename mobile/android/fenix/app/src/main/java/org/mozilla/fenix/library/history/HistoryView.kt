@@ -21,11 +21,14 @@ import org.mozilla.fenix.theme.ThemeManager
 /**
  * View that contains and configures the History List
  */
+@Suppress("LongParameterList")
 class HistoryView(
     container: ViewGroup,
     val store: HistoryFragmentStore,
     val onZeroItemsLoaded: () -> Unit,
     val onRecentlyClosedClicked: () -> Unit,
+    val onHistoryItemClicked: (History) -> Unit,
+    val onDeleteInitiated: (Set<History>) -> Unit,
     val onEmptyStateChanged: (Boolean) -> Unit,
 ) : LibraryPageView(container) {
 
@@ -40,7 +43,9 @@ class HistoryView(
 
     val historyAdapter = HistoryAdapter(
         store = store,
+        onHistoryItemClicked = onHistoryItemClicked,
         onRecentlyClosedClicked = onRecentlyClosedClicked,
+        onDeleteInitiated = onDeleteInitiated,
     ) { isEmpty ->
         onEmptyStateChanged(isEmpty)
     }.apply {

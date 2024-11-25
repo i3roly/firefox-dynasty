@@ -7,39 +7,6 @@
 
 requestLongerTimeout(2);
 
-async function setup({ disabled = false, prefs = [], records = null } = {}) {
-  const { removeMocks, remoteClients } = await createAndMockMLRemoteSettings({
-    autoDownloadFromRemoteSettings: false,
-    records,
-  });
-
-  await SpecialPowers.pushPrefEnv({
-    set: [
-      // Enabled by default.
-      ["browser.ml.enable", !disabled],
-      ["browser.ml.logLevel", "All"],
-      ["browser.ml.modelCacheTimeout", 1000],
-      ["browser.ml.checkForMemory", true],
-      ["browser.ml.defaultModelMemoryUsage", 0.0000001], // 100 bytes
-      ["browser.ml.queueWaitTimeout", 2],
-      ...prefs,
-    ],
-  });
-
-  return {
-    remoteClients,
-    async cleanup() {
-      await removeMocks();
-      await waitForCondition(
-        () => EngineProcess.areAllEnginesTerminated(),
-        "Waiting for all of the engines to be terminated.",
-        100,
-        200
-      );
-    },
-  };
-}
-
 const RAW_PIPELINE_OPTIONS = { taskName: "moz-echo" };
 const PIPELINE_OPTIONS = new PipelineOptions({ taskName: "moz-echo" });
 
@@ -687,6 +654,7 @@ add_task(async function test_ml_engine_get_status() {
         dtype: "q8",
         numThreads: null,
         executionPriority: null,
+        modelHub: null,
       },
       engineId: "default-engine",
     },
@@ -707,7 +675,9 @@ add_task(async function test_ml_engine_get_status() {
 });
 
 add_task(async function test_ml_engine_not_enough_memory() {
-  const { cleanup, remoteClients } = await setup();
+  const { cleanup, remoteClients } = await setup({
+    prefs: [["browser.ml.checkForMemory", true]],
+  });
 
   info("Get the greedy engine");
   const engineInstance = await createEngine({
@@ -827,6 +797,11 @@ const pipelineOptionsCases = [
 
   // Invalid values
   {
+    description: "Invalid hub",
+    options: { modelHub: "rogue" },
+    expectedError: /Invalid value/,
+  },
+  {
     description: "Invalid timeoutMS",
     options: { timeoutMS: -3 },
     expectedError: /Invalid value/,
@@ -863,6 +838,16 @@ const pipelineOptionsCases = [
   },
 
   // Valid values
+  {
+    description: "valid hub",
+    options: { modelHub: "huggingface" },
+    expected: { modelHub: "huggingface" },
+  },
+  {
+    description: "valid hub",
+    options: { modelHub: "mozilla" },
+    expected: { modelHub: "mozilla" },
+  },
   {
     description: "valid timeoutMS",
     options: { timeoutMS: 12345 },
@@ -903,6 +888,11 @@ const pipelineOptionsCases = [
     description: "Valid logLevel (All)",
     options: { logLevel: LogLevel.ALL },
     expected: { logLevel: LogLevel.ALL },
+  },
+  {
+    description: "Valid modelId",
+    options: { modelId: "Qwen2.5-0.5B-Instruct" },
+    expected: { modelId: "Qwen2.5-0.5B-Instruct" },
   },
 
   // Invalid revision cases
@@ -1007,6 +997,60 @@ add_task(async function test_ml_engine_infinite_worker() {
   );
 
   Assert.equal(res.output.timeoutMS, -1, "This should be an infinite worker.");
+  ok(
+    !EngineProcess.areAllEnginesTerminated(),
+    "The engine process is still active."
+  );
+
+  await EngineProcess.destroyMLEngine();
+
+  await cleanup();
+});
+
+add_task(async function test_ml_engine_model_hub_applied() {
+  const options = {
+    taskName: "moz-echo",
+    timeoutMS: -1,
+    modelHub: "huggingface",
+  };
+  const parsedOptions = new PipelineOptions(options);
+
+  Assert.equal(
+    parsedOptions.modelHubRootUrl,
+    "https://huggingface.co/",
+    "modelHubRootUrl is set"
+  );
+
+  Assert.equal(
+    parsedOptions.modelHubUrlTemplate,
+    "{model}/resolve/{revision}",
+    "modelHubUrlTemplate is set"
+  );
+});
+
+add_task(async function test_ml_engine_blessed_model() {
+  const { cleanup, remoteClients } = await setup();
+
+  const options = { taskName: "test-echo" };
+  const engineInstance = await createEngine(options);
+
+  info("Check the inference process is running");
+  Assert.equal(await checkForRemoteType("inference"), true);
+
+  info("Run the inference");
+  const inferencePromise = engineInstance.run({ data: "This gets echoed." });
+
+  info("Wait for the pending downloads.");
+  await remoteClients["ml-onnx-runtime"].resolvePendingDownloads(1);
+
+  const res = await inferencePromise;
+
+  Assert.equal(
+    res.config.modelId,
+    "test-echo",
+    "The blessed model was picked."
+  );
+
   ok(
     !EngineProcess.areAllEnginesTerminated(),
     "The engine process is still active."

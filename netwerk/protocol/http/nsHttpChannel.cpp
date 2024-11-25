@@ -52,7 +52,6 @@
 #include "mozilla/TimeStamp.h"
 #include "nsError.h"
 #include "nsPrintfCString.h"
-#include "nsAlgorithm.h"
 #include "nsQueryObject.h"
 #include "nsThreadUtils.h"
 #include "nsIConsoleService.h"
@@ -1721,8 +1720,6 @@ nsresult nsHttpChannel::SetupChannelForTransaction() {
 
   // See bug #466080. Transfer LOAD_ANONYMOUS flag to socket-layer.
   if (mLoadFlags & LOAD_ANONYMOUS) mCaps |= NS_HTTP_LOAD_ANONYMOUS;
-
-  if (LoadTimingEnabled()) mCaps |= NS_HTTP_TIMING_ENABLED;
 
   if (mUpgradeProtocolCallback) {
     rv = mRequestHead.SetHeader(nsHttp::Upgrade, mUpgradeProtocol, false);
@@ -4267,7 +4264,7 @@ nsresult nsHttpChannel::OpenCacheEntryInternal(bool isHttps) {
       CacheStorageService::CacheQueueSize(mCacheOpenWithPriority);
 
   if ((mNetworkTriggerDelay || StaticPrefs::network_http_rcwn_enabled()) &&
-      maybeRCWN) {
+      maybeRCWN && mAllowRCWN) {
     bool hasAltData = false;
     uint32_t sizeInKb = 0;
     rv = cacheStorage->GetCacheIndexEntryAttrs(
@@ -5264,8 +5261,6 @@ nsresult nsHttpChannel::ReadFromCache(void) {
   rv = mCachePump->AsyncRead(this);
   if (NS_FAILED(rv)) return rv;
 
-  if (LoadTimingEnabled()) mCacheReadStart = TimeStamp::Now();
-
   uint32_t suspendCount = mSuspendCount;
   if (LoadAsyncResumePending()) {
     LOG(
@@ -5754,9 +5749,10 @@ nsresult nsHttpChannel::SetupReplacementChannel(nsIURI* newURI,
         mURI, requestMethod, priority, mChannelId,
         NetworkLoadType::LOAD_REDIRECT, mLastStatusReported, TimeStamp::Now(),
         size, mCacheDisposition, mLoadInfo->GetInnerWindowID(),
-        mLoadInfo->GetOriginAttributes().IsPrivateBrowsing(), &timings,
-        std::move(mSource), Some(nsDependentCString(contentType.get())), newURI,
-        redirectFlags, channelId);
+        mLoadInfo->GetOriginAttributes().IsPrivateBrowsing(),
+        mRequestHead.Version(), &timings, std::move(mSource),
+        Some(nsDependentCString(contentType.get())), newURI, redirectFlags,
+        channelId);
   }
 
   nsresult rv = HttpBaseChannel::SetupReplacementChannel(
@@ -6373,7 +6369,7 @@ nsresult nsHttpChannel::CancelInternal(nsresult status) {
         mLastStatusReported, TimeStamp::Now(), size, mCacheDisposition,
         mLoadInfo->GetInnerWindowID(),
         mLoadInfo->GetOriginAttributes().IsPrivateBrowsing(),
-        &mTransactionTimings, std::move(mSource));
+        mRequestHead.Version(), &mTransactionTimings, std::move(mSource));
   }
 
   // If we don't have mTransactionPump and mCachePump, we need to call
@@ -6721,7 +6717,8 @@ void nsHttpChannel::AsyncOpenFinal(TimeStamp aTimeStamp) {
         mURI, requestMethod, mPriority, mChannelId, NetworkLoadType::LOAD_START,
         mChannelCreationTimestamp, mLastStatusReported, 0, mCacheDisposition,
         mLoadInfo->GetInnerWindowID(),
-        mLoadInfo->GetOriginAttributes().IsPrivateBrowsing());
+        mLoadInfo->GetOriginAttributes().IsPrivateBrowsing(),
+        mRequestHead.Version());
   }
 
   // Added due to PauseTask/DelayHttpChannel
@@ -6997,6 +6994,11 @@ nsresult nsHttpChannel::BeginConnect() {
     mapping->GetConnectionInfo(getter_AddRefs(mConnectionInfo), proxyInfo,
                                originAttributes);
     Telemetry::Accumulate(Telemetry::HTTP_TRANSACTION_USE_ALTSVC, true);
+    if (mConnectionInfo->IsHttp3() &&
+        StaticPrefs::
+            network_http_http3_force_use_alt_svc_mapping_for_testing()) {
+      mCaps |= NS_HTTP_DISALLOW_SPDY;
+    }
   } else if (mConnectionInfo) {
     LOG(("nsHttpChannel %p Using channel supplied connection info", this));
     Telemetry::Accumulate(Telemetry::HTTP_TRANSACTION_USE_ALTSVC, false);
@@ -7056,10 +7058,6 @@ nsresult nsHttpChannel::BeginConnect() {
     LOG(("nsHttpChannel %p AddAuthorizationHeaders failed (%08x)", this,
          static_cast<uint32_t>(rv)));
   }
-
-  // If TimingEnabled flag is not set after OnModifyRequest() then
-  // clear the already recorded AsyncOpen value for consistency.
-  if (!LoadTimingEnabled()) mAsyncOpenTime = TimeStamp();
 
   // if this somehow fails we can go on without it
   Unused << gHttpHandler->AddConnectionHeader(&mRequestHead, mCaps);
@@ -7177,9 +7175,8 @@ void nsHttpChannel::MaybeStartDNSPrefetch() {
     StoragePrincipalHelper::GetOriginAttributesForNetworkState(
         this, originAttributes);
 
-    mDNSPrefetch =
-        new nsDNSPrefetch(mURI, originAttributes, nsIRequest::GetTRRMode(),
-                          this, LoadTimingEnabled());
+    mDNSPrefetch = new nsDNSPrefetch(mURI, originAttributes,
+                                     nsIRequest::GetTRRMode(), this, true);
     nsIDNSService::DNSFlags dnsFlags = nsIDNSService::RESOLVE_DEFAULT_FLAGS;
     if (mCaps & NS_HTTP_REFRESH_DNS) {
       dnsFlags |= nsIDNSService::RESOLVE_BYPASS_CACHE;
@@ -7310,7 +7307,7 @@ nsHttpChannel::SetNavigationStartTimeStamp(TimeStamp aTimeStamp) {
 
 NS_IMETHODIMP
 nsHttpChannel::SetPriority(int32_t value) {
-  int16_t newValue = clamped<int32_t>(value, INT16_MIN, INT16_MAX);
+  int16_t newValue = std::clamp<int32_t>(value, INT16_MIN, INT16_MAX);
   if (mPriority == newValue) return NS_OK;
 
   LOG(("nsHttpChannel::SetPriority %p p=%d", this, newValue));
@@ -8283,6 +8280,7 @@ static void RecordHTTPSUpgradeTelemetry(nsIURI* aURI, nsILoadInfo* aLoadInfo) {
 
 NS_IMETHODIMP
 nsHttpChannel::OnStopRequest(nsIRequest* request, nsresult status) {
+  MOZ_ASSERT(!mAsyncOpenTime.IsNull());
   AUTO_PROFILER_LABEL("nsHttpChannel::OnStopRequest", NETWORK);
 
   LOG(("nsHttpChannel::OnStopRequest [this=%p request=%p status=%" PRIx32 "]\n",
@@ -8315,7 +8313,7 @@ nsHttpChannel::OnStopRequest(nsIRequest* request, nsresult status) {
     gIOService->RecheckCaptivePortal();
   }
 
-  if (LoadTimingEnabled() && request == mCachePump) {
+  if (request == mCachePump) {
     mCacheReadEnd = TimeStamp::Now();
   }
 
@@ -8816,7 +8814,7 @@ nsresult nsHttpChannel::ContinueOnStopRequest(nsresult aStatus, bool aIsFromNet,
         mLastStatusReported, TimeStamp::Now(), size, mCacheDisposition,
         mLoadInfo->GetInnerWindowID(),
         mLoadInfo->GetOriginAttributes().IsPrivateBrowsing(),
-        &mTransactionTimings, std::move(mSource),
+        mRequestHead.Version(), &mTransactionTimings, std::move(mSource),
         Some(nsDependentCString(contentType.get())));
   }
 
@@ -10368,6 +10366,18 @@ void nsHttpChannel::ReportSystemChannelTelemetry(nsresult status) {
 }
 
 NS_IMETHODIMP
+nsHttpChannel::GetAllowRacing(bool* aAllowRacing) {
+  *aAllowRacing = mAllowRCWN;
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsHttpChannel::SetAllowRacing(bool aAllowRacing) {
+  mAllowRCWN = aAllowRacing;
+  return NS_OK;
+}
+
+NS_IMETHODIMP
 nsHttpChannel::Test_delayCacheEntryOpeningBy(int32_t aTimeout) {
   LOG(("nsHttpChannel::Test_delayCacheEntryOpeningBy this=%p timeout=%d", this,
        aTimeout));
@@ -10547,7 +10557,7 @@ void nsHttpChannel::MaybeRaceCacheWithNetwork() {
     mRaceDelay /= 1000;
   }
 
-  mRaceDelay = clamped<uint32_t>(
+  mRaceDelay = std::clamp<uint32_t>(
       mRaceDelay, StaticPrefs::network_http_rcwn_min_wait_before_racing_ms(),
       StaticPrefs::network_http_rcwn_max_wait_before_racing_ms());
 

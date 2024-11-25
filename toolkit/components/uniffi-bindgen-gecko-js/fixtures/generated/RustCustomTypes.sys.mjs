@@ -292,6 +292,9 @@ export class FfiConverterString extends FfiConverter {
     }
 }
 
+/**
+ * CustomTypesDemo
+ */
 export class CustomTypesDemo {
     constructor({ url, handle } = {}) {
         try {
@@ -310,9 +313,16 @@ export class CustomTypesDemo {
             }
             throw e;
         }
+        /**
+         * @type {Url}
+         */
         this.url = url;
+        /**
+         * @type {Handle}
+         */
         this.handle = handle;
     }
+
     equals(other) {
         return (
             this.url == other.url &&
@@ -454,6 +464,10 @@ export class FfiConverterTypeUrl extends FfiConverter {
 
 
 
+/**
+ * getCustomTypesDemo
+ * @returns {CustomTypesDemo}
+ */
 export function getCustomTypesDemo(demo) {
 
         const liftResult = (result) => FfiConverterTypeCustomTypesDemo.lift(result);
@@ -467,8 +481,8 @@ export function getCustomTypesDemo(demo) {
                 }
                 throw e;
             }
-            return UniFFIScaffolding.callAsync(
-                60, // custom_types:uniffi_uniffi_custom_types_fn_func_get_custom_types_demo
+            return UniFFIScaffolding.callAsyncWrapper(
+                72, // custom_types:uniffi_uniffi_custom_types_fn_func_get_custom_types_demo
                 FfiConverterOptionalTypeCustomTypesDemo.lower(demo),
             )
         }

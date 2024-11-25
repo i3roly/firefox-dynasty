@@ -492,7 +492,7 @@ export class _ExperimentManager {
 
     if (
       enrollment &&
-      (enrollment.isActive || !enrollment.isRollout || !reenroll)
+      (enrollment.active || !enrollment.isRollout || !reenroll)
     ) {
       this.sendFailureTelemetry("enrollFailed", slug, "name-conflict");
       throw new Error(`An experiment with the slug "${slug}" already exists.`);
@@ -529,6 +529,9 @@ export class _ExperimentManager {
       featureIds,
       isRollout,
       localizations,
+      isFirefoxLabsOptIn,
+      firefoxLabsTitle,
+      firefoxLabsDescription,
     },
     branch,
     source,
@@ -578,6 +581,14 @@ export class _ExperimentManager {
 
     if (localizations) {
       experiment.localizations = localizations;
+    }
+
+    if (typeof isFirefoxLabsOptIn !== "undefined") {
+      Object.assign(experiment, {
+        isFirefoxLabsOptIn,
+        firefoxLabsTitle,
+        firefoxLabsDescription,
+      });
     }
 
     if (typeof isRollout !== "undefined") {

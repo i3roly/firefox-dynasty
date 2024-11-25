@@ -1025,7 +1025,7 @@ void HttpChannelChild::OnStopRequest(
         mLastStatusReported, now, mTransferSize, kCacheUnknown,
         mLoadInfo->GetInnerWindowID(),
         mLoadInfo->GetOriginAttributes().IsPrivateBrowsing(),
-        &mTransactionTimings, std::move(mSource),
+        mRequestHead.Version(), &mTransactionTimings, std::move(mSource),
         Some(nsDependentCString(contentType.get())));
   }
 
@@ -1598,7 +1598,7 @@ void HttpChannelChild::Redirect1Begin(
         NetworkLoadType::LOAD_REDIRECT, mLastStatusReported, TimeStamp::Now(),
         0, kCacheUnknown, mLoadInfo->GetInnerWindowID(),
         mLoadInfo->GetOriginAttributes().IsPrivateBrowsing(),
-        &mTransactionTimings, std::move(mSource),
+        mRequestHead.Version(), &mTransactionTimings, std::move(mSource),
         Some(nsDependentCString(contentType.get())), newOriginalURI,
         redirectFlags, channelId);
   }
@@ -1920,7 +1920,8 @@ HttpChannelChild::CompleteRedirectSetup(nsIStreamListener* aListener) {
         mURI, requestMethod, mPriority, mChannelId, NetworkLoadType::LOAD_START,
         mChannelCreationTimestamp, mLastStatusReported, 0, kCacheUnknown,
         mLoadInfo->GetInnerWindowID(),
-        mLoadInfo->GetOriginAttributes().IsPrivateBrowsing());
+        mLoadInfo->GetOriginAttributes().IsPrivateBrowsing(),
+        mRequestHead.Version());
   }
   StoreIsPending(true);
   StoreWasOpened(true);
@@ -2262,7 +2263,8 @@ nsresult HttpChannelChild::AsyncOpenInternal(nsIStreamListener* aListener) {
         mURI, requestMethod, mPriority, mChannelId, NetworkLoadType::LOAD_START,
         mChannelCreationTimestamp, mLastStatusReported, 0, kCacheUnknown,
         mLoadInfo->GetInnerWindowID(),
-        mLoadInfo->GetOriginAttributes().IsPrivateBrowsing());
+        mLoadInfo->GetOriginAttributes().IsPrivateBrowsing(),
+        mRequestHead.Version());
   }
   StoreIsPending(true);
   StoreWasOpened(true);
@@ -2464,6 +2466,7 @@ nsresult HttpChannelChild::ContinueAsyncOpen() {
   openArgs.classicScriptHintCharset() = mClassicScriptHintCharset;
 
   openArgs.isUserAgentHeaderModified() = LoadIsUserAgentHeaderModified();
+  openArgs.initiatorType() = mInitiatorType;
 
   RefPtr<Document> doc;
   mLoadInfo->GetLoadingDocument(getter_AddRefs(doc));
@@ -2837,7 +2840,7 @@ HttpChannelChild::ResumeAt(uint64_t startPos, const nsACString& entityID) {
 NS_IMETHODIMP
 HttpChannelChild::SetPriority(int32_t aPriority) {
   LOG(("HttpChannelChild::SetPriority %p p=%d", this, aPriority));
-  int16_t newValue = clamped<int32_t>(aPriority, INT16_MIN, INT16_MAX);
+  int16_t newValue = std::clamp<int32_t>(aPriority, INT16_MIN, INT16_MAX);
   if (mPriority == newValue) return NS_OK;
   mPriority = newValue;
   if (RemoteChannelExists()) SendSetPriority(mPriority);

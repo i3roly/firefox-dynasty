@@ -12,6 +12,11 @@ exclude: true
 # GeckoView API Changelog.
 
 ⚠️  breaking change and deprecation notices
+## v134
+- ⚠️ [`WebExtensionController.PromptDelegate.onInstallPrompt`][133.5] is removed see https://bugzilla.mozilla.org/show_bug.cgi?id=1919374 for more details.
+- Added support for controlling `javascript.options.mem.gc_parallel_marking` via [`GeckoRuntimeSettings.setParallelMarkingEnabled`][134.1]
+
+[134.1]: {{javadoc_uri}}/GeckoRuntimeSettings.html#setParallelMarkingEnabled
 
 ## v133
 - Added [`GeckoSession.getWebCompatInfo`][133.1] that returns a `GeckoResult<JSONObject>` for web compatability information. ([bug 1917273]({{bugzilla}}1917273)).
@@ -1645,4 +1650,4 @@ to allow adding gecko profiler markers.
 [65.24]: {{javadoc_uri}}/CrashReporter.html#sendCrashReport(android.content.Context,android.os.Bundle,java.lang.String)
 [65.25]: {{javadoc_uri}}/GeckoResult.html
 
-[api-version]: d77f77d8fff207115cd11ba469872d42c8950018
+[api-version]: 10698f170c29b8740cbc90a7eaabb75f0150cbd0

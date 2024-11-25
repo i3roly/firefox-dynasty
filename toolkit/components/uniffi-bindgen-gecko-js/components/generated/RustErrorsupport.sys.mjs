@@ -329,25 +329,25 @@ class UniFFICallbackHandler {
      * Invoke a method on a stored callback object
      * @param {int} handle - Object handle
      * @param {int} methodId - Method index (0-based)
-     * @param {ArrayBuffer} argsArrayBuffer - Arguments to pass to the method, packed in an ArrayBuffer
+     * @param {UniFFIScaffoldingValue[]} args - Arguments to pass to the method
      */
-    call(handle, methodId, argsArrayBuffer) {
+    call(handle, methodId, ...args) {
         try {
-            this.#invokeCallbackInner(handle, methodId, argsArrayBuffer);
+            this.#invokeCallbackInner(handle, methodId, args);
         } catch (e) {
             console.error(`internal error invoking callback: ${e}`)
         }
     }
 
     /**
-     * Free a stored callback object
+     * Destroy a stored callback object
      * @param {int} handle - Object handle
      */
-    free(handle) {
+    destroy(handle) {
         this.#handleMap.delete(handle);
     }
 
-    #invokeCallbackInner(handle, methodId, argsArrayBuffer) {
+    #invokeCallbackInner(handle, methodId, args) {
         const callbackObj = this.getCallbackObj(handle);
         if (callbackObj === undefined) {
             throw new UniFFIError(`${this.#name}: invalid callback handle id: ${handle}`);
@@ -359,7 +359,7 @@ class UniFFICallbackHandler {
             throw new UniFFIError(`${this.#name}: invalid method id: ${methodId}`)
         }
 
-        methodHandler.call(callbackObj, argsArrayBuffer);
+        methodHandler.call(callbackObj, args);
     }
 
     /**
@@ -409,7 +409,7 @@ class UniFFICallbackMethodHandler {
      * @param {obj} callbackObj -- Object implementing the callback interface for this method
      * @param {ArrayBuffer} argsArrayBuffer -- Arguments for the method, packed in an ArrayBuffer
      */
-     call(callbackObj, ...args) {
+     call(callbackObj, args) {
         const convertedArgs = this.#argsConverters.map((converter, i) => converter.lift(args[i]));
         return callbackObj[this.#name](...convertedArgs);
     }
@@ -546,6 +546,9 @@ UnitTestObjs.callbackHandlerApplicationErrorReporter = callbackHandlerApplicatio
 
 
 
+/**
+ * Set the global error reporter.  This is typically done early in startup.
+ */
 export function setApplicationErrorReporter(errorReporter) {
 
         const liftResult = (result) => undefined;
@@ -559,7 +562,7 @@ export function setApplicationErrorReporter(errorReporter) {
                 }
                 throw e;
             }
-            return UniFFIScaffolding.callAsync(
+            return UniFFIScaffolding.callAsyncWrapper(
                 0, // errorsupport:uniffi_error_support_fn_func_set_application_error_reporter
                 FfiConverterTypeApplicationErrorReporter.lower(errorReporter),
             )
@@ -571,12 +574,16 @@ export function setApplicationErrorReporter(errorReporter) {
         }
 }
 
+/**
+ * Unset the global error reporter.  This is typically done at shutdown for
+ * platforms that want to cleanup references like Desktop.
+ */
 export function unsetApplicationErrorReporter() {
 
         const liftResult = (result) => undefined;
         const liftError = null;
         const functionCall = () => {
-            return UniFFIScaffolding.callAsync(
+            return UniFFIScaffolding.callAsyncWrapper(
                 1, // errorsupport:uniffi_error_support_fn_func_unset_application_error_reporter
             )
         }

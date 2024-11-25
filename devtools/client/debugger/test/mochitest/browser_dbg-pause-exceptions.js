@@ -35,7 +35,10 @@ add_task(async function () {
   const whyPaused = await waitFor(
     () => dbg.win.document.querySelector(".why-paused")?.innerText
   );
-  is(whyPaused, `Paused on exception\nunreachable`);
+  is(
+    whyPaused,
+    `Paused on exception\nuncaughtException - exceptions.js:2:2\nunreachable`
+  );
 
   await resume(dbg);
 
@@ -128,6 +131,37 @@ add_task(async function () {
   await assertPausedAtSourceAndLine(dbg, newFunctionSource.id, 1, 0);
   assertTextContentOnLine(dbg, 1, "function anonymous(f=doesntExists()");
   await resume(dbg);
+});
+
+add_task(async function testSettingAppliedOnStartup() {
+  let dbg = await initDebugger("doc-exceptions.html", "exceptions.js");
+
+  await togglePauseOnExceptions(dbg, true, true);
+
+  await dbg.toolbox.closeToolbox();
+
+  // Do not use `initDebugger` as it resets all settings
+  const toolbox = await openNewTabAndToolbox(
+    EXAMPLE_URL + "doc-exceptions.html",
+    "jsdebugger"
+  );
+  dbg = createDebuggerContext(toolbox);
+
+  await waitForSource(dbg, "exceptions.js");
+
+  const pauseOnCaughtExceptionCheckbox = findElementWithSelector(
+    dbg,
+    ".breakpoints-exceptions-caught input"
+  );
+  ok(pauseOnCaughtExceptionCheckbox.checked, "The settings is visualy enabled");
+
+  uncaughtException();
+  await waitForPaused(dbg);
+  await assertPausedAtSourceAndLine(
+    dbg,
+    findSource(dbg, "exceptions.js").id,
+    2
+  );
 });
 
 function uncaughtException() {

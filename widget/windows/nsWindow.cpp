@@ -255,7 +255,7 @@ static const wchar_t kUser32LibName[] = L"user32.dll";
 
 uint32_t nsWindow::sInstanceCount = 0;
 bool nsWindow::sIsOleInitialized = false;
-nsIWidget::Cursor nsWindow::sCurrentCursor = {};
+MOZ_RUNINIT nsIWidget::Cursor nsWindow::sCurrentCursor = {};
 nsWindow* nsWindow::sCurrentWindow = nullptr;
 bool nsWindow::sJustGotDeactivate = false;
 bool nsWindow::sJustGotActivate = false;
@@ -418,7 +418,7 @@ extern mozilla::LazyLogModule gWindowsLog;
 static NS_DEFINE_CID(kCClipboardCID, NS_CLIPBOARD_CID);
 
 // General purpose user32.dll hook object
-static WindowsDllInterceptor sUser32Intercept;
+MOZ_RUNINIT static WindowsDllInterceptor sUser32Intercept;
 
 // When the client area is extended out into the default window frame area,
 // this is the minimum amount of space along the edge of resizable windows
@@ -543,7 +543,7 @@ class TIPMessageHandler {
     MSG* msg = reinterpret_cast<MSG*>(aLParam);
     UINT& msgCode = msg->message;
 
-    for (uint32_t i = 0; i < ArrayLength(sInstance->mMessages); ++i) {
+    for (uint32_t i = 0; i < std::size(sInstance->mMessages); ++i) {
       if (msgCode == sInstance->mMessages[i]) {
         A11yInstantiationBlocker block;
         return ::CallNextHookEx(nullptr, aCode, aWParam, aLParam);
@@ -1679,7 +1679,7 @@ void nsWindow::Show(bool aState) {
           // background color before uncloaking it to complete the Show().
           ClearWindow(mWnd);
           CloakWindow(mWnd, FALSE);
-          mHasBeenShown = false;
+          mHasBeenShown = true;
         }
 
       } else {
@@ -4788,6 +4788,7 @@ bool nsWindow::ProcessMessageInternal(UINT msg, WPARAM& wParam, LPARAM& lParam,
         result = true;
         break;
       }
+
       // According to WM_ENDSESSION lParam documentation:
       //   0 -> OS shutdown or restart (no way to distinguish)
       //   ENDSESSION_LOGOFF -> User is logging off
@@ -4801,18 +4802,10 @@ bool nsWindow::ProcessMessageInternal(UINT msg, WPARAM& wParam, LPARAM& lParam,
       } else if (lParam & (ENDSESSION_CLOSEAPP | ENDSESSION_CRITICAL)) {
         shutdownReason = AppShutdownReason::OSForceClose;
       } else {
-        MOZ_DIAGNOSTIC_ASSERT(false,
-                              "Received WM_ENDSESSION with unknown flags.");
+        MOZ_DIAGNOSTIC_CRASH("Received WM_ENDSESSION with unknown flags.");
         shutdownReason = AppShutdownReason::OSForceClose;
       }
-    }
-      [[fallthrough]];
-    case MOZ_WM_APP_QUIT: {
-      if (shutdownReason == AppShutdownReason::Unknown) {
-        // TODO: We do not expect that these days anybody sends us
-        // MOZ_WM_APP_QUIT, see bug 1827807.
-        shutdownReason = AppShutdownReason::WinUnexpectedMozQuit;
-      }
+
       // Let's fake a shutdown sequence without actually closing windows etc.
       // to avoid Windows killing us in the middle. A proper shutdown would
       // require having a chance to pump some messages. Unfortunately
@@ -8593,7 +8586,6 @@ nsSizeMode nsWindow::FrameState::GetSizeMode() const { return mSizeMode; }
 
 void nsWindow::FrameState::CheckInvariant() const {
   MOZ_ASSERT(mSizeMode >= 0 && mSizeMode < nsSizeMode_Invalid);
-  MOZ_ASSERT(mLastSizeMode >= 0 && mLastSizeMode < nsSizeMode_Invalid);
   MOZ_ASSERT(mPreFullscreenSizeMode >= 0 &&
              mPreFullscreenSizeMode < nsSizeMode_Invalid);
   MOZ_ASSERT(mWindow);
@@ -8678,17 +8670,17 @@ void nsWindow::FrameState::OnFrameChanged() {
   // of activating as needed. We also don't want to potentially trigger
   // more focus / restore. Among other things, this addresses a bug on Win7
   // related to window docking. (bug 489258)
+  const auto oldSizeMode = mSizeMode;
   const auto newSizeMode =
       GetSizeModeForWindowFrame(mWindow->mWnd, mFullscreenMode);
   EnsureSizeMode(newSizeMode, DoShowWindow::No);
 
   // If window was restored, activate the window now to get correct attributes.
   if (mWindow->mIsVisible && mWindow->IsForegroundWindow() &&
-      mLastSizeMode == nsSizeMode_Minimized &&
+      oldSizeMode == nsSizeMode_Minimized &&
       mSizeMode != nsSizeMode_Minimized) {
     mWindow->DispatchFocusToTopLevelWindow(true);
   }
-  mLastSizeMode = mSizeMode;
 }
 
 static void MaybeLogSizeMode(nsSizeMode aMode) {
@@ -8708,7 +8700,6 @@ void nsWindow::FrameState::SetSizeModeInternal(nsSizeMode aMode,
       mSizeMode == nsSizeMode_Fullscreen || aMode == nsSizeMode_Fullscreen;
   const bool fullscreen = aMode == nsSizeMode_Fullscreen;
 
-  mLastSizeMode = mSizeMode;
   mSizeMode = aMode;
 
   MaybeLogSizeMode(mSizeMode);

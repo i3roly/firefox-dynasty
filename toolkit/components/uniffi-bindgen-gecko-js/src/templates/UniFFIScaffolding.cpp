@@ -91,8 +91,9 @@ public:
 
   MOZ_CAN_RUN_SCRIPT
   void MakeCall(JSContext* aCx, dom::UniFFICallbackHandler* aJsHandler, ErrorResult& aError) override {
-    Sequence<dom::UniFFIScaffoldingValue> uniffiArgs;
+    nsTArray<dom::UniFFIScaffoldingValue> uniffiArgs;
 
+    {%- if !handler.arguments.is_empty() %}
     // Setup
     if (!uniffiArgs.AppendElements({{ handler.arguments.len() }}, mozilla::fallible)) {
       aError.Throw(NS_ERROR_OUT_OF_MEMORY);
@@ -110,6 +111,7 @@ public:
         return;
     }
     {%- endfor %}
+    {%- endif %}
 
     // Stores the return value.  For now, we currently don't do anything with it, since we only support
     // fire-and-forget callbacks.
@@ -215,7 +217,7 @@ void DeregisterCallbackHandler(uint64_t aInterfaceId, ErrorResult& aError) {
 {%- for (preprocessor_condition, scaffolding_calls, preprocessor_condition_end) in all_scaffolding_calls.iter() %}
 {{ preprocessor_condition }}
 {%- for scaffolding_call in scaffolding_calls %}
-class {{ scaffolding_call.handler_class_name }} : public UniffiHandlerBase {
+class {{ scaffolding_call.handler_class_name }} : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   {%- for arg in scaffolding_call.arguments %}
@@ -284,7 +286,7 @@ public:
 {{ preprocessor_condition_end }}
 {%- endfor %}
 
-UniquePtr<UniffiHandlerBase> GetHandler(uint64_t aId) {
+UniquePtr<UniffiSyncCallHandler> GetSyncCallHandler(uint64_t aId) {
   switch (aId) {
     {%- for (preprocessor_condition, scaffolding_calls, preprocessor_condition_end) in all_scaffolding_calls.iter() %}
 {{ preprocessor_condition }}

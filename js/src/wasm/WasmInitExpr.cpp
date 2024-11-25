@@ -74,8 +74,8 @@ class MOZ_STACK_CLASS InitExprInterpreter {
   [[nodiscard]] bool pushRef(ValType type, AnyRef ref) {
     return stack.append(Val(type, ref));
   }
-  [[nodiscard]] bool pushFuncRef(HandleFuncRef ref) {
-    return stack.append(Val(RefType::func(), ref));
+  [[nodiscard]] bool pushFuncRef(RefType type, HandleFuncRef ref) {
+    return stack.append(Val(type, ref));
   }
 
   int32_t popI32() {
@@ -104,7 +104,8 @@ class MOZ_STACK_CLASS InitExprInterpreter {
     if (!instance().constantRefFunc(funcIndex, &func)) {
       return false;
     }
-    return pushFuncRef(func);
+    const TypeDef& t = instance().codeMeta().getFuncTypeDef(funcIndex);
+    return pushFuncRef(RefType::fromTypeDef(&t, false), func);
   }
   bool evalRefNull(RefType type) { return pushRef(type, AnyRef::null()); }
   bool evalI32Add() {
@@ -137,7 +138,6 @@ class MOZ_STACK_CLASS InitExprInterpreter {
     uint64_t a = popI64();
     return pushI64(a * b);
   }
-#ifdef ENABLE_WASM_GC
   bool evalStructNew(JSContext* cx, uint32_t typeIndex) {
     const TypeDef& typeDef = instance().codeMeta().types->type(typeIndex);
     const StructType& structType = typeDef.structType();
@@ -241,7 +241,6 @@ class MOZ_STACK_CLASS InitExprInterpreter {
     stack.popBack();
     return pushRef(RefType::any(), ref);
   }
-#endif  // ENABLE_WASM_GC
 };
 
 bool InitExprInterpreter::evaluate(JSContext* cx, Decoder& d) {
@@ -354,7 +353,6 @@ bool InitExprInterpreter::evaluate(JSContext* cx, Decoder& d) {
         }
         CHECK(evalI64Mul());
       }
-#ifdef ENABLE_WASM_GC
       case uint16_t(Op::GcPrefix): {
         switch (op.b1) {
           case uint32_t(GcOp::StructNew): {
@@ -410,7 +408,6 @@ bool InitExprInterpreter::evaluate(JSContext* cx, Decoder& d) {
         }
         break;
       }
-#endif
       default: {
         MOZ_CRASH();
       }
@@ -422,7 +419,8 @@ bool InitExprInterpreter::evaluate(JSContext* cx, Decoder& d) {
 
 bool wasm::DecodeConstantExpression(Decoder& d, CodeMetadata* codeMeta,
                                     ValType expected, Maybe<LitVal>* literal) {
-  ValidatingOpIter iter(*codeMeta, d, ValidatingOpIter::InitExpr);
+  ValTypeVector locals;
+  ValidatingOpIter iter(*codeMeta, d, locals, ValidatingOpIter::InitExpr);
 
   if (!iter.startInitExpr(expected)) {
     return false;
@@ -554,11 +552,7 @@ bool wasm::DecodeConstantExpression(Decoder& d, CodeMetadata* codeMeta,
         *literal = Nothing();
         break;
       }
-#ifdef ENABLE_WASM_GC
       case uint16_t(Op::GcPrefix): {
-        if (!codeMeta->gcEnabled()) {
-          return iter.unrecognizedOpcode(&op);
-        }
         switch (op.b1) {
           case uint32_t(GcOp::StructNew): {
             uint32_t typeIndex;
@@ -627,7 +621,6 @@ bool wasm::DecodeConstantExpression(Decoder& d, CodeMetadata* codeMeta,
         *literal = Nothing();
         break;
       }
-#endif
       default: {
         return iter.unrecognizedOpcode(&op);
       }

@@ -25,16 +25,6 @@ let CONFIG = [
             { name: "partnerCode", value: "{partnerCode}" },
             { name: "starbase", value: "Regula I" },
             { name: "experiment", value: "Genesis" },
-            {
-              name: "accessPoint",
-              searchAccessPoint: {
-                addressbar: "addressbar",
-                contextmenu: "contextmenu",
-                homepage: "homepage",
-                newtab: "newtab",
-                searchbar: "searchbar",
-              },
-            },
           ],
           searchTermParamName: "search",
         },
@@ -59,6 +49,9 @@ let CONFIG = [
         search: {
           base: "https://example.com/1",
           searchTermParamName: "search",
+        },
+        trending: {
+          base: "https://example.com/3",
         },
       },
     },
@@ -137,7 +130,7 @@ add_task(async function test_engine_with_all_params_set() {
   let submission = engine.getSubmission("test");
   Assert.equal(
     submission.uri.spec,
-    "https://example.com/1?partnerCode=pc&starbase=Regula%20I&experiment=Genesis&accessPoint=searchbar&search=test",
+    "https://example.com/1?partnerCode=pc&starbase=Regula%20I&experiment=Genesis&search=test",
     "Should have the correct search URL"
   );
   Assert.ok(!submission.postData, "Should not have postData for a GET url");
@@ -158,14 +151,18 @@ add_task(async function test_engine_with_all_params_set() {
   );
 
   let trendingSubmission = engine.getSubmission(
-    "test",
+    "",
     SearchUtils.URL_TYPE.TRENDING_JSON
   );
   Assert.equal(
     trendingSubmission.uri.spec,
-    "https://example.com/3?trending=test"
+    "https://example.com/3?trending=",
+    "Should have the correct trending URL with search term parameter."
   );
-  Assert.ok(!submission.postData, "Should not have postData for a GET url");
+  Assert.ok(
+    !trendingSubmission.postData,
+    "Should not have postData for a GET url"
+  );
 });
 
 add_task(async function test_engine_with_some_params_set() {
@@ -197,10 +194,14 @@ add_task(async function test_engine_with_some_params_set() {
     null,
     "Should not have a suggestions URL"
   );
+  let trendingSubmission = engine.getSubmission(
+    "",
+    SearchUtils.URL_TYPE.TRENDING_JSON
+  );
   Assert.equal(
-    engine.getSubmission("test", SearchUtils.URL_TYPE.TRENDING_JSON),
-    null,
-    "Should not have a trending URL"
+    trendingSubmission.uri.spec,
+    "https://example.com/3",
+    "Should have the correct trending URL without search term parameter."
   );
 });
 

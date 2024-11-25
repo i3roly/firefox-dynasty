@@ -127,14 +127,20 @@ void nsColumnSetFrame::ForEachColumnRule(
     const std::function<void(const nsRect& lineRect)>& aSetLineRect,
     const nsPoint& aPt) const {
   nsIFrame* child = mFrames.FirstChild();
-  if (!child) return;  // no columns
+  if (!child) {
+    return;  // no columns
+  }
 
   nsIFrame* nextSibling = child->GetNextSibling();
-  if (!nextSibling) return;  // 1 column only - this means no gap to draw on
+  if (!nextSibling) {
+    return;  // 1 column only - this means no gap to draw on
+  }
 
   const nsStyleColumn* colStyle = StyleColumn();
   nscoord ruleWidth = colStyle->GetColumnRuleWidth();
-  if (!ruleWidth) return;
+  if (!ruleWidth) {
+    return;
+  }
 
   WritingMode wm = GetWritingMode();
   bool isVertical = wm.IsVertical();
@@ -1103,8 +1109,8 @@ void nsColumnSetFrame::FindBestBalanceBSize(const ReflowInput& aReflowInput,
       // extraBlockSize to try to make it on the feasible side.
       nextGuess = aColData.mSumBSize / aConfig.mUsedColCount + extraBlockSize;
       // Sanitize it
-      nextGuess = clamped(nextGuess, aConfig.mKnownInfeasibleBSize + 1,
-                          aConfig.mKnownFeasibleBSize - 1);
+      nextGuess = std::clamp(nextGuess, aConfig.mKnownInfeasibleBSize + 1,
+                             aConfig.mKnownFeasibleBSize - 1);
       // We keep doubling extraBlockSize in every iteration until we find a
       // feasible guess.
       extraBlockSize *= 2;

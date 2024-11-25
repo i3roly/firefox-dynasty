@@ -258,15 +258,15 @@ user-login = "jrmuizel"
 user-name = "Jeff Muizelaar"
 
 [[publisher.glean]]
-version = "61.2.0"
-when = "2024-10-07"
+version = "62.0.0"
+when = "2024-11-05"
 user-id = 48
 user-login = "badboy"
 user-name = "Jan-Erik Rediger"
 
 [[publisher.glean-core]]
-version = "61.2.0"
-when = "2024-10-07"
+version = "62.0.0"
+when = "2024-11-05"
 user-id = 48
 user-login = "badboy"
 user-name = "Jan-Erik Rediger"
@@ -319,6 +319,13 @@ when = "2023-03-25"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
+
+[[publisher.io-surface]]
+version = "0.15.1"
+when = "2020-06-30"
+user-id = 2396
+user-login = "jdm"
+user-name = "Josh Matthews"
 
 [[publisher.iovec]]
 version = "0.1.4"
@@ -557,8 +564,8 @@ user-login = "Amanieu"
 user-name = "Amanieu d'Antras"
 
 [[publisher.serde]]
-version = "1.0.210"
-when = "2024-09-06"
+version = "1.0.214"
+when = "2024-10-28"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
@@ -571,8 +578,8 @@ user-login = "dtolnay"
 user-name = "David Tolnay"
 
 [[publisher.serde_derive]]
-version = "1.0.210"
-when = "2024-09-06"
+version = "1.0.214"
+when = "2024-10-28"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
@@ -606,8 +613,8 @@ user-login = "mbrubeck"
 user-name = "Matt Brubeck"
 
 [[publisher.syn]]
-version = "2.0.68"
-when = "2024-06-23"
+version = "2.0.87"
+when = "2024-11-02"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
@@ -620,15 +627,15 @@ user-login = "BurntSushi"
 user-name = "Andrew Gallant"
 
 [[publisher.thiserror]]
-version = "1.0.64"
-when = "2024-09-22"
+version = "1.0.69"
+when = "2024-11-10"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
 
 [[publisher.thiserror-impl]]
-version = "1.0.64"
-when = "2024-09-22"
+version = "1.0.69"
+when = "2024-11-10"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
@@ -772,20 +779,26 @@ user-login = "alexcrichton"
 user-name = "Alex Crichton"
 
 [[publisher.wasm-encoder]]
-version = "0.214.0"
-when = "2024-07-16"
+version = "0.219.1"
+when = "2024-10-10"
 user-id = 73222
 user-login = "wasmtime-publish"
 
 [[publisher.wasm-smith]]
-version = "0.214.0"
-when = "2024-07-16"
+version = "0.219.1"
+when = "2024-10-10"
+user-id = 73222
+user-login = "wasmtime-publish"
+
+[[publisher.wasmparser]]
+version = "0.219.1"
+when = "2024-10-10"
 user-id = 73222
 user-login = "wasmtime-publish"
 
 [[publisher.wast]]
-version = "214.0.0"
-when = "2024-07-16"
+version = "219.0.1"
+when = "2024-10-10"
 user-id = 73222
 user-login = "wasmtime-publish"
 
@@ -889,6 +902,18 @@ end = "2025-07-30"
 notes = "I am an author of this crate"
 
 [[audits.bytecode-alliance.wildcard-audits.wasm-encoder]]
+who = "Alex Crichton <alex@alexcrichton.com>"
+criteria = "safe-to-deploy"
+user-id = 73222 # wasmtime-publish
+start = "2023-01-01"
+end = "2025-05-08"
+notes = """
+The Bytecode Alliance uses the `wasmtime-publish` crates.io account to automate
+publication of this crate from CI. This repository requires all PRs are reviewed
+by a Bytecode Alliance maintainer and it owned by the Bytecode Alliance itself.
+"""
+
+[[audits.bytecode-alliance.wildcard-audits.wasmparser]]
 who = "Alex Crichton <alex@alexcrichton.com>"
 criteria = "safe-to-deploy"
 user-id = 73222 # wasmtime-publish
@@ -1529,6 +1554,20 @@ criteria = "safe-to-run"
 version = "0.2.3"
 aggregated-from = "https://chromium.googlesource.com/chromiumos/third_party/rust_crates/+/refs/heads/main/cargo-vet/audits.toml?format=TEXT"
 
+[[audits.google.audits.unicode-linebreak]]
+who = "Lukasz Anforowicz <lukasza@chromium.org>"
+criteria = "safe-to-deploy"
+version = "0.1.5"
+notes = """
+Grepped for `-i cipher`, `-i crypto`, `'\bfs\b'``, `'\bnet\b'``, `'\bunsafe\b'``
+and there were no hits.
+
+Version `0.1.2` of this crate has been added to Chromium in
+https://source.chromium.org/chromium/chromium/src/+/591a0f30c5eac93b6a3d981c2714ffa4db28dbcb
+The CL description contains a link to a Google-internal document with audit details.
+"""
+aggregated-from = "https://chromium.googlesource.com/chromium/src/+/main/third_party/rust/chromium_crates_io/supply-chain/audits.toml?format=TEXT"
+
 [[audits.google.audits.version_check]]
 who = "George Burgess IV <gbiv@google.com>"
 criteria = "safe-to-deploy"
@@ -1567,6 +1606,11 @@ delta = "0.21.2 -> 0.21.3"
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
 version = "0.9.0"
+
+[[audits.isrg.audits.digest]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "0.10.6 -> 0.10.7"
 
 [[audits.isrg.audits.getrandom]]
 who = "Tim Geoghegan <timg@letsencrypt.org>"

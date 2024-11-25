@@ -1,10 +1,6 @@
 /* Any copyright is dedicated to the Public Domain.
    http://creativecommons.org/publicdomain/zero/1.0/ */
 
-ChromeUtils.defineESModuleGetters(this, {
-  setTimeout: "resource://gre/modules/Timer.sys.mjs",
-});
-
 add_setup(async function setup() {
   await SpecialPowers.pushPrefEnv({
     set: [["browser.urlbar.scotchBonnet.enableOverride", true]],
@@ -170,117 +166,6 @@ add_task(async function detect_searchmode_changes() {
       ""
     );
   }, "The searchMode name has been removed when we exit search mode");
-});
-
-async function focusSwitcher(win = window) {
-  if (!win.gURLBar.focused) {
-    let focus = BrowserTestUtils.waitForEvent(win.gURLBar.inputField, "focus");
-    EventUtils.synthesizeKey("l", { accelKey: true }, win);
-    await focus;
-  }
-  EventUtils.synthesizeKey("KEY_Tab", { shiftKey: true }, win);
-}
-
-/**
- * Test we can open the SearchModeSwitcher with various keys
- *
- * @param {string} openKey - The keyboard character used to open the popup.
- */
-async function test_open_switcher(openKey) {
-  let popup = UrlbarTestUtils.searchModeSwitcherPopup(window);
-  let promiseMenuOpen = BrowserTestUtils.waitForEvent(popup, "popupshown");
-
-  info(`Open the urlbar and open the switcher via keyboard (${openKey})`);
-  await focusSwitcher();
-  EventUtils.synthesizeKey(openKey);
-  await promiseMenuOpen;
-
-  EventUtils.synthesizeKey("KEY_Escape");
-}
-
-/**
- * Test that not all characters will open the SearchModeSwitcher
- *
- * @param {string} dontOpenKey - The keyboard character we will ignore.
- */
-async function test_dont_open_switcher(dontOpenKey) {
-  let popup = UrlbarTestUtils.searchModeSwitcherPopup(window);
-
-  let popupOpened = false;
-  let opened = () => {
-    popupOpened = true;
-  };
-  info("Pressing key that should not open the switcher");
-  popup.addEventListener("popupshown", opened);
-  await focusSwitcher();
-  EventUtils.synthesizeKey(dontOpenKey);
-
-  /* eslint-disable mozilla/no-arbitrary-setTimeout */
-  await new Promise(r => setTimeout(r, 50));
-  Assert.ok(!popupOpened, "The popup was not opened");
-  popup.removeEventListener("popupshown", opened);
-}
-
-/**
- * Test we can navigate the SearchModeSwitcher with various keys
- *
- * @param {string} navKey - The keyboard character used to navigate.
- * @param {Int} navTimes - The number of times we press that key.
- * @param {object} searchMode - The searchMode that we expect to select.
- */
-async function test_navigate_switcher(navKey, navTimes, searchMode) {
-  let popup = UrlbarTestUtils.searchModeSwitcherPopup(window);
-  let promiseMenuOpen = BrowserTestUtils.waitForEvent(popup, "popupshown");
-
-  info("Open the urlbar and open the switcher via Enter key");
-  await focusSwitcher();
-  EventUtils.synthesizeKey("KEY_Enter");
-  await promiseMenuOpen;
-
-  info("Select first result and enter search mode");
-  for (let i = 0; i < navTimes; i++) {
-    EventUtils.synthesizeKey(navKey);
-  }
-  EventUtils.synthesizeKey("KEY_Enter");
-
-  await UrlbarTestUtils.assertSearchMode(window, searchMode);
-
-  info("Exit the search mode");
-  await UrlbarTestUtils.promisePopupClose(window, () => {
-    EventUtils.synthesizeKey("KEY_Escape");
-  });
-  EventUtils.synthesizeKey("KEY_Escape");
-  await UrlbarTestUtils.assertSearchMode(window, null);
-}
-
-// TODO: Don't let tests depend on the actual search config.
-let amazonSearchMode = {
-  engineName: "Amazon.com",
-  entry: "searchbutton",
-  isPreview: false,
-  isGeneralPurposeEngine: true,
-};
-let bingSearchMode = {
-  engineName: "Bing",
-  isGeneralPurposeEngine: true,
-  source: 3,
-  isPreview: false,
-  entry: "searchbutton",
-};
-
-add_task(async function test_keyboard_nav() {
-  await test_open_switcher("KEY_Enter");
-  await test_open_switcher("KEY_ArrowDown");
-  await test_open_switcher(" ");
-
-  await test_dont_open_switcher("a");
-  await test_dont_open_switcher("KEY_ArrowUp");
-  await test_dont_open_switcher("x");
-
-  await test_navigate_switcher("KEY_Tab", 1, amazonSearchMode);
-  await test_navigate_switcher("KEY_ArrowDown", 1, amazonSearchMode);
-  await test_navigate_switcher("KEY_Tab", 2, bingSearchMode);
-  await test_navigate_switcher("KEY_ArrowDown", 2, bingSearchMode);
 });
 
 add_task(async function open_settings() {
@@ -529,13 +414,13 @@ add_task(async function test_suggestions_after_no_search_mode() {
 });
 
 add_task(async function open_engine_page_directly() {
-  await SearchTestUtils.installSearchExtension(
+  let searchExtension = await SearchTestUtils.installSearchExtension(
     {
       name: "MozSearch",
       search_url: "https://example.com/",
       favicon_url: "https://example.com/favicon.ico",
     },
-    { setAsDefault: true }
+    { setAsDefault: true, skipUnload: true }
   );
 
   const TEST_DATA = [
@@ -601,63 +486,129 @@ add_task(async function open_engine_page_directly() {
     await pageLoaded;
     Assert.ok(true, "The popup was hidden and expected page was loaded");
 
-    info("Search mode also be changed");
-    await UrlbarTestUtils.assertSearchMode(newWin, {
-      engineName: "MozSearch",
-      isGeneralPurposeEngine: false,
-      isPreview: true,
-      entry: "searchbutton",
-    });
+    await UrlbarTestUtils.assertSearchMode(newWin, null);
 
     // Cleanup.
     await PlacesUtils.history.clear();
     await BrowserTestUtils.closeWindow(newWin);
   }
+  await searchExtension.unload();
 });
 
-add_task(async function test_urlbar_text_after_previewed_search_mode() {
-  info("Open urlbar with a query that shows DuckDuckGo search engine");
-  await UrlbarTestUtils.promiseAutocompleteResultPopup({
-    window,
-    value: "@duck",
+add_task(async function test_enter_searchmode_by_key_if_single_result() {
+  await PlacesTestUtils.addBookmarkWithDetails({
+    uri: "https://example.com/",
+    title: "BOOKMARK",
   });
 
-  // Sanity check.
-  const target = await UrlbarTestUtils.getDetailsOfResultAt(window, 0);
-  Assert.equal(target.result.payload.engine, "DuckDuckGo");
-  Assert.ok(target.result.payload.providesSearchMode);
+  const TEST_DATA = [
+    {
+      key: "KEY_Enter",
+      expectedEntry: "keywordoffer",
+    },
+    {
+      key: "KEY_Tab",
+      expectedEntry: "keywordoffer",
+    },
+    {
+      key: "VK_RIGHT",
+      expectedEntry: "typed",
+    },
+    {
+      key: "VK_DOWN",
+      expectedEntry: "keywordoffer",
+    },
+  ];
+  for (let { key, expectedEntry } of TEST_DATA) {
+    info(`Test for entering search mode by ${key}`);
 
-  info("Choose the search mode suggestion");
-  EventUtils.synthesizeKey("KEY_Tab", {});
-  await UrlbarTestUtils.assertSearchMode(window, {
-    engineName: "DuckDuckGo",
-    entry: "keywordoffer",
-    source: 3,
-    isPreview: true,
-  });
+    info("Open urlbar with a query that shows bookmarks");
+    await UrlbarTestUtils.promiseAutocompleteResultPopup({
+      window,
+      value: "@book",
+    });
 
-  info("Click on the content area");
-  // We intentionally turn off this a11y check, because the following click is
-  // purposefully sent on an arbitrary web content that is not expected to be
-  // tested by itself with the browser mochitests, therefore this rule check
-  // shall be ignored by a11y_checks suite.
-  AccessibilityUtils.setEnv({ mustHaveAccessibleRule: false });
-  EventUtils.synthesizeMouseAtCenter(gBrowser.selectedBrowser, {});
-  AccessibilityUtils.resetEnv();
-  await UrlbarTestUtils.assertSearchMode(window, null);
+    // Sanity check.
+    const autofill = await UrlbarTestUtils.getDetailsOfResultAt(window, 0);
+    Assert.equal(autofill.result.providerName, "RestrictKeywordsAutofill");
+    Assert.equal(autofill.result.payload.autofillKeyword, "@bookmarks");
 
-  info("Choose any search engine from the switcher");
-  let popup = await UrlbarTestUtils.openSearchModeSwitcher(window);
-  let popupHidden = UrlbarTestUtils.searchModeSwitcherPopupClosed(window);
-  popup.querySelector("toolbarbutton[label=Bing]").click();
-  await popupHidden;
+    info("Choose the search mode suggestion");
+    EventUtils.synthesizeKey(key, {});
+    await UrlbarTestUtils.promiseSearchComplete(window);
+    await UrlbarTestUtils.assertSearchMode(window, {
+      source: UrlbarUtils.RESULT_SOURCE.BOOKMARKS,
+      entry: expectedEntry,
+      restrictType: "keyword",
+    });
 
-  Assert.equal(gURLBar.value, "", "The value of urlbar should be empty");
+    info("Check the suggestions");
+    Assert.equal(UrlbarTestUtils.getResultCount(window), 1);
+    const bookmark = await UrlbarTestUtils.getDetailsOfResultAt(window, 0);
+    Assert.equal(bookmark.result.source, UrlbarUtils.RESULT_SOURCE.BOOKMARKS);
+    Assert.equal(bookmark.result.type, UrlbarUtils.RESULT_TYPE.URL);
+    Assert.equal(bookmark.result.payload.url, "https://example.com/");
+    Assert.equal(bookmark.result.payload.title, "BOOKMARK");
 
-  // Clean up.
-  window.document.querySelector("#searchmode-switcher-close").click();
-  await UrlbarTestUtils.assertSearchMode(window, null);
+    info("Choose any search engine from the switcher");
+    let popup = await UrlbarTestUtils.openSearchModeSwitcher(window);
+    let popupHidden = UrlbarTestUtils.searchModeSwitcherPopupClosed(window);
+    popup.querySelector("toolbarbutton[label=Bing]").click();
+    await popupHidden;
+    Assert.equal(gURLBar.value, "", "The value of urlbar should be empty");
+
+    // Clean up.
+    window.document.querySelector("#searchmode-switcher-close").click();
+    await UrlbarTestUtils.assertSearchMode(window, null);
+  }
+
+  await PlacesUtils.bookmarks.eraseEverything();
 });
+
+add_task(
+  async function test_enter_searchmode_as_preview_by_key_if_multiple_results() {
+    await PlacesTestUtils.addBookmarkWithDetails({
+      uri: "https://example.com/",
+      title: "BOOKMARK",
+    });
+
+    for (let key of ["KEY_Tab", "VK_DOWN"]) {
+      info(`Test for entering search mode by ${key}`);
+
+      info("Open urlbar with a query that shows bookmarks");
+      await UrlbarTestUtils.promiseAutocompleteResultPopup({
+        window,
+        value: "@",
+      });
+
+      info("Choose the bookmark search mode");
+      let resultCount = UrlbarTestUtils.getResultCount(window);
+      for (let i = 0; i < resultCount; i++) {
+        EventUtils.synthesizeKey(key, {});
+
+        let { result } = await UrlbarTestUtils.getDetailsOfResultAt(window, i);
+        if (
+          result.providerName == "RestrictKeywords" &&
+          result.payload.keyword == "*"
+        ) {
+          await UrlbarTestUtils.assertSearchMode(window, {
+            source: UrlbarUtils.RESULT_SOURCE.BOOKMARKS,
+            entry: "keywordoffer",
+            restrictType: "keyword",
+            isPreview: true,
+          });
+          break;
+        }
+      }
+
+      // Clean up.
+      window.document.querySelector("#searchmode-switcher-close").click();
+      await UrlbarTestUtils.assertSearchMode(window, null);
+    }
+
+    await PlacesUtils.bookmarks.eraseEverything();
+  }
+);
 
 add_task(async function test_open_state() {
   let popup = UrlbarTestUtils.searchModeSwitcherPopup(window);
@@ -844,4 +795,70 @@ add_task(async function test_search_service_fail() {
   Services.search.wrappedJSObject.forceInitializationStatusForTests("success");
 
   await BrowserTestUtils.closeWindow(newWin);
+});
+
+add_task(async function test_search_mode_switcher_engine_no_icon() {
+  const testEngineName = "TestEngineNoIcon";
+  let searchExtension = await SearchTestUtils.installSearchExtension(
+    {
+      name: testEngineName,
+      search_url: "https://www.example.com/search?q=",
+      favicon_url: "",
+    },
+    { skipUnload: true }
+  );
+
+  let searchModeSwitcherButton = window.document.getElementById(
+    "searchmode-switcher-icon"
+  );
+
+  let popup = await UrlbarTestUtils.openSearchModeSwitcher(window);
+
+  let popupHidden = UrlbarTestUtils.searchModeSwitcherPopupClosed(window);
+  popup.querySelector(`toolbarbutton[label=${testEngineName}]`).click();
+  await popupHidden;
+
+  let regex = /url\("([^"]+)"\)/;
+  let searchModeSwitcherIconUrl =
+    searchModeSwitcherButton.style.listStyleImage.match(regex);
+
+  const searchGlassIconUrl = UrlbarUtils.ICON.SEARCH_GLASS;
+
+  Assert.equal(
+    searchModeSwitcherIconUrl[1],
+    searchGlassIconUrl,
+    "The search mode switcher should display the default search glass icon when the engine has no icon."
+  );
+
+  info("Press the close button and escape search mode");
+  window.document.querySelector("#searchmode-switcher-close").click();
+  await UrlbarTestUtils.assertSearchMode(window, null);
+
+  await searchExtension.unload();
+});
+
+add_task(async function test_search_mode_app_provided_engines() {
+  let cleanup = await installPersistTestEngines();
+
+  let popup = await UrlbarTestUtils.openSearchModeSwitcher(window);
+
+  info("Press on the example menu button and enter search mode");
+  let popupHidden = UrlbarTestUtils.searchModeSwitcherPopupClosed(window);
+  popup.querySelector("toolbarbutton[label=Example]").click();
+
+  await popupHidden;
+
+  info("Search mode also be changed");
+  await UrlbarTestUtils.assertSearchMode(window, {
+    engineName: "Example",
+    entry: "searchbutton",
+    source: 3,
+  });
+
+  info("Press the close button and escape search mode");
+  window.document.querySelector("#searchmode-switcher-close").click();
+  await UrlbarTestUtils.assertSearchMode(window, null);
+
+  cleanup();
+  await resetApplicationProvidedEngines();
 });

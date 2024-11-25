@@ -29,6 +29,7 @@ import org.mozilla.fenix.theme.Theme
 @Composable
 internal fun ToolsSubmenu(
     isPdf: Boolean,
+    isReportSiteIssueSupported: Boolean,
     webExtensionMenuItems: List<WebExtensionMenuItem.WebExtensionPageMenuItem>,
     isReaderable: Boolean,
     isReaderViewActive: Boolean,
@@ -85,7 +86,7 @@ internal fun ToolsSubmenu(
                 )
             }
 
-            if (webExtensionMenuItems.isNotEmpty()) {
+            if (webExtensionMenuItems.isNotEmpty() && isReportSiteIssueSupported) {
                 Divider(color = FirefoxTheme.colors.borderSecondary)
 
                 for (webExtensionMenuItem in webExtensionMenuItems) {
@@ -204,13 +205,14 @@ private fun ToolsSubmenuPreview() {
         ) {
             ToolsSubmenu(
                 isPdf = false,
+                isReportSiteIssueSupported = false,
                 webExtensionMenuItems = listOf(
                     WebExtensionMenuItem.WebExtensionPageMenuItem(
                         label = "label",
                         enabled = true,
                         icon = BitmapFactory.decodeResource(
                             LocalContext.current.resources,
-                            R.drawable.googleg_standard_color_18,
+                            R.drawable.mozac_ic_web_extension_default_icon,
                         ),
                         badgeText = "1",
                         badgeTextColor = Color.White.toArgb(),
@@ -247,13 +249,14 @@ private fun ToolsSubmenuPrivatePreview() {
         ) {
             ToolsSubmenu(
                 isPdf = false,
+                isReportSiteIssueSupported = true,
                 webExtensionMenuItems = listOf(
                     WebExtensionMenuItem.WebExtensionPageMenuItem(
                         label = "label",
                         enabled = true,
                         icon = BitmapFactory.decodeResource(
                             LocalContext.current.resources,
-                            R.drawable.googleg_standard_color_18,
+                            R.drawable.mozac_ic_web_extension_default_icon,
                         ),
                         badgeText = "1",
                         badgeTextColor = Color.White.toArgb(),

@@ -194,6 +194,12 @@ https_first_disabled = true
 
 ["browser_multiselect_tabs_reorder.js"]
 
+["browser_multiselect_tabs_unload.js"]
+
+["browser_multiselect_tabs_unload_telemetry.js"]
+
+["browser_multiselect_tabs_unload_with_beforeunload.js"]
+
 ["browser_multiselect_tabs_using_Ctrl.js"]
 
 ["browser_multiselect_tabs_using_Shift.js"]
@@ -227,11 +233,12 @@ support-files = [
 https_first_disabled = true
 
 ["browser_new_tab_bookmarks_toolbar_height.js"]
+support-files = ["file_observe_height_changes.html"]
 skip-if = [
   "os == 'mac' && os_version == '10.15' && processor == 'x86_64'", # Bug 1872477
   "os == 'mac' && os_version == '11.20' && arch == 'aarch64'", # Bug 1872477
+  "os == 'mac' && os_version == '14.70' && processor == 'x86_64'", # Bug 1929417
 ]
-support-files = ["file_observe_height_changes.html"]
 
 ["browser_new_tab_in_privilegedabout_process_pref.js"]
 https_first_disabled = true
@@ -317,6 +324,8 @@ support-files = ["tab_that_opens_dialog.html"]
 ["browser_restore_isAppTab.js"]
 run-if = ["crashreporter"] # test requires crashreporter due to 1536221
 
+["browser_scroll_size_determination.js"]
+
 ["browser_selectTabAtIndex.js"]
 
 ["browser_switch_by_scrolling.js"]
@@ -359,6 +368,12 @@ skip-if = ["win11_2009 && bits == 32 && !debug"] # high frequency win7 intermitt
 support-files = ["browser_tab_dragdrop2_frame1.xhtml"]
 
 ["browser_tab_groups.js"]
+skip-if = ["os == 'linux' && os_version == '18.04' && processor == 'x86_64'"] # Bug 1920294
+support-files = ["file_new_tab_page.html"]
+
+["browser_tab_groups_a11y.js"]
+
+["browser_tab_groups_keyboard_focus.js"]
 
 ["browser_tab_label_during_reload.js"]
 
@@ -371,6 +386,8 @@ support-files = ["browser_tab_dragdrop2_frame1.xhtml"]
 ["browser_tab_manager_keyboard_access.js"]
 
 ["browser_tab_manger_synced_tabs.js"]
+
+["browser_tab_move_active_tab.js"]
 
 ["browser_tab_move_to_new_window_reload.js"]
 

@@ -39,8 +39,6 @@ private fun reducer(state: MenuState, action: MenuAction): MenuState {
         is MenuAction.ToggleReaderView,
         is MenuAction.CustomizeReaderView,
         is MenuAction.Navigate,
-        is MenuAction.ShowCFR,
-        is MenuAction.DismissCFR,
         is MenuAction.SaveMenuClicked,
         is MenuAction.ToolsMenuClicked,
         -> state
@@ -82,6 +80,7 @@ private fun reducer(state: MenuState, action: MenuAction): MenuState {
         is MenuAction.InstallAddonSuccess -> state.copyWithExtensionMenuState { extensionState ->
             extensionState.copy(
                 recommendedAddons = state.extensionMenuState.recommendedAddons.filter { it != action.addon },
+                availableAddons = state.extensionMenuState.availableAddons.plus(action.addon),
                 addonInstallationInProgress = null,
             )
         }
@@ -96,6 +95,10 @@ private fun reducer(state: MenuState, action: MenuAction): MenuState {
 
         is MenuAction.UpdateManageExtensionsMenuItemVisibility -> state.copyWithExtensionMenuState {
             it.copy(shouldShowManageExtensionsMenuItem = action.isVisible)
+        }
+
+        is MenuAction.UpdateAvailableAddons -> state.copyWithExtensionMenuState {
+            it.copy(availableAddons = action.availableAddons)
         }
     }
 }

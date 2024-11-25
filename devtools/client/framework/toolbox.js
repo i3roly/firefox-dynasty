@@ -12,7 +12,6 @@ const DEVTOOLS_ALWAYS_ON_TOP = "devtools.toolbox.alwaysOnTop";
 const DISABLE_AUTOHIDE_PREF = "ui.popup.disable_autohide";
 const PSEUDO_LOCALE_PREF = "intl.l10n.pseudo";
 const HOST_HISTOGRAM = "DEVTOOLS_TOOLBOX_HOST";
-const CURRENT_THEME_SCALAR = "devtools.current_theme";
 const HTML_NS = "http://www.w3.org/1999/xhtml";
 const REGEX_4XX_5XX = /^[4,5]\d\d$/;
 
@@ -862,6 +861,7 @@ Toolbox.prototype = {
   async _onTargetSelected({ targetFront }) {
     this._updateFrames({ selected: targetFront.actorID });
     this.selectTarget(targetFront.actorID);
+    this._refreshHostTitle();
   },
 
   _onTargetDestroyed({ targetFront }) {
@@ -1545,7 +1545,7 @@ Toolbox.prototype = {
     // Log current theme. The question we want to answer is:
     // "What proportion of users use which themes?"
     const currentTheme = Services.prefs.getCharPref("devtools.theme");
-    this.telemetry.keyedScalarAdd(CURRENT_THEME_SCALAR, currentTheme, 1);
+    Glean.devtools.currentTheme[currentTheme].add(1);
 
     const browserWin = this.topWindow;
     this.telemetry.preparePendingEvent(browserWin, "open", "tools", null, [
@@ -3320,6 +3320,7 @@ Toolbox.prototype = {
   _refreshHostTitle() {
     let title;
 
+    const { selectedTargetFront } = this.commands.targetCommand;
     if (this.target.isXpcShellTarget) {
       // This will only be displayed for local development and can remain
       // hardcoded in english.
@@ -3333,19 +3334,24 @@ Toolbox.prototype = {
       } else {
         throw new Error("Unsupported scope: " + scope);
       }
-    } else if (this.target.name && this.target.name != this.target.url) {
+    } else if (
+      selectedTargetFront.name &&
+      selectedTargetFront.name != selectedTargetFront.url
+    ) {
+      // Only display the target `URL` when it isn't already the target `name`
+      // For Web Extension, we remove the `moz-extension://${addon-uid}` from the URL
       const url = this._descriptorFront.isWebExtensionDescriptor
-        ? this.getExtensionPathName(this.target.url)
-        : getUnicodeUrl(this.target.url);
+        ? this.getExtensionPathName(selectedTargetFront.url)
+        : getUnicodeUrl(selectedTargetFront.url);
       title = L10N.getFormatStr(
         "toolbox.titleTemplate2",
-        this.target.name,
+        selectedTargetFront.name,
         url
       );
     } else {
       title = L10N.getFormatStr(
         "toolbox.titleTemplate1",
-        getUnicodeUrl(this.target.url)
+        getUnicodeUrl(selectedTargetFront.url)
       );
     }
     this.postMessage({

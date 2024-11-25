@@ -248,8 +248,12 @@
     <string name="browser_menu_open_in_regular_tab">Odpri v navadnem zavihku</string>
     <!-- Browser menu toggle that adds a shortcut to the site on the device home screen. -->
     <string name="browser_menu_add_to_homescreen">Dodaj na domač zaslon</string>
+    <!-- Browser menu toggle that adds a PWA of the site on the device home screen. -->
+    <string name="browser_menu_add_app_to_homescreen">Dodaj aplikacijo na domači zaslon</string>
     <!-- Browser menu toggle that adds a shortcut to the site on the device home screen. -->
     <string name="browser_menu_add_to_homescreen_2">Dodaj na domači zaslon …</string>
+    <!-- Browser menu toggle that adds a PWA of the site on the device home screen. -->
+    <string name="browser_menu_add_app_to_homescreen_2">Dodaj aplikacijo na domači zaslon …</string>
     <!-- Text for notifying users that Xiaomi devices require additional permissions to add to home screen -->
     <string name="browser_menu_add_to_homescreen_xiaomi">Na napravah Xiaomi so morda za dodajanje bližnjic na domači zaslon potrebna dodatna dovoljenja. Preverite v nastavitvah.</string>
     <!-- Content description (not visible, for screen readers etc.) for the Resync tabs button -->
@@ -323,6 +327,10 @@
     <string name="browser_menu_back_button_content_description">Nazaj na glavni meni</string>
     <!-- Content description (not visible, for screen readers etc.) for bottom sheet handlebar main menu. -->
     <string name="browser_main_menu_handlebar_content_description">Zapri glavni meni</string>
+    <!-- Content description (not visible, for screen readers etc.) for main menu help button. -->
+    <string name="browser_main_menu_content_description_help_button">Pomoč</string>
+    <!-- Content description (not visible, for screen readers etc.) for main menu settings button. -->
+    <string name="browser_main_menu_content_description_settings_button">Nastavitve</string>
     <!-- Content description (not visible, for screen readers etc.) for bottom sheet handlebar extensions menu. -->
     <string name="browser_extensions_menu_handlebar_content_description">Zapri meni razširitev</string>
     <!-- Content description (not visible, for screen readers etc.) for bottom sheet handlebar save menu. -->
@@ -332,9 +340,19 @@
     <!-- Content description (not visible, for screen readers etc.) for bottom sheet handlebar custom tab menu. -->
     <string name="browser_custom_tab_menu_handlebar_content_description">Zapri meni zavihkov po meri</string>
     <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
-    <string name="browser_menu_tools_description_with_translate">Bralni pogled, Prevedi, Natisni, Deli, Odpri aplikacijo</string>
+    <string name="browser_menu_tools_description_with_translate" moz:removedIn="133" tools:ignore="UnusedResources">Bralni pogled, Prevedi, Natisni, Deli, Odpri aplikacijo</string>
     <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
-    <string name="browser_menu_tools_description">Bralni pogled, Natisni, Deli, Odpri aplikacijo</string>
+    <string name="browser_menu_tools_description" moz:removedIn="133" tools:ignore="UnusedResources">Bralni pogled, Natisni, Deli, Odpri aplikacijo</string>
+    <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu
+         The first parameter is the label of the report site issue (for example: Report Site issue) -->
+    <string name="browser_menu_tools_description_with_translate_with_report_site">Bralni pogled, Prevedi, %s, Natisni, Deli, Odpri aplikacijo</string>
+    <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
+    <string name="browser_menu_tools_description_with_translate_without_report_site">Bralni pogled, Prevedi, Natisni, Deli, Odpri aplikacijo</string>
+    <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu
+         The first parameter is the label of the report site issue (for example: Report Site issue) -->
+    <string name="browser_menu_tools_description_with_report_site">Bralni pogled, %s, Natisni, Deli, Odpri aplikacijo</string>
+    <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
+    <string name="browser_menu_tools_description_without_report_site">Bralni pogled, Natisni, Deli, Odpri aplikacijo</string>
     <!-- Browser menu label that navigates to the save sub-menu, which contains various save related menu items such as
          bookmarking a page, saving to collection, shortcut or as a PDF, and adding to home screen -->
     <string name="browser_menu_save">Shrani</string>
@@ -544,6 +562,10 @@
     <string name="onboarding_add_on_reviews_label">Ocen: %1$s</string>
     <!-- Content description for the add-on icon. -->
     <string name="onboarding_add_on_icon_content_description">Ikona dodatka</string>
+    <!-- Content description for the an installed add-on icon. -->
+    <string name="onboarding_installed_add_on_icon_content_description">Ikona nameščenega dodatka</string>
+    <!-- Content description for the an installing add-on icon. -->
+    <string name="onboarding_installing_add_on_icon_content_description">Ikona za nameščanje dodatka</string>
     <!-- Content description for the add add-on button. -->
     <string name="onboarding_add_on_add_button_content_description">Gumb za namestitev dodatka</string>
     <!-- Content description for the star rating group. -->
@@ -946,7 +968,9 @@
     <string name="exceptions_empty_message_learn_more_link">Več o tem</string>
 
     <!-- Preference switch for usage and technical data collection -->
-    <string name="preference_usage_data">Uporaba in tehnični podatki</string>
+    <string name="preference_usage_data" moz:removedIn="134" tools:ignore="UnusedResources">Uporaba in tehnični podatki</string>
+    <!-- Preference switch for usage and technical learn more link -->
+    <string name="preference_usage_data_learn_more" tools:ignore="UnusedResources">Več o tem</string>
     <!-- Preference description for usage and technical data collection -->
     <string name="preferences_usage_data_description">Pošilja podatke o učinkovitosti, uporabi, strojni opremi in prilagoditvah organizaciji Mozilla, da lahko naredi %1$s boljši</string>
     <!-- Preference switch for marketing data collection -->
@@ -1245,6 +1269,30 @@
 
 
     <!-- WebCompat Reporter -->
+
+
+    <!-- WebCompat Reporter -->
+    <!-- The title of the Web Compat Reporter feature. This is displayed in the top app bar. -->
+    <string name="webcompat_reporter_screen_title">Prijavi nedelujočo stran</string>
+    <!-- The description of the Web Compat Reporter feature. This first parameter is the name of the application (For example: Fenix) -->
+    <string name="webcompat_reporter_description">Pomagajte izboljšati %1$s za vse. S pomočjo podatkov, ki jih pošljete, Mozillini zaposleni odpravljajo težave s spletnimi mesti.</string>
+    <!-- The text field label of the URL text field. This is displayed above the user-inputted URL. -->
+    <string name="webcompat_reporter_label_url">Spletni naslov</string>
+    <!-- The error message of the URL text field when an invalid URL has been entered. -->
+    <string name="webcompat_reporter_url_error_invalid">Vnesite veljaven naslov URL</string>
+    <!-- The label/title of an optional field in the Web Compat Reporter feature for explaining a high-level reason why the site is broken. -->
+    <string name="webcompat_reporter_label_whats_broken">Kaj je narobe? (neobvezno)</string>
+    <!-- The placeholder text for the dropdown where a user can select a high-level reason why the site is broken. -->
+    <string name="webcompat_reporter_choose_reason">Izberite razlog</string>
+    <!-- The label/title of an optional field in the Web Compat Reporter feature for adding additional information. -->
+    <string name="webcompat_reporter_label_description">Opišite težavo (neobvezno)</string>
+    <!-- The button text for navigating away from the feature to provide more information on the broken site's bug report. -->
+    <string name="webcompat_reporter_send_more_info">Pošlji več informacij</string>
+    <!-- The button text for the cancel button to leave the Web Compat Reporter feature. -->
+    <string name="webcompat_reporter_cancel">Prekliči</string>
+    <!-- The button text for the send button to submit the provided form data. -->
+    <string name="webcompat_reporter_send">Pošlji</string>
+
 
     <!-- These reason strings are dropdown options on a WebCompat reporter form, indicating what is broken on the site. -->
     <!-- Broken site reason text for site slow or not working -->

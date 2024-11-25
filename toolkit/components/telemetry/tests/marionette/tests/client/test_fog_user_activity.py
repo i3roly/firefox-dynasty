@@ -16,22 +16,35 @@ class BaselineRidealongFilter:
         return doc_type in self.expected_pings
 
 
-DauReportFilter = BaselineRidealongFilter("dau-reporting")
+DauReportFilter = BaselineRidealongFilter("usage-reporting")
 
 
 class TestClientActivity(FOGTestCase):
     """
     Tests for client activity and FOG's scheduling of the "baseline" ping.
-    For every `baseline` ping we also expect a `dau-reporting` ping.
+    For every `baseline` ping we also expect a `usage-reporting` ping.
     """
 
     def test_user_activity(self):
+        # We might still get those pings in an unexpected order.
+        # Let's check we get both.
+        expected_pings = ["baseline", "usage-reporting"]
+
         # First test that restarting the browser sends a "active" ping
-        [ping0, dau_ping0] = self.wait_for_pings(
+        [ping0, ping1] = self.wait_for_pings(
             self.restart_browser, DauReportFilter, 2, ping_server=self.fog_ping_server
         )
-        self.assertEqual("active", ping0["payload"]["ping_info"]["reason"])
-        self.assertEqual("active", dau_ping0["payload"]["ping_info"]["reason"])
+        received_pings = sorted(
+            [
+                ping0["request_url"]["doc_type"],
+                ping1["request_url"]["doc_type"],
+            ]
+        )
+        self.assertEqual(expected_pings, received_pings)
+        if ping0["request_url"]["doc_type"] == "baseline":
+            self.assertEqual("active", ping0["payload"]["ping_info"]["reason"])
+        if ping1["request_url"]["doc_type"] == "baseline":
+            self.assertEqual("active", ping1["payload"]["ping_info"]["reason"])
 
         with self.marionette.using_context(self.marionette.CONTEXT_CHROME):
             zero_prefs_script = """\
@@ -47,28 +60,40 @@ class TestClientActivity(FOGTestCase):
             with marionette.using_context(marionette.CONTEXT_CHROME):
                 marionette.execute_script(script)
 
-        [ping1, dau_ping1] = self.wait_for_pings(
+        [ping2, ping3] = self.wait_for_pings(
             lambda: user_active(True, self.marionette),
             DauReportFilter,
             2,
             ping_server=self.fog_ping_server,
         )
 
-        [ping2, dau_ping2] = self.wait_for_pings(
+        [ping4, ping5] = self.wait_for_pings(
             lambda: user_active(False, self.marionette),
             DauReportFilter,
             2,
             ping_server=self.fog_ping_server,
         )
 
-        self.assertEqual("baseline", ping1["request_url"]["doc_type"])
-        self.assertEqual("dau-reporting", dau_ping1["request_url"]["doc_type"])
-        self.assertEqual("active", ping1["payload"]["ping_info"]["reason"])
-        self.assertEqual("active", dau_ping1["payload"]["ping_info"]["reason"])
-
-        self.assertEqual("baseline", ping2["request_url"]["doc_type"])
-        self.assertEqual("dau-reporting", dau_ping2["request_url"]["doc_type"])
-        self.assertEqual("inactive", ping2["payload"]["ping_info"]["reason"])
-        self.assertEqual(
-            "inactive", dau_ping2["payload"]["ping_info"]["reason"], dau_ping2
+        received_pings = sorted(
+            [
+                ping2["request_url"]["doc_type"],
+                ping3["request_url"]["doc_type"],
+            ]
         )
+        self.assertEqual(expected_pings, received_pings)
+        if ping2["request_url"]["doc_type"] == "baseline":
+            self.assertEqual("active", ping2["payload"]["ping_info"]["reason"])
+        if ping3["request_url"]["doc_type"] == "baseline":
+            self.assertEqual("active", ping3["payload"]["ping_info"]["reason"])
+
+        received_pings = sorted(
+            [
+                ping4["request_url"]["doc_type"],
+                ping5["request_url"]["doc_type"],
+            ]
+        )
+        self.assertEqual(expected_pings, received_pings)
+        if ping4["request_url"]["doc_type"] == "baseline":
+            self.assertEqual("inactive", ping4["payload"]["ping_info"]["reason"])
+        if ping5["request_url"]["doc_type"] == "baseline":
+            self.assertEqual("inactive", ping5["payload"]["ping_info"]["reason"])

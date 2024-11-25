@@ -127,32 +127,6 @@ add_task(async function simple_remote_no_local_result() {
   assertLatencyHistogram(histogram, true);
 });
 
-add_task(async function simple_remote_no_local_result_telemetry() {
-  Services.telemetry.clearScalars();
-
-  let histogram = TelemetryTestUtils.getAndClearKeyedHistogram(
-    SEARCH_TELEMETRY_LATENCY
-  );
-
-  let controller = new SearchSuggestionController();
-  await controller.fetch("mo", false, getEngine);
-
-  let scalars = {};
-  const key = "browser.search.data_transferred";
-
-  await TestUtils.waitForCondition(() => {
-    scalars =
-      Services.telemetry.getSnapshotForKeyedScalars("main", false).parent || {};
-    return key in scalars;
-  }, "should have the expected keyed scalars");
-
-  const scalar = scalars[key];
-  Assert.ok(`sggt-${ENGINE_NAME}` in scalar, "correct telemetry category");
-  Assert.notEqual(scalar[`sggt-${ENGINE_NAME}`], 0, "bandwidth logged");
-
-  assertLatencyHistogram(histogram, true);
-});
-
 add_task(async function simple_remote_no_local_result_alternative_type() {
   let controller = new SearchSuggestionController();
   let result = await controller.fetch("mo", false, alternateJSONEngine);
@@ -581,9 +555,7 @@ add_task(async function stop_search() {
   let histogram = TelemetryTestUtils.getAndClearKeyedHistogram(
     SEARCH_TELEMETRY_LATENCY
   );
-  let controller = new SearchSuggestionController(() => {
-    do_throw("The callback shouldn't be called after stop()");
-  });
+  let controller = new SearchSuggestionController();
   let resultPromise = controller.fetch("mo", false, getEngine);
   controller.stop();
   await resultPromise.then(result => {

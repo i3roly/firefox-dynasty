@@ -7,7 +7,7 @@
 #include "WinUtils.h"
 
 #include <knownfolders.h>
-#include <Psapi.h>
+#include <psapi.h>
 #include <winioctl.h>
 
 #include "gfxPlatform.h"
@@ -526,7 +526,7 @@ HWND WinUtils::GetTopLevelHWND(HWND aWnd, bool aStopIfNotChild,
 
 // Map from native window handles to nsWindow structures. Does not AddRef.
 // Inherently unsafe to access outside the main thread.
-static nsTHashMap<HWND, nsWindow*> sExtantNSWindows;
+MOZ_RUNINIT static nsTHashMap<HWND, nsWindow*> sExtantNSWindows;
 
 /* static */
 void WinUtils::SetNSWindowPtr(HWND aWnd, nsWindow* aWindow) {
@@ -1362,14 +1362,14 @@ void WinUtils::SetupKeyModifiersSequence(nsTArray<KeyPair>* aArray,
           KeyPair(VK_CONTROL, VK_LCONTROL, ScanCode::eControlLeft));
       aArray->AppendElement(KeyPair(VK_MENU, VK_RMENU, ScanCode::eAltRight));
     }
-    for (uint32_t i = ArrayLength(sModifierKeyMap); i; --i) {
+    for (uint32_t i = std::size(sModifierKeyMap); i; --i) {
       const uint32_t* map = sModifierKeyMap[i - 1];
       if (aModifiers & map[0]) {
         aArray->AppendElement(KeyPair(map[1], map[2], map[3]));
       }
     }
   } else {
-    for (uint32_t i = 0; i < ArrayLength(sModifierKeyMap); ++i) {
+    for (uint32_t i = 0; i < std::size(sModifierKeyMap); ++i) {
       const uint32_t* map = sModifierKeyMap[i];
       if (aModifiers & map[0]) {
         aArray->AppendElement(KeyPair(map[1], map[2], map[3]));
@@ -1584,9 +1584,8 @@ static bool IsTabletDevice() {
   // Guarantees that:
   // - The device has a touch screen.
   // - It is used as a tablet which means that it has no keyboard connected.
-  // On Windows 10 it means that it is verifying with ConvertibleSlateMode.
 
-  if (WindowsUIUtils::GetInTabletMode()) {
+  if (WindowsUIUtils::GetInWin10TabletMode()) {
     return true;
   }
 
@@ -1616,7 +1615,7 @@ static bool IsTabletDevice() {
   return false;
 }
 
-static bool SystemHasMouse() {
+bool WinUtils::SystemHasMouse() {
   // As per MSDN, this value is rarely false because of virtual mice, and
   // some machines report the existance of a mouse port as a mouse.
   //
@@ -1643,13 +1642,13 @@ PointerCapabilities WinUtils::GetPrimaryPointerCapabilities() {
   return PointerCapabilities::None;
 }
 
-static bool SystemHasTouchscreen() {
+bool WinUtils::SystemHasTouch() {
   int digitizerMetrics = ::GetSystemMetrics(SM_DIGITIZER);
   return (digitizerMetrics & NID_INTEGRATED_TOUCH) ||
          (digitizerMetrics & NID_EXTERNAL_TOUCH);
 }
 
-static bool SystemHasPenDigitizer() {
+bool WinUtils::SystemHasPen() {
   int digitizerMetrics = ::GetSystemMetrics(SM_DIGITIZER);
   return (digitizerMetrics & NID_INTEGRATED_PEN) ||
          (digitizerMetrics & NID_EXTERNAL_PEN);
@@ -1659,45 +1658,16 @@ static bool SystemHasPenDigitizer() {
 PointerCapabilities WinUtils::GetAllPointerCapabilities() {
   PointerCapabilities pointerCapabilities = PointerCapabilities::None;
 
-  if (SystemHasTouchscreen()) {
+  if (SystemHasTouch()) {
     pointerCapabilities |= PointerCapabilities::Coarse;
   }
 
-  if (SystemHasPenDigitizer() || SystemHasMouse()) {
+  if (SystemHasPen() || SystemHasMouse()) {
     pointerCapabilities |=
         PointerCapabilities::Fine | PointerCapabilities::Hover;
   }
 
   return pointerCapabilities;
-}
-
-void WinUtils::GetPointerExplanation(nsAString* aExplanation) {
-  // To support localization, we will return a comma-separated list of
-  // Fluent IDs
-  *aExplanation = u"pointing-device-none";
-
-  bool first = true;
-  auto append = [&](const char16_t* str) {
-    if (first) {
-      aExplanation->Truncate();
-      first = false;
-    } else {
-      aExplanation->Append(u",");
-    }
-    aExplanation->Append(str);
-  };
-
-  if (SystemHasTouchscreen()) {
-    append(u"pointing-device-touchscreen");
-  }
-
-  if (SystemHasPenDigitizer()) {
-    append(u"pointing-device-pen-digitizer");
-  }
-
-  if (SystemHasMouse()) {
-    append(u"pointing-device-mouse");
-  }
 }
 
 /* static */
@@ -1798,8 +1768,8 @@ bool WinUtils::MakeLongPath(nsAString& aPath) {
   wchar_t tempPath[MAX_PATH + 1];
   DWORD longResult =
       GetLongPathNameW((char16ptr_t)PromiseFlatString(aPath).get(), tempPath,
-                       ArrayLength(tempPath));
-  if (longResult > ArrayLength(tempPath)) {
+                       std::size(tempPath));
+  if (longResult > std::size(tempPath)) {
     // Our buffer is too short, and we're guaranteeing <= MAX_PATH results.
     return false;
   } else if (longResult) {
@@ -1818,7 +1788,7 @@ bool WinUtils::UnexpandEnvVars(nsAString& aPath) {
   // PathUnExpandEnvStringsW returns false if it doesn't make any
   // substitutions. Silently continue using the unaltered path.
   if (PathUnExpandEnvStringsW((char16ptr_t)PromiseFlatString(aPath).get(),
-                              tempPath, ArrayLength(tempPath))) {
+                              tempPath, std::size(tempPath))) {
     aPath = tempPath;
     MOZ_ASSERT(aPath.Length() <= MAX_PATH);
   }

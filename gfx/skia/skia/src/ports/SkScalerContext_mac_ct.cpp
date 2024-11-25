@@ -216,8 +216,7 @@ SkScalerContext_Mac::Offscreen::Offscreen(SkColor foregroundColor)
 CGRGBPixel* SkScalerContext_Mac::Offscreen::getCG(const SkScalerContext_Mac& context,
                                                   const SkGlyph& glyph, CGGlyph glyphID,
                                                   size_t* rowBytesPtr,
-                                                  bool generateA8FromLCD,
-                                                  bool lightOnDark) {
+                                                  bool generateA8FromLCD) {
     if (!fRGBSpace) {
         //It doesn't appear to matter what color space is specified.
         //Regular blends and antialiased text are always (s*a + d*(1-a))
@@ -282,7 +281,7 @@ CGRGBPixel* SkScalerContext_Mac::Offscreen::getCG(const SkScalerContext_Mac& con
         if (SkMask::kARGB32_Format != glyph.maskFormat()) {
             // Draw black on white to create mask. (Special path exists to speed this up in CG.)
             // If light-on-dark is requested, draw white on black.
-            CGContextSetGrayFillColor(fCG.get(), lightOnDark ? 1.0f : 0.0f, 1.0f);
+            CGContextSetGrayFillColor(fCG.get(), 0.0f, 1.0f);
         } else {
             CGContextSetFillColorWithColor(fCG.get(), fCGForegroundColor.get());
         }
@@ -309,7 +308,7 @@ CGRGBPixel* SkScalerContext_Mac::Offscreen::getCG(const SkScalerContext_Mac& con
 
     // Erase to white (or transparent black if it's a color glyph, to not composite against white).
     // For light-on-dark, instead erase to black.
-    uint32_t bgColor = (!glyph.isColor()) ? (lightOnDark ? 0xFF000000 : 0xFFFFFFFF) : 0x00000000;
+    uint32_t bgColor = (!glyph.isColor()) ? 0xFFFFFFFF : 0x00000000;
     sk_memset_rect32(image, bgColor, glyph.width(), glyph.height(), rowBytes);
 
     float subX = 0;
@@ -512,11 +511,10 @@ void SkScalerContext_Mac::generateImage(const SkGlyph& glyph, void* imageBuffer)
 
     // FIXME: lcd smoothed un-hinted rasterization unsupported.
     bool requestSmooth = fRec.getHinting() != SkFontHinting::kNone;
-    bool lightOnDark = (fRec.fFlags & SkScalerContext::kLightOnDark_Flag) != 0;
 
     // Draw the glyph
     size_t cgRowBytes;
-    CGRGBPixel* cgPixels = fOffscreen.getCG(*this, glyph, cgGlyph, &cgRowBytes, requestSmooth, lightOnDark);
+    CGRGBPixel* cgPixels = fOffscreen.getCG(*this, glyph, cgGlyph, &cgRowBytes, requestSmooth);
     if (cgPixels == nullptr) {
         return;
     }
@@ -540,13 +538,7 @@ void SkScalerContext_Mac::generateImage(const SkGlyph& glyph, void* imageBuffer)
                 int r = linear[(addr[x] >> 16) & 0xFF];
                 int g = linear[(addr[x] >>  8) & 0xFF];
                 int b = linear[(addr[x] >>  0) & 0xFF];
-                // If light-on-dark was requested, the mask is drawn inverted.
-                if (lightOnDark) {
-                    r = 255 - r;
-                    g = 255 - g;
-                    b = 255 - b;
-                }
-                addr[x] = (r << 16) | (g << 8) | b;
+                addr[x] = (linear[r] << 16) | (linear[g] << 8) | linear[b];
             }
             addr = SkTAddOffset<CGRGBPixel>(addr, cgRowBytes);
         }
@@ -671,68 +663,6 @@ public:
     }
 };
 } // namespace
-
-/*
- *  Our subpixel resolution is only 2 bits in each direction, so a scale of 4
- *  seems sufficient, and possibly even correct, to allow the hinted outline
- *  to be subpixel positioned.
- */
-#define kScaleForSubPixelPositionHinting (4.0f)
-
-bool SkScalerContext_Mac::generatePath(const SkGlyph& glyph, SkPath* path) {
-    if(isMavericks())
-        return false;
-    SkScalar scaleX = SK_Scalar1;
-    SkScalar scaleY = SK_Scalar1;
-    
-    CGAffineTransform xform = fTransform;
-    /*
-     *  For subpixel positioning, we want to return an unhinted outline, so it
-     *  can be positioned nicely at fractional offsets. However, we special-case
-     *  if the baseline of the (horizontal) text is axis-aligned. In those cases
-     *  we want to retain hinting in the direction orthogonal to the baseline.
-     *  e.g. for horizontal baseline, we want to retain hinting in Y.
-     *  The way we remove hinting is to scale the font by some value (4) in that
-     *  direction, ask for the path, and then scale the path back down.
-     */
-    if (fDoSubPosition) {
-        // start out by assuming that we want no hining in X and Y
-        scaleX = scaleY = kScaleForSubPixelPositionHinting;
-        // now see if we need to restore hinting for axis-aligned baselines
-        switch (this->computeAxisAlignmentForHText()) {
-            case SkAxisAlignment::kX:
-                scaleY = SK_Scalar1; // want hinting in the Y direction
-                break;
-            case SkAxisAlignment::kY:
-                scaleX = SK_Scalar1; // want hinting in the X direction
-                break;
-            default:
-                break;
-        }
-
-        CGAffineTransform scale(CGAffineTransformMakeScale(SkScalarToCGFloat(scaleX),
-                                                           SkScalarToCGFloat(scaleY)));
-        xform = CGAffineTransformConcat(fTransform, scale);
-    }
-
-    CGGlyph cgGlyph = SkTo<CGGlyph>(glyph.getGlyphID());
-    SkUniqueCFRef<CGPathRef> cgPath(CTFontCreatePathForGlyph(fCTFont.get(), cgGlyph, &xform));
-
-    path->reset();
-    if (!cgPath) {
-        return false;
-    }
-
-    SkCTPathGeometrySink sink;
-    CGPathApply(cgPath.get(), &sink, SkCTPathGeometrySink::ApplyElement);
-    *path = sink.detach();
-    if (fDoSubPosition) {
-        SkMatrix m;
-        m.setScale(SkScalarInvert(scaleX), SkScalarInvert(scaleY));
-        path->transform(m);
-    }
-    return true;
-}
 
 void SkScalerContext_Mac::generateFontMetrics(SkFontMetrics* metrics) {
     if (nullptr == metrics) {

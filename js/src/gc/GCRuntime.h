@@ -19,6 +19,7 @@
 #include "gc/GCMarker.h"
 #include "gc/GCParallelTask.h"
 #include "gc/IteratorUtils.h"
+#include "gc/Memory.h"
 #include "gc/Nursery.h"
 #include "gc/Scheduling.h"
 #include "gc/Statistics.h"
@@ -150,6 +151,9 @@ class BackgroundUnmarkTask : public GCParallelTask {
   explicit BackgroundUnmarkTask(GCRuntime* gc);
   void initZones();
   void run(AutoLockHelperThreadState& lock) override;
+
+ private:
+  void unmark();
 
   ZoneVector zones;
 };
@@ -572,10 +576,12 @@ class GCRuntime {
 
   // Get a free chunk or allocate one if needed. The chunk is left in the empty
   // chunks pool.
-  ArenaChunk* getOrAllocChunk(AutoLockGCBgAlloc& lock);
+  ArenaChunk* getOrAllocChunk(StallAndRetry stallAndRetry,
+                              AutoLockGCBgAlloc& lock);
 
   // Get or allocate a free chunk, removing it from the empty chunks pool.
-  ArenaChunk* takeOrAllocChunk(AutoLockGCBgAlloc& lock);
+  ArenaChunk* takeOrAllocChunk(StallAndRetry stallAndRetry,
+                               AutoLockGCBgAlloc& lock);
 
   void recycleChunk(ArenaChunk* chunk, const AutoLockGC& lock);
 
@@ -635,6 +641,7 @@ class GCRuntime {
   void joinTask(GCParallelTask& task, AutoLockHelperThreadState& lock);
   void updateHelperThreadCount();
   size_t parallelWorkerCount() const;
+  void maybeRequestGCAfterBackgroundTask(const AutoLockHelperThreadState& lock);
 
   // GC parallel task dispatch infrastructure.
   size_t getMaxParallelThreads() const;
@@ -701,7 +708,7 @@ class GCRuntime {
 
   // For ArenaLists::allocateFromArena()
   friend class ArenaLists;
-  ArenaChunk* pickChunk(AutoLockGCBgAlloc& lock);
+  ArenaChunk* pickChunk(StallAndRetry stallAndRetry, AutoLockGCBgAlloc& lock);
   Arena* allocateArena(ArenaChunk* chunk, Zone* zone, AllocKind kind,
                        ShouldCheckThresholds checkThresholds,
                        const AutoLockGC& lock);
@@ -962,21 +969,10 @@ class GCRuntime {
   void releaseHeldRelocatedArenasWithoutUnlocking(const AutoLockGC& lock);
 #endif
 
-  /*
-   * Whether to immediately trigger a slice after a background task
-   * finishes. This may not happen at a convenient time, so the consideration is
-   * whether the slice will run quickly or may take a long time.
-   */
-  enum ShouldTriggerSliceWhenFinished : bool {
-    DontTriggerSliceWhenFinished = false,
-    TriggerSliceWhenFinished = true
-  };
+  IncrementalProgress waitForBackgroundTask(GCParallelTask& task,
+                                            const JS::SliceBudget& budget,
+                                            bool shouldPauseMutator);
 
-  IncrementalProgress waitForBackgroundTask(
-      GCParallelTask& task, const JS::SliceBudget& budget,
-      bool shouldPauseMutator, ShouldTriggerSliceWhenFinished triggerSlice);
-
-  void maybeRequestGCAfterBackgroundTask(const AutoLockHelperThreadState& lock);
   void cancelRequestedGCAfterBackgroundTask();
   void finishCollection(JS::GCReason reason);
   void maybeStopPretenuring();

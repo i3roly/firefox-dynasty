@@ -286,6 +286,9 @@ export class FfiConverterString extends FfiConverter {
     }
 }
 
+/**
+ * Line
+ */
 export class Line {
     constructor({ start, end } = {}) {
         try {
@@ -304,9 +307,16 @@ export class Line {
             }
             throw e;
         }
+        /**
+         * @type {Point}
+         */
         this.start = start;
+        /**
+         * @type {Point}
+         */
         this.end = end;
     }
+
     equals(other) {
         return (
             this.start.equals(other.start) &&
@@ -359,6 +369,9 @@ export class FfiConverterTypeLine extends FfiConverterArrayBuffer {
     }
 }
 
+/**
+ * Point
+ */
 export class Point {
     constructor({ coordX, coordY } = {}) {
         try {
@@ -377,9 +390,16 @@ export class Point {
             }
             throw e;
         }
+        /**
+         * @type {number}
+         */
         this.coordX = coordX;
+        /**
+         * @type {number}
+         */
         this.coordY = coordY;
     }
+
     equals(other) {
         return (
             this.coordX == other.coordX &&
@@ -473,6 +493,10 @@ export class FfiConverterOptionalTypePoint extends FfiConverterArrayBuffer {
 
 
 
+/**
+ * gradient
+ * @returns {number}
+ */
 export function gradient(ln) {
 
         const liftResult = (result) => FfiConverterF64.lift(result);
@@ -486,8 +510,8 @@ export function gradient(ln) {
                 }
                 throw e;
             }
-            return UniFFIScaffolding.callAsync(
-                65, // geometry:uniffi_uniffi_geometry_fn_func_gradient
+            return UniFFIScaffolding.callAsyncWrapper(
+                78, // geometry:uniffi_uniffi_geometry_fn_func_gradient
                 FfiConverterTypeLine.lower(ln),
             )
         }
@@ -498,6 +522,10 @@ export function gradient(ln) {
         }
 }
 
+/**
+ * intersection
+ * @returns {?Point}
+ */
 export function intersection(ln1,ln2) {
 
         const liftResult = (result) => FfiConverterOptionalTypePoint.lift(result);
@@ -519,8 +547,8 @@ export function intersection(ln1,ln2) {
                 }
                 throw e;
             }
-            return UniFFIScaffolding.callAsync(
-                66, // geometry:uniffi_uniffi_geometry_fn_func_intersection
+            return UniFFIScaffolding.callAsyncWrapper(
+                79, // geometry:uniffi_uniffi_geometry_fn_func_intersection
                 FfiConverterTypeLine.lower(ln1),
                 FfiConverterTypeLine.lower(ln2),
             )

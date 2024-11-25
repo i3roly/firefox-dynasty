@@ -42,6 +42,7 @@
   _(AtomicsOr)                                     \
   _(AtomicsXor)                                    \
   _(AtomicsIsLockFree)                             \
+  _(AtomicsPause)                                  \
                                                    \
   _(BigInt)                                        \
   _(BigIntAsIntN)                                  \
@@ -86,6 +87,7 @@
   _(IntlGuardToCollator)                           \
   _(IntlGuardToDateTimeFormat)                     \
   _(IntlGuardToDisplayNames)                       \
+  _(IntlGuardToDurationFormat)                     \
   _(IntlGuardToListFormat)                         \
   _(IntlGuardToNumberFormat)                       \
   _(IntlGuardToPluralRules)                        \
@@ -94,8 +96,11 @@
   _(IntlGuardToSegments)                           \
   _(IntlGuardToSegmentIterator)                    \
                                                    \
+  _(MapConstructor)                                \
+  _(MapDelete)                                     \
   _(MapGet)                                        \
   _(MapHas)                                        \
+  _(MapSet)                                        \
                                                    \
   _(MathAbs)                                       \
   _(MathFloor)                                     \
@@ -150,7 +155,10 @@
   _(RegExpInstanceOptimizable)                     \
   _(GetFirstDollarIndex)                           \
                                                    \
+  _(SetConstructor)                                \
+  _(SetDelete)                                     \
   _(SetHas)                                        \
+  _(SetAdd)                                        \
   _(SetSize)                                       \
                                                    \
   _(String)                                        \

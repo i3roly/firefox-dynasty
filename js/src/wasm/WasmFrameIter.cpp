@@ -91,7 +91,6 @@ WasmFrameIter::WasmFrameIter(JitActivation* activation, wasm::Frame* fp)
     lineOrBytecode_ = trapData.bytecodeOffset;
     failedUnwindSignatureMismatch_ = trapData.failedUnwindSignatureMismatch;
 
-#ifdef ENABLE_WASM_TAIL_CALLS
     // The debugEnabled() relies on valid value of resumePCinCurrentFrame_
     // to identify DebugFrame. Normally this field is updated at popFrame().
     // The only case when this can happend is during IndirectCallBadSig
@@ -102,7 +101,6 @@ WasmFrameIter::WasmFrameIter(JitActivation* activation, wasm::Frame* fp)
       MOZ_ASSERT(trapData.trap == Trap::IndirectCallBadSig);
       resumePCinCurrentFrame_ = (uint8_t*)unwoundPC;
     }
-#endif
 
     MOZ_ASSERT(!done());
     return;
@@ -305,6 +303,7 @@ void WasmFrameIter::popFrame() {
 #endif
 
   MOZ_ASSERT(code_ == &instance()->code());
+
   lineOrBytecode_ = callsite->lineOrBytecode();
   failedUnwindSignatureMismatch_ = false;
 
@@ -401,15 +400,9 @@ bool WasmFrameIter::debugEnabled() const {
     return false;
   }
 
-#ifdef ENABLE_WASM_TAIL_CALLS
   // Debug frame is not present at the return stub.
   const CallSite* site = code_->lookupCallSite((void*)resumePCinCurrentFrame_);
-  if (site && site->kind() == CallSite::ReturnStub) {
-    return false;
-  }
-#endif
-
-  return true;
+  return !(site && site->kind() == CallSite::ReturnStub);
 }
 
 DebugFrame* WasmFrameIter::debugFrame() const {
@@ -1815,6 +1808,10 @@ static const char* ThunkedNativeToDescription(SymbolicAddress func) {
       return "call to asm.js native f64 Math.pow";
     case SymbolicAddress::ATan2D:
       return "call to asm.js native f64 Math.atan2";
+    case SymbolicAddress::ArrayMemMove:
+      return "call to native array.copy (data)";
+    case SymbolicAddress::ArrayRefsMove:
+      return "call to native array.copy (references)";
     case SymbolicAddress::MemoryGrowM32:
       return "call to native memory.grow m32 (in wasm)";
     case SymbolicAddress::MemoryGrowM64:

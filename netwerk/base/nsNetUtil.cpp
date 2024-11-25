@@ -614,7 +614,9 @@ nsresult NS_GetIsDocumentChannel(nsIChannel* aChannel, bool* aIsDocument) {
   if (NS_FAILED(rv)) {
     return rv;
   }
-  if (nsContentUtils::HtmlObjectContentTypeForMIMEType(mimeType) ==
+  nsCOMPtr<nsILoadInfo> loadInfo = aChannel->LoadInfo();
+  if (nsContentUtils::HtmlObjectContentTypeForMIMEType(
+          mimeType, loadInfo->GetSandboxFlags()) ==
       nsIObjectLoadingContent::TYPE_DOCUMENT) {
     *aIsDocument = true;
     return NS_OK;
@@ -2992,7 +2994,8 @@ static bool ShouldSecureUpgradeNoHSTS(nsIURI* aURI, nsILoadInfo* aLoadInfo) {
   }
   // 4.a Https-First
   if (nsHTTPSOnlyUtils::ShouldUpgradeHttpsFirstRequest(aURI, aLoadInfo)) {
-    if (aLoadInfo->GetWasSchemelessInput()) {
+    if (aLoadInfo->GetSchemelessInput() ==
+        nsILoadInfo::SchemelessInputTypeSchemeless) {
       aLoadInfo->SetHttpsUpgradeTelemetry(
           nsILoadInfo::HTTPS_FIRST_SCHEMELESS_UPGRADE);
     } else {
@@ -4123,6 +4126,36 @@ bool IsCoepCredentiallessEnabled(bool aIsOriginTrialCoepCredentiallessEnabled) {
   return StaticPrefs::
              browser_tabs_remote_coep_credentialless_DoNotUseDirectly() ||
          aIsOriginTrialCoepCredentiallessEnabled;
+}
+
+nsresult AddExtraHeaders(nsIHttpChannel* aHttpChannel,
+                         const nsACString& aExtraHeaders,
+                         bool aMerge /* = true */) {
+  nsresult rv;
+  nsAutoCString oneHeader;
+  nsAutoCString headerName;
+  nsAutoCString headerValue;
+  int32_t crlf = 0;
+  int32_t colon = 0;
+  const char* kWhitespace = "\b\t\r\n ";
+  nsAutoCString extraHeaders(aExtraHeaders);
+  while (true) {
+    crlf = extraHeaders.Find("\r\n");
+    if (crlf == -1) break;
+    extraHeaders.Mid(oneHeader, 0, crlf);
+    extraHeaders.Cut(0, crlf + 2);
+    colon = oneHeader.Find(":");
+    if (colon == -1) break;  // Should have a colon.
+    oneHeader.Left(headerName, colon);
+    colon++;
+    oneHeader.Mid(headerValue, colon, oneHeader.Length() - colon);
+    headerName.Trim(kWhitespace);
+    headerValue.Trim(kWhitespace);
+    // Add the header (merging if required).
+    rv = aHttpChannel->SetRequestHeader(headerName, headerValue, aMerge);
+    NS_ENSURE_SUCCESS(rv, rv);
+  }
+  return NS_OK;
 }
 
 }  // namespace net

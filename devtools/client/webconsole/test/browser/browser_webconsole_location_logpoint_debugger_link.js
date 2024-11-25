@@ -6,6 +6,9 @@
 
 "use strict";
 
+// Allow more time since we now wait for CM6 document updates to complete
+requestLongerTimeout(2);
+
 const TEST_URI =
   "https://example.com/browser/devtools/client/webconsole/" +
   "test/browser/test-location-debugger-link-logpoint.html";
@@ -28,6 +31,10 @@ add_task(async function () {
   const toolbox = hud.toolbox;
   const dbg = createDebuggerContext(toolbox);
   await selectSource(dbg, "test-location-debugger-link-logpoint-1.js");
+
+  // Wait a bit for CM6 to complete any updates so the log panel
+  // does not lose focus after the it has been opened
+  await waitForDocumentLoadComplete(dbg);
 
   info("Add a logpoint with an invalid expression");
   await setLogPoint(dbg, 7, "undefinedVariable");

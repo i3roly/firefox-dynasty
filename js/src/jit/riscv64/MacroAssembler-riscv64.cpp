@@ -2811,6 +2811,9 @@ void MacroAssembler::atomicFetchOp(Scalar::Type type, Synchronization sync,
   AtomicFetchOp(*this, nullptr, type, sync, op, mem, value, valueTemp,
                 offsetTemp, maskTemp, output);
 }
+
+void MacroAssembler::atomicPause() { MOZ_CRASH("NYI"); }
+
 void MacroAssembler::branchPtrInNurseryChunk(Condition cond, Register ptr,
                                              Register temp, Label* label) {
   MOZ_ASSERT(cond == Assembler::Equal || cond == Assembler::NotEqual);
@@ -4304,7 +4307,6 @@ void MacroAssembler::widenInt32(Register r) {
   move32To64SignExtend(r, Register64(r));
 }
 
-#ifdef ENABLE_WASM_TAIL_CALLS
 void MacroAssembler::wasmMarkCallAsSlow() { mv(ra, ra); }
 
 const int32_t SlowCallMarker = 0x8093;  // addi ra, ra, 0
@@ -4323,7 +4325,6 @@ CodeOffset MacroAssembler::wasmMarkedSlowCall(const wasm::CallSiteDesc& desc,
   wasmMarkCallAsSlow();
   return offset;
 }
-#endif  // ENABLE_WASM_TAIL_CALLS
 //}}} check_macroassembler_style
 
 // This method generates lui, dsll and ori instruction block that can be

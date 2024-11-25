@@ -92,8 +92,7 @@ __attribute__((constructor)) static void SSE2Check() {
   // Using write() in order to avoid jemalloc-based buffering. Ignoring return
   // values, since there isn't much we could do on failure and there is no
   // point in trying to recover from errors.
-  MOZ_UNUSED(
-      write(STDERR_FILENO, sSSE2Message, MOZ_ARRAY_LENGTH(sSSE2Message) - 1));
+  MOZ_UNUSED(write(STDERR_FILENO, sSSE2Message, std::size(sSSE2Message) - 1));
   // _exit() instead of exit() to avoid running the usual "at exit" code.
   _exit(255);
 }
@@ -159,7 +158,7 @@ static bool IsArg(const char* arg, const char* s) {
   return false;
 }
 
-Bootstrap::UniquePtr gBootstrap;
+MOZ_RUNINIT Bootstrap::UniquePtr gBootstrap;
 
 static int do_main(int argc, char* argv[], char* envp[]) {
   // Allow firefox.exe to launch XULRunner apps via -app <application.ini>

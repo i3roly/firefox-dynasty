@@ -722,7 +722,8 @@ void Theme::PaintRadioControl(PaintBackendData& aPaintData,
   }
 
   if (aState.HasState(ElementState::FOCUSRING)) {
-    PaintRoundedFocusRect(aPaintData, aRect, aColors, aDpiRatio, 5.0f, 1.0f);
+    auto radius = LayoutDeviceCoord(aRect.Size().width) / aDpiRatio;
+    PaintRoundedFocusRect(aPaintData, aRect, aColors, aDpiRatio, radius, 1.0f);
   }
 }
 
@@ -841,7 +842,7 @@ void Theme::PaintMenulistArrow(nsIFrame* aFrame, DrawTarget& aDrawTarget,
   const auto arrowColor = sRGBColor::FromABGR(
       nsLayoutUtils::GetTextColor(aFrame, &nsStyleText::mWebkitTextFillColor));
   ThemeDrawing::PaintArrow(aDrawTarget, aRect, xs, ys, kPolygonSize,
-                           ArrayLength(polygonX), arrowColor);
+                           std::size(polygonX), arrowColor);
 }
 
 void Theme::PaintSpinnerButton(nsIFrame* aFrame, DrawTarget& aDrawTarget,
@@ -867,7 +868,7 @@ void Theme::PaintSpinnerButton(nsIFrame* aFrame, DrawTarget& aDrawTarget,
   }
 
   ThemeDrawing::PaintArrow(aDrawTarget, aRect, kPolygonX, polygonY,
-                           kPolygonSize, ArrayLength(kPolygonX), borderColor);
+                           kPolygonSize, std::size(kPolygonX), borderColor);
 }
 
 template <typename PaintBackendData>

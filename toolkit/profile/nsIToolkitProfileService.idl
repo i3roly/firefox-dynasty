@@ -104,6 +104,14 @@ interface nsIToolkitProfileService : nsISupports
     nsIToolkitProfile getProfileByName(in AUTF8String aName);
 
     /**
+     * Get a profile by directory. Finds a profile with the matching root directory
+     *
+     * @param aRootDir The root directory to match against.
+     * @param aLocalDir And optional local directory to also match against.
+     */
+    nsIToolkitProfile getProfileByDir(in nsIFile aRootDir, [optional] in nsIFile aLocalDir);
+
+    /**
      * Create a new profile.
      *
      * The profile temporary directory will be chosen based on where the
@@ -171,6 +179,15 @@ interface nsIToolkitProfileService : nsISupports
      */
     [implicit_jscontext]
     Promise asyncFlushCurrentProfile();
+
+    /**
+     * Removes profile directories from disk. Will wait for up to aTimeout
+     * seconds to acquire the profile lock. aLocalDir can be null in which case
+     * it is calculated from the root directory.
+     */
+    [implicit_jscontext]
+    Promise removeProfileFilesByPath(in nsIFile aRootDir, in nsIFile aLocalDir,
+                                     in unsigned long aTimeout);
 };
 
 %{C++

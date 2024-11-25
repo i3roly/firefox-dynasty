@@ -7,6 +7,8 @@ import { BaseFeature } from "resource:///modules/urlbar/private/BaseFeature.sys.
 const lazy = {};
 
 ChromeUtils.defineESModuleGetters(lazy, {
+  GeolocationUtils:
+    "resource:///modules/urlbar/private/GeolocationUtils.sys.mjs",
   MerinoClient: "resource:///modules/MerinoClient.sys.mjs",
   QuickSuggest: "resource:///modules/QuickSuggest.sys.mjs",
   UrlbarPrefs: "resource:///modules/UrlbarPrefs.sys.mjs",
@@ -21,8 +23,12 @@ const MERINO_TIMEOUT_MS = 5000; // 5s
 const HISTOGRAM_LATENCY = "FX_URLBAR_MERINO_LATENCY_WEATHER_MS";
 const HISTOGRAM_RESPONSE = "FX_URLBAR_MERINO_RESPONSE_WEATHER";
 
-// The mean Earth radius used in distance calculations.
-const EARTH_RADIUS_KM = 6371.009;
+// Cache period for Merino's weather response. This is intentionally a small
+// amount of time. See the `cachePeriodMs` discussion in `MerinoClient`. In
+// addition, caching also helps prevent the weather suggestion from flickering
+// out of and into the view as the user matches the same suggestion with each
+// keystroke, especially when Merino has high latency.
+const MERINO_WEATHER_CACHE_PERIOD_MS = 60000; // 1 minute
 
 const RESULT_MENU_COMMAND = {
   INACCURATE_LOCATION: "inaccurate_location",
@@ -159,6 +165,19 @@ export class Weather extends BaseFeature {
     return ["Weather"];
   }
 
+  get showLessFrequentlyCount() {
+    const count = lazy.UrlbarPrefs.get("weather.showLessFrequentlyCount") || 0;
+    return Math.max(count, 0);
+  }
+
+  get canShowLessFrequently() {
+    const cap =
+      lazy.UrlbarPrefs.get("weatherShowLessFrequentlyCap") ||
+      lazy.QuickSuggest.backend.config?.showLessFrequentlyCap ||
+      0;
+    return !cap || this.showLessFrequentlyCount < cap;
+  }
+
   isSuggestionSponsored(_suggestion) {
     return true;
   }
@@ -167,75 +186,9 @@ export class Weather extends BaseFeature {
     return "weather";
   }
 
-  /**
-   * @returns {number}
-   *   The minimum prefix length of a weather keyword the user must type to
-   *   trigger the suggestion. Note that the strings returned from `keywords`
-   *   already take this into account. The min length is determined from the
-   *   first config source below whose value is non-zero. If no source has a
-   *   non-zero value, zero will be returned, and `this.keywords` will contain
-   *   only full keywords.
-   *
-   *   1. The `weather.minKeywordLength` pref, which is set when the user
-   *      increments the min length
-   *   2. `weatherKeywordsMinimumLength` in Nimbus
-   *   3. `min_keyword_length` in the weather record in remote settings (i.e.,
-   *      the weather config)
-   */
-  get minKeywordLength() {
-    let minLength =
-      lazy.UrlbarPrefs.get("weather.minKeywordLength") ||
-      lazy.UrlbarPrefs.get("weatherKeywordsMinimumLength") ||
-      this.#config.minKeywordLength ||
-      0;
-    return Math.max(minLength, 0);
-  }
-
-  /**
-   * @returns {boolean}
-   *   Weather the min keyword length can be incremented. A cap on the min
-   *   length can be set in remote settings and Nimbus.
-   */
-  get canIncrementMinKeywordLength() {
-    let nimbusMax =
-      lazy.UrlbarPrefs.get("weatherKeywordsMinimumLengthCap") || 0;
-
-    let maxKeywordLength;
-    if (nimbusMax) {
-      // In Nimbus, the cap is the max keyword length.
-      maxKeywordLength = nimbusMax;
-    } else {
-      // In the RS config, the cap is the max number of times the user can click
-      // "Show less frequently". The max keyword length is therefore the initial
-      // min length plus the cap.
-      let min = this.#config.minKeywordLength;
-      let cap = lazy.QuickSuggest.backend.config?.showLessFrequentlyCap;
-      if (min && cap) {
-        maxKeywordLength = min + cap;
-      }
-    }
-
-    return !maxKeywordLength || this.minKeywordLength < maxKeywordLength;
-  }
-
   enable(enabled) {
     if (!enabled) {
       this.#merino = null;
-    }
-  }
-
-  /**
-   * Increments the minimum prefix length of a weather keyword the user must
-   * type to trigger the suggestion, if possible. A cap on the min length can be
-   * set in remote settings and Nimbus, and if the cap has been reached, the
-   * length is not incremented.
-   */
-  incrementMinKeywordLength() {
-    if (this.canIncrementMinKeywordLength) {
-      lazy.UrlbarPrefs.set(
-        "weather.minKeywordLength",
-        this.minKeywordLength + 1
-      );
     }
   }
 
@@ -247,130 +200,19 @@ export class Weather extends BaseFeature {
     if (suggestions.length <= 1) {
       return suggestions;
     }
-    let geo = await lazy.QuickSuggest.geolocation();
-    return [
-      this.#bestSuggestionByDistance(geo, suggestions) ||
-        this.#bestSuggestionByRegion(geo, suggestions) ||
-        suggestions[0],
-    ];
-  }
-
-  /**
-   * Returns the suggestion with the city nearest the client's geolocation based
-   * on the great-circle distance between the coordinates [1]. This isn't
-   * necessarily super accurate, but that's OK since it's stable and accurate
-   * enough to find a good matching suggestion.
-   *
-   * [1] https://en.wikipedia.org/wiki/Great-circle_distance
-   *
-   * @param {object} geo
-   *   The `geolocation` object returned by Merino's geolocation provider. It's
-   *   expected to look like the following, but we gracefully handle exceptions:
-   *
-   *     `{ location: { latitude, longitude, radius }}`
-   *
-   *   The coordinates are expected to be in decimal and the radius is expected
-   *   to be in km.
-   * @param {Array} suggestions
-   *   Array of candidate weather suggestions.
-   * @returns {object|null}
-   *   The nearest suggestion as described above. If there are multiple nearest
-   *   cities within the accuracy radius, the most populous one is returned. If
-   *   the `geo` does not include a location or coordinates, null is returned.
-   */
-  #bestSuggestionByDistance(geo, suggestions) {
-    let geoLat = geo?.location?.latitude;
-    let geoLong = geo?.location?.longitude;
-    if (isNaN(geoLat) || isNaN(geoLong)) {
-      return null;
-    }
-
-    // All distances are in km.
-    [geoLat, geoLong] = [geoLat, geoLong].map(toRadians);
-    let geoLatSin = Math.sin(geoLat);
-    let geoLatCos = Math.cos(geoLat);
-    let geoRadius = geo?.location?.radius || 5;
-
-    let best;
-    let dMin = Infinity;
-    for (let s of suggestions) {
-      let [sLat, sLong] = [s.latitude, s.longitude].map(toRadians);
-      let d =
-        EARTH_RADIUS_KM *
-        Math.acos(
-          geoLatSin * Math.sin(sLat) +
-            geoLatCos * Math.cos(sLat) * Math.cos(Math.abs(geoLong - sLong))
-        );
-      if (
-        !best ||
-        // `s` is closer to the client than `best`.
-        d + geoRadius < dMin ||
-        // `s` is the same distance from the client as `best`, i.e., the
-        // difference between `s` and `best` is within the accuracy radius.
-        // Choose `s` if it has a larger population.
-        (Math.abs(d - dMin) <= geoRadius && best.population < s.population)
-      ) {
-        dMin = d;
-        best = s;
-      }
-    }
-
-    return best;
-  }
-
-  /**
-   * Returns the first suggestion with a city located in the same region and
-   * country as the client's geolocation. If there is no such suggestion, the
-   * first suggestion in the same country is returned. If there is no suggestion
-   * in the same country, null is returned. Since `suggestions` is ordered by
-   * population, if multiple cities match any of these criteria, the one that's
-   * returned will be the most populous.
-   *
-   * @param {object} geo
-   *   The `geolocation` object returned by Merino's geolocation provider. It's
-   *   expected to look like the following, but we gracefully handle exceptions:
-   *
-   *     `{ region_code, country_code }`
-   * @param {Array} suggestions
-   *   Array of candidate weather suggestions.
-   * @returns {object|null}
-   *   The suggestion as described above or null.
-   */
-  #bestSuggestionByRegion(geo, suggestions) {
-    let region = geo?.region_code?.toLowerCase();
-    let country = geo?.country_code?.toLowerCase();
-    if (!region && !country) {
-      return null;
-    }
-
-    let sameCountrySuggestion = null;
-    for (let s of suggestions) {
-      let sameRegion = s.region.toLowerCase() == region;
-      let sameCountry = s.country.toLowerCase() == country;
-      if (sameRegion && sameCountry) {
-        // This is the most populous city (since suggestions are ordered by
-        // population) in the client's region. Can't get better than this.
-        return s;
-      }
-      if (sameCountry && !sameCountrySuggestion) {
-        sameCountrySuggestion = s;
-      }
-    }
-
-    return sameCountrySuggestion;
+    let suggestion = await lazy.GeolocationUtils.best(suggestions);
+    return [suggestion];
   }
 
   async makeResult(queryContext, suggestion, searchString) {
-    // The Rust component doesn't enforce a minimum keyword length, so discard
-    // the suggestion if the search string isn't long enough. This conditional
-    // will always be false for the JS backend since in that case keywords are
-    // never shorter than `minKeywordLength`.
-    if (searchString.length < this.minKeywordLength) {
+    if (searchString.length < this.#minKeywordLength) {
       return null;
     }
 
     if (!this.#merino) {
-      this.#merino = new lazy.MerinoClient(this.constructor.name);
+      this.#merino = new lazy.MerinoClient(this.constructor.name, {
+        cachePeriodMs: MERINO_WEATHER_CACHE_PERIOD_MS,
+      });
     }
 
     // Set up location params to pass to Merino. We need to null-check each
@@ -408,10 +250,12 @@ export class Weather extends BaseFeature {
         lazy.UrlbarUtils.RESULT_SOURCE.SEARCH,
         {
           url: suggestion.url,
+          input: suggestion.url,
           iconId: suggestion.current_conditions.icon_id,
           requestId: suggestion.request_id,
           dynamicType: WEATHER_DYNAMIC_TYPE,
           city: suggestion.city_name,
+          region: suggestion.region_code,
           temperatureUnit: unit,
           temperature: suggestion.current_conditions.temperature[unit],
           currentConditions: suggestion.current_conditions.summary,
@@ -453,7 +297,7 @@ export class Weather extends BaseFeature {
       title: {
         l10n: {
           id: "firefox-suggest-weather-title",
-          args: { city: result.payload.city },
+          args: { city: result.payload.city, region: result.payload.region },
           cacheable: true,
           excludeArgsFromCacheKey: true,
         },
@@ -516,7 +360,7 @@ export class Weather extends BaseFeature {
       },
     ];
 
-    if (this.canIncrementMinKeywordLength) {
+    if (this.canShowLessFrequently) {
       commands.push({
         name: RESULT_MENU_COMMAND.SHOW_LESS_FREQUENTLY,
         l10n: {
@@ -557,7 +401,7 @@ export class Weather extends BaseFeature {
     return commands;
   }
 
-  handleCommand(view, result, selType) {
+  handleCommand(view, result, selType, searchString) {
     switch (selType) {
       case RESULT_MENU_COMMAND.MANAGE:
         // "manage" is handled by UrlbarInput, no need to do anything here.
@@ -582,11 +426,24 @@ export class Weather extends BaseFeature {
         break;
       case RESULT_MENU_COMMAND.SHOW_LESS_FREQUENTLY:
         view.acknowledgeFeedback(result);
-        this.incrementMinKeywordLength();
-        if (!this.canIncrementMinKeywordLength) {
+        this.incrementShowLessFrequentlyCount();
+        if (!this.canShowLessFrequently) {
           view.invalidateResultMenuCommands();
         }
+        lazy.UrlbarPrefs.set(
+          "weather.minKeywordLength",
+          searchString.length + 1
+        );
         break;
+    }
+  }
+
+  incrementShowLessFrequentlyCount() {
+    if (this.canShowLessFrequently) {
+      lazy.UrlbarPrefs.set(
+        "weather.showLessFrequentlyCount",
+        this.showLessFrequentlyCount + 1
+      );
     }
   }
 
@@ -596,6 +453,27 @@ export class Weather extends BaseFeature {
       ? rustBackend.getConfigForSuggestionType(this.rustSuggestionTypes[0])
       : null;
     return config || {};
+  }
+
+  get #minKeywordLength() {
+    // Use the pref value if it has a user value, which means the user clicked
+    // "Show less frequently" at least once. Otherwise, fall back to the Nimbus
+    // value and then the config value. That lets us override the pref's default
+    // value using Nimbus or the config, if necessary.
+    let minLength = lazy.UrlbarPrefs.get("weather.minKeywordLength");
+    if (
+      !Services.prefs.prefHasUserValue(
+        "browser.urlbar.weather.minKeywordLength"
+      )
+    ) {
+      let nimbusValue = lazy.UrlbarPrefs.get("weatherKeywordsMinimumLength");
+      if (nimbusValue !== null) {
+        minLength = nimbusValue;
+      } else if (!isNaN(this.#config.minKeywordLength)) {
+        minLength = this.#config.minKeywordLength;
+      }
+    }
+    return Math.max(minLength, 0);
   }
 
   get _test_merino() {
@@ -609,8 +487,4 @@ export class Weather extends BaseFeature {
   #fetchInstance = null;
   #merino = null;
   #timeoutMs = MERINO_TIMEOUT_MS;
-}
-
-function toRadians(deg) {
-  return (deg * Math.PI) / 180;
 }

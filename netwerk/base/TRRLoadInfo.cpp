@@ -888,12 +888,14 @@ TRRLoadInfo::SetHasInjectedCookieForCookieBannerHandling(
 }
 
 NS_IMETHODIMP
-TRRLoadInfo::GetWasSchemelessInput(bool* aWasSchemelessInput) {
+TRRLoadInfo::GetSchemelessInput(
+    nsILoadInfo::SchemelessInputType* aSchemelessInput) {
   return NS_ERROR_NOT_IMPLEMENTED;
 }
 
 NS_IMETHODIMP
-TRRLoadInfo::SetWasSchemelessInput(bool aWasSchemelessInput) {
+TRRLoadInfo::SetSchemelessInput(
+    nsILoadInfo::SchemelessInputType aSchemelessInput) {
   return NS_ERROR_NOT_IMPLEMENTED;
 }
 
@@ -926,6 +928,11 @@ TRRLoadInfo::GetSkipHTTPSUpgrade(bool* aSkipHTTPSUpgrade) {
 
 NS_IMETHODIMP
 TRRLoadInfo::SetSkipHTTPSUpgrade(bool aSkipHTTPSUpgrade) {
+  return NS_ERROR_NOT_IMPLEMENTED;
+}
+
+NS_IMETHODIMP
+TRRLoadInfo::GetFetchDestination(nsACString& aDestination) {
   return NS_ERROR_NOT_IMPLEMENTED;
 }
 

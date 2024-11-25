@@ -17,9 +17,48 @@ ChromeUtils.defineESModuleGetters(
  */
 
 /**
+ * @constant
+ * @type {string}
+ * @default
+ * @description The default engine identifier used when no specific engine ID is provided.
+ */
+export const DEFAULT_ENGINE_ID = "default-engine";
+
+/**
+ * @constant
+ * @type {{ [key: string]: string }}
+ * @description Supported tasks with their default model identifiers.
+ */
+export const DEFAULT_MODELS = Object.freeze({
+  "test-echo": "test-echo",
+  "text-classification":
+    "Xenova/distilbert-base-uncased-finetuned-sst-2-english",
+  "token-classification": "Xenova/bert-base-multilingual-cased-ner-hrl",
+  "question-answering": "Xenova/distilbert-base-cased-distilled-squad",
+  "fill-mask": "Xenova/bert-base-uncased",
+  summarization: "Xenova/distilbart-cnn-6-6",
+  translation: "Xenova/t5-small",
+  "text2text-generation": "Xenova/flan-t5-small",
+  "text-generation": "Xenova/gpt2",
+  "zero-shot-classification": "Xenova/distilbert-base-uncased-mnli",
+  "image-to-text": "Mozilla/distilvit",
+  "image-classification": "Xenova/vit-base-patch16-224",
+  "image-segmentation": "Xenova/detr-resnet-50-panoptic",
+  "zero-shot-image-classification": "Xenova/clip-vit-base-patch32",
+  "object-detection": "Xenova/detr-resnet-50",
+  "zero-shot-object-detection": "Xenova/owlvit-base-patch32",
+  "document-question-answering": "Xenova/donut-base-finetuned-docvqa",
+  "image-to-image": "Xenova/swin2SR-classical-sr-x2-64",
+  "depth-estimation": "Xenova/dpt-large",
+  "feature-extraction": "Xenova/all-MiniLM-L6-v2",
+  "image-feature-extraction": "Xenova/vit-base-patch16-224-in21k",
+});
+
+/**
  * Lists Firefox internal features
  */
 const FEATURES = [
+  "autofill-classification", // see toolkit/components/formautofill/MLAutofill.sys.mjs
   "pdfjs-alt-text", // see toolkit/components/pdfjs/content/PdfjsParent.sys.mjs
   "suggest-intent-classification", // see browser/components/urlbar/private/MLSuggest.sys.mjs
   "suggest-NER", // see browser/components/urlbar/private/MLSuggest.sys.mjs
@@ -51,6 +90,32 @@ class PipelineOptionsValidationError extends Error {
     this.value = value;
   }
 }
+
+/**
+ * Enum for model hubs
+ *
+ * @readonly
+ * @enum {string}
+ */
+export const ModelHub = {
+  HUGGINGFACE: "huggingface",
+  MOZILLA: "mozilla",
+
+  apply(options, hub) {
+    switch (hub) {
+      case ModelHub.HUGGINGFACE:
+        options.modelHubRootUrl = "https://huggingface.co/";
+        options.modelHubUrlTemplate = "{model}/resolve/{revision}";
+        break;
+      case ModelHub.MOZILLA:
+        options.modelHubRootUrl = "https://model-hub.mozilla.org/";
+        options.modelHubUrlTemplate = "{model}/{revision}";
+        break;
+      default:
+        throw new Error(`Unknown model hub: ${hub}`);
+    }
+  },
+};
 
 /**
  * Enum for execution priority.
@@ -138,7 +203,7 @@ export class PipelineOptions {
    *
    * @type {?string}
    */
-  engineId = "default-engine";
+  engineId = DEFAULT_ENGINE_ID;
 
   /**
    * The name of the feature to be used by the pipeline.
@@ -163,6 +228,13 @@ export class PipelineOptions {
    * @type {?number}
    */
   timeoutMS = null;
+
+  /**
+   * The hub to use. When null, looks at modelHubRootUrl and modelHubUrlTemplate
+   *
+   * @type {ModelHub | null}
+   */
+  modelHub = null;
 
   /**
    * The root URL of the model hub where models are hosted.
@@ -288,6 +360,7 @@ export class PipelineOptions {
       device: InferenceDevice,
       executionPriority: ExecutionPriority,
       logLevel: LogLevel,
+      modelHub: ModelHub,
     };
     // Check if the value is part of the enum or null
     if (!Object.values(enums[field]).includes(value)) {
@@ -334,14 +407,14 @@ export class PipelineOptions {
   #validateId(field, value) {
     // Define a regular expression to match the optional organization and required name
     // `organization/` part is optional, and both parts should follow the taskName pattern.
-    const validPattern = /^(?:[a-zA-Z0-9_\-]+\/)?[a-zA-Z0-9_\-]+$/;
+    const validPattern = /^(?:[a-zA-Z0-9_\-\.]+\/)?[a-zA-Z0-9_\-\.]+$/;
 
     // Check if the value matches the pattern
     if (!validPattern.test(value)) {
       throw new PipelineOptionsValidationError(
         field,
         value,
-        "Should follow the format 'organization/name' or 'name', where both parts contain only alphanumeric characters, underscores, or dashes."
+        "Should follow the format 'organization/name' or 'name', where both parts contain only alphanumeric characters, underscores, dots or dashes."
       );
     }
   }
@@ -401,6 +474,7 @@ export class PipelineOptions {
       "engineId",
       "featureId",
       "taskName",
+      "modelHub",
       "modelHubRootUrl",
       "modelHubUrlTemplate",
       "timeoutMS",
@@ -454,7 +528,15 @@ export class PipelineOptions {
         this.#validateRevision(key, options[key]);
       }
 
-      if (["dtype", "device", "executionPriority", "logLevel"].includes(key)) {
+      if (
+        [
+          "modelHub",
+          "dtype",
+          "device",
+          "executionPriority",
+          "logLevel",
+        ].includes(key)
+      ) {
         this.#validateEnum(key, options[key]);
       }
 
@@ -464,6 +546,10 @@ export class PipelineOptions {
 
       if (key === "timeoutMS") {
         this.#validateIntegerRange(key, options[key], -1, 36000000);
+      }
+
+      if (key === "modelHub") {
+        ModelHub.apply(this, options[key]);
       }
 
       this[key] = options[key];
@@ -480,6 +566,7 @@ export class PipelineOptions {
       engineId: this.engineId,
       featureId: this.featureId,
       taskName: this.taskName,
+      modelHub: this.modelHub,
       modelHubRootUrl: this.modelHubRootUrl,
       modelHubUrlTemplate: this.modelHubUrlTemplate,
       timeoutMS: this.timeoutMS,

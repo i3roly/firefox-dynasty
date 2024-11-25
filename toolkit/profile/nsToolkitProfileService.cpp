@@ -80,6 +80,7 @@ using namespace mozilla;
 #define PROFILE_DB_VERSION "2"
 #define INSTALL_PREFIX "Install"
 #define INSTALL_PREFIX_LENGTH 7
+#define STORE_ID_PREF "toolkit.profiles.storeID"
 
 struct KeyValue {
   KeyValue(const char* aKey, const char* aValue) : key(aKey), value(aValue) {}
@@ -144,96 +145,102 @@ void RemoveProfileRecursion(const nsCOMPtr<nsIFile>& aDirectoryOrFile,
   guardDeletion.release();
 }
 
-void RemoveProfileFiles(nsIToolkitProfile* aProfile, bool aInBackground) {
-  nsCOMPtr<nsIFile> rootDir = aProfile->GetRootDir();
-  nsCOMPtr<nsIFile> localDir = aProfile->GetLocalDir();
-
+/**
+ * `aLockTimeout` is the number of seconds to wait to obtain the profile lock
+ * before failing. Set to 0 to not wait at all and immediately fail if not lock
+ * was obtained.
+ */
+nsresult RemoveProfileFiles(nsIFile* aRootDir, nsIFile* aLocalDir,
+                            uint32_t aLockTimeout) {
   // XXX If we get here with an active quota manager,
   // something went very wrong. We want to assert this.
 
-  // Just lock the directories, don't mark the profile as locked or the lock
-  // will attempt to release its reference to the profile on the background
-  // thread which will assert.
+  // Attempt to acquire the profile lock.
+  nsresult rv;
   nsCOMPtr<nsIProfileLock> lock;
-  NS_ENSURE_SUCCESS_VOID(
-      NS_LockProfilePath(rootDir, localDir, nullptr, getter_AddRefs(lock)));
+  const mozilla::TimeStamp epoch = mozilla::TimeStamp::Now();
+  do {
+    rv = NS_LockProfilePath(aRootDir, aLocalDir, nullptr, getter_AddRefs(lock));
+    if (NS_SUCCEEDED(rv)) {
+      break;
+    }
 
-  nsCOMPtr<nsIRunnable> runnable = NS_NewRunnableFunction(
-      "nsToolkitProfile::RemoveProfileFiles",
-      [rootDir, localDir, lock]() mutable {
-        // We try to remove every single file and directory and collect
-        // those whose removal failed.
-        nsTArray<nsCOMPtr<nsIFile>> undeletedFiles;
-        // The root dir might contain the temp dir, so remove the temp dir
-        // first.
-        bool equals;
-        nsresult rv = rootDir->Equals(localDir, &equals);
-        if (NS_SUCCEEDED(rv) && !equals) {
-          RemoveProfileRecursion(localDir,
-                                 /* aIsIgnoreRoot  */ false,
-                                 /* aIsIgnoreLockfile */ false, undeletedFiles);
-        }
-        // Now remove the content of the profile dir (except lockfile)
-        RemoveProfileRecursion(rootDir,
-                               /* aIsIgnoreRoot  */ true,
+    // If we don't want to delay at all then bail immediately.
+    if (aLockTimeout == 0) {
+      return NS_ERROR_FAILURE;
+    }
+
+    // Check twice a second.
+    PR_Sleep(500);
+  } while ((mozilla::TimeStamp::Now() - epoch) <
+           mozilla::TimeDuration::FromSeconds(aLockTimeout));
+
+  // If we failed to acquire the lock then give up.
+  if (!lock) {
+    return NS_ERROR_FAILURE;
+  }
+
+  // We try to remove every single file and directory and collect
+  // those whose removal failed.
+  nsTArray<nsCOMPtr<nsIFile>> undeletedFiles;
+  // The root dir might contain the temp dir, so remove the temp dir
+  // first.
+  bool equals;
+  rv = aRootDir->Equals(aLocalDir, &equals);
+  if (NS_SUCCEEDED(rv) && !equals) {
+    RemoveProfileRecursion(aLocalDir,
+                           /* aIsIgnoreRoot  */ false,
+                           /* aIsIgnoreLockfile */ false, undeletedFiles);
+  }
+  // Now remove the content of the profile dir (except lockfile)
+  RemoveProfileRecursion(aRootDir,
+                         /* aIsIgnoreRoot  */ true,
+                         /* aIsIgnoreLockfile */ true, undeletedFiles);
+
+  // Retry loop if something was not deleted
+  if (undeletedFiles.Length() > 0) {
+    uint32_t retries = 1;
+    // XXX: Until bug 1716291 is fixed we just make one retry
+    while (undeletedFiles.Length() > 0 && retries <= 1) {
+      Unused << PR_Sleep(PR_MillisecondsToInterval(10 * retries));
+      for (auto&& file :
+           std::exchange(undeletedFiles, nsTArray<nsCOMPtr<nsIFile>>{})) {
+        RemoveProfileRecursion(file,
+                               /* aIsIgnoreRoot */ false,
                                /* aIsIgnoreLockfile */ true, undeletedFiles);
-
-        // Retry loop if something was not deleted
-        if (undeletedFiles.Length() > 0) {
-          uint32_t retries = 1;
-          // XXX: Until bug 1716291 is fixed we just make one retry
-          while (undeletedFiles.Length() > 0 && retries <= 1) {
-            Unused << PR_Sleep(PR_MillisecondsToInterval(10 * retries));
-            for (auto&& file :
-                 std::exchange(undeletedFiles, nsTArray<nsCOMPtr<nsIFile>>{})) {
-              RemoveProfileRecursion(file,
-                                     /* aIsIgnoreRoot */ false,
-                                     /* aIsIgnoreLockfile */ true,
-                                     undeletedFiles);
-            }
-            retries++;
-          }
-        }
+      }
+      retries++;
+    }
+  }
 
 #ifdef DEBUG
-        // XXX: Until bug 1716291 is fixed, we do not want to spam release
-        if (undeletedFiles.Length() > 0) {
-          NS_WARNING("Unable to remove all files from the profile directory:");
-          // Log the file names of those we could not remove
-          for (auto&& file : undeletedFiles) {
-            nsAutoString leafName;
-            if (NS_SUCCEEDED(file->GetLeafName(leafName))) {
-              NS_WARNING(NS_LossyConvertUTF16toASCII(leafName).get());
-            }
-          }
-        }
-#endif
-        // XXX: Activate this assert once bug 1716291 is fixed
-        // MOZ_ASSERT(undeletedFiles.Length() == 0);
-
-        // Now we can unlock the profile safely.
-        lock->Unlock();
-        // nsIProfileLock is not threadsafe so release our reference to it on
-        // the main thread.
-        NS_ReleaseOnMainThread("nsToolkitProfile::RemoveProfileFiles::Unlock",
-                               lock.forget());
-
-        if (undeletedFiles.Length() == 0) {
-          // We can safely remove the (empty) remaining profile directory
-          // and lockfile, no other files are here.
-          // As we do this only if we had no other blockers, this is as safe
-          // as deleting the lockfile explicitely after unlocking.
-          Unused << rootDir->Remove(true);
-        }
-      });
-
-  if (aInBackground) {
-    nsCOMPtr<nsIEventTarget> target =
-        do_GetService(NS_STREAMTRANSPORTSERVICE_CONTRACTID);
-    target->Dispatch(runnable, NS_DISPATCH_NORMAL);
-  } else {
-    runnable->Run();
+  // XXX: Until bug 1716291 is fixed, we do not want to spam release
+  if (undeletedFiles.Length() > 0) {
+    NS_WARNING("Unable to remove all files from the profile directory:");
+    // Log the file names of those we could not remove
+    for (auto&& file : undeletedFiles) {
+      nsAutoString leafName;
+      if (NS_SUCCEEDED(file->GetLeafName(leafName))) {
+        NS_WARNING(NS_LossyConvertUTF16toASCII(leafName).get());
+      }
+    }
   }
+#endif
+  // XXX: Activate this assert once bug 1716291 is fixed
+  // MOZ_ASSERT(undeletedFiles.Length() == 0);
+
+  // Now we can unlock the profile safely.
+  lock->Unlock();
+
+  if (undeletedFiles.Length() == 0) {
+    // We can safely remove the (empty) remaining profile directory
+    // and lockfile, no other files are here.
+    // As we do this only if we had no other blockers, this is as safe
+    // as deleting the lockfile explicitely after unlocking.
+    Unused << aRootDir->Remove(true);
+  }
+
+  return NS_OK;
 }
 
 nsToolkitProfile::nsToolkitProfile(const nsACString& aName, nsIFile* aRootDir,
@@ -357,32 +364,35 @@ nsToolkitProfile::SetStoreID(const nsACString& aStoreID) {
         mSection.get(), "StoreID", PromiseFlatCString(aStoreID).get());
     NS_ENSURE_SUCCESS(rv, rv);
 
-    rv = prefs->SetCharPref("toolkit.profiles.storeID", aStoreID);
+    rv = nsToolkitProfileService::gService->mProfileDB.SetString(
+        mSection.get(), "ShowSelector", mShowProfileSelector ? "1" : "0");
     NS_ENSURE_SUCCESS(rv, rv);
 
-    nsToolkitProfileService::gService->mGroupProfile = this;
-  } else {
-    rv = nsToolkitProfileService::gService->mProfileDB.DeleteString(
-        mSection.get(), "StoreID");
+    if (nsToolkitProfileService::gService->mCurrent == this) {
+      rv = prefs->SetCharPref(STORE_ID_PREF, aStoreID);
+      NS_ENSURE_SUCCESS(rv, rv);
 
-    // If the string was not present in the ini file, just ignore the error.
-    if (rv == NS_ERROR_FAILURE) {
-      rv = NS_OK;
+      nsToolkitProfileService::gService->mGroupProfile = this;
     }
+  } else {
+    // If the string was not present in the ini file, just ignore the error.
+    nsToolkitProfileService::gService->mProfileDB.DeleteString(mSection.get(),
+                                                               "StoreID");
 
     // We need a StoreID to show the profile selector, so if StoreID has been
     // removed, then remove ShowSelector also.
     mShowProfileSelector = false;
-    rv = nsToolkitProfileService::gService->mProfileDB.DeleteString(
-        mSection.get(), "ShowSelector");
-    if (rv == NS_ERROR_FAILURE) {
-      rv = NS_OK;
+
+    // If the string was not present in the ini file, just ignore the error.
+    nsToolkitProfileService::gService->mProfileDB.DeleteString(mSection.get(),
+                                                               "ShowSelector");
+
+    if (nsToolkitProfileService::gService->mCurrent == this) {
+      rv = prefs->ClearUserPref(STORE_ID_PREF);
+      NS_ENSURE_SUCCESS(rv, rv);
+
+      nsToolkitProfileService::gService->mGroupProfile = nullptr;
     }
-
-    rv = prefs->ClearUserPref("toolkit.profiles.storeID");
-    NS_ENSURE_SUCCESS(rv, rv);
-
-    nsToolkitProfileService::gService->mGroupProfile = nullptr;
   }
   mStoreID = aStoreID;
 
@@ -481,7 +491,15 @@ nsresult nsToolkitProfile::RemoveInternal(bool aRemoveFiles,
   }
 
   if (aRemoveFiles) {
-    RemoveProfileFiles(this, aInBackground);
+    if (aInBackground) {
+      NS_DispatchBackgroundTask(NS_NewRunnableFunction(
+          __func__, [rootDir = mRootDir, localDir = mLocalDir]() mutable {
+            RemoveProfileFiles(rootDir, localDir, 5);
+          }));
+    } else {
+      // Failure is ignored here.
+      RemoveProfileFiles(mRootDir, mLocalDir, 0);
+    }
   }
 
   nsINIParser* db = &nsToolkitProfileService::gService->mProfileDB;
@@ -670,13 +688,15 @@ void nsToolkitProfileService::CompleteStartup() {
   glean::startup::profile_database_version.Set(mStartupFileVersion);
   glean::startup::profile_count.Set(static_cast<uint32_t>(mProfiles.length()));
 
+  nsresult rv;
+  bool needsFlush = false;
+
   // If we started into an unmanaged profile in a profile group, set the group
   // profile to be the managed profile belonging to the group.
-  nsresult rv;
   nsCOMPtr<nsIPrefBranch> prefs = do_GetService(NS_PREFSERVICE_CONTRACTID);
   if (!mCurrent) {
     nsCString storeID;
-    rv = prefs->GetCharPref("toolkit.profiles.storeID", storeID);
+    rv = prefs->GetCharPref(STORE_ID_PREF, storeID);
     if (NS_SUCCEEDED(rv) && !storeID.IsEmpty()) {
       mGroupProfile = GetProfileByStoreID(storeID);
     }
@@ -685,32 +705,44 @@ void nsToolkitProfileService::CompleteStartup() {
     // profile for some group.
     if (!mCurrent->mStoreID.IsVoid()) {
       mGroupProfile = mCurrent;
-      rv = prefs->SetCharPref("toolkit.profiles.storeID", mCurrent->mStoreID);
+      rv = prefs->SetCharPref(STORE_ID_PREF, mCurrent->mStoreID);
       NS_ENSURE_SUCCESS_VOID(rv);
+    } else {
+      // Otherwise if the current profile has a store ID set in prefs but not in
+      // the database then restore it. This can happen if a version of Firefox
+      // prior to 67 has overwritten the database.
+      nsCString storeID;
+      rv = prefs->GetCharPref(STORE_ID_PREF, storeID);
+      if (NS_SUCCEEDED(rv) && !storeID.IsEmpty()) {
+        rv = mCurrent->SetStoreID(storeID);
+        if (NS_SUCCEEDED(rv)) {
+          needsFlush = true;
+        }
+      }
     }
   }
 
   if (mMaybeLockProfile) {
     nsCOMPtr<nsIToolkitShellService> shell =
         do_GetService(NS_TOOLKITSHELLSERVICE_CONTRACTID);
-    if (!shell) {
-      return;
+    if (shell) {
+      bool isDefaultApp;
+      rv = shell->IsDefaultApplication(&isDefaultApp);
+      if (NS_SUCCEEDED(rv) && isDefaultApp) {
+        mProfileDB.SetString(mInstallSection.get(), "Locked", "1");
+
+        needsFlush = true;
+      }
     }
+  }
 
-    bool isDefaultApp;
-    nsresult rv = shell->IsDefaultApplication(&isDefaultApp);
-    NS_ENSURE_SUCCESS_VOID(rv);
-
-    if (isDefaultApp) {
-      mProfileDB.SetString(mInstallSection.get(), "Locked", "1");
-
-      // There is a very small chance that this could fail if something else
-      // overwrote the profiles database since we started up, probably less than
-      // a second ago. There isn't really a sane response here, all the other
-      // profile changes are already flushed so whether we fail to flush here or
-      // force quit the app makes no difference.
-      NS_ENSURE_SUCCESS_VOID(Flush());
-    }
+  if (needsFlush) {
+    // There is a very small chance that this could fail if something else
+    // overwrote the profiles database since we started up, probably less than
+    // a second ago. There isn't really a sane response here, all the other
+    // profile changes are already flushed so whether we fail to flush here or
+    // force quit the app makes no difference.
+    NS_ENSURE_SUCCESS_VOID(Flush());
   }
 }
 
@@ -2007,7 +2039,12 @@ nsresult nsToolkitProfileService::ApplyResetProfile(
   // Now that the profile changes are flushed, try to remove the old profile's
   // files. If we fail the worst that will happen is that an orphan directory is
   // left. Let this run in the background while we start up.
-  RemoveProfileFiles(aOldProfile, true);
+  nsCOMPtr<nsIFile> rootDir = aOldProfile->GetRootDir();
+  nsCOMPtr<nsIFile> localDir = aOldProfile->GetLocalDir();
+  NS_DispatchBackgroundTask(NS_NewRunnableFunction(
+      __func__, [rootDir = rootDir, localDir = localDir]() mutable {
+        RemoveProfileFiles(rootDir, localDir, 5);
+      }));
 
   return NS_OK;
 }
@@ -2075,6 +2112,16 @@ void nsToolkitProfileService::GetProfileByDir(nsIFile* aRootDir,
       }
     }
   }
+}
+
+NS_IMETHODIMP
+nsToolkitProfileService::GetProfileByDir(nsIFile* aRootDir, nsIFile* aLocalDir,
+                                         nsIToolkitProfile** aResult) {
+  RefPtr<nsToolkitProfile> result;
+  GetProfileByDir(aRootDir, aLocalDir, getter_AddRefs(result));
+  result.forget(aResult);
+
+  return NS_OK;
 }
 
 nsresult NS_LockProfilePath(nsIFile* aPath, nsIFile* aTempPath,
@@ -2401,6 +2448,15 @@ nsresult WriteProfileInfo(nsIFile* profilesDBFile, nsIFile* installDBFile,
   return NS_OK;
 }
 
+nsISerialEventTarget* nsToolkitProfileService::AsyncQueue() {
+  if (!mAsyncQueue) {
+    MOZ_ALWAYS_SUCCEEDS(NS_CreateBackgroundTaskQueue(
+        "nsToolkitProfileService", getter_AddRefs(mAsyncQueue)));
+  }
+
+  return mAsyncQueue;
+}
+
 NS_IMETHODIMP
 nsToolkitProfileService::AsyncFlushCurrentProfile(JSContext* aCx,
                                                   dom::Promise** aPromise) {
@@ -2431,17 +2487,12 @@ nsToolkitProfileService::AsyncFlushCurrentProfile(JSContext* aCx,
   bool isRelative;
   GetProfileDescriptor(mCurrent, profileData->mPath, &isRelative);
 
-  if (!mAsyncQueue) {
-    MOZ_ALWAYS_SUCCEEDS(NS_CreateBackgroundTaskQueue(
-        "nsToolkitProfileService", getter_AddRefs(mAsyncQueue)));
-  }
-
   nsCOMPtr<nsIRemoteService> rs = GetRemoteService();
   RefPtr<nsRemoteService> remoteService =
       static_cast<nsRemoteService*>(rs.get());
 
   RefPtr<AsyncFlushPromise> p = remoteService->AsyncLockStartup(5000)->Then(
-      mAsyncQueue, __func__,
+      AsyncQueue(), __func__,
       [self = RefPtr{this}, this, profileData = std::move(profileData)](
           const nsRemoteService::StartupLockPromise::ResolveOrRejectValue&
               aValue) {
@@ -2511,17 +2562,12 @@ nsToolkitProfileService::AsyncFlush(JSContext* aCx, dom::Promise** aPromise) {
   UniquePtr<IniData> iniData = MakeUnique<IniData>();
   BuildIniData(iniData->mProfiles, iniData->mInstalls);
 
-  if (!mAsyncQueue) {
-    MOZ_ALWAYS_SUCCEEDS(NS_CreateBackgroundTaskQueue(
-        "nsToolkitProfileService", getter_AddRefs(mAsyncQueue)));
-  }
-
   nsCOMPtr<nsIRemoteService> rs = GetRemoteService();
   RefPtr<nsRemoteService> remoteService =
       static_cast<nsRemoteService*>(rs.get());
 
   RefPtr<AsyncFlushPromise> p = remoteService->AsyncLockStartup(5000)->Then(
-      mAsyncQueue, __func__,
+      AsyncQueue(), __func__,
       [self = RefPtr{this}, this, iniData = std::move(iniData)](
           const nsRemoteService::StartupLockPromise::ResolveOrRejectValue&
               aValue) {
@@ -2656,6 +2702,71 @@ void nsToolkitProfileService::BuildIniData(nsCString& aProfilesIniData,
   }
 
   mProfileDB.WriteToString(aProfilesIniData);
+}
+
+NS_IMETHODIMP
+nsToolkitProfileService::RemoveProfileFilesByPath(nsIFile* aRootDir,
+                                                  nsIFile* aLocalDir,
+                                                  uint32_t aTimeout,
+                                                  JSContext* aCx,
+                                                  dom::Promise** aPromise) {
+  nsIGlobalObject* global = xpc::CurrentNativeGlobal(aCx);
+
+  if (!global) {
+    return NS_ERROR_DOM_INVALID_STATE_ERR;
+  }
+
+  ErrorResult result;
+  RefPtr<dom::Promise> promise = dom::Promise::Create(global, result);
+
+  if (MOZ_UNLIKELY(result.Failed())) {
+    return result.StealNSResult();
+  }
+
+  nsCOMPtr<nsIFile> localDir = aLocalDir;
+  if (!localDir) {
+    GetLocalDirFromRootDir(aRootDir, getter_AddRefs(localDir));
+  }
+
+  using RemoveProfilesPromise = MozPromise<bool, nsresult, false>;
+  // This is responsible for cancelling the MozPromise if the global goes
+  // away.
+  auto requestHolder =
+      MakeRefPtr<dom::DOMMozPromiseRequestHolder<RemoveProfilesPromise>>(
+          global);
+
+  // This keeps the promise alive after this method returns.
+  nsMainThreadPtrHandle<dom::Promise> promiseHolder(
+      new nsMainThreadPtrHolder<dom::Promise>(
+          "nsToolkitProfileService::AsyncFlushCurrentProfile", promise));
+
+  InvokeAsync(AsyncQueue(), __func__,
+              [rootDir = nsCOMPtr{aRootDir}, localDir = nsCOMPtr{localDir},
+               aTimeout]() {
+                nsresult rv = RemoveProfileFiles(rootDir, localDir, aTimeout);
+                if (NS_SUCCEEDED(rv)) {
+                  return RemoveProfilesPromise::CreateAndResolve(true,
+                                                                 __func__);
+                }
+
+                return RemoveProfilesPromise::CreateAndReject(rv, __func__);
+              })
+      ->Then(GetCurrentSerialEventTarget(), __func__,
+             [requestHolder, promiseHolder](
+                 const RemoveProfilesPromise::ResolveOrRejectValue& result) {
+               requestHolder->Complete();
+
+               if (result.IsReject()) {
+                 promiseHolder->MaybeReject(result.RejectValue());
+               } else {
+                 promiseHolder->MaybeResolveWithUndefined();
+               }
+             })
+      ->Track(*requestHolder);
+
+  promise.forget(aPromise);
+
+  return NS_OK;
 }
 
 NS_IMETHODIMP

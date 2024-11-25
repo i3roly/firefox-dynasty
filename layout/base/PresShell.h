@@ -2861,7 +2861,7 @@ class PresShell final : public nsStubDocumentObserver,
      * AutoCurrentEventInfoSetter() pushes and pops current event info of
      * aEventHandler.mPresShell.
      */
-    struct MOZ_STACK_CLASS AutoCurrentEventInfoSetter final {
+    struct MOZ_RAII AutoCurrentEventInfoSetter final {
       explicit AutoCurrentEventInfoSetter(EventHandler& aEventHandler)
           : mEventHandler(aEventHandler) {
         MOZ_DIAGNOSTIC_ASSERT(!mEventHandler.mCurrentEventInfoSetter);
@@ -3049,7 +3049,8 @@ class PresShell final : public nsStubDocumentObserver,
   // Text directives are supposed to be scrolled to the center of the viewport.
   // Since `ScrollToAnchor()` might get called after `GoToAnchor()` during a
   // load, the vertical view position should be preserved.
-  WhereToScroll mLastAnchorVerticalScrollViewPosition;
+  enum class AnchorScrollType : bool { Anchor, TextDirective };
+  AnchorScrollType mLastAnchorScrollType = AnchorScrollType::Anchor;
 
   // Information needed to properly handle scrolling content into view if the
   // pre-scroll reflow flush can be interrupted.  mContentToScrollTo is non-null

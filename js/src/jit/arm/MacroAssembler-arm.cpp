@@ -4446,7 +4446,7 @@ CodeOffset MacroAssembler::move32WithPatch(Register dest) {
   return movWithPatch(ImmWord(uintptr_t(-1)), dest);
 }
 
-void MacroAssembler::patchMove32(CodeOffset offset, int32_t n) {
+void MacroAssembler::patchMove32(CodeOffset offset, Imm32 n) {
   Register dest;
   Assembler::RelocStyle rs;
 
@@ -4459,7 +4459,7 @@ void MacroAssembler::patchMove32(CodeOffset offset, int32_t n) {
   // Patch over actual instructions.
   {
     BufferInstructionIterator iter(BufferOffset(offset.offset()), &m_buffer);
-    MacroAssembler::ma_mov_patch(Imm32(n), dest, Always, rs, iter);
+    MacroAssembler::ma_mov_patch(n, dest, Always, rs, iter);
   }
 }
 
@@ -5860,6 +5860,8 @@ void MacroAssembler::atomicEffectOpJS(Scalar::Type arrayType,
   AtomicEffectOp(*this, nullptr, arrayType, sync, op, value, mem, temp);
 }
 
+void MacroAssembler::atomicPause() { as_yield(); }
+
 // ========================================================================
 // Primitive atomic operations.
 
@@ -6125,7 +6127,6 @@ void MacroAssembler::shiftIndex32AndAdd(Register indexTemp32, int shift,
   addPtr(indexTemp32, pointer);
 }
 
-#ifdef ENABLE_WASM_TAIL_CALLS
 void MacroAssembler::wasmMarkCallAsSlow() { ma_and(lr, lr, lr); }
 
 const int32_t SlowCallMarker = 0xe00ee00e;
@@ -6147,7 +6148,6 @@ CodeOffset MacroAssembler::wasmMarkedSlowCall(const wasm::CallSiteDesc& desc,
   wasmMarkCallAsSlow();
   return offset;
 }
-#endif  // ENABLE_WASM_TAIL_CALLS
 
 //}}} check_macroassembler_style
 

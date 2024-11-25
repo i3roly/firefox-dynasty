@@ -43,14 +43,14 @@
       </html:moz-button-group>
       <toolbarseparator class="tab-group-edit-mode-only" />
       <html:div class="panel-body tab-group-edit-actions tab-group-edit-mode-only">
-        <toolbarbutton id="tabGroupEditor_addNewTabInGroup" class="subviewbutton" data-l10n-id="tab-group-editor-action-add-new"></toolbarbutton>
-        <toolbarbutton disabled="true" id="tabGroupEditor_moveGroupToNewWindow" class="subviewbutton" data-l10n-id="tab-group-editor-action-new-window"></toolbarbutton>
-        <toolbarbutton disabled="true" id="tabGroupEditor_saveAndCloseGroup" class="subviewbutton" data-l10n-id="tab-group-editor-action-save"></toolbarbutton>
-        <toolbarbutton id="tabGroupEditor_ungroupTabs" class="subviewbutton" data-l10n-id="tab-group-editor-action-ungroup"></toolbarbutton>
+        <toolbarbutton tabindex="1" id="tabGroupEditor_addNewTabInGroup" class="subviewbutton" data-l10n-id="tab-group-editor-action-new-tab"></toolbarbutton>
+        <toolbarbutton tabindex="1" id="tabGroupEditor_moveGroupToNewWindow" class="subviewbutton" data-l10n-id="tab-group-editor-action-new-window"></toolbarbutton>
+        <toolbarbutton tabindex="1" id="tabGroupEditor_saveAndCloseGroup" class="subviewbutton" data-l10n-id="tab-group-editor-action-save"></toolbarbutton>
+        <toolbarbutton tabindex="1" id="tabGroupEditor_ungroupTabs" class="subviewbutton" data-l10n-id="tab-group-editor-action-ungroup"></toolbarbutton>
       </html:div>
       <toolbarseparator class="tab-group-edit-mode-only" />
       <html:div class="tab-group-edit-mode-only panel-body tab-group-delete">
-        <toolbarbutton disabled="true" id="tabGroupEditor_deleteGroup" class="subviewbutton" data-l10n-id="tab-group-editor-action-delete"></toolbarbutton>
+        <toolbarbutton id="tabGroupEditor_deleteGroup" class="subviewbutton" data-l10n-id="tab-group-editor-action-delete"></toolbarbutton>
       </html:div>
     </panel>
        `;
@@ -113,9 +113,27 @@
         });
 
       document
+        .getElementById("tabGroupEditor_moveGroupToNewWindow")
+        .addEventListener("command", () => {
+          gBrowser.replaceGroupWithWindow(this.activeGroup);
+        });
+
+      document
         .getElementById("tabGroupEditor_ungroupTabs")
         .addEventListener("command", () => {
           this.#handleUngroup();
+        });
+
+      document
+        .getElementById("tabGroupEditor_saveAndCloseGroup")
+        .addEventListener("command", () => {
+          this.#handleSaveAndClose();
+        });
+
+      document
+        .getElementById("tabGroupEditor_deleteGroup")
+        .addEventListener("command", () => {
+          this.#handleDelete();
         });
 
       this.panel.addEventListener("popupshown", this);
@@ -215,6 +233,8 @@
       this.#panel.openPopup(group.firstChild, {
         position: "bottomleft topleft",
       });
+      document.getElementById("tabGroupEditor_moveGroupToNewWindow").disabled =
+        gBrowser.openTabCount == this.activeGroup?.tabs.length;
     }
 
     on_popupshown() {
@@ -261,6 +281,15 @@
 
     #handleUngroup() {
       this.activeGroup?.ungroupTabs();
+    }
+
+    #handleSaveAndClose() {
+      this.activeGroup.save();
+      gBrowser.removeTabGroup(this.activeGroup);
+    }
+
+    #handleDelete() {
+      gBrowser.removeTabGroup(this.activeGroup);
     }
   }
 

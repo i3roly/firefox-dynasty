@@ -159,7 +159,6 @@ namespace jit {
   _(DoConcatStringObject, js::jit::DoConcatStringObject)                       \
   _(DoGetElemFallback, js::jit::DoGetElemFallback, 2)                          \
   _(DoGetElemSuperFallback, js::jit::DoGetElemSuperFallback, 3)                \
-  _(DoGetIntrinsicFallback, js::jit::DoGetIntrinsicFallback)                   \
   _(DoGetIteratorFallback, js::jit::DoGetIteratorFallback, 1)                  \
   _(DoGetNameFallback, js::jit::DoGetNameFallback)                             \
   _(DoGetPropFallback, js::jit::DoGetPropFallback, 1)                          \
@@ -167,6 +166,7 @@ namespace jit {
   _(DoHasOwnFallback, js::jit::DoHasOwnFallback, 2)                            \
   _(DoInFallback, js::jit::DoInFallback, 2)                                    \
   _(DoInstanceOfFallback, js::jit::DoInstanceOfFallback, 2)                    \
+  _(DoLazyConstantFallback, js::jit::DoLazyConstantFallback)                   \
   _(DoNewArrayFallback, js::jit::DoNewArrayFallback)                           \
   _(DoNewObjectFallback, js::jit::DoNewObjectFallback)                         \
   _(DoOptimizeGetIteratorFallback, js::jit::DoOptimizeGetIteratorFallback)     \
@@ -247,8 +247,12 @@ namespace jit {
   _(LeaveWith, js::jit::LeaveWith)                                             \
   _(LinearizeForCharAccess, js::jit::LinearizeForCharAccess)                   \
   _(LoadAliasedDebugVar, js::LoadAliasedDebugVar)                              \
+  _(MapObjectCreate, js::MapObject::create)                                    \
+  _(MapObjectDelete, js::jit::MapObjectDelete)                                 \
   _(MapObjectGet, js::jit::MapObjectGet)                                       \
   _(MapObjectHas, js::jit::MapObjectHas)                                       \
+  _(MapObjectSet, js::jit::MapObjectSet)                                       \
+  _(MapObjectSetFromIC, js::jit::MapObjectSetFromIC)                           \
   _(MutatePrototype, js::jit::MutatePrototype)                                 \
   _(NamedLambdaObjectCreateWithoutEnclosing,                                   \
     js::NamedLambdaObject::createWithoutEnclosing)                             \
@@ -303,6 +307,10 @@ namespace jit {
   _(SetElementSuper, js::SetElementSuper)                                      \
   _(SetFunctionName, js::SetFunctionName)                                      \
   _(SetIntrinsicOperation, js::SetIntrinsicOperation)                          \
+  _(SetObjectAdd, js::jit::SetObjectAdd)                                       \
+  _(SetObjectAddFromIC, js::jit::SetObjectAddFromIC)                           \
+  _(SetObjectCreate, js::SetObject::create)                                    \
+  _(SetObjectDelete, js::jit::SetObjectDelete)                                 \
   _(SetObjectHas, js::jit::SetObjectHas)                                       \
   _(SetPropertyMegamorphicNoCache, js::jit::SetPropertyMegamorphic<false>)     \
   _(SetPropertyMegamorphicYesCache, js::jit::SetPropertyMegamorphic<true>)     \

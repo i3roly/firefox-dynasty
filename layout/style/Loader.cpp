@@ -575,7 +575,9 @@ static const char kCharsetSym[] = "@charset \"";
 static bool GetCharsetFromData(const char* aStyleSheetData,
                                uint32_t aDataLength, nsACString& aCharset) {
   aCharset.Truncate();
-  if (aDataLength <= sizeof(kCharsetSym) - 1) return false;
+  if (aDataLength <= sizeof(kCharsetSym) - 1) {
+    return false;
+  }
 
   if (strncmp(aStyleSheetData, kCharsetSym, sizeof(kCharsetSym) - 1)) {
     return false;
@@ -991,7 +993,6 @@ static void RecordUseCountersIfNeeded(Document* aDoc,
     return;
   }
   Servo_UseCounters_Merge(docCounters, sheetCounters);
-  aDoc->MaybeWarnAboutZoom();
 }
 
 bool Loader::MaybePutIntoLoadsPerformed(SheetLoadData& aLoadData) {

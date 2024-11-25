@@ -17,10 +17,12 @@
 
 namespace mozilla::ipc {
 
-RefPtr<SharedMemory> IdleSchedulerParent::sActiveChildCounter = nullptr;
+MOZ_RUNINIT RefPtr<SharedMemory> IdleSchedulerParent::sActiveChildCounter =
+    nullptr;
 std::bitset<NS_IDLE_SCHEDULER_COUNTER_ARRAY_LENGHT>
     IdleSchedulerParent::sInUseChildCounters;
-LinkedList<IdleSchedulerParent> IdleSchedulerParent::sIdleAndGCRequests;
+MOZ_RUNINIT LinkedList<IdleSchedulerParent>
+    IdleSchedulerParent::sIdleAndGCRequests;
 int32_t IdleSchedulerParent::sMaxConcurrentIdleTasksInChildProcesses = 1;
 uint32_t IdleSchedulerParent::sMaxConcurrentGCs = 1;
 uint32_t IdleSchedulerParent::sActiveGCs = 0;
@@ -103,9 +105,8 @@ void IdleSchedulerParent::CalculateNumIdleTasks() {
   // On one and two processor (or hardware thread) systems this will
   // allow one concurrent idle task.
   sMaxConcurrentIdleTasksInChildProcesses = int32_t(std::max(sNumCPUs, 1u));
-  sMaxConcurrentGCs =
-      std::min(std::max(sNumCPUs / sPrefConcurrentGCsCPUDivisor, 1u),
-               sPrefConcurrentGCsMax);
+  sMaxConcurrentGCs = std::clamp(sNumCPUs / sPrefConcurrentGCsCPUDivisor, 1u,
+                                 sPrefConcurrentGCsMax);
 
   if (sActiveChildCounter && sActiveChildCounter->Memory()) {
     static_cast<Atomic<int32_t>*>(

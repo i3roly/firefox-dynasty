@@ -324,6 +324,23 @@ formautofill:
           iframe.
         type: string
 
+  availability:
+    type: boolean
+    description: >
+      A boolean sent once per session to represent whether the
+      formautofill is available in the build
+      This metric was generated to correspond to the Legacy Telemetry
+      scalar formautofill.availability.
+    bugs:
+      - https://bugzil.la/1386959
+    data_reviews:
+      - https://bugzil.la/1386959
+    notification_emails:
+      - autofill@lists.mozilla.org
+      - passwords-dev@mozilla.org
+    expires: never
+    telemetry_mirror: FORMAUTOFILL_AVAILABILITY
+
 address:
   show_capture_doorhanger:
     type: event
@@ -1425,3 +1442,126 @@ creditcard:
     expires: never
     extra_keys: *creditcard_detected_extra
     telemetry_mirror: Creditcard_Cleared_CcFormV2
+
+formautofill.ml:
+  field_infer_result:
+    type: event
+    description: >
+      Captures the result from both ML-based model and existing heuristics for autofill field classification.
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1928369
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1928369
+    notification_emails:
+      - autofill@lists.mozilla.org
+    expires: never
+    extra_keys:
+      infer_field_name:
+        description: The inferred result by the existing autofill heuristics.
+        type: string
+      infer_reason:
+        description: The inference method. Possible values are `autocomplete`, `fathom`, `regex-heuristic`, or `update-heuristic`.
+        type: string
+      fathom_infer_label:
+        description: The inferred result by the Fathom model.
+        type: string
+      fathom_infer_score:
+        description: The score of the inferred result by the Fathom model.
+        type: string
+      ml_revision:
+        description: The revision for the ML autofill model.
+        type: string
+      ml_infer_label:
+        description: The inferred result by the autofill ML model.
+        type: string
+      ml_infer_score:
+        description: The score of the inferred result by the autofill ML model.
+        type: string
+
+formautofill.addresses:
+  detected_sections_count:
+    type: counter
+    description: >
+      Count at detection time number of address form sections. A single
+      form can contain more than one address form section.
+      This metric was generated to correspond to the Legacy Telemetry
+      scalar formautofill.addresses.detected_sections_count.
+    bugs:
+      - https://bugzil.la/1801039
+    data_reviews:
+      - https://bugzil.la/1801039
+    notification_emails:
+      - autofill@lists.mozilla.org
+      - passwords-dev@mozilla.org
+    expires: never
+    telemetry_mirror: FORMAUTOFILL_ADDRESSES_DETECTED_SECTIONS_COUNT
+
+  submitted_sections_count:
+    type: counter
+    description: >
+      Count at submission time number of credit card form sections
+      submitted.
+      This metric was generated to correspond to the Legacy Telemetry
+      scalar formautofill.addresses.submitted_sections_count.
+    bugs:
+      - https://bugzil.la/1656344
+    data_reviews:
+      - https://bugzil.la/1656344
+    notification_emails:
+      - autofill@lists.mozilla.org
+      - passwords-dev@mozilla.org
+    expires: never
+    telemetry_mirror: FORMAUTOFILL_ADDRESSES_SUBMITTED_SECTIONS_COUNT
+
+  autofill_profiles_count:
+    type: quantity
+    description: >
+      Count at store time how many address autofill profiles user has.
+      This metric was generated to correspond to the Legacy Telemetry
+      scalar formautofill.addresses.autofill_profiles_count.
+    bugs:
+      - https://bugzil.la/1801039
+    data_reviews:
+      - https://bugzil.la/1801039
+    notification_emails:
+      - autofill@lists.mozilla.org
+      - passwords-dev@mozilla.org
+    expires: never
+    unit: address autofill profiles
+    telemetry_mirror: FORMAUTOFILL_ADDRESSES_AUTOFILL_PROFILES_COUNT
+
+formautofill.credit_cards:
+  detected_sections_count:
+    type: counter
+    description: >
+      Count at detection time number of credit card form sections. A
+      single form can contain more than one credit card form section.
+      This metric was generated to correspond to the Legacy Telemetry
+      scalar formautofill.creditCards.detected_sections_count.
+    bugs:
+      - https://bugzil.la/1656344
+    data_reviews:
+      - https://bugzil.la/1656344
+    notification_emails:
+      - autofill@lists.mozilla.org
+      - passwords-dev@mozilla.org
+    expires: never
+    telemetry_mirror: FORMAUTOFILL_CREDITCARDS_DETECTED_SECTIONS_COUNT
+
+  submitted_sections_count:
+    type: counter
+    description: >
+      Count at submission time number of credit card form sections
+      submitted.
+      This metric was generated to correspond to the Legacy Telemetry
+      scalar formautofill.creditCards.submitted_sections_count.
+    bugs:
+      - https://bugzil.la/1656344
+    data_reviews:
+      - https://bugzil.la/1656344
+    notification_emails:
+      - autofill@lists.mozilla.org
+      - jmathies@mozilla.com
+      - chsiang@mozilla.com
+    expires: never
+    telemetry_mirror: FORMAUTOFILL_CREDITCARDS_SUBMITTED_SECTIONS_COUNT

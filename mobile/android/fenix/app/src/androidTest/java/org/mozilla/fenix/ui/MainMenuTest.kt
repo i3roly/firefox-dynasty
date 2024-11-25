@@ -78,6 +78,12 @@ class MainMenuTest : TestSetup() {
             verifyEmptyDownloadsList(composeTestRule)
         }.goBack {
         }.openThreeDotMenu {
+        }.openPasswords {
+            verifySecurityPromptForLogins()
+            tapSetupLater()
+            verifyEmptySavedLoginsListView()
+        }.goBackToHomeScreen {
+        }.openThreeDotMenu {
         }.openAddonsManagerMenu {
             verifyAddonsListIsDisplayed(true)
         }.goBack {
@@ -226,7 +232,7 @@ class MainMenuTest : TestSetup() {
         }.closeBrowserMenuToBrowser {
             longClickPageObject(MatcherHelper.itemWithText("Link 2"))
             clickContextMenuItem("Open link in new tab")
-            clickSnackbarButton("SWITCH")
+            clickSnackbarButton(composeTestRule, "SWITCH")
         }.openThreeDotMenu {
             verifyDesktopSiteModeEnabled(false)
         }

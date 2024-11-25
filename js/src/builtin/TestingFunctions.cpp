@@ -984,7 +984,7 @@ static bool WasmMaxMemoryPages(JSContext* cx, unsigned argc, Value* vp) {
     return false;
   }
   if (!args.get(0).isString()) {
-    JS_ReportErrorASCII(cx, "index type must be a string");
+    JS_ReportErrorASCII(cx, "address type must be a string");
     return false;
   }
   RootedString s(cx, args.get(0).toString());
@@ -994,21 +994,21 @@ static bool WasmMaxMemoryPages(JSContext* cx, unsigned argc, Value* vp) {
   }
   if (StringEqualsLiteral(ls, "i32")) {
     args.rval().setInt32(
-        int32_t(wasm::MaxMemoryPages(wasm::IndexType::I32).value()));
+        int32_t(wasm::MaxMemoryPages(wasm::AddressType::I32).value()));
     return true;
   }
   if (StringEqualsLiteral(ls, "i64")) {
 #ifdef ENABLE_WASM_MEMORY64
     if (wasm::Memory64Available(cx)) {
       args.rval().setInt32(
-          int32_t(wasm::MaxMemoryPages(wasm::IndexType::I64).value()));
+          int32_t(wasm::MaxMemoryPages(wasm::AddressType::I64).value()));
       return true;
     }
 #endif
     JS_ReportErrorASCII(cx, "memory64 not enabled");
     return false;
   }
-  JS_ReportErrorASCII(cx, "bad index type");
+  JS_ReportErrorASCII(cx, "bad address type");
   return false;
 }
 
@@ -2308,7 +2308,6 @@ static bool WasmBuiltinI8VecMul(JSContext* cx, unsigned argc, Value* vp) {
   return true;
 }
 
-#ifdef ENABLE_WASM_GC
 static bool WasmGcReadField(JSContext* cx, unsigned argc, Value* vp) {
   CallArgs args = CallArgsFromVp(argc, vp);
   RootedObject callee(cx, &args.callee());
@@ -2359,7 +2358,6 @@ static bool WasmGcArrayLength(JSContext* cx, unsigned argc, Value* vp) {
   args.rval().setInt32(int32_t(arr.numElements_));
   return true;
 }
-#endif  // ENABLE_WASM_GC
 
 static bool LargeArrayBufferSupported(JSContext* cx, unsigned argc, Value* vp) {
   CallArgs args = CallArgsFromVp(argc, vp);
@@ -9313,6 +9311,8 @@ static bool GetAvailableLocalesOf(JSContext* cx, unsigned argc, Value* vp) {
       kind = SupportedLocaleKind::DateTimeFormat;
     } else if (StringEqualsLiteral(typeStr, "DisplayNames")) {
       kind = SupportedLocaleKind::DisplayNames;
+    } else if (StringEqualsLiteral(typeStr, "DurationFormat")) {
+      kind = SupportedLocaleKind::DurationFormat;
     } else if (StringEqualsLiteral(typeStr, "ListFormat")) {
       kind = SupportedLocaleKind::ListFormat;
     } else if (StringEqualsLiteral(typeStr, "NumberFormat")) {
@@ -9992,12 +9992,12 @@ gc::ZealModeHelpText),
 "  virtual memory reservation in order to elide bounds checks on this platform."),
 
     JS_FN_HELP("wasmMaxMemoryPages", WasmMaxMemoryPages, 1, 0,
-"wasmMaxMemoryPages(indexType)",
+"wasmMaxMemoryPages(addressType)",
 "  Returns an int with the maximum number of pages that can be allocated to a memory."
-"  This is an implementation artifact that does depend on the index type, the hardware,"
+"  This is an implementation artifact that does depend on the address type, the hardware,"
 "  the operating system, the build configuration, and flags.  The result is constant for"
 "  a given combination of those; there is no guarantee that that size allocation will"
-"  always succeed, only that it can succeed in principle.  The indexType is a string,"
+"  always succeed, only that it can succeed in principle.  The addressType is a string,"
 "  'i32' or 'i64'."),
 
 #define WASM_FEATURE(NAME, ...) \
@@ -10092,7 +10092,6 @@ JS_FOR_WASM_FEATURES(WASM_FEATURE)
 "wasmBuiltinI8VecMul()",
 "  Returns a module that implements an i8 vector pairwise multiplication intrinsic."),
 
-#ifdef ENABLE_WASM_GC
     JS_FN_HELP("wasmGcReadField", WasmGcReadField, 2, 0,
 "wasmGcReadField(obj, index)",
 "  Gets a field of a WebAssembly GC struct or array."),
@@ -10100,7 +10099,6 @@ JS_FOR_WASM_FEATURES(WASM_FEATURE)
     JS_FN_HELP("wasmGcArrayLength", WasmGcArrayLength, 1, 0,
 "wasmGcArrayLength(arr)",
 "  Gets the length of a WebAssembly GC array."),
-#endif // ENABLE_WASM_GC
 
 #ifdef ENABLE_WASM_BRANCH_HINTING
     JS_FN_HELP("wasmParsedBranchHints", WasmParsedBranchHints, 1, 0,

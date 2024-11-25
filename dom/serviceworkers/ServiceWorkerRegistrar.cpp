@@ -138,8 +138,8 @@ nsresult CreatePrincipalInfo(nsILineInputStream* aStream,
   return NS_OK;
 }
 
-const IPCNavigationPreloadState gDefaultNavigationPreloadState(false,
-                                                               "true"_ns);
+MOZ_RUNINIT const IPCNavigationPreloadState
+    gDefaultNavigationPreloadState(false, "true"_ns);
 
 }  // namespace
 
@@ -1095,7 +1095,7 @@ void ServiceWorkerRegistrar::MaybeResetGeneration() {
 
 bool ServiceWorkerRegistrar::IsSupportedVersion(
     const nsACString& aVersion) const {
-  uint32_t numVersions = ArrayLength(gSupportedRegistrarVersions);
+  uint32_t numVersions = std::size(gSupportedRegistrarVersions);
   for (uint32_t i = 0; i < numVersions; i++) {
     if (aVersion.EqualsASCII(gSupportedRegistrarVersions[i])) {
       return true;

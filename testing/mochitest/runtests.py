@@ -145,7 +145,6 @@ TBPL_RETRY = 4  # Defined in mozharness
 
 
 class MessageLogger(object):
-
     """File-like object for logging messages (structured logs)"""
 
     BUFFERING_THRESHOLD = 100
@@ -1245,7 +1244,7 @@ class MochitestDesktop(object):
          - create it if it does
         Removal of those directories is handled in cleanup()
         """
-        if type(extraTestsDirs) != list:
+        if type(extraTestsDirs) is not list:
             return
 
         for d in extraTestsDirs:
@@ -4008,7 +4007,6 @@ toolbar#nav-bar {
                 logzip.close()
 
     class OutputHandler(object):
-
         """line output handler for mozrunner"""
 
         def __init__(

@@ -98,6 +98,7 @@
 #include "mozilla/dom/WakeLock.h"
 #include "mozilla/dom/WindowGlobalChild.h"
 #include "mozilla/dom/power/PowerManagerService.h"
+#include "mozilla/glean/GleanMetrics.h"
 #include "mozilla/net/UrlClassifierFeatureFactory.h"
 #include "nsAttrValueInlines.h"
 #include "nsContentPolicyUtils.h"
@@ -140,11 +141,6 @@
 #  include "objbase.h"
 #endif
 #include "xpcpublic.h"
-
-// TODO : remove this workaround after enabling HEVC by default in bug 1928536.
-#ifdef MOZ_WMF
-#  include "mozilla/EMEUtils.h"
-#endif
 
 mozilla::LazyLogModule gMediaElementLog("HTMLMediaElement");
 mozilla::LazyLogModule gMediaElementEventsLog("HTMLMediaElementEvents");
@@ -1998,7 +1994,7 @@ class HTMLMediaElement::ErrorSink {
     MOZ_ASSERT(mOwner);
   }
 
-  void SetError(uint16_t aErrorCode, const nsACString& aErrorDetails) {
+  void SetError(uint16_t aErrorCode, const Maybe<MediaResult>& aResult) {
     // Since we have multiple paths calling into DecodeError, e.g.
     // MediaKeys::Terminated and EMEH264Decoder::Error. We should take the 1st
     // one only in order not to fire multiple 'error' events.
@@ -2011,7 +2007,9 @@ class HTMLMediaElement::ErrorSink {
       return;
     }
 
-    mError = new MediaError(mOwner, aErrorCode, aErrorDetails);
+    ReportErrorProbe(aErrorCode, aResult);
+    mError = new MediaError(mOwner, aErrorCode,
+                            aResult ? aResult->Message() : nsCString());
     mOwner->DispatchAsyncEvent(u"error"_ns);
     if (mOwner->ReadyState() == HAVE_NOTHING &&
         aErrorCode == MEDIA_ERR_ABORTED) {
@@ -2039,6 +2037,35 @@ class HTMLMediaElement::ErrorSink {
     return (aErrorCode == MEDIA_ERR_DECODE || aErrorCode == MEDIA_ERR_NETWORK ||
             aErrorCode == MEDIA_ERR_ABORTED ||
             aErrorCode == MEDIA_ERR_SRC_NOT_SUPPORTED);
+  }
+
+  void ReportErrorProbe(uint16_t aErrorCode,
+                        const Maybe<MediaResult>& aResult) {
+    MOZ_ASSERT(IsValidErrorCode(aErrorCode));
+    auto getErrorType = [&]() {
+      if (aErrorCode == MEDIA_ERR_ABORTED) {
+        return "AbortError"_ns;
+      }
+      if (aErrorCode == MEDIA_ERR_NETWORK) {
+        return "NetworkError"_ns;
+      }
+      if (aErrorCode == MEDIA_ERR_DECODE) {
+        return "DecodeErr"_ns;
+      }
+      return "SrcNotSupportedErr"_ns;
+    };
+
+    glean::media::ErrorExtra extraData;
+    extraData.errorType = Some(getErrorType());
+    if (aResult) {
+      extraData.errorName = Some(aResult->ErrorName());
+    }
+    nsAutoString keySystem;
+    if (mOwner->mMediaKeys) {
+      mOwner->mMediaKeys->GetKeySystem(keySystem);
+      extraData.keySystem = Some(NS_ConvertUTF16toUTF8(keySystem));
+    }
+    glean::media::error.Record(Some(extraData));
   }
 
   // Media elememt's life cycle would be longer than error sink, so we use the
@@ -2523,9 +2550,12 @@ void HTMLMediaElement::NoSupportedMediaSourceError(
     // Code. In case we're loading a 3rd party resource we should not leak this
     // and pass a Generic Error Message
     mErrorSink->SetError(MEDIA_ERR_SRC_NOT_SUPPORTED,
-                         "Failed to open media"_ns);
+                         Some(MediaResult{NS_ERROR_DOM_MEDIA_NOT_SUPPORTED_ERR,
+                                          "Failed to open media"_ns}));
   } else {
-    mErrorSink->SetError(MEDIA_ERR_SRC_NOT_SUPPORTED, aErrorDetails);
+    mErrorSink->SetError(
+        MEDIA_ERR_SRC_NOT_SUPPORTED,
+        Some(MediaResult{NS_ERROR_DOM_MEDIA_NOT_SUPPORTED_ERR, aErrorDetails}));
   }
 
   RemoveMediaTracks();
@@ -5101,24 +5131,7 @@ CanPlayStatus HTMLMediaElement::GetCanPlay(
 
 void HTMLMediaElement::CanPlayType(const nsAString& aType, nsAString& aResult) {
   DecoderDoctorDiagnostics diagnostics;
-  CanPlayStatus canPlay;
-#ifdef MOZ_WMF
-  // TODO : remove this workaround after enabling HEVC by default in bug
-  // 1928536.
-  bool isHEVC = false;
-  Maybe<MediaContainerType> containerType = MakeMediaContainerType(aType);
-  if (containerType) {
-    const auto& codecString = containerType->ExtendedType().Codecs().AsString();
-    isHEVC = StringBeginsWith(codecString, u"hev1"_ns) ||
-             StringBeginsWith(codecString, u"hvc1"_ns);
-  }
-  if (isHEVC && !IsHEVCAllowedByOrigin(GetOrigin(OwnerDoc()))) {
-    canPlay = CANPLAY_NO;
-  } else
-#endif
-  {
-    canPlay = GetCanPlay(aType, &diagnostics);
-  }
+  CanPlayStatus canPlay = GetCanPlay(aType, &diagnostics);
   diagnostics.StoreFormatDiagnostics(OwnerDoc(), aType, canPlay != CANPLAY_NO,
                                      __func__);
   switch (canPlay) {
@@ -5712,9 +5725,10 @@ void HTMLMediaElement::DecodeError(const MediaResult& aError) {
   } else if (mReadyState == HAVE_NOTHING) {
     NoSupportedMediaSourceError(aError.Description());
   } else if (IsCORSSameOrigin()) {
-    Error(MEDIA_ERR_DECODE, aError.Description());
+    Error(MEDIA_ERR_DECODE, Some(aError));
   } else {
-    Error(MEDIA_ERR_DECODE, "Failed to decode media"_ns);
+    Error(MEDIA_ERR_DECODE, Some(MediaResult{NS_ERROR_DOM_MEDIA_DECODE_ERR,
+                                             "Failed to decode media"}));
   }
 }
 
@@ -5730,8 +5744,8 @@ bool HTMLMediaElement::HasError() const { return GetError(); }
 void HTMLMediaElement::LoadAborted() { Error(MEDIA_ERR_ABORTED); }
 
 void HTMLMediaElement::Error(uint16_t aErrorCode,
-                             const nsACString& aErrorDetails) {
-  mErrorSink->SetError(aErrorCode, aErrorDetails);
+                             const Maybe<MediaResult>& aResult) {
+  mErrorSink->SetError(aErrorCode, aResult);
   ChangeDelayLoadStatus(false);
   UpdateAudioChannelPlayingState();
 }
@@ -8064,6 +8078,10 @@ void HTMLMediaElement::NodeInfoChanged(Document* aOldDoc) {
 
 #ifdef MOZ_WMF_CDM
 bool HTMLMediaElement::IsUsingWMFCDM() const { return mIsUsingWMFCDM; };
+
+CDMProxy* HTMLMediaElement::GetCDMProxy() const {
+  return mMediaKeys ? mMediaKeys->GetCDMProxy() : nullptr;
+};
 #endif
 
 }  // namespace mozilla::dom

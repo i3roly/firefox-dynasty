@@ -380,6 +380,10 @@ export { FfiConverterTypePoint, Point };
 
 
 
+/**
+ * gradient
+ * @returns {number}
+ */
 export function gradient(value) {
 
         const liftResult = (result) => FfiConverterF64.lift(result);
@@ -393,8 +397,8 @@ export function gradient(value) {
                 }
                 throw e;
             }
-            return UniFFIScaffolding.callAsync(
-                61, // external_types:uniffi_uniffi_fixture_external_types_fn_func_gradient
+            return UniFFIScaffolding.callAsyncWrapper(
+                73, // external_types:uniffi_uniffi_fixture_external_types_fn_func_gradient
                 FfiConverterOptionalTypeLine.lower(value),
             )
         }
@@ -405,6 +409,10 @@ export function gradient(value) {
         }
 }
 
+/**
+ * intersection
+ * @returns {?Point}
+ */
 export function intersection(ln1,ln2) {
 
         const liftResult = (result) => FfiConverterOptionalTypePoint.lift(result);
@@ -426,8 +434,8 @@ export function intersection(ln1,ln2) {
                 }
                 throw e;
             }
-            return UniFFIScaffolding.callAsync(
-                62, // external_types:uniffi_uniffi_fixture_external_types_fn_func_intersection
+            return UniFFIScaffolding.callAsyncWrapper(
+                74, // external_types:uniffi_uniffi_fixture_external_types_fn_func_intersection
                 FfiConverterTypeLine.lower(ln1),
                 FfiConverterTypeLine.lower(ln2),
             )

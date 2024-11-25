@@ -27,16 +27,15 @@ import androidx.navigation.fragment.findNavController
 import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.PagingData
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import mozilla.components.browser.state.action.HistoryMetadataAction
 import mozilla.components.concept.engine.prompt.ShareData
 import mozilla.components.lib.state.ext.consumeFrom
 import mozilla.components.lib.state.ext.flowScoped
-import mozilla.components.service.fxa.SyncEngine
-import mozilla.components.service.fxa.sync.SyncReason
 import mozilla.components.support.base.feature.UserInteractionHandler
 import mozilla.components.support.ktx.kotlin.toShortUrl
 import mozilla.components.ui.widgets.withCenterAlignedButtons
@@ -48,6 +47,7 @@ import org.mozilla.fenix.R
 import org.mozilla.fenix.addons.showSnackBar
 import org.mozilla.fenix.browser.browsingmode.BrowsingMode
 import org.mozilla.fenix.components.StoreProvider
+import org.mozilla.fenix.components.appstate.AppAction
 import org.mozilla.fenix.components.history.DefaultPagedHistoryProvider
 import org.mozilla.fenix.databinding.FragmentHistoryBinding
 import org.mozilla.fenix.ext.components
@@ -112,9 +112,7 @@ class HistoryFragment : LibraryPageFragment<History>(), UserInteractionHandler, 
                 initialState = HistoryFragmentState.initial,
                 middleware = listOf(
                     HistoryNavigationMiddleware(
-                        navController = findNavController(),
-                        openToBrowser = ::openItem,
-                        onBackPressed = requireActivity().onBackPressedDispatcher::onBackPressed,
+                        onBackPressed = { findNavController().popBackStack() },
                     ),
                     HistoryTelemetryMiddleware(
                         isInPrivateMode = requireComponents.appStore.state.mode == BrowsingMode.Private,
@@ -125,18 +123,15 @@ class HistoryFragment : LibraryPageFragment<History>(), UserInteractionHandler, 
                         scope = lifecycleScope,
                     ),
                     HistoryStorageMiddleware(
-                        appStore = requireContext().components.appStore,
                         browserStore = requireContext().components.core.store,
-                        historyProvider = historyProvider,
                         historyStorage = requireContext().components.core.historyStorage,
-                        undoDeleteSnackbar = ::showDeleteSnackbar,
                         onTimeFrameDeleted = ::onTimeFrameDeleted,
                     ),
                 ),
             )
         }
         _historyView = HistoryView(
-            binding.historyLayout,
+            container = binding.historyLayout,
             onZeroItemsLoaded = {
                 historyStore.dispatch(
                     HistoryFragmentAction.ChangeEmptyState(isEmpty = true),
@@ -149,6 +144,8 @@ class HistoryFragment : LibraryPageFragment<History>(), UserInteractionHandler, 
                 )
             },
             onRecentlyClosedClicked = ::navigateToRecentlyClosed,
+            onHistoryItemClicked = ::openItem,
+            onDeleteInitiated = ::onDeleteInitiated,
         )
 
         return view
@@ -176,14 +173,12 @@ class HistoryFragment : LibraryPageFragment<History>(), UserInteractionHandler, 
 
     private fun showDeleteSnackbar(
         items: Set<History>,
-        undo: suspend (Set<History>) -> Unit,
-        delete: suspend (Set<History>) -> Unit,
     ) {
-        CoroutineScope(IO).allowUndo(
+        lifecycleScope.allowUndo(
             view = requireActivity().getRootView()!!,
             message = getMultiSelectSnackBarMessage(items),
             undoActionTitle = getString(R.string.snackbar_deleted_undo),
-            onCancel = { undo.invoke(items) },
+            onCancel = { undo(items) },
             operation = { delete(items) },
         )
     }
@@ -295,6 +290,7 @@ class HistoryFragment : LibraryPageFragment<History>(), UserInteractionHandler, 
         R.id.delete_history_multi_select -> {
             with(historyStore) {
                 dispatch(HistoryFragmentAction.DeleteItems(state.mode.selectedItems))
+                onDeleteInitiated(state.mode.selectedItems)
                 dispatch(HistoryFragmentAction.ExitEditMode)
             }
             true
@@ -388,20 +384,37 @@ class HistoryFragment : LibraryPageFragment<History>(), UserInteractionHandler, 
         _binding = null
     }
 
-    private fun openItem(item: History.Regular) = runIfFragmentIsAttached {
-        GleanHistory.openedItem.record(
-            GleanHistory.OpenedItemExtra(
-                isRemote = item.isRemote,
-                timeGroup = item.historyTimeGroup.toString(),
-                isPrivate = (activity as HomeActivity).browsingModeManager.mode == BrowsingMode.Private,
-            ),
-        )
+    private fun openItem(item: History) {
+        when (item) {
+            is History.Regular -> openRegularItem(item)
+            is History.Group -> {
+                findNavController().navigate(
+                    HistoryFragmentDirections.actionGlobalHistoryMetadataGroup(
+                        title = item.title,
+                        historyMetadataItems = item.items.toTypedArray(),
+                    ),
+                    NavOptions.Builder()
+                        .setPopUpTo(R.id.historyMetadataGroupFragment, true)
+                        .build(),
+                )
+            }
+            else -> Unit
+        }
+    }
 
+    private fun openRegularItem(item: History.Regular) = runIfFragmentIsAttached {
         (activity as HomeActivity).openToBrowserAndLoad(
             searchTermOrURL = item.url,
             newTab = true,
             from = BrowserDirection.FromHistory,
         )
+    }
+
+    private fun onDeleteInitiated(items: Set<History>) {
+        val appStore = requireContext().components.appStore
+
+        appStore.dispatch(AppAction.AddPendingDeletionSet(items.toPendingDeletionHistory()))
+        showDeleteSnackbar(items)
     }
 
     private fun share(data: List<ShareData>) {
@@ -426,15 +439,32 @@ class HistoryFragment : LibraryPageFragment<History>(), UserInteractionHandler, 
         )
     }
 
-    @Suppress("UnusedPrivateMember")
-    private suspend fun syncHistory() {
-        val accountManager = requireComponents.backgroundServices.accountManager
-        accountManager.syncNow(
-            reason = SyncReason.User,
-            debounce = true,
-            customEngineSubset = listOf(SyncEngine.History),
-        )
-        historyView.historyAdapter.refresh()
+    private suspend fun undo(items: Set<History>) = withContext(IO) {
+        val appStore = requireContext().components.appStore
+        val pendingDeletionItems = items.map { it.toPendingDeletionHistory() }.toSet()
+        appStore.dispatch(AppAction.UndoPendingDeletionSet(pendingDeletionItems))
+    }
+
+    private suspend fun delete(items: Set<History>) = withContext(IO) {
+        val browserStore = requireContext().components.core.store
+        val historyStorage = requireContext().components.core.historyStorage
+
+        historyStore.dispatch(HistoryFragmentAction.EnterDeletionMode)
+        for (item in items) {
+            when (item) {
+                is History.Regular -> historyStorage.deleteVisitsFor(item.url)
+                is History.Group -> {
+                    // NB: If we have non-search groups, this logic needs to be updated.
+                    historyProvider.deleteMetadataSearchGroup(item)
+                    browserStore.dispatch(
+                        HistoryMetadataAction.DisbandSearchGroupAction(searchTerm = item.title),
+                    )
+                }
+                // We won't encounter individual metadata entries outside of groups.
+                is History.Metadata -> {}
+            }
+        }
+        historyStore.dispatch(HistoryFragmentAction.ExitDeletionMode)
     }
 
     internal class DeleteConfirmationDialogFragment(
@@ -442,8 +472,7 @@ class HistoryFragment : LibraryPageFragment<History>(), UserInteractionHandler, 
     ) : DialogFragment() {
         override fun onCreateDialog(savedInstanceState: Bundle?): Dialog =
             AlertDialog.Builder(requireContext()).apply {
-                val layout = LayoutInflater.from(context)
-                    .inflate(R.layout.delete_history_time_range_dialog, null)
+                val layout = getLayoutInflater().inflate(R.layout.delete_history_time_range_dialog, null)
                 val radioGroup = layout.findViewById<RadioGroup>(R.id.radio_group)
                 radioGroup.check(R.id.last_hour_button)
                 setView(layout)
@@ -467,7 +496,6 @@ class HistoryFragment : LibraryPageFragment<History>(), UserInteractionHandler, 
             }.create().withCenterAlignedButtons()
     }
 
-    @Suppress("UnusedPrivateMember")
     companion object {
         private const val PAGE_SIZE = 25
     }

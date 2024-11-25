@@ -219,7 +219,6 @@ class nsDocShell final : public nsDocLoader,
    * file
    * @param aPostDataStream the POST data to send
    * @param aHeadersDataStream ??? (only used for plugins)
-   * @param aIsTrusted false if the triggerer is an untrusted DOM event.
    * @param aTriggeringPrincipal, if not passed explicitly we fall back to
    *        the document's principal.
    * @param aCsp, the CSP to be used for the load, that is the CSP of the
@@ -232,7 +231,7 @@ class nsDocShell final : public nsDocLoader,
                        const nsAString& aTargetSpec, const nsAString& aFileName,
                        nsIInputStream* aPostDataStream,
                        nsIInputStream* aHeadersDataStream,
-                       bool aIsUserTriggered, bool aIsTrusted,
+                       bool aIsUserTriggered,
                        nsIPrincipal* aTriggeringPrincipal,
                        nsIContentSecurityPolicy* aCsp);
   /**
@@ -445,7 +444,7 @@ class nsDocShell final : public nsDocLoader,
       bool aIsTopFrame, bool aAllowKeywordFixup, bool aUsePrivateBrowsing,
       bool aNotifyKeywordSearchLoading = false,
       nsIInputStream** aNewPostData = nullptr,
-      bool* outWasSchemelessInput = nullptr);
+      nsILoadInfo::SchemelessInputType* outSchemelessInput = nullptr);
 
   static already_AddRefed<nsIURI> MaybeFixBadCertDomainErrorURI(
       nsIChannel* aChannel, nsIURI* aUrl);
@@ -1163,7 +1162,7 @@ class nsDocShell final : public nsDocLoader,
   nsWeakPtr mBrowserChild;
 
   // Dimensions of the docshell
-  nsIntRect mBounds;
+  mozilla::LayoutDeviceIntRect mBounds;
 
   /**
    * Content-Type Hint of the most-recently initiated load. Used for

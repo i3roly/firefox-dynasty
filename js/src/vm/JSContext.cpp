@@ -972,7 +972,6 @@ JSContext::JSContext(JSRuntime* runtime, const JS::ContextOptions& options)
       isolate(this, nullptr),
       activation_(this, nullptr),
       profilingActivation_(nullptr),
-      entryMonitor(this, nullptr),
       noExecuteDebuggerTop(this, nullptr),
 #ifdef JS_CHECK_UNSAFE_CALL_WITH_ABI
       inUnsafeCallWithABI(this, false),
@@ -1401,20 +1400,34 @@ bool JSContext::enableExecutionTracing() {
     }
   }
 
+  executionTracerSuspended_ = false;
   return true;
+}
+
+void JSContext::cleanUpExecutionTracingState() {
+  MOZ_ASSERT(executionTracer_);
+
+  for (RealmsIter realm(runtime()); !realm.done(); realm.next()) {
+    if (realm->isSystem()) {
+      continue;
+    }
+    realm->disableExecutionTracing();
+  }
+
+  caches().tracingCaches.clearAll();
 }
 
 void JSContext::disableExecutionTracing() {
   if (executionTracer_) {
-    for (RealmsIter realm(runtime()); !realm.done(); realm.next()) {
-      if (realm->isSystem()) {
-        continue;
-      }
-      realm->disableExecutionTracing();
-    }
-
-    caches().tracingCaches.clearAll();
+    cleanUpExecutionTracingState();
     executionTracer_ = nullptr;
+  }
+}
+
+void JSContext::suspendExecutionTracing() {
+  if (executionTracer_) {
+    cleanUpExecutionTracingState();
+    executionTracerSuspended_ = true;
   }
 }
 

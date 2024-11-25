@@ -15,9 +15,13 @@ import {
 const lazy = {};
 
 ChromeUtils.defineESModuleGetters(lazy, {
+  ActionsProviderContextualSearch:
+    "resource:///modules/ActionsProviderContextualSearch.sys.mjs",
   UrlbarView: "resource:///modules/UrlbarView.sys.mjs",
   UrlbarPrefs: "resource:///modules/UrlbarPrefs.sys.mjs",
   UrlbarProviderAutofill: "resource:///modules/UrlbarProviderAutofill.sys.mjs",
+  UrlbarProviderGlobalActions:
+    "resource:///modules/UrlbarProviderGlobalActions.sys.mjs",
   UrlbarResult: "resource:///modules/UrlbarResult.sys.mjs",
   UrlbarSearchUtils: "resource:///modules/UrlbarSearchUtils.sys.mjs",
   UrlbarTokenizer: "resource:///modules/UrlbarTokenizer.sys.mjs",
@@ -132,7 +136,11 @@ class ProviderTabToSearch extends UrlbarProvider {
       queryContext.searchString &&
       queryContext.tokens.length == 1 &&
       !queryContext.searchMode &&
-      lazy.UrlbarPrefs.get("suggest.engines")
+      lazy.UrlbarPrefs.get("suggest.engines") &&
+      !(
+        lazy.UrlbarProviderGlobalActions.isActive(queryContext) &&
+        lazy.ActionsProviderContextualSearch.isActive(queryContext)
+      )
     );
   }
 
@@ -244,34 +252,18 @@ class ProviderTabToSearch extends UrlbarProvider {
           let scalarKey = lazy.UrlbarSearchUtils.getSearchModeScalarKey({
             engineName: result?.payload.engine,
           });
-          Services.telemetry.keyedScalarAdd(
-            "urlbar.tabtosearch.impressions_onboarding",
-            scalarKey,
-            1
-          );
+          Glean.urlbarTabtosearch.impressionsOnboarding[scalarKey].add(1);
           onboardingResultCount += 1;
         } else if (result.type === UrlbarUtils.RESULT_TYPE.SEARCH) {
           let scalarKey = lazy.UrlbarSearchUtils.getSearchModeScalarKey({
             engineName: result?.payload.engine,
           });
-          Services.telemetry.keyedScalarAdd(
-            "urlbar.tabtosearch.impressions",
-            scalarKey,
-            1
-          );
+          Glean.urlbarTabtosearch.impressions[scalarKey].add(1);
           regularResultCount += 1;
         }
       });
-      Services.telemetry.keyedScalarAdd(
-        "urlbar.tips",
-        "tabtosearch-shown",
-        regularResultCount
-      );
-      Services.telemetry.keyedScalarAdd(
-        "urlbar.tips",
-        "tabtosearch_onboard-shown",
-        onboardingResultCount
-      );
+      Glean.urlbar.tips["tabtosearch-shown"].add(regularResultCount);
+      Glean.urlbar.tips["tabtosearch_onboard-shown"].add(onboardingResultCount);
     } catch (ex) {
       // If your test throws this error or causes another test to throw it, it
       // is likely because your test showed a tab-to-search result but did not

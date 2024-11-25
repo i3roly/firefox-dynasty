@@ -129,7 +129,7 @@ gfxSVGGlyphsDocument* gfxSVGGlyphs::FindOrCreateGlyphsDocument(
 
 nsresult gfxSVGGlyphsDocument::SetupPresentation() {
   nsCOMPtr<nsIDocumentLoaderFactory> docLoaderFactory =
-      nsContentUtils::FindInternalDocumentViewer("image/svg+xml"_ns);
+      nsContentUtils::FindInternalDocumentViewer(SVG_CONTENT_TYPE);
   NS_ASSERTION(docLoaderFactory, "Couldn't get DocumentLoaderFactory");
 
   nsCOMPtr<nsIDocumentViewer> viewer;
@@ -138,7 +138,7 @@ nsresult gfxSVGGlyphsDocument::SetupPresentation() {
   NS_ENSURE_SUCCESS(rv, rv);
 
   auto upem = mOwner->FontEntry()->UnitsPerEm();
-  rv = viewer->Init(nullptr, gfx::IntRect(0, 0, upem, upem), nullptr);
+  rv = viewer->Init(nullptr, LayoutDeviceIntRect(0, 0, upem, upem), nullptr);
   if (NS_SUCCEEDED(rv)) {
     rv = viewer->Open(nullptr, nullptr);
     NS_ENSURE_SUCCESS(rv, rv);

@@ -407,6 +407,19 @@ export class SearchService {
     return this.#getEnginesByExtensionID(extensionID);
   }
 
+  async findContextualSearchEngineByHost(host) {
+    await this.init();
+    let settings = await this._settings.get();
+    let config = await this.#engineSelector.findContextualSearchEngineByHost(
+      host
+    );
+    if (config) {
+      let engine = new lazy.AppProvidedSearchEngine({ config, settings });
+      return engine;
+    }
+    return null;
+  }
+
   /**
    * This function calls #init to start initialization when it has not been
    * started yet. Otherwise, it returns the pending promise.
@@ -590,6 +603,11 @@ export class SearchService {
     });
     lazy.logConsole.debug(`Adding ${newEngine.name}`);
     this.#addEngineToStore(newEngine);
+  }
+
+  async addContextualSearchEngine(engine) {
+    await this.init();
+    this.#addEngineToStore(engine);
   }
 
   /**
@@ -1005,7 +1023,7 @@ export class SearchService {
   #loadPathIgnoreList = [];
 
   /**
-   * A map of engine display names to `SearchEngine`.
+   * A map of engine identifiers to `SearchEngine`.
    *
    * @type {Map<string, object>|null}
    */
@@ -2644,20 +2662,12 @@ export class SearchService {
       }
     }
 
-    Services.telemetry.scalarSet(
-      "browser.searchinit.secure_opensearch_engine_count",
-      totalSecure
-    );
-    Services.telemetry.scalarSet(
-      "browser.searchinit.insecure_opensearch_engine_count",
-      totalInsecure
-    );
-    Services.telemetry.scalarSet(
-      "browser.searchinit.secure_opensearch_update_count",
+    Glean.browserSearchinit.secureOpensearchEngineCount.set(totalSecure);
+    Glean.browserSearchinit.insecureOpensearchEngineCount.set(totalInsecure);
+    Glean.browserSearchinit.secureOpensearchUpdateCount.set(
       totalWithSecureUpdates
     );
-    Services.telemetry.scalarSet(
-      "browser.searchinit.insecure_opensearch_update_count",
+    Glean.browserSearchinit.insecureOpensearchUpdateCount.set(
       totalWithInsecureUpdates
     );
   }

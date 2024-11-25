@@ -3405,8 +3405,6 @@ class nsDisplayListSet {
    */
   nsDisplayList* Content() const { return mLists[5]; }
 
-  const std::array<nsDisplayList*, 6>& Lists() const { return mLists; }
-
   /**
    * Clears all the display lists in the set.
    */
@@ -3482,6 +3480,10 @@ class nsDisplayListSet {
   // it.  Don't let us be heap-allocated!
   void* operator new(size_t sz) noexcept(true);
 
+  // We use an array here so that we can use a range-based for loop whenever
+  // we need to carry out the same operation on each nsDisplayList. The size of
+  // the array does not change; it always contains exactly six non-null
+  // pointers (provided to our ctor).
   std::array<nsDisplayList*, 6> mLists;
 };
 
@@ -3520,6 +3522,9 @@ struct nsDisplayListCollection : public nsDisplayListSet {
   // it.  Don't let us be heap-allocated!
   void* operator new(size_t sz) noexcept(true);
 
+  // Self contained allocation of the memory for our lists, which we pass
+  // pointers to to our nsDisplayListSet base class for it to store in it's
+  // `mLists` std::array.
   nsDisplayList mLists[6];
 };
 

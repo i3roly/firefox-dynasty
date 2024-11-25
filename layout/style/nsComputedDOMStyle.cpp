@@ -217,11 +217,11 @@ struct ComputedStyleMap {
    * or is currently disabled.
    */
   const Entry* FindEntryForProperty(nsCSSPropertyID aPropID) {
-    if (size_t(aPropID) >= ArrayLength(kEntryIndices)) {
+    if (size_t(aPropID) >= std::size(kEntryIndices)) {
       MOZ_ASSERT(aPropID == eCSSProperty_UNKNOWN);
       return nullptr;
     }
-    MOZ_ASSERT(kEntryIndices[aPropID] < ArrayLength(kEntries));
+    MOZ_ASSERT(kEntryIndices[aPropID] < std::size(kEntries));
     const auto& entry = kEntries[kEntryIndices[aPropID]];
     if (!entry.IsEnabled()) {
       return nullptr;
@@ -250,7 +250,7 @@ struct ComputedStyleMap {
   /**
    * A map of indexes on the nsComputedDOMStyle object to indexes into kEntries.
    */
-  uint32_t mIndexMap[ArrayLength(kEntries)];
+  uint32_t mIndexMap[std::size(kEntries)];
 
  private:
   /**
@@ -274,9 +274,9 @@ struct ComputedStyleMap {
 };
 
 constexpr ComputedStyleMap::Entry
-    ComputedStyleMap::kEntries[ArrayLength(kEntries)];
+    ComputedStyleMap::kEntries[std::size(kEntries)];
 
-constexpr size_t ComputedStyleMap::kEntryIndices[ArrayLength(kEntries)];
+constexpr size_t ComputedStyleMap::kEntryIndices[std::size(kEntries)];
 
 void ComputedStyleMap::Update() {
   if (!IsDirty()) {
@@ -284,7 +284,7 @@ void ComputedStyleMap::Update() {
   }
 
   uint32_t index = 0;
-  for (uint32_t i = 0; i < ArrayLength(kEntries); i++) {
+  for (uint32_t i = 0; i < std::size(kEntries); i++) {
     if (kEntries[i].IsEnumerable()) {
       mIndexMap[index++] = i;
     }
@@ -1746,18 +1746,6 @@ already_AddRefed<CSSValue> nsComputedDOMStyle::DoGetPaddingLeft() {
 
 already_AddRefed<CSSValue> nsComputedDOMStyle::DoGetPaddingRight() {
   return GetPaddingWidthFor(eSideRight);
-}
-
-already_AddRefed<CSSValue> nsComputedDOMStyle::DoGetBorderSpacing() {
-  RefPtr<nsDOMCSSValueList> valueList = GetROCSSValueList(false);
-
-  const nsStyleTableBorder* border = StyleTableBorder();
-  valueList->AppendCSSValue(
-      PixelsToCSSValue(border->mBorderSpacing.width.ToCSSPixels()));
-  valueList->AppendCSSValue(
-      PixelsToCSSValue(border->mBorderSpacing.height.ToCSSPixels()));
-
-  return valueList.forget();
 }
 
 already_AddRefed<CSSValue> nsComputedDOMStyle::DoGetBorderTopWidth() {

@@ -22,6 +22,7 @@
 #include "SurfaceCacheUtils.h"
 #include "mozilla/dom/ContentParent.h"
 #include "mozilla/dom/ContentChild.h"
+#include "mozilla/glean/GleanMetrics.h"
 #include "mozilla/Preferences.h"
 #include "mozilla/Services.h"
 #include "mozilla/ServoStyleSet.h"
@@ -114,7 +115,8 @@ static ColorCaches sColorCaches;
 
 static EnumeratedCache<FloatID, Maybe<float>, FloatID::End> sFloatCache;
 static EnumeratedCache<IntID, Maybe<int32_t>, IntID::End> sIntCache;
-static EnumeratedCache<FontID, widget::LookAndFeelFont, FontID::End> sFontCache;
+MOZ_RUNINIT static EnumeratedCache<FontID, widget::LookAndFeelFont, FontID::End>
+    sFontCache;
 
 // To make one of these prefs toggleable from a reftest add a user
 // pref in testing/profiles/reftest/user.js. For example, to make
@@ -195,9 +197,10 @@ static const char sIntPrefs[][45] = {
     "ui.hideCursorWhileTyping",
     "ui.gtkThemeFamily",
     "ui.fullKeyboardAccess",
+    "ui.pointingDeviceKinds",
 };
 
-static_assert(ArrayLength(sIntPrefs) == size_t(LookAndFeel::IntID::End),
+static_assert(std::size(sIntPrefs) == size_t(LookAndFeel::IntID::End),
               "Should have a pref for each int value");
 
 // This array MUST be kept in the same order as the float id list in
@@ -212,7 +215,7 @@ static const char sFloatPrefs[][37] = {
 };
 // clang-format on
 
-static_assert(ArrayLength(sFloatPrefs) == size_t(LookAndFeel::FloatID::End),
+static_assert(std::size(sFloatPrefs) == size_t(LookAndFeel::FloatID::End),
               "Should have a pref for each float value");
 
 // This array MUST be kept in the same order as the color list in
@@ -336,7 +339,7 @@ static const char sColorPrefs[][41] = {
     "ui.themedScrollbarThumbInactive",
 };
 
-static_assert(ArrayLength(sColorPrefs) == size_t(LookAndFeel::ColorID::End),
+static_assert(std::size(sColorPrefs) == size_t(LookAndFeel::ColorID::End),
               "Should have a pref for each color value");
 
 // This array MUST be kept in the same order as the SystemFont enum.
@@ -353,7 +356,7 @@ static const char sFontPrefs[][41] = {
     "ui.font.-moz-field",
 };
 
-static_assert(ArrayLength(sFontPrefs) == size_t(LookAndFeel::FontID::End),
+static_assert(std::size(sFontPrefs) == size_t(LookAndFeel::FontID::End),
               "Should have a pref for each font value");
 
 const char* nsXPLookAndFeel::GetColorPrefName(ColorID aId) {
@@ -1236,6 +1239,19 @@ void nsXPLookAndFeel::RecordTelemetry() {
   Telemetry::ScalarSet(
       Telemetry::ScalarID::WIDGET_DARK_MODE,
       NS_SUCCEEDED(GetIntValue(IntID::SystemUsesDarkTheme, i)) && i != 0);
+
+  auto devices =
+      static_cast<PointingDeviceKinds>(GetInt(IntID::PointingDeviceKinds, 0));
+
+  glean::widget::pointing_devices
+      .EnumGet(glean::widget::PointingDevicesLabel::eMouse)
+      .Set(!!(devices & PointingDeviceKinds::Mouse));
+  glean::widget::pointing_devices
+      .EnumGet(glean::widget::PointingDevicesLabel::eTouch)
+      .Set(!!(devices & PointingDeviceKinds::Touch));
+  glean::widget::pointing_devices
+      .EnumGet(glean::widget::PointingDevicesLabel::ePen)
+      .Set(!!(devices & PointingDeviceKinds::Pen));
 
   RecordLookAndFeelSpecificTelemetry();
 }

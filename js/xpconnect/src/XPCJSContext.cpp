@@ -837,8 +837,6 @@ static void LoadStartupJSPrefs(XPCJSContext* xpccx) {
   // about:config). Make sure we use explicit defaults here.
   bool useJitForTrustedPrincipals =
       Preferences::GetBool(JS_OPTIONS_DOT_STR "jit_trustedprincipals", false);
-  bool disableWasmHugeMemory = Preferences::GetBool(
-      JS_OPTIONS_DOT_STR "wasm_disable_huge_memory", false);
 
   bool safeMode = false;
   nsCOMPtr<nsIXULRuntime> xr = do_GetService("@mozilla.org/xre/runtime;1");
@@ -943,11 +941,6 @@ static void LoadStartupJSPrefs(XPCJSContext* xpccx) {
   }
   JS_SetGlobalJitCompilerOption(cx, JSJITCOMPILER_WRITE_PROTECT_CODE,
                                 writeProtectCode);
-
-  if (disableWasmHugeMemory) {
-    bool disabledHugeMemory = JS::DisableWasmHugeMemory();
-    MOZ_RELEASE_ASSERT(disabledHugeMemory);
-  }
 }
 
 static void ReloadPrefsCallback(const char* pref, void* aXpccx) {
@@ -1264,9 +1257,8 @@ nsresult XPCJSContext::Initialize() {
   struct rlimit rlim;
   const size_t kUncappedStackQuota =
       getrlimit(RLIMIT_STACK, &rlim) == 0
-          ? std::max(std::min(size_t(rlim.rlim_cur - kStackSafeMargin),
-                              kStackQuotaMax - kStackSafeMargin),
-                     kStackQuotaMin)
+          ? std::clamp(size_t(rlim.rlim_cur - kStackSafeMargin), kStackQuotaMin,
+                       kStackQuotaMax - kStackSafeMargin)
           : kStackQuotaMin;
 #  if defined(MOZ_ASAN)
   // See the standalone MOZ_ASAN branch below for the ASan case.

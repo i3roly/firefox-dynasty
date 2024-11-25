@@ -30,7 +30,7 @@ ls.preparelsdatabase:
       - hsingh@mozilla.com
       - jvarga@mozilla.com
       - storage-telemetry@mozilla.com
-    expires: 135
+    expires: 138
 ls.preparedatastore:
   processing_time:
     type: timing_distribution
@@ -55,7 +55,7 @@ ls.preparedatastore:
       - jvarga@mozilla.com
       - storage-telemetry@mozilla.com
       - storage-telemetry@mozilla.com
-    expires: 135
+    expires: 138
 ls.request:
   send_cancellation:
     type: counter
@@ -71,7 +71,7 @@ ls.request:
     notification_emails:
       - hsingh@mozilla.com
       - jvarga@mozilla.com
-    expires: 135
+    expires: 138
   recv_cancellation:
     type: counter
     description: >
@@ -87,4 +87,23 @@ ls.request:
       - hsingh@mozilla.com
       - jvarga@mozilla.com
       - storage-telemetry@mozilla.com
-    expires: 135
+    expires: 138
+localstorage.database:
+  request_allow_to_close_response_time:
+    type: timing_distribution
+    time_unit: microsecond
+    description: >
+      Time it took between sending PBackgroundLSDatabase::RequestAllowToClose
+      and receiving PBackgroundLSDatabase::AllowToClose message. These messages
+      are issued when QuotaManager is shutting down or is aborting operations
+      for a particular origin or process.
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1925205
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1925205
+    data_sensitivity:
+      - technical
+    notification_emails:
+      - jvarga@mozilla.com
+      - storage-telemetry@mozilla.com
+    expires: 136

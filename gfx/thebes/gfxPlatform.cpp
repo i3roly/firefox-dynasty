@@ -149,7 +149,6 @@ static const uint32_t kDefaultGlyphCacheSize = -1;
 #include "mozilla/Attributes.h"
 #include "mozilla/Mutex.h"
 
-#include "nsAlgorithm.h"
 #include "nsIGfxInfo.h"
 #include "nsIXULRuntime.h"
 #include "VsyncSource.h"
@@ -1043,16 +1042,6 @@ void gfxPlatform::Init() {
   }
 }
 
-static bool IsOsTempDirWritable() {
-  nsCOMPtr<nsIFile> file;
-  nsresult rv = NS_GetSpecialDirectory(NS_OS_TEMP_DIR, getter_AddRefs(file));
-  NS_ENSURE_SUCCESS(rv, false);
-  bool writable = false;
-  rv = file->IsWritable(&writable);
-  NS_ENSURE_SUCCESS(rv, false);
-  return writable;
-}
-
 void gfxPlatform::ReportTelemetry() {
   MOZ_RELEASE_ASSERT(XRE_IsParentProcess(),
                      "GFX: Only allowed to be called from parent process.");
@@ -1075,9 +1064,6 @@ void gfxPlatform::ReportTelemetry() {
       supportsHDR |= screen->GetIsHDR();
     }
     glean::gfx::supports_hdr.Set(supportsHDR);
-
-    bool tmpWritable = IsOsTempDirWritable();
-    glean::gfx::tmp_writable.Set(tmpWritable);
   }
 
   nsString adapterDesc;
@@ -3197,12 +3183,13 @@ void gfxPlatform::InitWebGPUConfig() {
 
   gfxVars::SetAllowWebGPU(feature.IsEnabled());
 
+  if (StaticPrefs::dom_webgpu_allow_present_without_readback()
 #if XP_WIN
-  if (IsWin10CreatorsUpdateOrLater() &&
-      StaticPrefs::dom_webgpu_allow_present_without_readback()) {
+      && IsWin10CreatorsUpdateOrLater()
+#endif
+  ) {
     gfxVars::SetAllowWebGPUPresentWithoutReadback(true);
   }
-#endif
 }
 
 #ifdef XP_WIN

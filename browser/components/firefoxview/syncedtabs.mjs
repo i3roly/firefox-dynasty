@@ -135,7 +135,6 @@ class SyncedTabsInView extends ViewPage {
     descriptionArray,
     descriptionLink,
     header,
-    headerIconUrl,
     mainImageUrl,
   }) {
     return html`
@@ -147,7 +146,6 @@ class SyncedTabsInView extends ViewPage {
         ?isSelectedTab=${this.selectedTab}
         ?isInnerCard=${this.recentBrowsing}
         mainImageUrl="${ifDefined(mainImageUrl)}"
-        headerIconUrl="${ifDefined(headerIconUrl)}"
         id="empty-container"
       >
         <button
@@ -390,7 +388,7 @@ class SyncedTabsInView extends ViewPage {
         <div class="syncedtabs-header">
           <div>
             <fxview-search-textbox
-              data-l10n-id="firefoxview-search-text-box-syncedtabs"
+              data-l10n-id="firefoxview-search-text-box-tabs"
               data-l10n-attrs="placeholder"
               @fxview-search-textbox-query=${this.onSearchQuery}
               .size=${this.searchTextboxSize}

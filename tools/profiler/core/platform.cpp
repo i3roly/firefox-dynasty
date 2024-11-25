@@ -462,9 +462,9 @@ Json::String ToCompactString(const Json::Value& aJsonValue) {
   return Json::writeString(builder, aJsonValue);
 }
 
-/* static */ mozilla::baseprofiler::detail::BaseProfilerMutex
+MOZ_RUNINIT /* static */ mozilla::baseprofiler::detail::BaseProfilerMutex
     ProfilingLog::gMutex;
-/* static */ mozilla::UniquePtr<Json::Value> ProfilingLog::gLog;
+MOZ_RUNINIT /* static */ mozilla::UniquePtr<Json::Value> ProfilingLog::gLog;
 
 /* static */ void ProfilingLog::Init() {
   mozilla::baseprofiler::detail::BaseProfilerAutoLock lock{gMutex};
@@ -516,7 +516,7 @@ class MOZ_RAII PSAutoLock {
   mozilla::baseprofiler::detail::BaseProfilerAutoLock mLock;
 };
 
-/* static */ mozilla::baseprofiler::detail::BaseProfilerMutex
+MOZ_RUNINIT /* static */ mozilla::baseprofiler::detail::BaseProfilerMutex
     PSAutoLock::gPSMutex{"Gecko Profiler mutex"};
 
 // Only functions that take a PSLockRef arg can access CorePS's and ActivePS's
@@ -1887,7 +1887,7 @@ using ProfilerStateChangeMutex =
     mozilla::baseprofiler::detail::BaseProfilerMutex;
 using ProfilerStateChangeLock =
     mozilla::baseprofiler::detail::BaseProfilerAutoLock;
-static ProfilerStateChangeMutex gProfilerStateChangeMutex;
+MOZ_RUNINIT static ProfilerStateChangeMutex gProfilerStateChangeMutex;
 
 struct IdentifiedProfilingStateChangeCallback {
   ProfilingStateSet mProfilingStateSet;
@@ -1905,7 +1905,7 @@ struct IdentifiedProfilingStateChangeCallback {
 using IdentifiedProfilingStateChangeCallbackUPtr =
     UniquePtr<IdentifiedProfilingStateChangeCallback>;
 
-static Vector<IdentifiedProfilingStateChangeCallbackUPtr>
+MOZ_RUNINIT static Vector<IdentifiedProfilingStateChangeCallbackUPtr>
     mIdentifiedProfilingStateChangeCallbacks;
 
 void profiler_add_state_change_callback(
@@ -5746,7 +5746,7 @@ void profiler_start_from_signal() {
       // start the profiler in content/child processes.
       profiler_start(PROFILER_DEFAULT_SIGHANDLE_ENTRIES,
                      PROFILER_DEFAULT_INTERVAL, features, filters,
-                     MOZ_ARRAY_LENGTH(filters), 0);
+                     std::size(filters), 0);
     } else {
       // Directly start the profiler on this thread. We know we're not the main
       // thread here, so this will not start the profiler in child processes,
@@ -5754,16 +5754,15 @@ void profiler_start_from_signal() {
       // stuck.
       profiler_start(PROFILER_DEFAULT_SIGHANDLE_ENTRIES,
                      PROFILER_DEFAULT_INTERVAL, features, filters,
-                     MOZ_ARRAY_LENGTH(filters), 0);
+                     std::size(filters), 0);
       // Now also try and start the profiler from the main thread, so that the
       // ParentProfiler will start child threads.
       NS_DispatchToMainThread(
           NS_NewRunnableFunction("StartProfilerInChildProcesses", [=] {
-            Unused << NotifyProfilerStarted(PROFILER_DEFAULT_SIGHANDLE_ENTRIES,
-                                            Nothing(),
-                                            PROFILER_DEFAULT_INTERVAL, features,
-                                            const_cast<const char**>(filters),
-                                            MOZ_ARRAY_LENGTH(filters), 0);
+            Unused << NotifyProfilerStarted(
+                PROFILER_DEFAULT_SIGHANDLE_ENTRIES, Nothing(),
+                PROFILER_DEFAULT_INTERVAL, features,
+                const_cast<const char**>(filters), std::size(filters), 0);
           }));
     }
   }
@@ -5893,6 +5892,10 @@ void profiler_init(void* aStackTop) {
   }
 
   SharedLibraryInfo::Initialize();
+
+  // We initialize here as well as in baseprofiler because
+  // baseprofiler init doesn't happen in child processes.
+  Flow::Init();
 
   uint32_t features = DefaultFeatures() & AvailableFeatures();
 

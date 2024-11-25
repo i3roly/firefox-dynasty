@@ -293,6 +293,8 @@ void JSRuntime::setTelemetryCallback(
 
 void JSRuntime::setUseCounter(JSObject* obj, JSUseCounter counter) {
   if (useCounterCallback) {
+    // A use counter callback cannot GC.
+    JS::AutoSuppressGCAnalysis suppress;
     (*useCounterCallback)(obj, counter);
   }
 }
@@ -858,4 +860,10 @@ void JSRuntime::ensureRealmIsRecordingAllocations(
     // debuggers and runtime profiling.
     global->realm()->chooseAllocationSamplingProbability();
   }
+}
+
+void js::HasSeenObjectEmulateUndefinedFuse::popFuse(JSContext* cx) {
+  js::InvalidatingRuntimeFuse::popFuse(cx);
+  MOZ_ASSERT(cx->global());
+  cx->runtime()->setUseCounter(cx->global(), JSUseCounter::ISHTMLDDA_FUSE);
 }

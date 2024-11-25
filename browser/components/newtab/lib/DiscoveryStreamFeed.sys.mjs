@@ -118,6 +118,8 @@ const PREF_CONTEXTUAL_CONTENT_FAKESPOT_CTA_COPY =
 const PREF_CONTEXTUAL_CONTENT_FAKESPOT_CTA_URL =
   "discoverystream.contextualContent.fakespot.ctaUrl";
 
+const PREF_SECTIONS_ENABLED = "discoverystream.sections.enabled";
+
 let getHardcodedLayout;
 
 export class DiscoveryStreamFeed {
@@ -1582,68 +1584,16 @@ export class DiscoveryStreamFeed {
   // eslint-disable-next-line max-statements
   async getComponentFeed(feedUrl, isStartup) {
     const cachedData = (await this.cache.get()) || {};
+    const prefs = this.store.getState().Prefs.values;
+    const sectionsEnabled = prefs[PREF_SECTIONS_ENABLED];
     let isFakespot;
-    let selectedFeed;
+    const selectedFeedPref = prefs[PREF_CONTEXTUAL_CONTENT_SELECTED_FEED];
+    let sections = [];
     const { feeds } = cachedData;
 
     let feed = feeds ? feeds[feedUrl] : null;
     if (this.isExpired({ cachedData, key: "feed", url: feedUrl, isStartup })) {
-      let options = {};
-      const headers = new Headers();
-      if (this.isMerino) {
-        const topicSelectionEnabled =
-          this.store.getState().Prefs.values[PREF_TOPIC_SELECTION_ENABLED];
-        const topicsString =
-          this.store.getState().Prefs.values[PREF_SELECTED_TOPICS];
-        const topics = topicSelectionEnabled
-          ? topicsString
-              .split(",")
-              .map(s => s.trim())
-              .filter(item => item)
-          : [];
-
-        // Should we pass the experiment branch and slug to the Merino feed request.
-        const prefMerinoFeedExperiment = Services.prefs.getBoolPref(
-          PREF_MERINO_FEED_EXPERIMENT
-        );
-
-        // Should we pass the feed param to the merino request
-        const contextualContentEnabled =
-          this.store.getState().Prefs.values[PREF_CONTEXTUAL_CONTENT_ENABLED];
-        selectedFeed =
-          this.store.getState().Prefs.values[
-            PREF_CONTEXTUAL_CONTENT_SELECTED_FEED
-          ];
-        isFakespot = selectedFeed === "fakespot";
-        const fakespotEnabled =
-          this.store.getState().Prefs.values[PREF_FAKESPOT_ENABLED];
-
-        const shouldFetchTBRFeed =
-          (contextualContentEnabled && !isFakespot) ||
-          (contextualContentEnabled && isFakespot && fakespotEnabled);
-
-        headers.append("content-type", "application/json");
-        options = {
-          method: "POST",
-          headers,
-          body: JSON.stringify({
-            ...(prefMerinoFeedExperiment ? this.getExperimentInfo() : {}),
-            locale: this.locale,
-            region: this.region,
-            topics,
-            ...(shouldFetchTBRFeed ? { feeds: [selectedFeed] } : {}),
-          }),
-        };
-      } else if (this.isBff) {
-        const oAuthConsumerKey = Services.prefs.getStringPref(
-          "extensions.pocket.oAuthConsumerKeyBff"
-        );
-        headers.append("consumer_key", oAuthConsumerKey);
-        options = {
-          method: "GET",
-          headers,
-        };
-      }
+      const options = this.formatComponentFeedRequest();
 
       const feedResponse = await this.fetchFromEndpoint(feedUrl, options);
 
@@ -1663,15 +1613,10 @@ export class DiscoveryStreamFeed {
             received_rank: item.receivedRank,
             recommended_at: feedResponse.recommendedAt,
           }));
-          if (feedResponse.feeds && selectedFeed) {
-            const selectedFeedPref =
-              this.store.getState().Prefs.values[
-                PREF_CONTEXTUAL_CONTENT_SELECTED_FEED
-              ];
-
+          if (feedResponse.feeds && selectedFeedPref && !sectionsEnabled) {
+            isFakespot = selectedFeedPref === "fakespot";
             const keyName = isFakespot ? "products" : "recommendations";
             const selectedFeedResponse = feedResponse.feeds[selectedFeedPref];
-
             selectedFeedResponse?.[keyName]?.forEach(item =>
               recommendations.push({
                 id: isFakespot ? item.id : item.tileId,
@@ -1685,53 +1630,50 @@ export class DiscoveryStreamFeed {
                 received_rank: item.receivedRank,
                 recommended_at: feedResponse.recommendedAt,
                 // property to determine if rec is used in ListFeed or not
-                feedName: selectedFeed,
+                feedName: selectedFeedPref,
                 category: item.category,
               })
             );
 
-            const prevTitle =
-              this.store.getState().Prefs.values[
-                PREF_CONTEXTUAL_CONTENT_LISTFEED_TITLE
-              ];
+            const prevTitle = prefs[PREF_CONTEXTUAL_CONTENT_LISTFEED_TITLE];
 
             const feedTitle = isFakespot
               ? selectedFeedResponse.headerCopy
               : selectedFeedResponse.title;
 
             if (feedTitle && feedTitle !== prevTitle) {
-              if (isFakespot) {
-                this.store.dispatch(
-                  ac.SetPref(PREF_CONTEXTUAL_CONTENT_LISTFEED_TITLE, feedTitle)
-                );
-                this.store.dispatch(
-                  ac.SetPref(
-                    PREF_CONTEXTUAL_CONTENT_FAKESPOT_CATEGORY,
-                    selectedFeedResponse.defaultCategoryName
-                  )
-                );
-                this.store.dispatch(
-                  ac.SetPref(
-                    PREF_CONTEXTUAL_CONTENT_FAKESPOT_FOOTER,
-                    selectedFeedResponse.footerCopy
-                  )
-                );
-                this.store.dispatch(
-                  ac.SetPref(
-                    PREF_CONTEXTUAL_CONTENT_FAKESPOT_CTA_COPY,
-                    selectedFeedResponse.cta.ctaCopy
-                  )
-                );
-                this.store.dispatch(
-                  ac.SetPref(
-                    PREF_CONTEXTUAL_CONTENT_FAKESPOT_CTA_URL,
-                    selectedFeedResponse.cta.url
-                  )
-                );
-              } else {
-                this.store.dispatch(
-                  ac.SetPref(PREF_CONTEXTUAL_CONTENT_LISTFEED_TITLE, feedTitle)
-                );
+              this.handleListfeedStrings(selectedFeedResponse, isFakespot);
+            }
+          }
+
+          if (sectionsEnabled) {
+            for (const [sectionKey, sectionData] of Object.entries(
+              feedResponse.feeds
+            )) {
+              if (sectionData) {
+                for (const item of sectionData.recommendations) {
+                  recommendations.push({
+                    id: item.tileId,
+                    scheduled_corpus_item_id: item.scheduledCorpusItemId,
+                    url: item.url,
+                    title: item.title,
+                    topic: item.topic,
+                    excerpt: item.excerpt,
+                    publisher: item.publisher,
+                    raw_image_src: item.imageUrl,
+                    received_rank: item.receivedRank,
+                    recommended_at: feedResponse.recommendedAt,
+                    // property to determine if rec is used in ListFeed or not
+                    section: sectionKey,
+                  });
+                }
+                sections.push({
+                  sectionKey,
+                  title: sectionData.title,
+                  subtitle: sectionData.subtitle || "",
+                  receivedRank: sectionData.receivedFeedRank,
+                  layout: sectionData.layout,
+                });
               }
             }
           }
@@ -1763,6 +1705,7 @@ export class DiscoveryStreamFeed {
           personalized,
           data: {
             settings,
+            sections,
             recommendations: rotatedItems,
             status: "success",
           },
@@ -1780,6 +1723,109 @@ export class DiscoveryStreamFeed {
         },
       }
     );
+  }
+
+  handleListfeedStrings(feedResponse, isFakespot) {
+    if (isFakespot) {
+      this.store.dispatch(
+        ac.SetPref(
+          PREF_CONTEXTUAL_CONTENT_LISTFEED_TITLE,
+          feedResponse.headerCopy
+        )
+      );
+      this.store.dispatch(
+        ac.SetPref(
+          PREF_CONTEXTUAL_CONTENT_FAKESPOT_CATEGORY,
+          feedResponse.defaultCategoryName
+        )
+      );
+      this.store.dispatch(
+        ac.SetPref(
+          PREF_CONTEXTUAL_CONTENT_FAKESPOT_FOOTER,
+          feedResponse.footerCopy
+        )
+      );
+      this.store.dispatch(
+        ac.SetPref(
+          PREF_CONTEXTUAL_CONTENT_FAKESPOT_CTA_COPY,
+          feedResponse.cta.ctaCopy
+        )
+      );
+      this.store.dispatch(
+        ac.SetPref(
+          PREF_CONTEXTUAL_CONTENT_FAKESPOT_CTA_URL,
+          feedResponse.cta.url
+        )
+      );
+    } else {
+      this.store.dispatch(
+        ac.SetPref(PREF_CONTEXTUAL_CONTENT_LISTFEED_TITLE, feedResponse.title)
+      );
+    }
+  }
+
+  formatComponentFeedRequest() {
+    const prefs = this.store.getState().Prefs.values;
+    const headers = new Headers();
+    if (this.isMerino) {
+      const topicSelectionEnabled = prefs[PREF_TOPIC_SELECTION_ENABLED];
+      const topicsString = prefs[PREF_SELECTED_TOPICS];
+      const topics = topicSelectionEnabled
+        ? topicsString
+            .split(",")
+            .map(s => s.trim())
+            .filter(item => item)
+        : [];
+
+      // Should we pass the experiment branch and slug to the Merino feed request.
+      const prefMerinoFeedExperiment = Services.prefs.getBoolPref(
+        PREF_MERINO_FEED_EXPERIMENT
+      );
+
+      headers.append("content-type", "application/json");
+      let body = {
+        ...(prefMerinoFeedExperiment ? this.getExperimentInfo() : {}),
+        locale: this.locale,
+        region: this.region,
+        topics,
+      };
+
+      const sectionsEnabled = prefs[PREF_SECTIONS_ENABLED];
+
+      // Should we pass the feed param to the merino request
+      const contextualContentEnabled = prefs[PREF_CONTEXTUAL_CONTENT_ENABLED];
+      const selectedFeed = prefs[PREF_CONTEXTUAL_CONTENT_SELECTED_FEED];
+      const isFakespot = selectedFeed === "fakespot";
+      const fakespotEnabled = prefs[PREF_FAKESPOT_ENABLED];
+
+      const shouldFetchTBRFeed =
+        (contextualContentEnabled && !isFakespot) ||
+        (contextualContentEnabled && isFakespot && fakespotEnabled);
+
+      if (shouldFetchTBRFeed) {
+        body.feeds = [selectedFeed];
+      }
+      if (sectionsEnabled) {
+        // if sections is enabled, it should override the TBR feed
+        body.feeds = ["sections"];
+      }
+
+      return {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+      };
+    } else if (this.isBff) {
+      const oAuthConsumerKey = Services.prefs.getStringPref(
+        "extensions.pocket.oAuthConsumerKeyBff"
+      );
+      headers.append("consumer_key", oAuthConsumerKey);
+      return {
+        method: "GET",
+        headers,
+      };
+    }
+    return {};
   }
 
   /**
@@ -2222,6 +2268,7 @@ export class DiscoveryStreamFeed {
       case PREF_UNIFIED_ADS_SPOCS_ENABLED:
       case PREF_CONTEXTUAL_CONTENT_ENABLED:
       case PREF_CONTEXTUAL_CONTENT_SELECTED_FEED:
+      case PREF_SECTIONS_ENABLED:
         // This is a config reset directly related to Discovery Stream pref.
         this.configReset();
         break;
@@ -2750,32 +2797,6 @@ getHardcodedLayout = ({
           newFooterSection,
           properties: {
             alignment: "left-align",
-            links: [
-              {
-                name: "Self improvement",
-                url: "https://getpocket.com/explore/self-improvement?utm_source=pocket-newtab",
-              },
-              {
-                name: "Food",
-                url: "https://getpocket.com/explore/food?utm_source=pocket-newtab",
-              },
-              {
-                name: "Entertainment",
-                url: "https://getpocket.com/explore/entertainment?utm_source=pocket-newtab",
-              },
-              {
-                name: "Health & fitness",
-                url: "https://getpocket.com/explore/health?utm_source=pocket-newtab",
-              },
-              {
-                name: "Science",
-                url: "https://getpocket.com/explore/science?utm_source=pocket-newtab",
-              },
-              {
-                name: "More recommendations ›",
-                url: "https://getpocket.com/explore?utm_source=pocket-newtab",
-              },
-            ],
             extraLinks: [
               {
                 name: "Career",
@@ -2791,11 +2812,6 @@ getHardcodedLayout = ({
               title: {
                 id: "newtab-section-menu-privacy-notice",
               },
-            },
-          },
-          header: {
-            title: {
-              id: "newtab-pocket-read-more",
             },
           },
           styles: {

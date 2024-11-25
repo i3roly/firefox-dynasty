@@ -138,6 +138,10 @@ const char* const XPCJSRuntime::mStrings[] = {
     "indexedDB",        // IDX_INDEXEDDB
     "structuredClone",  // IDX_STRUCTUREDCLONE
     "locks",            // IDX_LOCKS
+#ifdef ENABLE_EXPLICIT_RESOURCE_MANAGEMENT
+    "suppressed",  // IDX_SUPPRESSED
+    "error",       // IDX_ERROR
+#endif
 };
 
 /***************************************************************************/
@@ -2564,11 +2568,11 @@ static void AccumulateTelemetryCallback(JSMetric id, uint32_t sample) {
       Telemetry::Accumulate(Telemetry::NAME, sample); \
       break;
 
-    FOR_EACH_JS_METRIC(CASE_ACCUMULATE)
+    FOR_EACH_JS_LEGACY_METRIC(CASE_ACCUMULATE)
 #undef CASE_ACCUMULATE
 
     default:
-      MOZ_CRASH("Bad metric id");
+      break;
   }
   // clang-format on
 
@@ -2619,6 +2623,10 @@ static void AccumulateTelemetryCallback(JSMetric id, uint32_t sample) {
       glean::javascript_gc::slice_time.AccumulateRawDuration(
           TimeDuration::FromMilliseconds(sample));
       break;
+    case JSMetric::ION_COMPILE_TIME:
+      glean::javascript_ion::compile_time.AccumulateRawDuration(
+          TimeDuration::FromMicroseconds(sample));
+      break;
     default:
       // The rest aren't relayed to Glean.
       break;
@@ -2635,6 +2643,12 @@ static void SetUseCounterCallback(JSObject* obj, JSUseCounter counter) {
       return;
     case JSUseCounter::WASM_LEGACY_EXCEPTIONS:
       SetUseCounter(obj, eUseCounter_custom_JS_wasm_legacy_exceptions);
+      return;
+    case JSUseCounter::ISHTMLDDA_FUSE:
+      SetUseCounter(obj, eUseCounter_custom_JS_isHTMLDDA_fuse);
+      return;
+    case JSUseCounter::OPTIMIZE_GET_ITERATOR_FUSE:
+      SetUseCounter(obj, eUseCounter_custom_JS_OptimizeGetIterator_fuse);
       return;
     case JSUseCounter::COUNT:
       break;

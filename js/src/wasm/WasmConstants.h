@@ -879,8 +879,8 @@ enum class MiscOp {
 
 // Opcodes from threads proposal as of June 30, 2017
 enum class ThreadOp {
-  // Wait and wake
-  Wake = 0x00,
+  // Wait and notify
+  Notify = 0x00,
   I32Wait = 0x01,
   I64Wait = 0x02,
   Fence = 0x03,
@@ -985,6 +985,7 @@ enum class BuiltinInlineOp {
 
   StringCast,
   StringTest,
+  StringLength,
 
   // Op limit.
   Limit
@@ -1108,6 +1109,11 @@ struct OpBytes {
         return true;
     }
   }
+
+#ifdef DEBUG
+  // Defined in WasmOpIter.cpp
+  const char* toString() const;
+#endif
 };
 
 static const char NameSectionName[] = "name";

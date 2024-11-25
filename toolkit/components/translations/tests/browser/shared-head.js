@@ -100,7 +100,7 @@ async function openAboutTranslations({
   languagePairs = LANGUAGE_PAIRS,
   prefs,
   autoDownloadFromRemoteSettings = false,
-}) {
+} = {}) {
   await SpecialPowers.pushPrefEnv({
     set: [
       // Enabled by default.
@@ -182,6 +182,8 @@ async function openAboutTranslations({
       await EngineProcess.destroyTranslationsEngine();
 
       await SpecialPowers.popPrefEnv();
+      TestTranslationsTelemetry.reset();
+      Services.fog.testResetFOG();
     },
     resolveDownloads,
     rejectDownloads,
@@ -275,11 +277,34 @@ function upperCaseNode(node) {
 }
 
 /**
+ * Recursively transforms all child nodes to have diacriticized text. This is useful
+ * to spot multiple translations.
+ *
+ * @param {Node} node
+ */
+function diacriticizeNode(node) {
+  if (typeof node.nodeValue === "string") {
+    let result = "";
+    for (let i = 0; i < node.nodeValue.length; i++) {
+      const ch = node.nodeValue[i];
+      result += ch;
+      if ("abcdefghijklmnopqrstuvwxyz".includes(ch.toLowerCase())) {
+        result += "\u0305";
+      }
+    }
+    node.nodeValue = result;
+  }
+  for (const childNode of node.childNodes) {
+    diacriticizeNode(childNode);
+  }
+}
+
+/**
  * Creates a mocked message port for translations.
  *
  * @returns {MessagePort} This is mocked
  */
-function createMockedTranslatorPort(transformNode = upperCaseNode) {
+function createMockedTranslatorPort(transformNode = upperCaseNode, delay = 0) {
   const parser = new DOMParser();
   const mockedPort = {
     async postMessage(message) {
@@ -296,15 +321,18 @@ function createMockedTranslatorPort(transformNode = upperCaseNode) {
           });
           break;
         case "TranslationsPort:TranslationRequest": {
-          const { messageId, sourceText } = message;
+          const { translationId, sourceText } = message;
 
           const translatedDoc = parser.parseFromString(sourceText, "text/html");
           transformNode(translatedDoc.body);
+          if (delay) {
+            await new Promise(resolve => setTimeout(resolve, delay));
+          }
           mockedPort.onmessage({
             data: {
               type: "TranslationsPort:TranslationResponse",
               targetText: translatedDoc.body.innerHTML,
-              messageId,
+              translationId,
             },
           });
         }
@@ -312,6 +340,198 @@ function createMockedTranslatorPort(transformNode = upperCaseNode) {
     },
   };
   return mockedPort;
+}
+
+class TranslationResolver {
+  resolvers = Promise.withResolvers();
+  resolveCount = 0;
+  getPromise() {
+    return this.resolvers.promise;
+  }
+}
+
+/**
+ * Creates a mocked message port for translations.
+ *
+ * @returns {MessagePort} This is mocked
+ */
+function createControlledTranslatorPort() {
+  const parser = new DOMParser();
+
+  const canceledTranslations = new Set();
+  let resolvers = Promise.withResolvers();
+  let translationCount = 0;
+
+  async function resolveRequests() {
+    info("Resolving all pending translation requests");
+    await TestUtils.waitForTick();
+    resolvers.resolve();
+    resolvers = Promise.withResolvers();
+    await TestUtils.waitForTick();
+    const count = translationCount;
+    translationCount = 0;
+    return count;
+  }
+
+  const mockedTranslatorPort = {
+    async postMessage(message) {
+      switch (message.type) {
+        case "TranslationsPort:CancelSingleTranslation":
+          info("Canceling translation id:" + message.translationId);
+          canceledTranslations.add(message.translationId);
+          break;
+        case "TranslationsPort:GetEngineStatusRequest":
+          mockedTranslatorPort.onmessage({
+            data: {
+              type: "TranslationsPort:GetEngineStatusResponse",
+              status: "ready",
+            },
+          });
+          break;
+        case "TranslationsPort:TranslationRequest": {
+          const { translationId, sourceText } = message;
+
+          // Create a short debug version of the text.
+          let debugText = sourceText.trim().replaceAll("\n", "");
+          if (debugText.length > 50) {
+            debugText = debugText.slice(0, 50) + "...";
+          }
+
+          info(
+            `Translation requested (id:${message.translationId}) "${debugText}"`
+          );
+          await resolvers.promise;
+
+          if (canceledTranslations.has(translationId)) {
+            info("Cancelled translation id:" + translationId);
+          } else {
+            info(
+              "Translation completed, responding id:" + message.translationId
+            );
+            translationCount++;
+            const translatedDoc = parser.parseFromString(
+              sourceText,
+              "text/html"
+            );
+            diacriticizeNode(translatedDoc.body);
+            const targetText =
+              translatedDoc.body.innerHTML.trim() + ` (id:${translationId})`;
+
+            info("Translation response: " + targetText.replaceAll("\n", ""));
+            mockedTranslatorPort.onmessage({
+              data: {
+                type: "TranslationsPort:TranslationResponse",
+                targetText,
+                translationId,
+              },
+            });
+          }
+        }
+      }
+    },
+  };
+
+  return { mockedTranslatorPort, resolveRequests };
+}
+
+/**
+ * @type {typeof import("../../content/translations-document.sys.mjs")}
+ */
+const { TranslationsDocument, LRUCache } = ChromeUtils.importESModule(
+  "chrome://global/content/translations/translations-document.sys.mjs"
+);
+
+/**
+ * @param {string} html
+ * @param {{
+ *  mockedTranslatorPort?: (message: string) => Promise<string>,
+ *  mockedReportVisibleChange?: () => void
+ * }} [options]
+ */
+async function createTranslationsDoc(html, options) {
+  await SpecialPowers.pushPrefEnv({
+    set: [
+      ["browser.translations.enable", true],
+      ["browser.translations.logLevel", "All"],
+    ],
+  });
+
+  const parser = new DOMParser();
+  const document = parser.parseFromString(html, "text/html");
+
+  // For some reason, the document <body> here from the DOMParser is "display: flex" by
+  // default. Ensure that it is "display: block" instead, otherwise the children of the
+  // <body> will not be "display: inline".
+  document.body.style.display = "block";
+
+  const translate = () => {
+    info("Creating the TranslationsDocument.");
+    return new TranslationsDocument(
+      document,
+      "en",
+      "EN",
+      0, // This is a fake innerWindowID
+      options?.mockedTranslatorPort ?? createMockedTranslatorPort(),
+      () => {
+        throw new Error("Cannot request a new port");
+      },
+      options?.mockedReportVisibleChange ?? (() => {}),
+      performance.now(),
+      () => performance.now(),
+      new LRUCache()
+    );
+  };
+
+  /**
+   * Test utility to check that the document matches the expected markup
+   *
+   * @param {string} message
+   * @param {string} html
+   */
+  async function htmlMatches(message, html, element = document.body) {
+    const expected = naivelyPrettify(html);
+    try {
+      await waitForCondition(
+        () => naivelyPrettify(element.innerHTML) === expected,
+        "Waiting for HTML to match."
+      );
+      ok(true, message);
+    } catch (error) {
+      console.error(error);
+
+      // Provide a nice error message.
+      const actual = naivelyPrettify(element.innerHTML);
+      ok(
+        false,
+        `${message}\n\nExpected HTML:\n\n${expected}\n\nActual HTML:\n\n${actual}\n\n`
+      );
+    }
+  }
+
+  function cleanup() {
+    SpecialPowers.popPrefEnv();
+  }
+
+  return { htmlMatches, cleanup, translate, document };
+}
+
+/**
+ * Perform a double requestAnimationFrame, which is used by the TranslationsDocument
+ * to handle mutations.
+ *
+ * @param {Document} doc
+ */
+function doubleRaf(doc) {
+  return new Promise(resolve => {
+    doc.ownerGlobal.requestAnimationFrame(() => {
+      doc.ownerGlobal.requestAnimationFrame(() => {
+        resolve(
+          // Wait for a tick to be after anything that resolves with a double rAF.
+          TestUtils.waitForTick()
+        );
+      });
+    });
+  });
 }
 
 /**

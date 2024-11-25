@@ -7,6 +7,23 @@
 const { SelectableProfile } = ChromeUtils.importESModule(
   "resource:///modules/profiles/SelectableProfile.sys.mjs"
 );
+const { Sqlite } = ChromeUtils.importESModule(
+  "resource://gre/modules/Sqlite.sys.mjs"
+);
+
+const lazy = {};
+
+ChromeUtils.defineLazyGetter(lazy, "SelectableProfileService", () => {
+  const { SelectableProfileService } = ChromeUtils.importESModule(
+    "resource:///modules/profiles/SelectableProfileService.sys.mjs"
+  );
+
+  SelectableProfileService.overrideDirectoryService({
+    ProfD: getProfileService().currentProfile.rootDir,
+  });
+
+  return SelectableProfileService;
+});
 
 let gProfileServiceInitialised = false;
 
@@ -23,10 +40,7 @@ function startProfileService() {
 }
 
 function getSelectableProfileService() {
-  const { SelectableProfileService } = ChromeUtils.importESModule(
-    "resource:///modules/profiles/SelectableProfileService.sys.mjs"
-  );
-  return SelectableProfileService;
+  return lazy.SelectableProfileService;
 }
 
 /**
@@ -40,6 +54,41 @@ async function initSelectableProfileService() {
 
   await SelectableProfileService.init();
   await SelectableProfileService.maybeSetupDataStore();
+}
+
+function getRelativeProfilePath(path) {
+  let relativePath = path.getRelativePath(
+    Services.dirsvc.get("UAppData", Ci.nsIFile)
+  );
+
+  if (AppConstants.platform === "win") {
+    relativePath = relativePath.replace("/", "\\");
+  }
+
+  return relativePath;
+}
+
+// Waits for the profile service to update about a change
+async function updateNotified() {
+  let { resolve, promise } = Promise.withResolvers();
+  let observer = (subject, topic, data) => {
+    Services.obs.removeObserver(observer, "sps-profiles-updated");
+    resolve(data);
+  };
+
+  Services.obs.addObserver(observer, "sps-profiles-updated");
+
+  await promise;
+}
+
+async function openDatabase() {
+  let dbFile = Services.dirsvc.get("UAppData", Ci.nsIFile);
+  dbFile.append("Profile Groups");
+  dbFile.append(`${getProfileService().currentProfile.storeID}.sqlite`);
+  return Sqlite.openConnection({
+    path: dbFile.path,
+    openNotExclusive: true,
+  });
 }
 
 async function createTestProfile(profileData = {}) {
@@ -60,6 +109,6 @@ async function createTestProfile(profileData = {}) {
     path,
     themeBg: profileData.themeBg ?? "var(--background-color-box)",
     themeFg: profileData.themeFg ?? "var(--text-color)",
-    themeL10nId: profileData.themeL10nId ?? "default",
+    themeId: profileData.themeId ?? "default",
   });
 }

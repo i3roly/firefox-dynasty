@@ -111,6 +111,9 @@ using ValidatingOpIter = OpIter<ValidatingPolicy>;
 // Shared subtyping function across validation.
 
 [[nodiscard]] bool CheckIsSubtypeOf(Decoder& d, const CodeMetadata& codeMeta,
+                                    size_t opcodeOffset, ResultType subType,
+                                    ResultType superType);
+[[nodiscard]] bool CheckIsSubtypeOf(Decoder& d, const CodeMetadata& codeMeta,
                                     size_t opcodeOffset, StorageType subType,
                                     StorageType superType);
 
@@ -135,14 +138,14 @@ using ValidatingOpIter = OpIter<ValidatingPolicy>;
                                                 ValTypeVector* locals);
 
 // Returns whether the given [begin, end) prefix of a module's bytecode starts a
-// code section and, if so, returns the SectionRange of that code section.
+// code section and, if so, returns the BytecodeRange of that code section.
 // Note that, even if this function returns 'false', [begin, end) may actually
 // be a valid module in the special case when there are no function defs and the
 // code section is not present. Such modules can be valid so the caller must
 // handle this special case.
 
 [[nodiscard]] bool StartsCodeSection(const uint8_t* begin, const uint8_t* end,
-                                     SectionRange* codeSection);
+                                     BytecodeRange* codeSection);
 
 // Calling DecodeModuleEnvironment decodes all sections up to the code section
 // and performs full validation of all those sections. The client must then
@@ -156,6 +159,12 @@ using ValidatingOpIter = OpIter<ValidatingPolicy>;
 [[nodiscard]] bool ValidateFunctionBody(const CodeMetadata& codeMeta,
                                         uint32_t funcIndex, uint32_t bodySize,
                                         Decoder& d);
+#ifdef DEBUG
+[[nodiscard]] bool DumpFunctionBody(const CodeMetadata& codeMeta,
+                                    uint32_t funcIndex,
+                                    const uint8_t* bodyBegin, uint32_t bodySize,
+                                    IndentedPrinter& out, UniqueChars* error);
+#endif
 
 [[nodiscard]] bool DecodeModuleTail(Decoder& d, CodeMetadata* codeMeta,
                                     ModuleMetadata* meta);

@@ -255,7 +255,7 @@ nsresult nsHostResolver::Init() MOZ_NO_THREAD_SAFETY_ANALYSIS {
   } else {
     // We clamp down the idle time between 0 and one hour.
     poolTimeoutMs =
-        mozilla::clamped<uint32_t>(poolTimeoutSecs * 1000, 0, 3600 * 1000);
+        std::clamp<uint32_t>(poolTimeoutSecs * 1000, 0, 3600 * 1000);
   }
 
 #if defined(XP_WIN)
@@ -491,6 +491,7 @@ already_AddRefed<nsHostRecord> nsHostResolver::InitMockHTTPSRecord(
   }
 
   RefPtr<TypeHostRecord> typeRec = do_QueryObject(rec);
+  MutexAutoLock lock(typeRec->mResultsLock);
   typeRec->mResults = result;
   typeRec->negative = false;
   return rec.forget();
@@ -614,6 +615,7 @@ nsresult nsHostResolver::ResolveHost(const nsACString& aHost,
 
     if (IS_OTHER_TYPE(type) && originHost) {
       RefPtr<TypeHostRecord> typeRec = do_QueryObject(rec);
+      MutexAutoLock lock(typeRec->mResultsLock);
       typeRec->mOriginHost = std::move(originHost);
     }
 

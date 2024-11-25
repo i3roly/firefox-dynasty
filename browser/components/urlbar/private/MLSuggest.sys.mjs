@@ -13,24 +13,6 @@ ChromeUtils.defineESModuleGetters(lazy, {
   UrlbarPrefs: "resource:///modules/UrlbarPrefs.sys.mjs",
 });
 
-/**
- * These INTENT_OPTIONS and NER_OPTIONS will go to remote setting server and depends
- * on https://bugzilla.mozilla.org/show_bug.cgi?id=1923553
- */
-const INTENT_OPTIONS = {
-  taskName: "text-classification",
-  featureId: "suggest-intent-classification",
-  engineId: "ml-suggest-intent",
-  timeoutMS: -1,
-};
-
-const NER_OPTIONS = {
-  taskName: "token-classification",
-  featureId: "suggest-NER",
-  engineId: "ml-suggest-ner",
-  timeoutMS: -1,
-};
-
 // List of prepositions used in subject cleaning.
 const PREPOSITIONS = ["in", "at", "on", "for", "to", "near"];
 
@@ -42,6 +24,22 @@ const PREPOSITIONS = ["in", "at", "on", "for", "to", "near"];
 class _MLSuggest {
   #modelEngines = {};
 
+  INTENT_OPTIONS = {
+    taskName: "text-classification",
+    featureId: "suggest-intent-classification",
+    engineId: "ml-suggest-intent",
+    timeoutMS: -1,
+    numThreads: 2,
+  };
+
+  NER_OPTIONS = {
+    taskName: "token-classification",
+    featureId: "suggest-NER",
+    engineId: "ml-suggest-ner",
+    timeoutMS: -1,
+    numThreads: 2,
+  };
+
   // Helper to wrap createEngine for testing purpose
   createEngine(args) {
     return lazy.createEngine(args);
@@ -52,8 +50,8 @@ class _MLSuggest {
    */
   async initialize() {
     await Promise.all([
-      this.#initializeModelEngine(INTENT_OPTIONS),
-      this.#initializeModelEngine(NER_OPTIONS),
+      this.#initializeModelEngine(this.INTENT_OPTIONS),
+      this.#initializeModelEngine(this.NER_OPTIONS),
     ]);
   }
 
@@ -67,7 +65,17 @@ class _MLSuggest {
    *   The suggestion result including intent, location, and subject, or null if
    *   an error occurs.
    *   {string} intent
-   *     The predicted intent label of the query.
+   *     The predicted intent label of the query. Possible values include:
+   *       - 'information_intent': For queries seeking general information.
+   *       - 'yelp_intent': For queries related to local businesses or services.
+   *       - 'navigation_intent': For queries with navigation-related actions.
+   *       - 'travel_intent': For queries showing travel-related interests.
+   *       - 'purchase_intent': For queries with purchase or shopping intent.
+   *       - 'weather_intent': For queries asking about weather or forecasts.
+   *       - 'translation_intent': For queries seeking translations.
+   *       - 'unknown': When the intent cannot be classified with confidence.
+   *       - '' (empty string): Returned when model probabilities for all intents
+   *         are below the intent threshold.
    *   - {object|null} location: The detected location from the query, which is
    *     an object with `city` and `state` fields:
    *     - {string|null} city: The detected city, or `null` if no city is found.
@@ -98,11 +106,16 @@ class _MLSuggest {
       lazy.UrlbarPrefs.get("nerThreshold")
     );
 
+    const intentLabel = await this.#applyIntentThreshold(
+      intentRes,
+      lazy.UrlbarPrefs.get("intentThreshold")
+    );
+
     return {
-      intent: intentRes,
+      intent: intentLabel,
       location: locationResVal,
       subject: this.#findSubjectFromQuery(query, locationResVal),
-      metrics: this.#sumObjectsByKey(intentRes.metrics, nerResult.metrics),
+      metrics: { intent: intentRes.metrics, ner: nerResult.metrics },
     };
   }
 
@@ -142,11 +155,12 @@ class _MLSuggest {
    *   The user's input query.
    * @param {object} options
    *   The options for the engine pipeline
-   * @returns {string|null}
-   *   The predicted intent label or null if the model is not initialized.
+   * @returns {object[] | null}
+   *   The intent results or null if the model is not initialized.
    */
   async _findIntent(query, options = {}) {
-    const engineIntentClassifier = this.#modelEngines[INTENT_OPTIONS.engineId];
+    const engineIntentClassifier =
+      this.#modelEngines[this.INTENT_OPTIONS.engineId];
     if (!engineIntentClassifier) {
       return null;
     }
@@ -160,12 +174,11 @@ class _MLSuggest {
     } catch (error) {
       // engine could timeout or fail, so remove that from cache
       // and reinitialize
-      this.#modelEngines[INTENT_OPTIONS.engineId] = null;
-      this.#initializeModelEngine(INTENT_OPTIONS);
+      this.#modelEngines[this.INTENT_OPTIONS.engineId] = null;
+      this.#initializeModelEngine(this.INTENT_OPTIONS);
       return null;
     }
-    // Return the first label from the result
-    return res[0].label;
+    return res;
   }
 
   /**
@@ -180,16 +193,36 @@ class _MLSuggest {
    *   The NER results or null if the model is not initialized.
    */
   async _findNER(query, options = {}) {
-    const engineNER = this.#modelEngines[NER_OPTIONS.engineId];
+    const engineNER = this.#modelEngines[this.NER_OPTIONS.engineId];
     try {
       return engineNER?.run({ args: [query], options });
     } catch (error) {
       // engine could timeout or fail, so remove that from cache
       // and reinitialize
-      this.#modelEngines[NER_OPTIONS.engineId] = null;
-      this.#initializeModelEngine(NER_OPTIONS);
+      this.#modelEngines[this.NER_OPTIONS.engineId] = null;
+      this.#initializeModelEngine(this.NER_OPTIONS);
       return null;
     }
+  }
+
+  /**
+   * Applies a confidence threshold to determine the intent label.
+   *
+   * If the highest-scoring intent in the result exceeds the threshold, its label
+   * is returned; otherwise, the label defaults to 'unknown'.
+   *
+   * @param {object[]} intentResult
+   *   The result of the intent classification model, where each item includes
+   *   a `label` and `score`.
+   * @param {number} intentThreshold
+   *   The confidence threshold for accepting the intent label.
+   * @returns {string}
+   *   The determined intent label or 'unknown' if the threshold is not met.
+   */
+  async #applyIntentThreshold(intentResult, intentThreshold) {
+    return intentResult[0]?.score > intentThreshold
+      ? intentResult[0].label
+      : "";
   }
 
   /**
@@ -277,44 +310,24 @@ class _MLSuggest {
     if (!location || (!location.city && !location.state)) {
       return query;
     }
-    // Remove the city and state from the query
-    let subjectWithoutLocation = query;
-    if (location.city) {
-      subjectWithoutLocation = subjectWithoutLocation
-        .replace(location.city, "")
-        .trim();
-    }
-    if (location.state) {
-      subjectWithoutLocation = subjectWithoutLocation
-        .replace(location.state, "")
-        .trim();
-    }
-    // Remove leftover commas, trailing whitespace, and unnecessary punctuation
-    subjectWithoutLocation = subjectWithoutLocation
-      .replaceAll(",", "")
-      .replace(/\s+/g, " ")
-      .trim();
 
-    return this.#cleanSubject(subjectWithoutLocation);
+    // Remove the city and state values from the query
+    let locValues = Object.values(location).filter(v => !!v);
+    let words = query
+      .trim()
+      .split(/\s+|,/)
+      .filter(w => !!w && !locValues.includes(w));
+
+    let subjectWords = this.#cleanSubject(words);
+    return subjectWords.join(" ");
   }
 
-  #cleanSubject(subject) {
-    let end = PREPOSITIONS.find(
-      p => subject === p || subject.endsWith(" " + p)
-    );
-    if (end) {
-      subject = subject.substring(0, subject.length - end.length).trimEnd();
+  #cleanSubject(words) {
+    // Remove trailing prepositions from the list of words
+    while (words.length && PREPOSITIONS.includes(words[words.length - 1])) {
+      words.pop();
     }
-    return subject;
-  }
-
-  #sumObjectsByKey(...objs) {
-    return objs.reduce((a, b) => {
-      for (let k in b) {
-        if (b.hasOwnProperty(k)) a[k] = (a[k] || 0) + b[k];
-      }
-      return a;
-    }, {});
+    return words;
   }
 }
 

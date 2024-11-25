@@ -724,7 +724,7 @@ GLBlitHelper::GLBlitHelper(GLContext* const gl)
         }                                                                    \n\
     ";
   const char* const parts[] = {mDrawBlitProg_VersionLine.get(), kVertSource};
-  mGL->fShaderSource(mDrawBlitProg_VertShader, ArrayLength(parts), parts,
+  mGL->fShaderSource(mDrawBlitProg_VertShader, std::size(parts), parts,
                      nullptr);
   mGL->fCompileShader(mDrawBlitProg_VertShader);
 }
@@ -1617,7 +1617,7 @@ template <size_t N>
 static void PushUnorm(uint32_t* const out, const float inVal) {
   const uint32_t mask = (1 << N) - 1;
   auto fval = inVal;
-  fval = std::max(0.0f, std::min(fval, 1.0f));
+  fval = std::clamp(fval, 0.0f, 1.0f);
   fval *= mask;
   fval = roundf(fval);
   auto ival = static_cast<uint32_t>(fval);

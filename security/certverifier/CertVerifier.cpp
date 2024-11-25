@@ -59,7 +59,7 @@ CertVerifier::CertVerifier(OcspDownloadConfig odc, OcspStrictConfig osc,
                            mozilla::TimeDuration ocspTimeoutHard,
                            uint32_t certShortLifetimeInDays,
                            NetscapeStepUpPolicy netscapeStepUpPolicy,
-                           CertificateTransparencyMode ctMode,
+                           CertificateTransparencyConfig&& ctConfig,
                            CRLiteMode crliteMode,
                            const nsTArray<EnterpriseCert>& thirdPartyCerts)
     : mOCSPDownloadConfig(odc),
@@ -68,7 +68,7 @@ CertVerifier::CertVerifier(OcspDownloadConfig odc, OcspStrictConfig osc,
       mOCSPTimeoutHard(ocspTimeoutHard),
       mCertShortLifetimeInDays(certShortLifetimeInDays),
       mNetscapeStepUpPolicy(netscapeStepUpPolicy),
-      mCTMode(ctMode),
+      mCTConfig(std::move(ctConfig)),
       mCRLiteMode(crliteMode),
       mSignatureCache(
           signature_cache_new(
@@ -204,7 +204,7 @@ static Result BuildCertChainForOneKeyUsage(
 }
 
 void CertVerifier::LoadKnownCTLogs() {
-  if (mCTMode == CertificateTransparencyMode::Disabled) {
+  if (mCTConfig.mMode == CertificateTransparencyMode::Disabled) {
     return;
   }
   mCTVerifier = MakeUnique<MultiLogCTVerifier>();
@@ -230,28 +230,120 @@ void CertVerifier::LoadKnownCTLogs() {
   }
 }
 
+bool HostnameMatchesPolicy(const char* hostname, const nsCString& policy) {
+  // Some contexts don't have a hostname (mostly tests), in which case the
+  // policy doesn't apply.
+  if (!hostname) {
+    return false;
+  }
+  nsDependentCString hostnameString(hostname);
+  // The policy is a comma-separated list of entries of the form
+  // '.example.com', 'example.com', or an IP address.
+  for (const auto& entry : policy.Split(',')) {
+    if (entry.IsEmpty()) {
+      continue;
+    }
+    // For '.example.com' entries, exact matches match the policy.
+    if (entry[0] == '.' &&
+        Substring(entry, 1).EqualsIgnoreCase(hostnameString)) {
+      MOZ_LOG(gCertVerifierLog, LogLevel::Debug,
+              ("not enforcing CT for '%s' (matches policy '%s')", hostname,
+               policy.get()));
+      return true;
+    }
+    // For 'example.com' entries, exact matches or subdomains match the policy
+    // (IP addresses match here too).
+    if (StringEndsWith(hostnameString, entry) &&
+        (hostnameString.Length() == entry.Length() ||
+         hostnameString[hostnameString.Length() - entry.Length() - 1] == '.')) {
+      MOZ_LOG(gCertVerifierLog, LogLevel::Debug,
+              ("not enforcing CT for '%s' (matches policy '%s')", hostname,
+               policy.get()));
+      return true;
+    }
+  }
+  return false;
+}
+
+bool CertificateListHasSPKIHashIn(
+    const nsTArray<nsTArray<uint8_t>>& certificates,
+    const nsTArray<CopyableTArray<uint8_t>>& spkiHashes) {
+  if (spkiHashes.IsEmpty()) {
+    return false;
+  }
+  for (const auto& certificate : certificates) {
+    Input certificateInput;
+    if (certificateInput.Init(certificate.Elements(), certificate.Length()) !=
+        Success) {
+      return false;
+    }
+    // No path building is happening here, so this parameter doesn't matter.
+    EndEntityOrCA notUsedForPathBuilding = EndEntityOrCA::MustBeEndEntity;
+    BackCert decodedCertificate(certificateInput, notUsedForPathBuilding,
+                                nullptr);
+    if (decodedCertificate.Init() != Success) {
+      return false;
+    }
+    Input spki(decodedCertificate.GetSubjectPublicKeyInfo());
+    uint8_t spkiHash[SHA256_LENGTH];
+    if (DigestBufNSS(spki, DigestAlgorithm::sha256, spkiHash,
+                     sizeof(spkiHash)) != Success) {
+      return false;
+    }
+    Span spkiHashSpan(reinterpret_cast<const uint8_t*>(spkiHash),
+                      sizeof(spkiHash));
+    for (const auto& candidateSPKIHash : spkiHashes) {
+      if (Span(candidateSPKIHash) == spkiHashSpan) {
+        MOZ_LOG(gCertVerifierLog, LogLevel::Debug,
+                ("found SPKI hash match - not enforcing CT"));
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 Result CertVerifier::VerifyCertificateTransparencyPolicy(
     NSSCertDBTrustDomain& trustDomain,
     const nsTArray<nsTArray<uint8_t>>& builtChain, Input sctsFromTLS, Time time,
+    const char* hostname,
     /*optional out*/ CertificateTransparencyInfo* ctInfo) {
+  if (builtChain.IsEmpty()) {
+    return Result::FATAL_ERROR_INVALID_ARGS;
+  }
   if (ctInfo) {
     ctInfo->Reset();
   }
-  if (mCTMode == CertificateTransparencyMode::Disabled ||
+  if (mCTConfig.mMode == CertificateTransparencyMode::Disabled ||
       !trustDomain.GetIsBuiltChainRootBuiltInRoot()) {
     return Success;
   }
   if (time > TimeFromEpochInSeconds(kCTExpirationTime / PR_USEC_PER_SEC)) {
+    MOZ_LOG(gCertVerifierLog, LogLevel::Warning,
+            ("skipping CT - built-in information has expired"));
     return Success;
   }
   if (ctInfo) {
     ctInfo->enabled = true;
   }
 
-  if (builtChain.IsEmpty()) {
-    return Result::FATAL_ERROR_INVALID_ARGS;
+  Result rv = VerifyCertificateTransparencyPolicyInner(
+      trustDomain, builtChain, sctsFromTLS, time, ctInfo);
+  if (rv == Result::ERROR_INSUFFICIENT_CERTIFICATE_TRANSPARENCY &&
+      (mCTConfig.mMode != CertificateTransparencyMode::Enforce ||
+       HostnameMatchesPolicy(hostname, mCTConfig.mSkipForHosts) ||
+       CertificateListHasSPKIHashIn(builtChain,
+                                    mCTConfig.mSkipForSPKIHashes))) {
+    return Success;
   }
 
+  return rv;
+}
+
+Result CertVerifier::VerifyCertificateTransparencyPolicyInner(
+    NSSCertDBTrustDomain& trustDomain,
+    const nsTArray<nsTArray<uint8_t>>& builtChain, Input sctsFromTLS, Time time,
+    /*optional out*/ CertificateTransparencyInfo* ctInfo) {
   Input embeddedSCTs = trustDomain.GetSCTListFromCertificate();
   if (embeddedSCTs.GetLength() > 0) {
     MOZ_LOG(gCertVerifierLog, LogLevel::Debug,
@@ -284,9 +376,7 @@ Result CertVerifier::VerifyCertificateTransparencyPolicy(
       ctInfo->verifyResult = std::move(emptyResult);
       ctInfo->policyCompliance.emplace(CTPolicyCompliance::NotEnoughScts);
     }
-    return mCTMode == CertificateTransparencyMode::Enforce
-               ? Result::ERROR_INSUFFICIENT_CERTIFICATE_TRANSPARENCY
-               : Success;
+    return Result::ERROR_INSUFFICIENT_CERTIFICATE_TRANSPARENCY;
   }
 
   const nsTArray<uint8_t>& endEntityBytes = builtChain.ElementAt(0);
@@ -366,8 +456,7 @@ Result CertVerifier::VerifyCertificateTransparencyPolicy(
     ctInfo->policyCompliance.emplace(ctPolicyCompliance);
   }
 
-  if (ctPolicyCompliance != CTPolicyCompliance::Compliant &&
-      mCTMode == CertificateTransparencyMode::Enforce) {
+  if (ctPolicyCompliance != CTPolicyCompliance::Compliant) {
     return Result::ERROR_INSUFFICIENT_CERTIFICATE_TRANSPARENCY;
   }
 
@@ -532,8 +621,9 @@ Result CertVerifier::VerifyCert(
           *issuerSources = trustDomain.GetIssuerSources();
         }
         if (rv == Success) {
-          rv = VerifyCertificateTransparencyPolicy(
-              trustDomain, builtChain, sctsFromTLSInput, time, ctInfo);
+          rv = VerifyCertificateTransparencyPolicy(trustDomain, builtChain,
+                                                   sctsFromTLSInput, time,
+                                                   hostname, ctInfo);
         }
         if (rv == Success) {
           if (evStatus) {
@@ -560,11 +650,10 @@ Result CertVerifier::VerifyCert(
       KeySizeStatus keySizeStatuses[] = {KeySizeStatus::LargeMinimumSucceeded,
                                          KeySizeStatus::CompatibilityRisk};
 
-      static_assert(
-          MOZ_ARRAY_LENGTH(keySizeOptions) == MOZ_ARRAY_LENGTH(keySizeStatuses),
-          "keySize array lengths differ");
+      static_assert(std::size(keySizeOptions) == std::size(keySizeStatuses),
+                    "keySize array lengths differ");
 
-      size_t keySizeOptionsCount = MOZ_ARRAY_LENGTH(keySizeStatuses);
+      size_t keySizeOptionsCount = std::size(keySizeStatuses);
 
       for (size_t i = 0; i < keySizeOptionsCount && rv != Success; i++) {
         // invalidate any telemetry info relating to failed chains
@@ -604,8 +693,9 @@ Result CertVerifier::VerifyCert(
           rv = Result::ERROR_ADDITIONAL_POLICY_CONSTRAINT_FAILED;
         }
         if (rv == Success) {
-          rv = VerifyCertificateTransparencyPolicy(
-              trustDomain, builtChain, sctsFromTLSInput, time, ctInfo);
+          rv = VerifyCertificateTransparencyPolicy(trustDomain, builtChain,
+                                                   sctsFromTLSInput, time,
+                                                   hostname, ctInfo);
         }
         if (rv == Success) {
           if (keySizeStatus) {

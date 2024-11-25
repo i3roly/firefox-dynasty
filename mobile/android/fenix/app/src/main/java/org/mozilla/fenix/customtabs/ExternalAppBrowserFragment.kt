@@ -10,7 +10,6 @@ import android.view.ViewGroup
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.navArgs
@@ -39,6 +38,7 @@ import org.mozilla.fenix.components.toolbar.BrowserToolbarView
 import org.mozilla.fenix.components.toolbar.ToolbarMenu
 import org.mozilla.fenix.components.toolbar.ToolbarPosition
 import org.mozilla.fenix.components.toolbar.navbar.CustomTabNavBar
+import org.mozilla.fenix.components.toolbar.navbar.shouldAddNavigationBar
 import org.mozilla.fenix.compose.Divider
 import org.mozilla.fenix.ext.components
 import org.mozilla.fenix.ext.nav
@@ -47,6 +47,7 @@ import org.mozilla.fenix.ext.runIfFragmentIsAttached
 import org.mozilla.fenix.ext.settings
 import org.mozilla.fenix.settings.quicksettings.protections.cookiebanners.getCookieBannerUIMode
 import org.mozilla.fenix.theme.FirefoxTheme
+import org.mozilla.fenix.theme.Theme
 
 /**
  * Fragment used for browsing the web within external apps.
@@ -224,11 +225,14 @@ class ExternalAppBrowserFragment : BaseBrowserFragment() {
         ContextMenuSnackbarDelegate(),
     )
 
+    @Suppress("LongMethod")
     private fun initializeNavBar() {
         // Update the contents of the bottomToolbarContainer with the CustomTabNavBar configuration
-        // only if the container was initialized in the parent - we know a navbar should be used.
+        // only if a navbar should be used and it was initialized in the parent.
         // Follow up: https://bugzilla.mozilla.org/show_bug.cgi?id=1888300
-        _bottomToolbarContainerView ?: return
+        if (context?.shouldAddNavigationBar() != true || _bottomToolbarContainerView == null) {
+            return
+        }
 
         val customTabSessionId = customTabSessionId ?: return
 
@@ -239,12 +243,17 @@ class ExternalAppBrowserFragment : BaseBrowserFragment() {
             toolbar = browserToolbarView,
         )
 
+        val openLinkInPrivate = requireContext().settings().openLinksInAPrivateTab
         val isToolbarAtBottom = requireComponents.settings.toolbarPosition == ToolbarPosition.BOTTOM
         bottomToolbarContainerView.updateContent {
-            FirefoxTheme {
-                val background = navbarIntegration.backgroundColor?.let { Color(it) } ?: FirefoxTheme.colors.layer1
+            val customTabTheme = if (openLinkInPrivate) {
+                Theme.Private
+            } else {
+                Theme.getTheme()
+            }
+            FirefoxTheme(theme = customTabTheme) {
                 Column(
-                    modifier = Modifier.background(background),
+                    modifier = Modifier.background(FirefoxTheme.colors.layer1),
                 ) {
                     if (isToolbarAtBottom) {
                         // If the toolbar is reinitialized - for example after the screen is rotated
@@ -290,12 +299,11 @@ class ExternalAppBrowserFragment : BaseBrowserFragment() {
                                 ExternalAppBrowserFragmentDirections.actionGlobalMenuDialogFragment(
                                     accesspoint = MenuAccessPoint.External,
                                     customTabSessionId = customTabSessionId,
+                                    isSandboxCustomTab = args.isSandboxCustomTab,
                                 ),
                             )
                         },
-                        backgroundColor = background,
-                        buttonTint = navbarIntegration.buttonTint,
-                        buttonDisabledTint = navbarIntegration.buttonDisabledTint,
+                        isSandboxCustomTab = args.isSandboxCustomTab,
                         onVisibilityUpdated = {
                             configureEngineViewWithDynamicToolbarsMaxHeight()
                         },

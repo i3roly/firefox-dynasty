@@ -100,22 +100,19 @@ struct BuiltinModuleIds {
 
 struct FeatureOptions {
   FeatureOptions()
-      : isBuiltinModule(false),
+      : disableOptimizingCompiler(false),
+        isBuiltinModule(false),
         jsStringBuiltins(false),
-        jsStringConstants(false)
-#ifdef ENABLE_WASM_GC
-        ,
-        requireGC(false)
-#endif
-#ifdef ENABLE_WASM_TAIL_CALLS
-        ,
-        requireTailCalls(false)
-#endif
-  {
-  }
+        jsStringConstants(false),
+        requireExnref(false) {}
+
+  // Whether we should try to disable our optimizing compiler. Only available
+  // with `IsSimdPrivilegedContext`.
+  bool disableOptimizingCompiler;
 
   // Enables builtin module opcodes, only set in WasmBuiltinModule.cpp.
   bool isBuiltinModule;
+
   // Enable JS String builtins for this module, only available if the feature
   // is also enabled.
   bool jsStringBuiltins;
@@ -124,14 +121,8 @@ struct FeatureOptions {
   bool jsStringConstants;
   SharedChars jsStringConstantsNamespace;
 
-#ifdef ENABLE_WASM_GC
-  // Enable GC support.
-  bool requireGC;
-#endif
-#ifdef ENABLE_WASM_TAIL_CALLS
-  // Enable tail-calls support.
-  bool requireTailCalls;
-#endif
+  // Enable exnref support.
+  bool requireExnref;
 
   // Parse the compile options bag.
   [[nodiscard]] bool init(JSContext* cx, HandleValue val);

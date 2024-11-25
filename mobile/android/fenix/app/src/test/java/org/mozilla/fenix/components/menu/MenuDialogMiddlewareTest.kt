@@ -188,6 +188,7 @@ class MenuDialogMiddlewareTest {
         // Wait for UpdateExtensionState and middleware
         store.waitUntilIdle()
 
+        assertTrue(store.state.extensionMenuState.availableAddons.isEmpty())
         assertEquals(1, store.state.extensionMenuState.recommendedAddons.size)
         assertEquals(addon, store.state.extensionMenuState.recommendedAddons.first())
         assertTrue(store.state.extensionMenuState.showExtensionsOnboarding)
@@ -202,6 +203,7 @@ class MenuDialogMiddlewareTest {
                 installedState = Addon.InstalledState(
                     id = "id",
                     version = "1.0",
+                    enabled = true,
                     optionsPageUrl = "",
                 ),
             )
@@ -218,6 +220,38 @@ class MenuDialogMiddlewareTest {
             // Wait for UpdateExtensionState and middleware
             store.waitUntilIdle()
 
+            assertEquals(1, store.state.extensionMenuState.availableAddons.size)
+            assertTrue(store.state.extensionMenuState.recommendedAddons.isEmpty())
+            assertFalse(store.state.extensionMenuState.showExtensionsOnboarding)
+            assertTrue(store.state.extensionMenuState.shouldShowManageExtensionsMenuItem)
+        }
+
+    @Test
+    fun `GIVEN at least one addon is installed and not enabled WHEN init action is dispatched THEN initial extension state is updated`() =
+        runTestOnMain {
+            val addon = Addon(
+                id = "ext",
+                installedState = Addon.InstalledState(
+                    id = "id",
+                    version = "1.0",
+                    enabled = false,
+                    optionsPageUrl = "",
+                ),
+            )
+
+            whenever(addonManager.getAddons()).thenReturn(listOf(addon))
+
+            val store = createStore()
+
+            assertEquals(0, store.state.extensionMenuState.recommendedAddons.size)
+
+            // Wait for InitAction and middleware
+            store.waitUntilIdle()
+
+            // Wait for UpdateExtensionState and middleware
+            store.waitUntilIdle()
+
+            assertTrue(store.state.extensionMenuState.availableAddons.isEmpty())
             assertTrue(store.state.extensionMenuState.recommendedAddons.isEmpty())
             assertFalse(store.state.extensionMenuState.showExtensionsOnboarding)
             assertTrue(store.state.extensionMenuState.shouldShowManageExtensionsMenuItem)
@@ -675,26 +709,6 @@ class MenuDialogMiddlewareTest {
     }
 
     @Test
-    fun `WHEN delete browsing data and quit action is dispatched THEN onDeleteAndQuit is invoked`() = runTestOnMain {
-        var dismissWasCalled = false
-
-        val appStore = spy(AppStore())
-        val store = createStore(
-            appStore = appStore,
-            menuState = MenuState(
-                browserMenuState = null,
-            ),
-            onDismiss = { dismissWasCalled = true },
-        )
-
-        store.dispatch(MenuAction.DeleteBrowsingDataAndQuit).join()
-        store.waitUntilIdle()
-
-        verify(onDeleteAndQuit).invoke()
-        assertTrue(dismissWasCalled)
-    }
-
-    @Test
     fun `GIVEN selected tab has external app WHEN open in app action is dispatched THEN the site is opened in app`() = runTestOnMain {
         val url = "https://www.mozilla.org"
         val title = "Mozilla"
@@ -975,26 +989,6 @@ class MenuDialogMiddlewareTest {
 
         verify(appStore).dispatch(FindInPageAction.FindInPageStarted)
         assertTrue(dismissWasCalled)
-    }
-
-    @Test
-    fun `WHEN CFR is dismissed THEN dismiss CFR action is dispatched`() = runTestOnMain {
-        var dismissWasCalled = false
-
-        val appStore = spy(AppStore())
-        val store = createStore(
-            appStore = appStore,
-            menuState = MenuState(
-                browserMenuState = null,
-            ),
-            onDismiss = { dismissWasCalled = true },
-        )
-
-        store.dispatch(MenuAction.DismissCFR)
-        store.waitUntilIdle()
-
-        assertFalse(settings.shouldShowMenuCFR)
-        assertFalse(dismissWasCalled)
     }
 
     @Test

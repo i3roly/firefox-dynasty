@@ -25,7 +25,6 @@ tasks-from:
     - android-lint.yml
     - buildconfig.yml
     - clang.yml
-    - cram.yml
     - doc.yml
     - file-metadata.yml
     - jsshell.yml
@@ -42,6 +41,7 @@ tasks-from:
     - webcompat.yml
     - wpt-manifest.yml
     - wpt-metadata.yml
+    - wpt-unittest.yml
 
 task-defaults:
     use-python: default
