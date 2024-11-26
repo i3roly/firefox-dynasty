@@ -664,6 +664,68 @@ public:
 };
 } // namespace
 
+/*
+ *  Our subpixel resolution is only 2 bits in each direction, so a scale of 4
+ *  seems sufficient, and possibly even correct, to allow the hinted outline
+ *  to be subpixel positioned.
+ */
+#define kScaleForSubPixelPositionHinting (4.0f)
+
+bool SkScalerContext_Mac::generatePath(const SkGlyph& glyph, SkPath* path, bool* modified) {
+    if(isMavericks())
+        return false;
+    SkScalar scaleX = SK_Scalar1;
+    SkScalar scaleY = SK_Scalar1;
+
+    CGAffineTransform xform = fTransform;
+    /*
+     *  For subpixel positioning, we want to return an unhinted outline, so it
+     *  can be positioned nicely at fractional offsets. However, we special-case
+     *  if the baseline of the (horizontal) text is axis-aligned. In those cases
+     *  we want to retain hinting in the direction orthogonal to the baseline.
+     *  e.g. for horizontal baseline, we want to retain hinting in Y.
+     *  The way we remove hinting is to scale the font by some value (4) in that
+     *  direction, ask for the path, and then scale the path back down.
+     */
+    if (fDoSubPosition) {
+        // start out by assuming that we want no hining in X and Y
+        scaleX = scaleY = kScaleForSubPixelPositionHinting;
+        // now see if we need to restore hinting for axis-aligned baselines
+        switch (this->computeAxisAlignmentForHText()) {
+            case SkAxisAlignment::kX:
+                scaleY = SK_Scalar1; // want hinting in the Y direction
+                break;
+            case SkAxisAlignment::kY:
+                scaleX = SK_Scalar1; // want hinting in the X direction
+                break;
+            default:
+                break;
+        }
+
+        CGAffineTransform scale(CGAffineTransformMakeScale(SkScalarToCGFloat(scaleX),
+                                                           SkScalarToCGFloat(scaleY)));
+        xform = CGAffineTransformConcat(fTransform, scale);
+    }
+
+    CGGlyph cgGlyph = SkTo<CGGlyph>(glyph.getGlyphID());
+    SkUniqueCFRef<CGPathRef> cgPath(CTFontCreatePathForGlyph(fCTFont.get(), cgGlyph, &xform));
+
+    path->reset();
+    if (!cgPath) {
+        return false;
+    }
+
+    SkCTPathGeometrySink sink;
+    CGPathApply(cgPath.get(), &sink, SkCTPathGeometrySink::ApplyElement);
+    *path = sink.detach();
+    if (fDoSubPosition) {
+        SkMatrix m;
+        m.setScale(SkScalarInvert(scaleX), SkScalarInvert(scaleY));
+        path->transform(m);
+    }
+    return true;
+}
+
 void SkScalerContext_Mac::generateFontMetrics(SkFontMetrics* metrics) {
     if (nullptr == metrics) {
         return;
