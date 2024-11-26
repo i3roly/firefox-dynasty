@@ -771,6 +771,7 @@ class DiscoveryStreamAdminUI extends (external_React_default()).PureComponent {
     } = e.target;
     this.props.dispatch(actionCreators.SetPref("discoverystream.sections.enabled", pressed));
     this.props.dispatch(actionCreators.SetPref("discoverystream.sections.cards.enabled", pressed));
+    this.props.dispatch(actionCreators.SetPref("discoverystream.sections.cards.thumbsUpDown.enabled", pressed));
   }
   renderComponent(width, component) {
     return /*#__PURE__*/external_React_default().createElement("table", null, /*#__PURE__*/external_React_default().createElement("tbody", null, /*#__PURE__*/external_React_default().createElement(Row, null, /*#__PURE__*/external_React_default().createElement("td", {
@@ -1509,13 +1510,14 @@ class _ContextMenuItem extends (external_React_default()).PureComponent {
     const {
       option
     } = this.props;
-    const className = [option.disabled ? "disabled" : ""].join(" ");
+    const listItemClassNames = [option.className || ""].join(" ");
+    const buttonClassNames = [option.disabled ? "disabled" : ""].join(" ");
     return /*#__PURE__*/external_React_default().createElement("li", {
       role: "presentation",
-      className: "context-menu-item"
+      className: `context-menu-item ${listItemClassNames}`
     }, /*#__PURE__*/external_React_default().createElement("button", {
-      className: className,
       role: "menuitem",
+      className: buttonClassNames,
       onClick: this.onClick,
       onKeyDown: this.onKeyDown,
       onKeyUp: this.onKeyUp,
@@ -2128,6 +2130,10 @@ class DSLinkMenu extends (external_React_default()).PureComponent {
     if (!this.props.isRecentSave) {
       if (this.props.pocket_button_enabled) {
         pocketMenuOptions = this.props.saveToPocketCard ? ["CheckDeleteFromPocket"] : ["CheckSavedToPocket"];
+      }
+      // Override pocketMenuOptions to add Save to Pocket btn link to all section cards
+      if (this.props.isSectionsCard) {
+        pocketMenuOptions = ["CheckSavedToPocket"];
       }
       TOP_STORIES_CONTEXT_MENU_OPTIONS = ["CheckBookmark", "CheckArchiveFromPocket", ...pocketMenuOptions, "Separator", "OpenInNewWindow", "OpenInPrivateWindow", "Separator", "BlockUrl", ...(this.props.showPrivacyInfo ? ["ShowPrivacyInfo"] : [])];
     }
@@ -2982,7 +2988,8 @@ const DefaultMeta = ({
   state,
   format,
   topic,
-  isSectionsCard
+  isSectionsCard,
+  showTopics
 }) => /*#__PURE__*/external_React_default().createElement("div", {
   className: "meta"
 }, /*#__PURE__*/external_React_default().createElement("div", {
@@ -2994,11 +3001,11 @@ const DefaultMeta = ({
   context: context,
   sponsor: sponsor,
   sponsored_by_override: sponsored_by_override
-}), format !== "rectangle" && /*#__PURE__*/external_React_default().createElement((external_React_default()).Fragment, null, /*#__PURE__*/external_React_default().createElement("header", {
+}), format !== "rectangle" && /*#__PURE__*/external_React_default().createElement((external_React_default()).Fragment, null, /*#__PURE__*/external_React_default().createElement("h3", {
   className: "title clamp"
 }, title), excerpt && /*#__PURE__*/external_React_default().createElement("p", {
   className: "excerpt clamp"
-}, excerpt)), format === "rectangle" && /*#__PURE__*/external_React_default().createElement((external_React_default()).Fragment, null, /*#__PURE__*/external_React_default().createElement("header", {
+}, excerpt)), format === "rectangle" && /*#__PURE__*/external_React_default().createElement((external_React_default()).Fragment, null, /*#__PURE__*/external_React_default().createElement("h3", {
   className: "title clamp"
 }, "Sponsored"), /*#__PURE__*/external_React_default().createElement("p", {
   className: "excerpt clamp"
@@ -3010,7 +3017,13 @@ const DefaultMeta = ({
   isThumbsUpActive: state.isThumbsUpActive
 }), isSectionsCard && /*#__PURE__*/external_React_default().createElement("div", {
   className: "sections-card-footer"
-}, /*#__PURE__*/external_React_default().createElement("span", {
+}, !isListCard && format !== "rectangle" && mayHaveSectionsCards && mayHaveThumbsUpDown && /*#__PURE__*/external_React_default().createElement(DSThumbsUpDownButtons, {
+  onThumbsDownClick: onThumbsDownClick,
+  onThumbsUpClick: onThumbsUpClick,
+  sponsor: sponsor,
+  isThumbsDownActive: state.isThumbsDownActive,
+  isThumbsUpActive: state.isThumbsUpActive
+}), showTopics && /*#__PURE__*/external_React_default().createElement("span", {
   className: "ds-card-topic",
   "data-l10n-id": `newtab-topic-label-${topic}`
 })), !newSponsoredLabel && /*#__PURE__*/external_React_default().createElement(DSContextFooter, {
@@ -3563,7 +3576,7 @@ class _DSCard extends (external_React_default()).PureComponent {
       className: "meta"
     }, /*#__PURE__*/external_React_default().createElement("div", {
       className: "info-wrap"
-    }, /*#__PURE__*/external_React_default().createElement("header", {
+    }, /*#__PURE__*/external_React_default().createElement("h3", {
       className: "title clamp"
     }, this.props.title))) : /*#__PURE__*/external_React_default().createElement(DefaultMeta, {
       source: source,
@@ -3585,7 +3598,8 @@ class _DSCard extends (external_React_default()).PureComponent {
       onThumbsDownClick: this.onThumbsDownClick,
       state: this.state,
       isListCard: isListCard,
-      isSectionsCard: this.props.showTopics && this.props.mayHaveSectionsCards && this.props.topic && !isListCard,
+      showTopics: this.props.showTopics,
+      isSectionsCard: this.props.mayHaveSectionsCards && this.props.topic && !isListCard,
       format: format,
       topic: this.props.topic
     }), /*#__PURE__*/external_React_default().createElement("div", {
@@ -3620,7 +3634,8 @@ class _DSCard extends (external_React_default()).PureComponent {
       is_list_card: this.props.isListCard,
       section: this.props.section,
       section_position: this.props.sectionPosition,
-      format: format
+      format: format,
+      isSectionsCard: this.props.mayHaveSectionsCards
     }))));
   }
 }
@@ -4049,6 +4064,7 @@ function ListFeed({
 
 
 const PREF_ONBOARDING_EXPERIENCE_DISMISSED = "discoverystream.onboardingExperience.dismissed";
+const PREF_SECTIONS_CARDS_ENABLED = "discoverystream.sections.cards.enabled";
 const PREF_THUMBS_UP_DOWN_ENABLED = "discoverystream.thumbsUpDown.enabled";
 const PREF_TOPICS_ENABLED = "discoverystream.topicLabels.enabled";
 const PREF_TOPICS_SELECTED = "discoverystream.topicSelection.selectedTopics";
@@ -4329,6 +4345,7 @@ class _CardGrid extends (external_React_default()).PureComponent {
     } = DiscoveryStream;
     const showRecentSaves = prefs.showRecentSaves && recentSavesEnabled;
     const isOnboardingExperienceDismissed = prefs[PREF_ONBOARDING_EXPERIENCE_DISMISSED];
+    const mayHaveSectionsCards = prefs[PREF_SECTIONS_CARDS_ENABLED];
     const mayHaveThumbsUpDown = prefs[PREF_THUMBS_UP_DOWN_ENABLED];
     const showTopics = prefs[PREF_TOPICS_ENABLED];
     const selectedTopics = prefs[PREF_TOPICS_SELECTED];
@@ -4381,6 +4398,7 @@ class _CardGrid extends (external_React_default()).PureComponent {
         recommendation_id: rec.recommendation_id,
         firstVisibleTimestamp: this.props.firstVisibleTimestamp,
         mayHaveThumbsUpDown: mayHaveThumbsUpDown,
+        mayHaveSectionsCards: mayHaveSectionsCards,
         scheduled_corpus_item_id: rec.scheduled_corpus_item_id,
         recommended_at: rec.recommended_at,
         received_rank: rec.received_rank,
@@ -9235,6 +9253,21 @@ const selectLayoutRender = ({ state = {}, prefs = {} }) => {
     filterArray.push(...DS_COMPONENTS);
   }
 
+  // function to determine amount of tiles shown per section per viewport
+  function getMaxTiles(responsiveLayouts) {
+    return responsiveLayouts
+      .flatMap(responsiveLayout => responsiveLayout)
+      .reduce((acc, t) => {
+        acc[t.columnCount] = t.tiles.length;
+
+        // Update maxTile if current tile count is greater
+        if (!acc.maxTile || t.tiles.length > acc.maxTile) {
+          acc.maxTile = t.tiles.length;
+        }
+        return acc;
+      }, {});
+  }
+
   const placeholderComponent = component => {
     if (!component.feed) {
       // TODO we now need a placeholder for topsites and textPromo.
@@ -9247,6 +9280,14 @@ const selectLayoutRender = ({ state = {}, prefs = {} }) => {
     }
     const data = {
       recommendations: [],
+      sections: [
+        {
+          layout: {
+            responsiveLayouts: [],
+          },
+          data: [],
+        },
+      ],
     };
 
     let items = 0;
@@ -9257,11 +9298,18 @@ const selectLayoutRender = ({ state = {}, prefs = {} }) => {
       data.recommendations.push({ placeholder: true });
     }
 
+    const sectionsEnabled = prefs["discoverystream.sections.enabled"];
+    if (sectionsEnabled) {
+      for (let i = 0; i < items; i++) {
+        data.sections[0].data.push({ placeholder: true });
+      }
+    }
+
     return { ...component, data };
   };
 
   // TODO update devtools to show placements
-  const handleSpocs = (data, spocsPositions, spocsPlacement) => {
+  const handleSpocs = (data = [], spocsPositions, spocsPlacement) => {
     let result = [...data];
     // Do we ever expect to possibly have a spoc.
     if (spocsPositions?.length) {
@@ -9408,6 +9456,23 @@ const selectLayoutRender = ({ state = {}, prefs = {} }) => {
       };
     }
 
+    // Setup absolute positions for sections layout.
+    if (sectionsEnabled) {
+      let currentPosition = 0;
+      data.sections.forEach(section => {
+        // We assume the count for the breakpoint with the most tiles.
+        const { maxTile } = getMaxTiles(section?.layout?.responsiveLayouts);
+        for (let i = 0; i < maxTile; i++) {
+          if (section.data[i]) {
+            section.data[i] = {
+              ...section.data[i],
+              pos: currentPosition++,
+            };
+          }
+        }
+      });
+    }
+
     return { ...component, data };
   };
 
@@ -9508,7 +9573,8 @@ function useIntersectionObserver(callback, options = {
 
 
 // Prefs
-const PREF_SECTIONS_CARDS_ENABLED = "discoverystream.sections.cards.enabled";
+const CardSections_PREF_SECTIONS_CARDS_ENABLED = "discoverystream.sections.cards.enabled";
+const PREF_SECTIONS_CARDS_THUMBS_UP_DOWN_ENABLED = "discoverystream.sections.cards.thumbsUpDown.enabled";
 const CardSections_PREF_TOPICS_ENABLED = "discoverystream.topicLabels.enabled";
 const CardSections_PREF_TOPICS_SELECTED = "discoverystream.topicSelection.selectedTopics";
 const CardSections_PREF_TOPICS_AVAILABLE = "discoverystream.topicSelection.topics";
@@ -9528,13 +9594,17 @@ function CardSections({
     recommendations,
     sections
   } = data;
-  const isEmpty = recommendations?.length === 0 || !sections;
+  const isEmpty = !recommendations?.length || !sections;
   const prefs = (0,external_ReactRedux_namespaceObject.useSelector)(state => state.Prefs.values);
   const showTopics = prefs[CardSections_PREF_TOPICS_ENABLED];
-  const mayHaveSectionsCards = prefs[PREF_SECTIONS_CARDS_ENABLED];
+  const mayHaveSectionsCards = prefs[CardSections_PREF_SECTIONS_CARDS_ENABLED];
+  const mayHaveSectionsCardsThumbsUpDown = prefs[PREF_SECTIONS_CARDS_THUMBS_UP_DOWN_ENABLED];
   const mayHaveThumbsUpDown = prefs[CardSections_PREF_THUMBS_UP_DOWN_ENABLED];
   const selectedTopics = prefs[CardSections_PREF_TOPICS_SELECTED];
   const availableTopics = prefs[CardSections_PREF_TOPICS_AVAILABLE];
+  const {
+    saveToPocketCard
+  } = (0,external_ReactRedux_namespaceObject.useSelector)(state => state.DiscoveryStream);
   const handleIntersection = (0,external_React_namespaceObject.useCallback)(el => {
     dispatch(actionCreators.AlsoToMain({
       type: actionTypes.CARD_SECTION_IMPRESSION,
@@ -9552,21 +9622,27 @@ function CardSections({
   if (!data) {
     return null;
   }
+
+  // Only show thumbs up/down buttons if both default thumbs and sections thumbs prefs are enabled
+  const mayHaveCombinedThumbsUpDown = mayHaveSectionsCardsThumbsUpDown && mayHaveThumbsUpDown;
   function getLayoutData(responsiveLayout, index) {
     let layoutData = {
-      position: {},
       classNames: []
     };
-    responsiveLayout.flatMap(layout => layout.tiles.filter((_, tileIndex) => tileIndex === index).forEach(tile => {
-      layoutData.classNames.push(`col-${layout.columnCount}-${tile.size}`);
-      layoutData.position[`col${layout.columnCount}`] = tile.position;
-    }));
+    responsiveLayout.forEach(layout => {
+      layout.tiles.forEach((tile, tileIndex) => {
+        if (tile.position === index) {
+          layoutData.classNames.push(`col-${layout.columnCount}-${tile.size}`);
+          layoutData.classNames.push(`col-${layout.columnCount}-position-${tileIndex}`);
+        }
+      });
+    });
     return layoutData;
   }
 
   // function to determine amount of tiles shown per section per viewport
-  function getMaxTiles(responsiveLayout) {
-    return responsiveLayout.flatMap(layout => layout).reduce((acc, t) => {
+  function getMaxTiles(responsiveLayouts) {
+    return responsiveLayouts.flatMap(responsiveLayout => responsiveLayout).reduce((acc, t) => {
       acc[t.columnCount] = t.tiles.length;
 
       // Update maxTile if current tile count is greater
@@ -9596,6 +9672,12 @@ function CardSections({
     const {
       maxTile
     } = getMaxTiles(responsiveLayouts);
+    const displaySections = section.data.slice(0, maxTile);
+    const isSectionEmpty = !displaySections?.length;
+    const shouldShowLabels = sectionKey === "top_stories_section" && showTopics;
+    if (isSectionEmpty) {
+      return null;
+    }
     return /*#__PURE__*/external_React_default().createElement("section", {
       key: sectionKey,
       id: sectionKey,
@@ -9612,11 +9694,14 @@ function CardSections({
     }, subtitle)), /*#__PURE__*/external_React_default().createElement("div", {
       className: "ds-section-grid ds-card-grid"
     }, section.data.slice(0, maxTile).map((rec, index) => {
-      const layoutData = getLayoutData(responsiveLayouts, index);
       const {
-        classNames,
-        position
-      } = layoutData;
+        classNames
+      } = getLayoutData(responsiveLayouts, index);
+      if (!rec || rec.placeholder) {
+        return /*#__PURE__*/external_React_default().createElement(PlaceholderDSCard, {
+          key: `dscard-${index}`
+        });
+      }
       return /*#__PURE__*/external_React_default().createElement(DSCard, {
         key: `dscard-${rec.id}`,
         pos: rec.pos,
@@ -9649,20 +9734,17 @@ function CardSections({
         received_rank: rec.received_rank,
         format: rec.format,
         alt_text: rec.alt_text,
-        mayHaveThumbsUpDown: mayHaveThumbsUpDown,
+        mayHaveThumbsUpDown: mayHaveCombinedThumbsUpDown,
         mayHaveSectionsCards: mayHaveSectionsCards,
-        showTopics: showTopics,
+        showTopics: shouldShowLabels,
         selectedTopics: selectedTopics,
         availableTopics: availableTopics,
         is_collection: is_collection,
+        saveToPocketCard: saveToPocketCard,
         ctaButtonSponsors: ctaButtonSponsors,
         ctaButtonVariant: ctaButtonVariant,
         spocMessageVariant: spocMessageVariant,
         sectionsClassNames: classNames.join(" "),
-        "data-position-one": position.col1,
-        "data-position-two": position.col2,
-        "data-position-three": position.col3,
-        "data-position-four": position.col4,
         section: sectionKey,
         sectionPosition: sectionIndex
       });

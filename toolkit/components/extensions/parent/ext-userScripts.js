@@ -6,6 +6,10 @@
 
 "use strict";
 
+ChromeUtils.defineESModuleGetters(this, {
+  ExtensionUserScripts: "resource://gre/modules/ExtensionUserScripts.sys.mjs",
+});
+
 var { ExtensionUtils } = ChromeUtils.importESModule(
   "resource://gre/modules/ExtensionUtils.sys.mjs"
 );
@@ -111,6 +115,14 @@ this.userScripts = class extends ExtensionAPI {
       }
     }
 
+    if (!extension.userScriptsManager) {
+      // extension.userScriptsManager is initialized by initExtension() at
+      // extension startup when the extension has the "userScripts" permission.
+      // When we get here, it means that "userScripts" was requested after
+      // startup, and we need to initialize it here.
+      ExtensionUserScripts.initExtension(extension);
+    }
+
     const usm = extension.userScriptsManager;
 
     return {
@@ -150,6 +162,26 @@ this.userScripts = class extends ExtensionAPI {
           }
           return usm.runReadTask(async () => {
             return usm.getScripts(ids);
+          });
+        },
+
+        configureWorld: async properties => {
+          ensureValidWorldId(properties.worldId);
+          return usm.runWriteTask(async () => {
+            await usm.configureWorld(properties);
+          });
+        },
+
+        resetWorldConfiguration: async worldId => {
+          ensureValidWorldId(worldId);
+          return usm.runWriteTask(async () => {
+            await usm.resetWorldConfiguration(worldId);
+          });
+        },
+
+        getWorldConfigurations: async () => {
+          return usm.runReadTask(async () => {
+            return usm.getWorldConfigurations();
           });
         },
       },

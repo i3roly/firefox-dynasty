@@ -11,6 +11,19 @@ server.registerPathHandler("/resultCollector", (request, response) => {
 AddonTestUtils.init(this);
 AddonTestUtils.overrideCertDB();
 
+const { ExtensionPermissions } = ChromeUtils.importESModule(
+  "resource://gre/modules/ExtensionPermissions.sys.mjs"
+);
+
+async function grantUserScriptsPermission(extensionId) {
+  // userScripts is optional-only, and we must grant it. See comment at
+  // grantUserScriptsPermission in test_ext_userScripts_mv3_availability.js.
+  await ExtensionPermissions.add(extensionId, {
+    permissions: ["userScripts"],
+    origins: [],
+  });
+}
+
 async function collectResults(contentPage) {
   return contentPage.spawn([], () => {
     return this.content.wrappedJSObject.resultCollector;
@@ -25,11 +38,14 @@ add_setup(async () => {
 // Tests that user scripts can run in the MAIN world, and only for new document
 // loads (not existing ones).
 add_task(async function userScript_runs_in_MAIN_world() {
+  const extensionId = "@userScript_runs_in_MAIN_world";
+  await grantUserScriptsPermission(extensionId);
   let extension = ExtensionTestUtils.loadExtension({
     useAddonManager: "permanent",
     manifest: {
+      browser_specific_settings: { gecko: { id: extensionId } },
       manifest_version: 3,
-      permissions: ["userScripts"],
+      optional_permissions: ["userScripts"],
       host_permissions: ["*://example.com/*"],
     },
     files: {
@@ -37,6 +53,12 @@ add_task(async function userScript_runs_in_MAIN_world() {
       "6.file.js": "resultCollector.push('6.file');dump('6.file.js ran\\n');",
     },
     async background() {
+      browser.test.onMessage.addListener(async msg => {
+        browser.test.assertEq("revoke_permission", msg, "Expected msg");
+        await browser.permissions.remove({ permissions: ["userScripts"] });
+        browser.test.assertEq(undefined, browser.userScripts, "API gone");
+        browser.test.sendMessage("revoke_permission:done");
+      });
       await browser.userScripts.register([
         {
           id: "basic",
@@ -81,15 +103,32 @@ add_task(async function userScript_runs_in_MAIN_world() {
   await contentPageAfterRegister.close();
   await contentPageBeforeExtStarted.close();
 
+  // Verify that when the "userScripts" permission is revoked, that scripts
+  // won't be injected in new documents.
+  extension.sendMessage("revoke_permission");
+  await extension.awaitMessage("revoke_permission:done");
+  let contentPageAfterRevoke = await ExtensionTestUtils.loadContentPage(
+    "http://example.com/resultCollector"
+  );
+  Assert.deepEqual(
+    await collectResults(contentPageAfterRevoke),
+    [],
+    "Should not execute after permission revocation"
+  );
+  await contentPageAfterRevoke.close();
+
   await extension.unload();
 });
 
 add_task(async function userScript_require_host_permissions() {
+  const extensionId = "@userScript_require_host_permissions";
+  await grantUserScriptsPermission(extensionId);
   let extension = ExtensionTestUtils.loadExtension({
     useAddonManager: "permanent",
     manifest: {
+      browser_specific_settings: { gecko: { id: extensionId } },
       manifest_version: 3,
-      permissions: ["userScripts"],
+      optional_permissions: ["userScripts"],
       host_permissions: ["*://example.net/*"],
     },
     async background() {
@@ -151,11 +190,14 @@ add_task(async function userScript_require_host_permissions() {
 // Tests that user scripts can run in the USER_SCRIPT world, and only for new
 // document loads (not existing ones).
 add_task(async function userScript_runs_in_USER_SCRIPT_world() {
+  const extensionId = "@userScript_runs_in_USER_SCRIPT_world";
+  await grantUserScriptsPermission(extensionId);
   let extension = ExtensionTestUtils.loadExtension({
     useAddonManager: "permanent",
     manifest: {
+      browser_specific_settings: { gecko: { id: extensionId } },
       manifest_version: 3,
-      permissions: ["userScripts"],
+      optional_permissions: ["userScripts"],
       host_permissions: ["*://example.com/*"],
     },
     files: {

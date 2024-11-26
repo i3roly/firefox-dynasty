@@ -95,6 +95,7 @@ export const DefaultMeta = ({
   format,
   topic,
   isSectionsCard,
+  showTopics,
 }) => (
   <div className="meta">
     <div className="info-wrap">
@@ -110,14 +111,14 @@ export const DefaultMeta = ({
       )}
       {format !== "rectangle" && (
         <>
-          <header className="title clamp">{title}</header>
+          <h3 className="title clamp">{title}</h3>
           {excerpt && <p className="excerpt clamp">{excerpt}</p>}
         </>
       )}
       {/* Rectangle format is returned for English clients only.*/}
       {format === "rectangle" && (
         <>
-          <header className="title clamp">Sponsored</header>
+          <h3 className="title clamp">Sponsored</h3>
           <p className="excerpt clamp">
             Sponsored content supports our mission to build a better web.
           </p>
@@ -138,10 +139,24 @@ export const DefaultMeta = ({
       )}
     {isSectionsCard && (
       <div className="sections-card-footer">
-        <span
-          className="ds-card-topic"
-          data-l10n-id={`newtab-topic-label-${topic}`}
-        />
+        {!isListCard &&
+          format !== "rectangle" &&
+          mayHaveSectionsCards &&
+          mayHaveThumbsUpDown && (
+            <DSThumbsUpDownButtons
+              onThumbsDownClick={onThumbsDownClick}
+              onThumbsUpClick={onThumbsUpClick}
+              sponsor={sponsor}
+              isThumbsDownActive={state.isThumbsDownActive}
+              isThumbsUpActive={state.isThumbsUpActive}
+            />
+          )}
+        {showTopics && (
+          <span
+            className="ds-card-topic"
+            data-l10n-id={`newtab-topic-label-${topic}`}
+          />
+        )}
       </div>
     )}
     {!newSponsoredLabel && (
@@ -814,7 +829,7 @@ export class _DSCard extends React.PureComponent {
         {isFakespot ? (
           <div className="meta">
             <div className="info-wrap">
-              <header className="title clamp">{this.props.title}</header>
+              <h3 className="title clamp">{this.props.title}</h3>
             </div>
           </div>
         ) : (
@@ -838,11 +853,9 @@ export class _DSCard extends React.PureComponent {
             onThumbsDownClick={this.onThumbsDownClick}
             state={this.state}
             isListCard={isListCard}
+            showTopics={this.props.showTopics}
             isSectionsCard={
-              this.props.showTopics &&
-              this.props.mayHaveSectionsCards &&
-              this.props.topic &&
-              !isListCard
+              this.props.mayHaveSectionsCards && this.props.topic && !isListCard
             }
             format={format}
             topic={this.props.topic}
@@ -886,6 +899,7 @@ export class _DSCard extends React.PureComponent {
                 section={this.props.section}
                 section_position={this.props.sectionPosition}
                 format={format}
+                isSectionsCard={this.props.mayHaveSectionsCards}
               />
             )}
           </div>

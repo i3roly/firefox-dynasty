@@ -31,7 +31,7 @@ class HashableValue {
   HashableValue() : value(UndefinedValue()) {}
   explicit HashableValue(JSWhyMagic whyMagic) : value(MagicValue(whyMagic)) {}
 
-  [[nodiscard]] bool setValue(JSContext* cx, HandleValue v);
+  [[nodiscard]] bool setValue(JSContext* cx, const Value& v);
   HashNumber hash(const mozilla::HashCodeScrambler& hcs) const;
 
   // Value equality. Separate BigInt instances may compare equal.
@@ -141,8 +141,8 @@ class MapObject : public OrderedHashMapObject {
   static const JSClass class_;
   static const JSClass protoClass_;
 
-  [[nodiscard]] static bool getKeysAndValuesInterleaved(
-      HandleObject obj, JS::MutableHandle<GCVector<JS::Value>> entries);
+  [[nodiscard]] bool getKeysAndValuesInterleaved(
+      JS::MutableHandle<GCVector<JS::Value>> entries);
   [[nodiscard]] static bool entries(JSContext* cx, unsigned argc, Value* vp);
   static MapObject* createWithProto(JSContext* cx, HandleObject proto,
                                     NewObjectKind newKind);
@@ -150,22 +150,20 @@ class MapObject : public OrderedHashMapObject {
 
   // Publicly exposed Map calls for JSAPI access (webidl maplike/setlike
   // interfaces, etc.)
-  static uint32_t size(JSContext* cx, HandleObject obj);
-  [[nodiscard]] static bool get(JSContext* cx, HandleObject obj,
-                                HandleValue key, MutableHandleValue rval);
-  [[nodiscard]] static bool has(JSContext* cx, HandleObject obj,
-                                HandleValue key, bool* rval);
-  [[nodiscard]] static bool delete_(JSContext* cx, HandleObject obj,
-                                    HandleValue key, bool* rval);
+  uint32_t size();
+  [[nodiscard]] bool get(JSContext* cx, const Value& key,
+                         MutableHandleValue rval);
+  [[nodiscard]] bool has(JSContext* cx, const Value& key, bool* rval);
+  [[nodiscard]] bool delete_(JSContext* cx, const Value& key, bool* rval);
 
   // Set call for public JSAPI exposure. Does not actually return map object
   // as stated in spec, expects caller to return a value. for instance, with
   // webidl maplike/setlike, should return interface object.
-  [[nodiscard]] static bool set(JSContext* cx, HandleObject obj,
-                                HandleValue key, HandleValue val);
-  [[nodiscard]] static bool clear(JSContext* cx, HandleObject obj);
+  [[nodiscard]] bool set(JSContext* cx, const Value& key, const Value& val);
+  void clear(JSContext* cx);
   [[nodiscard]] static bool iterator(JSContext* cx, IteratorKind kind,
-                                     HandleObject obj, MutableHandleValue iter);
+                                     Handle<MapObject*> obj,
+                                     MutableHandleValue iter);
 
   void clearNurseryIteratorsBeforeMinorGC();
 
@@ -234,7 +232,7 @@ class MapIteratorObject : public TableIteratorObject {
   static const JSClass class_;
 
   static const JSFunctionSpec methods[];
-  static MapIteratorObject* create(JSContext* cx, HandleObject mapobj,
+  static MapIteratorObject* create(JSContext* cx, Handle<MapObject*> mapobj,
                                    Kind kind);
   static void finalize(JS::GCContext* gcx, JSObject* obj);
   static size_t objectMoved(JSObject* obj, JSObject* old);
@@ -271,29 +269,26 @@ class SetObject : public OrderedHashSetObject {
   static const JSClass class_;
   static const JSClass protoClass_;
 
-  [[nodiscard]] static bool keys(JSContext* cx, HandleObject obj,
-                                 JS::MutableHandle<GCVector<JS::Value>> keys);
+  [[nodiscard]] bool keys(JS::MutableHandle<GCVector<JS::Value>> keys);
   [[nodiscard]] static bool values(JSContext* cx, unsigned argc, Value* vp);
-  [[nodiscard]] static bool add(JSContext* cx, HandleObject obj,
-                                HandleValue key);
+  [[nodiscard]] bool add(JSContext* cx, const Value& key);
 
   // Publicly exposed Set calls for JSAPI access (webidl maplike/setlike
   // interfaces, etc.)
   static SetObject* createWithProto(JSContext* cx, HandleObject proto,
                                     NewObjectKind newKind);
   static SetObject* create(JSContext* cx, HandleObject proto = nullptr);
-  static uint32_t size(JSContext* cx, HandleObject obj);
+  uint32_t size();
   [[nodiscard]] static bool size(JSContext* cx, unsigned argc, Value* vp);
   [[nodiscard]] static bool add(JSContext* cx, unsigned argc, Value* vp);
   [[nodiscard]] static bool has(JSContext* cx, unsigned argc, Value* vp);
-  [[nodiscard]] static bool has(JSContext* cx, HandleObject obj,
-                                HandleValue key, bool* rval);
-  [[nodiscard]] static bool clear(JSContext* cx, HandleObject obj);
+  [[nodiscard]] bool has(JSContext* cx, const Value& key, bool* rval);
+  void clear(JSContext* cx);
   [[nodiscard]] static bool iterator(JSContext* cx, IteratorKind kind,
-                                     HandleObject obj, MutableHandleValue iter);
+                                     Handle<SetObject*> obj,
+                                     MutableHandleValue iter);
   [[nodiscard]] static bool delete_(JSContext* cx, unsigned argc, Value* vp);
-  [[nodiscard]] static bool delete_(JSContext* cx, HandleObject obj,
-                                    HandleValue key, bool* rval);
+  [[nodiscard]] bool delete_(JSContext* cx, const Value& key, bool* rval);
 
   [[nodiscard]] static bool copy(JSContext* cx, unsigned argc, Value* vp);
 
@@ -356,7 +351,7 @@ class SetIteratorObject : public TableIteratorObject {
   static const JSClass class_;
 
   static const JSFunctionSpec methods[];
-  static SetIteratorObject* create(JSContext* cx, HandleObject setobj,
+  static SetIteratorObject* create(JSContext* cx, Handle<SetObject*> setobj,
                                    Kind kind);
   static void finalize(JS::GCContext* gcx, JSObject* obj);
   static size_t objectMoved(JSObject* obj, JSObject* old);

@@ -449,6 +449,11 @@ struct MOZ_STACK_CLASS IntrinsicSizeInput final {
   // to NS_UNCONSTRAINEDSIZE.
   Maybe<LogicalSize> mPercentageBasisForChildren;
 
+  bool HasSomePercentageBasisForChildren() const {
+    return mPercentageBasisForChildren &&
+           !mPercentageBasisForChildren->IsAllValues(NS_UNCONSTRAINEDSIZE);
+  }
+
   IntrinsicSizeInput(gfxContext* aContext,
                      const Maybe<LogicalSize>& aContainingBlockSize,
                      const Maybe<LogicalSize>& aPercentageBasisForChildren)
@@ -767,9 +772,6 @@ class nsIFrame : public nsQueryFrame {
    *
    * If the frame is a continuing frame, then aPrevInFlow indicates the previous
    * frame (the frame that was split).
-   *
-   * Each subclass that need a view should override this method and call
-   * CreateView() after calling its base class Init().
    *
    * @param   aContent the content object associated with the frame
    * @param   aParent the parent frame
@@ -1793,6 +1795,17 @@ class nsIFrame : public nsQueryFrame {
     return GetLogicalBaseline(GetWritingMode());
   }
 
+  // Gets a caret baseline suitable for the frame if the frame doesn't have one.
+  //
+  // @param aBSize the content box block size of the line container. Needed to
+  // resolve line-height: -moz-block-height. NS_UNCONSTRAINEDSIZE is fine
+  // otherwise.
+  //
+  // TODO(emilio): Now we support align-content on blocks it seems we could
+  // get rid of line-height: -moz-block-height.
+  nscoord GetFontMetricsDerivedCaretBaseline(
+      nscoord aBSize = NS_UNCONSTRAINEDSIZE) const;
+
   /**
    * Subclasses can call this method to enable visibility tracking for this
    * frame.
@@ -2608,6 +2621,11 @@ class nsIFrame : public nsQueryFrame {
   virtual nsIFrame* LastInFlow() const { return const_cast<nsIFrame*>(this); }
 
   /**
+   * Useful for line participants. Find the line container frame for this line.
+   */
+  nsIFrame* FindLineContainer() const;
+
+  /**
    * Mark any stored intrinsic inline size information as dirty (requiring
    * re-calculation).  Note that this should generally not be called
    * directly; PresShell::FrameNeedsReflow() will call it instead.
@@ -3266,12 +3284,6 @@ class nsIFrame : public nsQueryFrame {
     return IsIntrinsicKeyword(bSize);
   }
 
-  /**
-   * Helper method to create a view for a frame.  Only used by a few sub-classes
-   * that need a view.
-   */
-  void CreateView();
-
  protected:
   virtual nsView* GetViewInternal() const {
     MOZ_ASSERT_UNREACHABLE("method should have been overridden by subclass");
@@ -3298,11 +3310,6 @@ class nsIFrame : public nsQueryFrame {
    * from the returned view.
    */
   nsView* GetClosestView(nsPoint* aOffset = nullptr) const;
-
-  /**
-   * Find the closest ancestor (excluding |this| !) that has a view
-   */
-  nsIFrame* GetAncestorWithView() const;
 
   /**
    * Sets the view's attributes from the frame style.

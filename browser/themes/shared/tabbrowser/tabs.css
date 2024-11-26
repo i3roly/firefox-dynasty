@@ -688,7 +688,7 @@
   }
 
   #tabbrowser-tabs[movingtab-createGroup] & {
-    transition: background-color 300ms ease, color 300ms ease, outline-color 300ms ease;
+    transition: background-color 100ms ease, color 100ms ease, outline-color 100ms ease;
 
     &[dragover-createGroup] {
       background-color: light-dark(var(--dragover-tab-group-color-pale), var(--dragover-tab-group-color));
@@ -754,7 +754,7 @@
  */
 .tab-group-line {
   display: none;
-  background-color: var(--tab-group-color);
+  background-color: light-dark(var(--tab-group-color), var(--tab-group-color-invert));
   height: 2px;
   margin: 0 calc(-1 * var(--tab-overflow-clip-margin)) calc(-1 * var(--tab-block-margin));
 
@@ -768,7 +768,7 @@
 
   #tabbrowser-tabs[movingtab] &:is([selected],[multiselected]) {
     display: flex;
-    background-color: var(--dragover-tab-group-color);
+    background-color: light-dark(var(--dragover-tab-group-color), var(--dragover-tab-group-color-invert));
   }
 
   #tabbrowser-tabs:is([movingtab-createGroup],[movingtab-ungroup]) &:is([selected],[multiselected]) {
@@ -808,7 +808,7 @@ tab-group {
 
   tab-group:not([collapsed]) > &::after {
     content: "";
-    background-color: var(--tab-group-color);
+    background-color: light-dark(var(--tab-group-color), var(--tab-group-color-invert));
     height: 2px;
     position: absolute;
     inset: auto 0 0;
@@ -899,18 +899,19 @@ tab-group {
   .tab-group-editor-swatch {
     width: 16px;
     height: 16px;
-    border-radius: var(--border-radius-small);
+    padding: var(--focus-outline-offset);
+    border: var(--focus-outline-width) solid transparent;
+    border-radius: var(--border-radius-medium);
+    background-clip: content-box;
     background-color: light-dark(var(--tabgroup-swatch-color), var(--tabgroup-swatch-color-invert));
 
     input:checked + & {
-      outline: var(--focus-outline);
-      outline-color: currentColor;
-      outline-offset: var(--focus-outline-offset);
+      border-color: var(--focus-outline-color);
     }
 
     input:focus-visible + & {
-      outline-color: var(--focus-outline-color);
-      box-shadow: 0 0 0 calc(var(--focus-outline-width) * 3) color-mix(in srgb, var(--focus-outline-color) 50%, transparent);
+      outline: 1px solid var(--focus-outline-color);
+      outline-offset: 1px;
     }
   }
 

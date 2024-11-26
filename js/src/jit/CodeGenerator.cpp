@@ -21663,8 +21663,22 @@ void CodeGenerator::visitSetObjectHasValueVMCall(
   pushArg(ToValue(ins, LSetObjectHasValueVMCall::InputIndex));
   pushArg(ToRegister(ins->setObject()));
 
-  using Fn = bool (*)(JSContext*, HandleObject, HandleValue, bool*);
+  using Fn = bool (*)(JSContext*, Handle<SetObject*>, HandleValue, bool*);
   callVM<Fn, jit::SetObjectHas>(ins);
+}
+
+void CodeGenerator::visitSetObjectDelete(LSetObjectDelete* ins) {
+  pushArg(ToValue(ins, LSetObjectDelete::KeyIndex));
+  pushArg(ToRegister(ins->setObject()));
+  using Fn = bool (*)(JSContext*, Handle<SetObject*>, HandleValue, bool*);
+  callVM<Fn, jit::SetObjectDelete>(ins);
+}
+
+void CodeGenerator::visitSetObjectAdd(LSetObjectAdd* ins) {
+  pushArg(ToValue(ins, LSetObjectAdd::KeyIndex));
+  pushArg(ToRegister(ins->setObject()));
+  using Fn = bool (*)(JSContext*, Handle<SetObject*>, HandleValue);
+  callVM<Fn, jit::SetObjectAdd>(ins);
 }
 
 void CodeGenerator::visitSetObjectSize(LSetObjectSize* ins) {
@@ -21718,7 +21732,7 @@ void CodeGenerator::visitMapObjectHasValueVMCall(
   pushArg(ToValue(ins, LMapObjectHasValueVMCall::InputIndex));
   pushArg(ToRegister(ins->mapObject()));
 
-  using Fn = bool (*)(JSContext*, HandleObject, HandleValue, bool*);
+  using Fn = bool (*)(JSContext*, Handle<MapObject*>, HandleValue, bool*);
   callVM<Fn, jit::MapObjectHas>(ins);
 }
 
@@ -21768,8 +21782,23 @@ void CodeGenerator::visitMapObjectGetValueVMCall(
   pushArg(ToRegister(ins->mapObject()));
 
   using Fn =
-      bool (*)(JSContext*, HandleObject, HandleValue, MutableHandleValue);
+      bool (*)(JSContext*, Handle<MapObject*>, HandleValue, MutableHandleValue);
   callVM<Fn, jit::MapObjectGet>(ins);
+}
+
+void CodeGenerator::visitMapObjectDelete(LMapObjectDelete* ins) {
+  pushArg(ToValue(ins, LMapObjectDelete::KeyIndex));
+  pushArg(ToRegister(ins->mapObject()));
+  using Fn = bool (*)(JSContext*, Handle<MapObject*>, HandleValue, bool*);
+  callVM<Fn, jit::MapObjectDelete>(ins);
+}
+
+void CodeGenerator::visitMapObjectSet(LMapObjectSet* ins) {
+  pushArg(ToValue(ins, LMapObjectSet::ValueIndex));
+  pushArg(ToValue(ins, LMapObjectSet::KeyIndex));
+  pushArg(ToRegister(ins->mapObject()));
+  using Fn = bool (*)(JSContext*, Handle<MapObject*>, HandleValue, HandleValue);
+  callVM<Fn, jit::MapObjectSet>(ins);
 }
 
 void CodeGenerator::visitMapObjectSize(LMapObjectSize* ins) {

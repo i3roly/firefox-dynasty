@@ -3420,6 +3420,22 @@
     set: ObjId
     obj: ObjId
 
+- name: SetDeleteResult
+  shared: true
+  transpile: true
+  cost_estimate: 5
+  args:
+    set: ObjId
+    val: ValId
+
+- name: SetAddResult
+  shared: true
+  transpile: true
+  cost_estimate: 5
+  args:
+    set: ObjId
+    key: ValId
+
 - name: SetSizeResult
   shared: true
   transpile: true
@@ -3522,6 +3538,23 @@
   args:
     map: ObjId
     obj: ObjId
+
+- name: MapDeleteResult
+  shared: true
+  transpile: true
+  cost_estimate: 5
+  args:
+    map: ObjId
+    val: ValId
+
+- name: MapSetResult
+  shared: true
+  transpile: true
+  cost_estimate: 5
+  args:
+    map: ObjId
+    key: ValId
+    val: ValId
 
 - name: MapSizeResult
   shared: true

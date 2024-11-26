@@ -7,39 +7,6 @@
 
 requestLongerTimeout(2);
 
-async function setup({ disabled = false, prefs = [], records = null } = {}) {
-  const { removeMocks, remoteClients } = await createAndMockMLRemoteSettings({
-    autoDownloadFromRemoteSettings: false,
-    records,
-  });
-
-  await SpecialPowers.pushPrefEnv({
-    set: [
-      // Enabled by default.
-      ["browser.ml.enable", !disabled],
-      ["browser.ml.logLevel", "All"],
-      ["browser.ml.modelCacheTimeout", 1000],
-      ["browser.ml.checkForMemory", true],
-      ["browser.ml.defaultModelMemoryUsage", 0.0000001], // 100 bytes
-      ["browser.ml.queueWaitTimeout", 2],
-      ...prefs,
-    ],
-  });
-
-  return {
-    remoteClients,
-    async cleanup() {
-      await removeMocks();
-      await waitForCondition(
-        () => EngineProcess.areAllEnginesTerminated(),
-        "Waiting for all of the engines to be terminated.",
-        100,
-        200
-      );
-    },
-  };
-}
-
 const RAW_PIPELINE_OPTIONS = { taskName: "moz-echo" };
 const PIPELINE_OPTIONS = new PipelineOptions({ taskName: "moz-echo" });
 
@@ -708,7 +675,9 @@ add_task(async function test_ml_engine_get_status() {
 });
 
 add_task(async function test_ml_engine_not_enough_memory() {
-  const { cleanup, remoteClients } = await setup();
+  const { cleanup, remoteClients } = await setup({
+    prefs: [["browser.ml.checkForMemory", true]],
+  });
 
   info("Get the greedy engine");
   const engineInstance = await createEngine({

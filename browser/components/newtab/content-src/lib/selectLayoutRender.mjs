@@ -73,6 +73,21 @@ export const selectLayoutRender = ({ state = {}, prefs = {} }) => {
     filterArray.push(...DS_COMPONENTS);
   }
 
+  // function to determine amount of tiles shown per section per viewport
+  function getMaxTiles(responsiveLayouts) {
+    return responsiveLayouts
+      .flatMap(responsiveLayout => responsiveLayout)
+      .reduce((acc, t) => {
+        acc[t.columnCount] = t.tiles.length;
+
+        // Update maxTile if current tile count is greater
+        if (!acc.maxTile || t.tiles.length > acc.maxTile) {
+          acc.maxTile = t.tiles.length;
+        }
+        return acc;
+      }, {});
+  }
+
   const placeholderComponent = component => {
     if (!component.feed) {
       // TODO we now need a placeholder for topsites and textPromo.
@@ -85,6 +100,14 @@ export const selectLayoutRender = ({ state = {}, prefs = {} }) => {
     }
     const data = {
       recommendations: [],
+      sections: [
+        {
+          layout: {
+            responsiveLayouts: [],
+          },
+          data: [],
+        },
+      ],
     };
 
     let items = 0;
@@ -95,11 +118,18 @@ export const selectLayoutRender = ({ state = {}, prefs = {} }) => {
       data.recommendations.push({ placeholder: true });
     }
 
+    const sectionsEnabled = prefs["discoverystream.sections.enabled"];
+    if (sectionsEnabled) {
+      for (let i = 0; i < items; i++) {
+        data.sections[0].data.push({ placeholder: true });
+      }
+    }
+
     return { ...component, data };
   };
 
   // TODO update devtools to show placements
-  const handleSpocs = (data, spocsPositions, spocsPlacement) => {
+  const handleSpocs = (data = [], spocsPositions, spocsPlacement) => {
     let result = [...data];
     // Do we ever expect to possibly have a spoc.
     if (spocsPositions?.length) {
@@ -244,6 +274,23 @@ export const selectLayoutRender = ({ state = {}, prefs = {} }) => {
         ...data.recommendations[i],
         pos: positions[component.type]++,
       };
+    }
+
+    // Setup absolute positions for sections layout.
+    if (sectionsEnabled) {
+      let currentPosition = 0;
+      data.sections.forEach(section => {
+        // We assume the count for the breakpoint with the most tiles.
+        const { maxTile } = getMaxTiles(section?.layout?.responsiveLayouts);
+        for (let i = 0; i < maxTile; i++) {
+          if (section.data[i]) {
+            section.data[i] = {
+              ...section.data[i],
+              pos: currentPosition++,
+            };
+          }
+        }
+      });
     }
 
     return { ...component, data };

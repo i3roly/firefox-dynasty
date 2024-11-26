@@ -54,14 +54,18 @@ static PreBarriered<Value> NormalizeDoubleValue(double d) {
   return JS::CanonicalizedDoubleValue(d);
 }
 
-bool HashableValue::setValue(JSContext* cx, HandleValue v) {
+bool HashableValue::setValue(JSContext* cx, const Value& v) {
   if (v.isString()) {
     // Atomize so that hash() and operator==() are fast and infallible.
-    JSString* str = AtomizeString(cx, v.toString());
-    if (!str) {
-      return false;
+    if (v.toString()->isAtom()) {
+      value = v;
+    } else {
+      JSString* str = AtomizeString(cx, v.toString());
+      if (!str) {
+        return false;
+      }
+      value = StringValue(str);
     }
-    value = StringValue(str);
   } else if (v.isDouble()) {
     value = NormalizeDoubleValue(v.toDouble());
 #ifdef ENABLE_RECORD_TUPLE
@@ -242,9 +246,9 @@ static inline void SetRegisteredNurseryIterators(TableObject* t, bool b) {
                      JS::BooleanValue(b));
 }
 
-MapIteratorObject* MapIteratorObject::create(JSContext* cx, HandleObject obj,
+MapIteratorObject* MapIteratorObject::create(JSContext* cx,
+                                             Handle<MapObject*> mapobj,
                                              Kind kind) {
-  Handle<MapObject*> mapobj(obj.as<MapObject>());
   Rooted<GlobalObject*> global(cx, &mapobj->global());
   Rooted<JSObject*> proto(
       cx, GlobalObject::getOrCreateMapIteratorPrototype(cx, global));
@@ -428,8 +432,8 @@ const JSPropertySpec MapObject::properties[] = {
 const JSFunctionSpec MapObject::methods[] = {
     JS_INLINABLE_FN("get", get, 1, 0, MapGet),
     JS_INLINABLE_FN("has", has, 1, 0, MapHas),
-    JS_FN("set", set, 2, 0),
-    JS_FN("delete", delete_, 1, 0),
+    JS_INLINABLE_FN("set", set, 2, 0, MapSet),
+    JS_INLINABLE_FN("delete", delete_, 1, 0, MapDelete),
     JS_FN("keys", keys, 0, 0),
     JS_FN("values", values, 0, 0),
     JS_FN("clear", clear, 0, 0),
@@ -575,23 +579,19 @@ template <typename ObjectT>
 }
 
 bool MapObject::getKeysAndValuesInterleaved(
-    HandleObject obj, JS::MutableHandle<GCVector<JS::Value>> entries) {
-  MapObject* mapObj = &obj->as<MapObject>();
+    JS::MutableHandle<GCVector<JS::Value>> entries) {
   auto appendEntry = [&entries](auto& entry) {
     return entries.append(entry.key.get()) && entries.append(entry.value);
   };
-  return Table(mapObj).forEachEntry(appendEntry);
+  return Table(this).forEachEntry(appendEntry);
 }
 
-bool MapObject::set(JSContext* cx, HandleObject obj, HandleValue k,
-                    HandleValue v) {
-  MapObject* mapObject = &obj->as<MapObject>();
-  Rooted<HashableValue> key(cx);
-  if (!key.setValue(cx, k)) {
+bool MapObject::set(JSContext* cx, const Value& key, const Value& val) {
+  HashableValue k;
+  if (!k.setValue(cx, key)) {
     return false;
   }
-
-  return mapObject->setWithHashableKey(cx, key, v);
+  return setWithHashableKey(cx, k, val);
 }
 
 bool MapObject::setWithHashableKey(JSContext* cx, const HashableValue& key,
@@ -791,20 +791,15 @@ bool MapObject::is(HandleValue v) {
 
 bool MapObject::is(HandleObject o) { return o->hasClass(&class_); }
 
-#define ARG0_KEY(cx, args, key)  \
-  Rooted<HashableValue> key(cx); \
-  if (args.length() > 0 && !key.setValue(cx, args[0])) return false
-
-uint32_t MapObject::size(JSContext* cx, HandleObject obj) {
-  MapObject* mapObj = &obj->as<MapObject>();
-  static_assert(sizeof(Table(mapObj).count()) <= sizeof(uint32_t),
+uint32_t MapObject::size() {
+  static_assert(sizeof(Table(this).count()) <= sizeof(uint32_t),
                 "map count must be precisely representable as a JS number");
-  return Table(mapObj).count();
+  return Table(this).count();
 }
 
 bool MapObject::size_impl(JSContext* cx, const CallArgs& args) {
-  RootedObject obj(cx, &args.thisv().toObject());
-  args.rval().setNumber(size(cx, obj));
+  auto* mapObj = &args.thisv().toObject().as<MapObject>();
+  args.rval().setNumber(mapObj->size());
   return true;
 }
 
@@ -814,15 +809,13 @@ bool MapObject::size(JSContext* cx, unsigned argc, Value* vp) {
   return CallNonGenericMethod<MapObject::is, MapObject::size_impl>(cx, args);
 }
 
-bool MapObject::get(JSContext* cx, HandleObject obj, HandleValue key,
-                    MutableHandleValue rval) {
-  Rooted<HashableValue> k(cx);
-
+bool MapObject::get(JSContext* cx, const Value& key, MutableHandleValue rval) {
+  HashableValue k;
   if (!k.setValue(cx, key)) {
     return false;
   }
 
-  if (const Table::Entry* p = Table(&obj->as<MapObject>()).get(k)) {
+  if (const Table::Entry* p = Table(this).get(k)) {
     rval.set(p->value);
   } else {
     rval.setUndefined();
@@ -832,8 +825,8 @@ bool MapObject::get(JSContext* cx, HandleObject obj, HandleValue key,
 }
 
 bool MapObject::get_impl(JSContext* cx, const CallArgs& args) {
-  RootedObject obj(cx, &args.thisv().toObject());
-  return get(cx, obj, args.get(0), args.rval());
+  auto* mapObj = &args.thisv().toObject().as<MapObject>();
+  return mapObj->get(cx, args.get(0), args.rval());
 }
 
 bool MapObject::get(JSContext* cx, unsigned argc, Value* vp) {
@@ -842,26 +835,24 @@ bool MapObject::get(JSContext* cx, unsigned argc, Value* vp) {
   return CallNonGenericMethod<MapObject::is, MapObject::get_impl>(cx, args);
 }
 
-bool MapObject::has(JSContext* cx, HandleObject obj, HandleValue key,
-                    bool* rval) {
-  Rooted<HashableValue> k(cx);
-
+bool MapObject::has(JSContext* cx, const Value& key, bool* rval) {
+  HashableValue k;
   if (!k.setValue(cx, key)) {
     return false;
   }
 
-  *rval = Table(&obj->as<MapObject>()).has(k);
+  *rval = Table(this).has(k);
   return true;
 }
 
 bool MapObject::has_impl(JSContext* cx, const CallArgs& args) {
+  auto* mapObj = &args.thisv().toObject().as<MapObject>();
   bool found;
-  RootedObject obj(cx, &args.thisv().toObject());
-  if (has(cx, obj, args.get(0), &found)) {
-    args.rval().setBoolean(found);
-    return true;
+  if (!mapObj->has(cx, args.get(0), &found)) {
+    return false;
   }
-  return false;
+  args.rval().setBoolean(found);
+  return true;
 }
 
 bool MapObject::has(JSContext* cx, unsigned argc, Value* vp) {
@@ -871,14 +862,10 @@ bool MapObject::has(JSContext* cx, unsigned argc, Value* vp) {
 }
 
 bool MapObject::set_impl(JSContext* cx, const CallArgs& args) {
-  MOZ_ASSERT(MapObject::is(args.thisv()));
-
-  MapObject* obj = &args.thisv().toObject().as<MapObject>();
-  ARG0_KEY(cx, args, key);
-  if (!obj->setWithHashableKey(cx, key, args.get(1))) {
+  auto* mapObj = &args.thisv().toObject().as<MapObject>();
+  if (!mapObj->set(cx, args.get(0), args.get(1))) {
     return false;
   }
-
   args.rval().set(args.thisv());
   return true;
 }
@@ -889,19 +876,16 @@ bool MapObject::set(JSContext* cx, unsigned argc, Value* vp) {
   return CallNonGenericMethod<MapObject::is, MapObject::set_impl>(cx, args);
 }
 
-bool MapObject::delete_(JSContext* cx, HandleObject obj, HandleValue key,
-                        bool* rval) {
-  MapObject* mapObject = &obj->as<MapObject>();
-  Rooted<HashableValue> k(cx);
-
+bool MapObject::delete_(JSContext* cx, const Value& key, bool* rval) {
+  HashableValue k;
   if (!k.setValue(cx, key)) {
     return false;
   }
 
-  if (mapObject->isTenured()) {
-    *rval = Table(mapObject).remove(cx, k);
+  if (isTenured()) {
+    *rval = Table(this).remove(cx, k);
   } else {
-    *rval = PreBarrieredTable(mapObject).remove(cx, k);
+    *rval = PreBarrieredTable(this).remove(cx, k);
   }
   return true;
 }
@@ -916,14 +900,12 @@ bool MapObject::delete_impl(JSContext* cx, const CallArgs& args) {
   // because makeEmpty clears the value by doing e->value = Value(), and in the
   // case of Table, Value() means HeapPtr<Value>(), which is the same as
   // HeapPtr<Value>(UndefinedValue()).
-  MOZ_ASSERT(MapObject::is(args.thisv()));
-  RootedObject obj(cx, &args.thisv().toObject());
 
+  auto* mapObj = &args.thisv().toObject().as<MapObject>();
   bool found;
-  if (!delete_(cx, obj, args.get(0), &found)) {
+  if (!mapObj->delete_(cx, args.get(0), &found)) {
     return false;
   }
-
   args.rval().setBoolean(found);
   return true;
 }
@@ -934,9 +916,9 @@ bool MapObject::delete_(JSContext* cx, unsigned argc, Value* vp) {
   return CallNonGenericMethod<MapObject::is, MapObject::delete_impl>(cx, args);
 }
 
-bool MapObject::iterator(JSContext* cx, IteratorKind kind, HandleObject obj,
-                         MutableHandleValue iter) {
-  Rooted<JSObject*> iterobj(cx, MapIteratorObject::create(cx, obj, kind));
+bool MapObject::iterator(JSContext* cx, IteratorKind kind,
+                         Handle<MapObject*> obj, MutableHandleValue iter) {
+  JSObject* iterobj = MapIteratorObject::create(cx, obj, kind);
   if (!iterobj) {
     return false;
   }
@@ -946,8 +928,8 @@ bool MapObject::iterator(JSContext* cx, IteratorKind kind, HandleObject obj,
 
 bool MapObject::iterator_impl(JSContext* cx, const CallArgs& args,
                               IteratorKind kind) {
-  RootedObject obj(cx, &args.thisv().toObject());
-  return iterator(cx, kind, obj, args.rval());
+  Rooted<MapObject*> mapObj(cx, &args.thisv().toObject().as<MapObject>());
+  return iterator(cx, kind, mapObj, args.rval());
 }
 
 bool MapObject::keys_impl(JSContext* cx, const CallArgs& args) {
@@ -981,9 +963,10 @@ bool MapObject::entries(JSContext* cx, unsigned argc, Value* vp) {
 }
 
 bool MapObject::clear_impl(JSContext* cx, const CallArgs& args) {
-  RootedObject obj(cx, &args.thisv().toObject());
+  auto* mapObj = &args.thisv().toObject().as<MapObject>();
+  mapObj->clear(cx);
   args.rval().setUndefined();
-  return clear(cx, obj);
+  return true;
 }
 
 bool MapObject::clear(JSContext* cx, unsigned argc, Value* vp) {
@@ -992,14 +975,12 @@ bool MapObject::clear(JSContext* cx, unsigned argc, Value* vp) {
   return CallNonGenericMethod(cx, is, clear_impl, args);
 }
 
-bool MapObject::clear(JSContext* cx, HandleObject obj) {
-  MapObject* mapObject = &obj->as<MapObject>();
-  if (mapObject->isTenured()) {
-    Table(mapObject).clear(cx);
+void MapObject::clear(JSContext* cx) {
+  if (isTenured()) {
+    Table(this).clear(cx);
   } else {
-    PreBarrieredTable(mapObject).clear(cx);
+    PreBarrieredTable(this).clear(cx);
   }
-  return true;
 }
 
 /*** SetIterator ************************************************************/
@@ -1056,11 +1037,11 @@ bool GlobalObject::initSetIteratorProto(JSContext* cx,
   return true;
 }
 
-SetIteratorObject* SetIteratorObject::create(JSContext* cx, HandleObject obj,
+SetIteratorObject* SetIteratorObject::create(JSContext* cx,
+                                             Handle<SetObject*> setobj,
                                              Kind kind) {
   MOZ_ASSERT(kind != Kind::Keys);
 
-  Handle<SetObject*> setobj(obj.as<SetObject>());
   Rooted<GlobalObject*> global(cx, &setobj->global());
   Rooted<JSObject*> proto(
       cx, GlobalObject::getOrCreateSetIteratorPrototype(cx, global));
@@ -1210,8 +1191,8 @@ const JSPropertySpec SetObject::properties[] = {
 
 const JSFunctionSpec SetObject::methods[] = {
     JS_INLINABLE_FN("has", has, 1, 0, SetHas),
-    JS_FN("add", add, 1, 0),
-    JS_FN("delete", delete_, 1, 0),
+    JS_INLINABLE_FN("add", add, 1, 0, SetAdd),
+    JS_INLINABLE_FN("delete", delete_, 1, 0, SetDelete),
     JS_FN("entries", entries, 0, 0),
     JS_FN("clear", clear, 0, 0),
     JS_SELF_HOSTED_FN("forEach", "SetForEach", 2, 0),
@@ -1260,21 +1241,17 @@ const JSPropertySpec SetObject::staticProperties[] = {
   return NativeDefineDataProperty(cx, nativeProto, iteratorId, valuesFn, 0);
 }
 
-bool SetObject::keys(JSContext* cx, HandleObject obj,
-                     JS::MutableHandle<GCVector<JS::Value>> keys) {
-  SetObject* setObj = &obj->as<SetObject>();
+bool SetObject::keys(JS::MutableHandle<GCVector<JS::Value>> keys) {
   auto appendEntry = [&keys](auto& entry) { return keys.append(entry.get()); };
-  return Table(setObj).forEachEntry(appendEntry);
+  return Table(this).forEachEntry(appendEntry);
 }
 
-bool SetObject::add(JSContext* cx, HandleObject obj, HandleValue k) {
-  Rooted<HashableValue> key(cx);
-  if (!key.setValue(cx, k)) {
+bool SetObject::add(JSContext* cx, const Value& key) {
+  HashableValue k;
+  if (!k.setValue(cx, key)) {
     return false;
   }
-
-  SetObject* setObj = &obj->as<SetObject>();
-  return setObj->addHashableValue(cx, key);
+  return addHashableValue(cx, k);
 }
 
 bool SetObject::addHashableValue(JSContext* cx, const HashableValue& value) {
@@ -1456,17 +1433,12 @@ bool SetObject::construct(JSContext* cx, unsigned argc, Value* vp) {
     }
 
     if (optimized) {
-      RootedValue keyVal(cx);
-      Rooted<HashableValue> key(cx);
-      Rooted<ArrayObject*> array(cx, &iterable.toObject().as<ArrayObject>());
+      ArrayObject* array = &iterable.toObject().as<ArrayObject>();
       for (uint32_t index = 0; index < array->getDenseInitializedLength();
            ++index) {
-        keyVal.set(array->getDenseElement(index));
+        Value keyVal = array->getDenseElement(index);
         MOZ_ASSERT(!keyVal.isMagic(JS_ELEMENTS_HOLE));
-        if (!key.setValue(cx, keyVal)) {
-          return false;
-        }
-        if (!obj->addHashableValue(cx, key)) {
+        if (!obj->add(cx, keyVal)) {
           return false;
         }
       }
@@ -1492,22 +1464,15 @@ bool SetObject::is(HandleValue v) {
 
 bool SetObject::is(HandleObject o) { return o->hasClass(&class_); }
 
-uint32_t SetObject::size(JSContext* cx, HandleObject obj) {
-  MOZ_ASSERT(SetObject::is(obj));
-  SetObject* setObj = &obj->as<SetObject>();
-  static_assert(sizeof(Table(setObj).count()) <= sizeof(uint32_t),
+uint32_t SetObject::size() {
+  static_assert(sizeof(Table(this).count()) <= sizeof(uint32_t),
                 "set count must be precisely representable as a JS number");
-  return Table(setObj).count();
+  return Table(this).count();
 }
 
 bool SetObject::size_impl(JSContext* cx, const CallArgs& args) {
-  MOZ_ASSERT(is(args.thisv()));
-
-  SetObject* setObj = &args.thisv().toObject().as<SetObject>();
-
-  static_assert(sizeof(Table(setObj).count()) <= sizeof(uint32_t),
-                "set count must be precisely representable as a JS number");
-  args.rval().setNumber(Table(setObj).count());
+  auto* setObj = &args.thisv().toObject().as<SetObject>();
+  args.rval().setNumber(setObj->size());
   return true;
 }
 
@@ -1518,26 +1483,22 @@ bool SetObject::size(JSContext* cx, unsigned argc, Value* vp) {
 }
 
 bool SetObject::has_impl(JSContext* cx, const CallArgs& args) {
-  MOZ_ASSERT(is(args.thisv()));
-
-  ARG0_KEY(cx, args, key);
-  SetObject* setObj = &args.thisv().toObject().as<SetObject>();
-  args.rval().setBoolean(Table(setObj).has(key));
+  auto* setObj = &args.thisv().toObject().as<SetObject>();
+  bool found;
+  if (!setObj->has(cx, args.get(0), &found)) {
+    return false;
+  }
+  args.rval().setBoolean(found);
   return true;
 }
 
-bool SetObject::has(JSContext* cx, HandleObject obj, HandleValue key,
-                    bool* rval) {
-  MOZ_ASSERT(SetObject::is(obj));
-
-  Rooted<HashableValue> k(cx);
-
+bool SetObject::has(JSContext* cx, const Value& key, bool* rval) {
+  HashableValue k;
   if (!k.setValue(cx, key)) {
     return false;
   }
 
-  SetObject* setObj = &obj->as<SetObject>();
-  *rval = Table(setObj).has(k);
+  *rval = Table(this).has(k);
   return true;
 }
 
@@ -1548,10 +1509,8 @@ bool SetObject::has(JSContext* cx, unsigned argc, Value* vp) {
 }
 
 bool SetObject::add_impl(JSContext* cx, const CallArgs& args) {
-  MOZ_ASSERT(is(args.thisv()));
-  ARG0_KEY(cx, args, key);
-  SetObject* setObj = &args.thisv().toObject().as<SetObject>();
-  if (!setObj->addHashableValue(cx, key)) {
+  auto* setObj = &args.thisv().toObject().as<SetObject>();
+  if (!setObj->add(cx, args.get(0))) {
     return false;
   }
   args.rval().set(args.thisv());
@@ -1564,29 +1523,22 @@ bool SetObject::add(JSContext* cx, unsigned argc, Value* vp) {
   return CallNonGenericMethod<SetObject::is, SetObject::add_impl>(cx, args);
 }
 
-bool SetObject::delete_(JSContext* cx, HandleObject obj, HandleValue key,
-                        bool* rval) {
-  MOZ_ASSERT(SetObject::is(obj));
-
-  Rooted<HashableValue> k(cx);
-
+bool SetObject::delete_(JSContext* cx, const Value& key, bool* rval) {
+  HashableValue k;
   if (!k.setValue(cx, key)) {
     return false;
   }
 
-  SetObject* setObj = &obj->as<SetObject>();
-  *rval = Table(setObj).remove(cx, k);
+  *rval = Table(this).remove(cx, k);
   return true;
 }
 
 bool SetObject::delete_impl(JSContext* cx, const CallArgs& args) {
-  MOZ_ASSERT(is(args.thisv()));
-
-  ARG0_KEY(cx, args, key);
-
-  SetObject* setObj = &args.thisv().toObject().as<SetObject>();
-
-  bool found = Table(setObj).remove(cx, key);
+  auto* setObj = &args.thisv().toObject().as<SetObject>();
+  bool found;
+  if (!setObj->delete_(cx, args.get(0), &found)) {
+    return false;
+  }
   args.rval().setBoolean(found);
   return true;
 }
@@ -1597,10 +1549,9 @@ bool SetObject::delete_(JSContext* cx, unsigned argc, Value* vp) {
   return CallNonGenericMethod<SetObject::is, SetObject::delete_impl>(cx, args);
 }
 
-bool SetObject::iterator(JSContext* cx, IteratorKind kind, HandleObject obj,
-                         MutableHandleValue iter) {
-  MOZ_ASSERT(SetObject::is(obj));
-  Rooted<JSObject*> iterobj(cx, SetIteratorObject::create(cx, obj, kind));
+bool SetObject::iterator(JSContext* cx, IteratorKind kind,
+                         Handle<SetObject*> obj, MutableHandleValue iter) {
+  JSObject* iterobj = SetIteratorObject::create(cx, obj, kind);
   if (!iterobj) {
     return false;
   }
@@ -1610,13 +1561,8 @@ bool SetObject::iterator(JSContext* cx, IteratorKind kind, HandleObject obj,
 
 bool SetObject::iterator_impl(JSContext* cx, const CallArgs& args,
                               IteratorKind kind) {
-  Rooted<SetObject*> setobj(cx, &args.thisv().toObject().as<SetObject>());
-  Rooted<JSObject*> iterobj(cx, SetIteratorObject::create(cx, setobj, kind));
-  if (!iterobj) {
-    return false;
-  }
-  args.rval().setObject(*iterobj);
-  return true;
+  Rooted<SetObject*> setObj(cx, &args.thisv().toObject().as<SetObject>());
+  return iterator(cx, kind, setObj, args.rval());
 }
 
 bool SetObject::values_impl(JSContext* cx, const CallArgs& args) {
@@ -1639,16 +1585,11 @@ bool SetObject::entries(JSContext* cx, unsigned argc, Value* vp) {
   return CallNonGenericMethod(cx, is, entries_impl, args);
 }
 
-bool SetObject::clear(JSContext* cx, HandleObject obj) {
-  MOZ_ASSERT(SetObject::is(obj));
-  SetObject* setObj = &obj->as<SetObject>();
-  Table(setObj).clear(cx);
-  return true;
-}
+void SetObject::clear(JSContext* cx) { Table(this).clear(cx); }
 
 bool SetObject::clear_impl(JSContext* cx, const CallArgs& args) {
-  SetObject* setObj = &args.thisv().toObject().as<SetObject>();
-  Table(setObj).clear(cx);
+  auto* setObj = &args.thisv().toObject().as<SetObject>();
+  setObj->clear(cx);
   args.rval().setUndefined();
   return true;
 }
@@ -1699,76 +1640,23 @@ static bool forEach(const char* funcName, JSContext* cx, HandleObject obj,
   return Call(cx, fval, obj, callbackFn, thisArg, &fval);
 }
 
-// Handles Clear/Size for public jsapi map/set access
-template <typename RetT>
-RetT CallObjFunc(RetT (*ObjFunc)(JSContext*, HandleObject), JSContext* cx,
-                 HandleObject obj) {
-  CHECK_THREAD(cx);
-  cx->check(obj);
+// RAII class that unwraps a wrapped Map or Set object and then enters its
+// realm.
+template <typename TableObject>
+class MOZ_RAII AutoEnterTableRealm {
+  mozilla::Maybe<AutoRealm> ar_;
+  Rooted<TableObject*> unwrapped_;
 
-  // Always unwrap, in case this is an xray or cross-compartment wrapper.
-  RootedObject unwrappedObj(cx);
-  unwrappedObj = UncheckedUnwrap(obj);
-
-  // Enter the realm of the backing object before calling functions on
-  // it.
-  JSAutoRealm ar(cx, unwrappedObj);
-  return ObjFunc(cx, unwrappedObj);
-}
-
-// Handles Has/Delete for public jsapi map/set access
-bool CallObjFunc(bool (*ObjFunc)(JSContext* cx, HandleObject obj,
-                                 HandleValue key, bool* rval),
-                 JSContext* cx, HandleObject obj, HandleValue key, bool* rval) {
-  CHECK_THREAD(cx);
-  cx->check(obj, key);
-
-  // Always unwrap, in case this is an xray or cross-compartment wrapper.
-  RootedObject unwrappedObj(cx);
-  unwrappedObj = UncheckedUnwrap(obj);
-  JSAutoRealm ar(cx, unwrappedObj);
-
-  // If we're working with a wrapped map/set, rewrap the key into the
-  // compartment of the unwrapped map/set.
-  RootedValue wrappedKey(cx, key);
-  if (obj != unwrappedObj) {
-    if (!JS_WrapValue(cx, &wrappedKey)) {
-      return false;
-    }
+ public:
+  AutoEnterTableRealm(JSContext* cx, JSObject* obj) : unwrapped_(cx) {
+    JSObject* unwrapped = UncheckedUnwrap(obj);
+    MOZ_ASSERT(unwrapped != obj);
+    MOZ_RELEASE_ASSERT(unwrapped->is<TableObject>());
+    unwrapped_ = &unwrapped->as<TableObject>();
+    ar_.emplace(cx, unwrapped_);
   }
-  return ObjFunc(cx, unwrappedObj, wrappedKey, rval);
-}
-
-// Handles iterator generation for public jsapi map/set access
-template <typename Iter>
-bool CallObjFunc(bool (*ObjFunc)(JSContext* cx, Iter kind, HandleObject obj,
-                                 MutableHandleValue iter),
-                 JSContext* cx, Iter iterType, HandleObject obj,
-                 MutableHandleValue rval) {
-  CHECK_THREAD(cx);
-  cx->check(obj);
-
-  // Always unwrap, in case this is an xray or cross-compartment wrapper.
-  RootedObject unwrappedObj(cx);
-  unwrappedObj = UncheckedUnwrap(obj);
-  {
-    // Retrieve the iterator while in the unwrapped map/set's compartment,
-    // otherwise we'll crash on a compartment assert.
-    JSAutoRealm ar(cx, unwrappedObj);
-    if (!ObjFunc(cx, iterType, unwrappedObj, rval)) {
-      return false;
-    }
-  }
-
-  // If the caller is in a different compartment than the map/set, rewrap the
-  // iterator object into the caller's compartment.
-  if (obj != unwrappedObj) {
-    if (!JS_WrapValue(cx, rval)) {
-      return false;
-    }
-  }
-  return true;
-}
+  Handle<TableObject*> unwrapped() const { return unwrapped_; }
+};
 
 /*** JS public APIs *********************************************************/
 
@@ -1777,7 +1665,15 @@ JS_PUBLIC_API JSObject* JS::NewMapObject(JSContext* cx) {
 }
 
 JS_PUBLIC_API uint32_t JS::MapSize(JSContext* cx, HandleObject obj) {
-  return CallObjFunc<uint32_t>(&MapObject::size, cx, obj);
+  CHECK_THREAD(cx);
+  cx->check(obj);
+
+  if (obj->is<MapObject>()) {
+    return obj.as<MapObject>()->size();
+  }
+
+  AutoEnterTableRealm<MapObject> enter(cx, obj);
+  return enter.unwrapped()->size();
 }
 
 JS_PUBLIC_API bool JS::MapGet(JSContext* cx, HandleObject obj, HandleValue key,
@@ -1785,32 +1681,21 @@ JS_PUBLIC_API bool JS::MapGet(JSContext* cx, HandleObject obj, HandleValue key,
   CHECK_THREAD(cx);
   cx->check(obj, key, rval);
 
-  // Unwrap the object, and enter its realm. If object isn't wrapped,
-  // this is essentially a noop.
-  RootedObject unwrappedObj(cx);
-  unwrappedObj = UncheckedUnwrap(obj);
+  if (obj->is<MapObject>()) {
+    return obj.as<MapObject>()->get(cx, key, rval);
+  }
+
   {
-    JSAutoRealm ar(cx, unwrappedObj);
-    RootedValue wrappedKey(cx, key);
-
-    // If we passed in a wrapper, wrap our key into its compartment now.
-    if (obj != unwrappedObj) {
-      if (!JS_WrapValue(cx, &wrappedKey)) {
-        return false;
-      }
+    AutoEnterTableRealm<MapObject> enter(cx, obj);
+    Rooted<Value> wrappedKey(cx, key);
+    if (!JS_WrapValue(cx, &wrappedKey)) {
+      return false;
     }
-    if (!MapObject::get(cx, unwrappedObj, wrappedKey, rval)) {
+    if (!enter.unwrapped()->get(cx, wrappedKey, rval)) {
       return false;
     }
   }
-
-  // If we passed in a wrapper, wrap our return value on the way out.
-  if (obj != unwrappedObj) {
-    if (!JS_WrapValue(cx, rval)) {
-      return false;
-    }
-  }
-  return true;
+  return JS_WrapValue(cx, rval);
 }
 
 JS_PUBLIC_API bool JS::MapSet(JSContext* cx, HandleObject obj, HandleValue key,
@@ -1818,56 +1703,103 @@ JS_PUBLIC_API bool JS::MapSet(JSContext* cx, HandleObject obj, HandleValue key,
   CHECK_THREAD(cx);
   cx->check(obj, key, val);
 
-  // Unwrap the object, and enter its compartment. If object isn't wrapped,
-  // this is essentially a noop.
-  RootedObject unwrappedObj(cx);
-  unwrappedObj = UncheckedUnwrap(obj);
-  {
-    JSAutoRealm ar(cx, unwrappedObj);
-
-    // If we passed in a wrapper, wrap both key and value before adding to
-    // the map
-    RootedValue wrappedKey(cx, key);
-    RootedValue wrappedValue(cx, val);
-    if (obj != unwrappedObj) {
-      if (!JS_WrapValue(cx, &wrappedKey) || !JS_WrapValue(cx, &wrappedValue)) {
-        return false;
-      }
-    }
-    return MapObject::set(cx, unwrappedObj, wrappedKey, wrappedValue);
+  if (obj->is<MapObject>()) {
+    return obj.as<MapObject>()->set(cx, key, val);
   }
+
+  AutoEnterTableRealm<MapObject> enter(cx, obj);
+  Rooted<Value> wrappedKey(cx, key);
+  Rooted<Value> wrappedValue(cx, val);
+  if (!JS_WrapValue(cx, &wrappedKey) || !JS_WrapValue(cx, &wrappedValue)) {
+    return false;
+  }
+  return enter.unwrapped()->set(cx, wrappedKey, wrappedValue);
 }
 
 JS_PUBLIC_API bool JS::MapHas(JSContext* cx, HandleObject obj, HandleValue key,
                               bool* rval) {
-  return CallObjFunc(MapObject::has, cx, obj, key, rval);
+  CHECK_THREAD(cx);
+  cx->check(obj, key);
+
+  if (obj->is<MapObject>()) {
+    return obj.as<MapObject>()->has(cx, key, rval);
+  }
+
+  AutoEnterTableRealm<MapObject> enter(cx, obj);
+  Rooted<Value> wrappedKey(cx, key);
+  if (!JS_WrapValue(cx, &wrappedKey)) {
+    return false;
+  }
+  return enter.unwrapped()->has(cx, wrappedKey, rval);
 }
 
 JS_PUBLIC_API bool JS::MapDelete(JSContext* cx, HandleObject obj,
                                  HandleValue key, bool* rval) {
-  return CallObjFunc(MapObject::delete_, cx, obj, key, rval);
+  CHECK_THREAD(cx);
+  cx->check(obj, key);
+
+  if (obj->is<MapObject>()) {
+    return obj.as<MapObject>()->delete_(cx, key, rval);
+  }
+
+  AutoEnterTableRealm<MapObject> enter(cx, obj);
+  Rooted<Value> wrappedKey(cx, key);
+  if (!JS_WrapValue(cx, &wrappedKey)) {
+    return false;
+  }
+  return enter.unwrapped()->delete_(cx, wrappedKey, rval);
 }
 
 JS_PUBLIC_API bool JS::MapClear(JSContext* cx, HandleObject obj) {
-  return CallObjFunc(&MapObject::clear, cx, obj);
+  CHECK_THREAD(cx);
+  cx->check(obj);
+
+  if (obj->is<MapObject>()) {
+    obj.as<MapObject>()->clear(cx);
+    return true;
+  }
+
+  AutoEnterTableRealm<MapObject> enter(cx, obj);
+  enter.unwrapped()->clear(cx);
+  return true;
+}
+
+template <typename TableObject>
+[[nodiscard]] static bool CreateIterator(
+    JSContext* cx, typename TableObject::IteratorKind kind,
+    Handle<JSObject*> obj, MutableHandle<Value> rval) {
+  CHECK_THREAD(cx);
+  cx->check(obj);
+
+  if (obj->is<TableObject>()) {
+    return TableObject::iterator(cx, kind, obj.as<TableObject>(), rval);
+  }
+
+  {
+    AutoEnterTableRealm<TableObject> enter(cx, obj);
+    if (!TableObject::iterator(cx, kind, enter.unwrapped(), rval)) {
+      return false;
+    }
+  }
+  return JS_WrapValue(cx, rval);
 }
 
 JS_PUBLIC_API bool JS::MapKeys(JSContext* cx, HandleObject obj,
                                MutableHandleValue rval) {
-  return CallObjFunc(&MapObject::iterator, cx, MapObject::IteratorKind::Keys,
-                     obj, rval);
+  return CreateIterator<MapObject>(cx, MapObject::IteratorKind::Keys, obj,
+                                   rval);
 }
 
 JS_PUBLIC_API bool JS::MapValues(JSContext* cx, HandleObject obj,
                                  MutableHandleValue rval) {
-  return CallObjFunc(&MapObject::iterator, cx, MapObject::IteratorKind::Values,
-                     obj, rval);
+  return CreateIterator<MapObject>(cx, MapObject::IteratorKind::Values, obj,
+                                   rval);
 }
 
 JS_PUBLIC_API bool JS::MapEntries(JSContext* cx, HandleObject obj,
                                   MutableHandleValue rval) {
-  return CallObjFunc(&MapObject::iterator, cx, MapObject::IteratorKind::Entries,
-                     obj, rval);
+  return CreateIterator<MapObject>(cx, MapObject::IteratorKind::Entries, obj,
+                                   rval);
 }
 
 JS_PUBLIC_API bool JS::MapForEach(JSContext* cx, HandleObject obj,
@@ -1880,7 +1812,15 @@ JS_PUBLIC_API JSObject* JS::NewSetObject(JSContext* cx) {
 }
 
 JS_PUBLIC_API uint32_t JS::SetSize(JSContext* cx, HandleObject obj) {
-  return CallObjFunc<uint32_t>(&SetObject::size, cx, obj);
+  CHECK_THREAD(cx);
+  cx->check(obj);
+
+  if (obj->is<SetObject>()) {
+    return obj.as<SetObject>()->size();
+  }
+
+  AutoEnterTableRealm<SetObject> enter(cx, obj);
+  return enter.unwrapped()->size();
 }
 
 JS_PUBLIC_API bool JS::SetAdd(JSContext* cx, HandleObject obj,
@@ -1888,36 +1828,64 @@ JS_PUBLIC_API bool JS::SetAdd(JSContext* cx, HandleObject obj,
   CHECK_THREAD(cx);
   cx->check(obj, key);
 
-  // Unwrap the object, and enter its compartment. If object isn't wrapped,
-  // this is essentially a noop.
-  RootedObject unwrappedObj(cx);
-  unwrappedObj = UncheckedUnwrap(obj);
-  {
-    JSAutoRealm ar(cx, unwrappedObj);
-
-    // If we passed in a wrapper, wrap key before adding to the set
-    RootedValue wrappedKey(cx, key);
-    if (obj != unwrappedObj) {
-      if (!JS_WrapValue(cx, &wrappedKey)) {
-        return false;
-      }
-    }
-    return SetObject::add(cx, unwrappedObj, wrappedKey);
+  if (obj->is<SetObject>()) {
+    return obj.as<SetObject>()->add(cx, key);
   }
+
+  AutoEnterTableRealm<SetObject> enter(cx, obj);
+  Rooted<Value> wrappedKey(cx, key);
+  if (!JS_WrapValue(cx, &wrappedKey)) {
+    return false;
+  }
+  return enter.unwrapped()->add(cx, wrappedKey);
 }
 
 JS_PUBLIC_API bool JS::SetHas(JSContext* cx, HandleObject obj, HandleValue key,
                               bool* rval) {
-  return CallObjFunc(SetObject::has, cx, obj, key, rval);
+  CHECK_THREAD(cx);
+  cx->check(obj, key);
+
+  if (obj->is<SetObject>()) {
+    return obj.as<SetObject>()->has(cx, key, rval);
+  }
+
+  AutoEnterTableRealm<SetObject> enter(cx, obj);
+  Rooted<Value> wrappedKey(cx, key);
+  if (!JS_WrapValue(cx, &wrappedKey)) {
+    return false;
+  }
+  return enter.unwrapped()->has(cx, wrappedKey, rval);
 }
 
 JS_PUBLIC_API bool JS::SetDelete(JSContext* cx, HandleObject obj,
                                  HandleValue key, bool* rval) {
-  return CallObjFunc(SetObject::delete_, cx, obj, key, rval);
+  CHECK_THREAD(cx);
+  cx->check(obj, key);
+
+  if (obj->is<SetObject>()) {
+    return obj.as<SetObject>()->delete_(cx, key, rval);
+  }
+
+  AutoEnterTableRealm<SetObject> enter(cx, obj);
+  Rooted<Value> wrappedKey(cx, key);
+  if (!JS_WrapValue(cx, &wrappedKey)) {
+    return false;
+  }
+  return enter.unwrapped()->delete_(cx, wrappedKey, rval);
 }
 
 JS_PUBLIC_API bool JS::SetClear(JSContext* cx, HandleObject obj) {
-  return CallObjFunc(&SetObject::clear, cx, obj);
+  CHECK_THREAD(cx);
+  cx->check(obj);
+
+  if (obj->is<SetObject>()) {
+    obj.as<SetObject>()->clear(cx);
+    return true;
+  }
+
+  AutoEnterTableRealm<SetObject> enter(cx, obj);
+  enter.unwrapped()->clear(cx);
+  return true;
 }
 
 JS_PUBLIC_API bool JS::SetKeys(JSContext* cx, HandleObject obj,
@@ -1927,14 +1895,14 @@ JS_PUBLIC_API bool JS::SetKeys(JSContext* cx, HandleObject obj,
 
 JS_PUBLIC_API bool JS::SetValues(JSContext* cx, HandleObject obj,
                                  MutableHandleValue rval) {
-  return CallObjFunc(&SetObject::iterator, cx, SetObject::IteratorKind::Values,
-                     obj, rval);
+  return CreateIterator<SetObject>(cx, SetObject::IteratorKind::Values, obj,
+                                   rval);
 }
 
 JS_PUBLIC_API bool JS::SetEntries(JSContext* cx, HandleObject obj,
                                   MutableHandleValue rval) {
-  return CallObjFunc(&SetObject::iterator, cx, SetObject::IteratorKind::Entries,
-                     obj, rval);
+  return CreateIterator<SetObject>(cx, SetObject::IteratorKind::Entries, obj,
+                                   rval);
 }
 
 JS_PUBLIC_API bool JS::SetForEach(JSContext* cx, HandleObject obj,

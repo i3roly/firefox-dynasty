@@ -661,7 +661,7 @@ void WebGPUParent::MapCallback(ffi::WGPUBufferMapAsyncStatus aStatus,
     mapData->mMappedSize = size;
   }
 
-  req->mResolver(std::move(result));
+  req->mResolver(result);
   delete req;
 }
 
@@ -903,13 +903,13 @@ ipc::IPCResult WebGPUParent::RecvQueueWriteAction(
   return IPC_OK();
 }
 
-ipc::IPCResult WebGPUParent::RecvBindGroupLayoutDrop(RawId aBindGroupId) {
-  ffi::wgpu_server_bind_group_layout_drop(mContext.get(), aBindGroupId);
+ipc::IPCResult WebGPUParent::RecvBindGroupLayoutDrop(RawId aBindGroupLayoutId) {
+  ffi::wgpu_server_bind_group_layout_drop(mContext.get(), aBindGroupLayoutId);
   return IPC_OK();
 }
 
-ipc::IPCResult WebGPUParent::RecvPipelineLayoutDrop(RawId aLayoutId) {
-  ffi::wgpu_server_pipeline_layout_drop(mContext.get(), aLayoutId);
+ipc::IPCResult WebGPUParent::RecvPipelineLayoutDrop(RawId aPipelineLayoutId) {
+  ffi::wgpu_server_pipeline_layout_drop(mContext.get(), aPipelineLayoutId);
   return IPC_OK();
 }
 
@@ -1629,10 +1629,7 @@ bool WebGPUParent::EnsureExternalTextureForSwapChain(
 
   auto externalTexture = CreateExternalTexture(aDeviceId, aTextureId, aWidth,
                                                aHeight, aFormat, aUsage);
-  if (!externalTexture) {
-    return false;
-  }
-  return true;
+  return static_cast<bool>(externalTexture);
 }
 
 std::shared_ptr<ExternalTexture> WebGPUParent::CreateExternalTexture(

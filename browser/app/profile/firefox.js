@@ -1031,7 +1031,7 @@ pref("browser.tabs.hoverPreview.showThumbnails", true);
 
 pref("browser.tabs.groups.enabled", false);
 pref("browser.tabs.groups.dragOverThresholdPercent", 20);
-pref("browser.tabs.groups.dragOverDelayMS", 50);
+pref("browser.tabs.groups.dragOverDelayMS", 30);
 
 pref("browser.tabs.firefox-view.logLevel", "Warn");
 
@@ -1510,11 +1510,7 @@ pref("browser.bookmarks.editDialog.maxRecentFolders", 7);
   // On windows these levels are:
   // See - security/sandbox/win/src/sandboxbroker/sandboxBroker.cpp
   // SetSecurityLevelForContentProcess() for what the different settings mean.
-  #if defined(EARLY_BETA_OR_EARLIER)
-    pref("security.sandbox.content.level", 8);
-  #else
-    pref("security.sandbox.content.level", 7);
-  #endif
+  pref("security.sandbox.content.level", 8);
 
   // Pref controlling if messages relevant to sandbox violations are logged.
   pref("security.sandbox.logging.enabled", false);
@@ -2072,10 +2068,10 @@ pref("identity.fxaccounts.enabled", true);
 pref("identity.fxaccounts.remote.root", "https://accounts.firefox.com/");
 
 // The value of the context query parameter passed in fxa requests.
-pref("identity.fxaccounts.contextParam", "fx_desktop_v3");
+pref("identity.fxaccounts.contextParam", "oauth_webchannel_v1");
 
 // Whether to use the oauth flow for desktop or not
-pref("identity.fxaccounts.oauth.enabled", false);
+pref("identity.fxaccounts.oauth.enabled", true);
 
 // The remote URL of the FxA Profile Server
 pref("identity.fxaccounts.remote.profile.uri", "https://profile.accounts.firefox.com/v1");
@@ -3097,7 +3093,11 @@ pref("devtools.debugger.hide-ignored-sources", false);
 pref("devtools.popup.disable_autohide", false);
 
 // Add support for high contrast mode
-pref("devtools.high-contrast-mode-support", false);
+#if defined(NIGHTLY_BUILD)
+  pref("devtools.high-contrast-mode-support", true);
+#else
+  pref("devtools.high-contrast-mode-support", false);
+#endif
 
 // FirstStartup service time-out in ms
 pref("first-startup.timeout", 30000);

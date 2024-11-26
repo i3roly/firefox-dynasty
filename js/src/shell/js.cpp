@@ -1496,14 +1496,13 @@ static bool TrackUnhandledRejections(JSContext* cx, JS::HandleObject promise,
 
   switch (state) {
     case JS::PromiseRejectionHandlingState::Unhandled:
-      if (!SetObject::add(cx, sc->unhandledRejectedPromises, promiseVal)) {
+      if (!sc->unhandledRejectedPromises->add(cx, promiseVal)) {
         return false;
       }
       break;
     case JS::PromiseRejectionHandlingState::Handled:
       bool deleted = false;
-      if (!SetObject::delete_(cx, sc->unhandledRejectedPromises, promiseVal,
-                              &deleted)) {
+      if (!sc->unhandledRejectedPromises->delete_(cx, promiseVal, &deleted)) {
         return false;
       }
       // We can't MOZ_ASSERT(deleted) here, because it's possible we failed to
@@ -11841,7 +11840,7 @@ static void SetWorkerContextOptions(JSContext* cx) {
 
   AutoRealm ar(cx, sc->unhandledRejectedPromises);
 
-  if (!SetObject::size(cx, sc->unhandledRejectedPromises)) {
+  if (sc->unhandledRejectedPromises->size() == 0) {
     return true;
   }
 

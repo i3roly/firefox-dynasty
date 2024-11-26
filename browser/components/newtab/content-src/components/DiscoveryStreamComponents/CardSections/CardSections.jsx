@@ -4,13 +4,15 @@
 
 import React, { useCallback } from "react";
 import { DSEmptyState } from "../DSEmptyState/DSEmptyState";
-import { DSCard } from "../DSCard/DSCard";
+import { DSCard, PlaceholderDSCard } from "../DSCard/DSCard";
 import { useSelector } from "react-redux";
 import { actionCreators as ac, actionTypes as at } from "common/Actions.mjs";
 import { useIntersectionObserver } from "../../../lib/hooks";
 
 // Prefs
 const PREF_SECTIONS_CARDS_ENABLED = "discoverystream.sections.cards.enabled";
+const PREF_SECTIONS_CARDS_THUMBS_UP_DOWN_ENABLED =
+  "discoverystream.sections.cards.thumbsUpDown.enabled";
 const PREF_TOPICS_ENABLED = "discoverystream.topicLabels.enabled";
 const PREF_TOPICS_SELECTED = "discoverystream.topicSelection.selectedTopics";
 const PREF_TOPICS_AVAILABLE = "discoverystream.topicSelection.topics";
@@ -28,14 +30,17 @@ function CardSections({
   ctaButtonSponsors,
 }) {
   const { recommendations, sections } = data;
-  const isEmpty = recommendations?.length === 0 || !sections;
+  const isEmpty = !recommendations?.length || !sections;
 
   const prefs = useSelector(state => state.Prefs.values);
   const showTopics = prefs[PREF_TOPICS_ENABLED];
   const mayHaveSectionsCards = prefs[PREF_SECTIONS_CARDS_ENABLED];
+  const mayHaveSectionsCardsThumbsUpDown =
+    prefs[PREF_SECTIONS_CARDS_THUMBS_UP_DOWN_ENABLED];
   const mayHaveThumbsUpDown = prefs[PREF_THUMBS_UP_DOWN_ENABLED];
   const selectedTopics = prefs[PREF_TOPICS_SELECTED];
   const availableTopics = prefs[PREF_TOPICS_AVAILABLE];
+  const { saveToPocketCard } = useSelector(state => state.DiscoveryStream);
 
   const handleIntersection = useCallback(
     el => {
@@ -60,27 +65,33 @@ function CardSections({
     return null;
   }
 
+  // Only show thumbs up/down buttons if both default thumbs and sections thumbs prefs are enabled
+  const mayHaveCombinedThumbsUpDown =
+    mayHaveSectionsCardsThumbsUpDown && mayHaveThumbsUpDown;
+
   function getLayoutData(responsiveLayout, index) {
     let layoutData = {
-      position: {},
       classNames: [],
     };
 
-    responsiveLayout.flatMap(layout =>
-      layout.tiles
-        .filter((_, tileIndex) => tileIndex === index)
-        .forEach(tile => {
+    responsiveLayout.forEach(layout => {
+      layout.tiles.forEach((tile, tileIndex) => {
+        if (tile.position === index) {
           layoutData.classNames.push(`col-${layout.columnCount}-${tile.size}`);
-          layoutData.position[`col${layout.columnCount}`] = tile.position;
-        })
-    );
+          layoutData.classNames.push(
+            `col-${layout.columnCount}-position-${tileIndex}`
+          );
+        }
+      });
+    });
+
     return layoutData;
   }
 
   // function to determine amount of tiles shown per section per viewport
-  function getMaxTiles(responsiveLayout) {
-    return responsiveLayout
-      .flatMap(layout => layout)
+  function getMaxTiles(responsiveLayouts) {
+    return responsiveLayouts
+      .flatMap(responsiveLayout => responsiveLayout)
       .reduce((acc, t) => {
         acc[t.columnCount] = t.tiles.length;
 
@@ -102,6 +113,15 @@ function CardSections({
         const { sectionKey, title, subtitle } = section;
         const { responsiveLayouts } = section.layout;
         const { maxTile } = getMaxTiles(responsiveLayouts);
+        const displaySections = section.data.slice(0, maxTile);
+        const isSectionEmpty = !displaySections?.length;
+        const shouldShowLabels =
+          sectionKey === "top_stories_section" && showTopics;
+
+        if (isSectionEmpty) {
+          return null;
+        }
+
         return (
           <section
             key={sectionKey}
@@ -117,8 +137,12 @@ function CardSections({
             </div>
             <div className="ds-section-grid ds-card-grid">
               {section.data.slice(0, maxTile).map((rec, index) => {
-                const layoutData = getLayoutData(responsiveLayouts, index);
-                const { classNames, position } = layoutData;
+                const { classNames } = getLayoutData(responsiveLayouts, index);
+
+                if (!rec || rec.placeholder) {
+                  return <PlaceholderDSCard key={`dscard-${index}`} />;
+                }
+
                 return (
                   <DSCard
                     key={`dscard-${rec.id}`}
@@ -152,20 +176,17 @@ function CardSections({
                     received_rank={rec.received_rank}
                     format={rec.format}
                     alt_text={rec.alt_text}
-                    mayHaveThumbsUpDown={mayHaveThumbsUpDown}
+                    mayHaveThumbsUpDown={mayHaveCombinedThumbsUpDown}
                     mayHaveSectionsCards={mayHaveSectionsCards}
-                    showTopics={showTopics}
+                    showTopics={shouldShowLabels}
                     selectedTopics={selectedTopics}
                     availableTopics={availableTopics}
                     is_collection={is_collection}
+                    saveToPocketCard={saveToPocketCard}
                     ctaButtonSponsors={ctaButtonSponsors}
                     ctaButtonVariant={ctaButtonVariant}
                     spocMessageVariant={spocMessageVariant}
                     sectionsClassNames={classNames.join(" ")}
-                    data-position-one={position.col1}
-                    data-position-two={position.col2}
-                    data-position-three={position.col3}
-                    data-position-four={position.col4}
                     section={sectionKey}
                     sectionPosition={sectionIndex}
                   />

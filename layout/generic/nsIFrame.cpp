@@ -325,6 +325,16 @@ bool nsIFrame::CheckAndClearPaintedState() {
   return result;
 }
 
+nsIFrame* nsIFrame::FindLineContainer() const {
+  MOZ_ASSERT(IsLineParticipant());
+  nsIFrame* parent = GetParent();
+  while (parent &&
+         (parent->IsLineParticipant() || parent->CanContinueTextRun())) {
+    parent = parent->GetParent();
+  }
+  return parent;
+}
+
 bool nsIFrame::CheckAndClearDisplayListState() {
   bool result = BuiltDisplayList();
   SetBuiltDisplayList(false);
@@ -1506,42 +1516,6 @@ void nsIFrame::SyncFrameViewProperties(nsView* aView) {
   }
 }
 
-void nsIFrame::CreateView() {
-  MOZ_ASSERT(!HasView());
-
-  nsView* parentView = GetParent()->GetClosestView();
-  MOZ_ASSERT(parentView, "no parent with view");
-
-  nsViewManager* viewManager = parentView->GetViewManager();
-  MOZ_ASSERT(viewManager, "null view manager");
-
-  nsView* view = viewManager->CreateView(GetRect(), parentView);
-  SyncFrameViewProperties(view);
-
-  nsView* insertBefore = nsLayoutUtils::FindSiblingViewFor(parentView, this);
-  // we insert this view 'above' the insertBefore view, unless insertBefore is
-  // null, in which case we want to call with aAbove == false to insert at the
-  // beginning in document order
-  viewManager->InsertChild(parentView, view, insertBefore,
-                           insertBefore != nullptr);
-
-  // REVIEW: Don't create a widget for fixed-pos elements anymore.
-  // ComputeRepaintRegionForCopy will calculate the right area to repaint
-  // when we scroll.
-  // Reparent views on any child frames (or their descendants) to this
-  // view. We can just call ReparentFrameViewTo on this frame because
-  // we know this frame has no view, so it will crawl the children. Also,
-  // we know that any descendants with views must have 'parentView' as their
-  // parent view.
-  ReparentFrameViewTo(viewManager, view);
-
-  // Remember our view
-  SetView(view);
-
-  NS_FRAME_LOG(NS_FRAME_TRACE_CALLS,
-               ("nsIFrame::CreateView: frame=%p view=%p", this, view));
-}
-
 /* virtual */
 nsMargin nsIFrame::GetUsedMargin() const {
   nsMargin margin;
@@ -2132,6 +2106,18 @@ nsIFrame::CaretBlockAxisMetrics nsIFrame::GetCaretBlockAxisMetrics(
                                  .mExtent = height};
   }
   return CaretBlockAxisMetrics{.mOffset = baseline - ascent, .mExtent = height};
+}
+
+nscoord nsIFrame::GetFontMetricsDerivedCaretBaseline(nscoord aBSize) const {
+  float inflation = nsLayoutUtils::FontSizeInflationFor(this);
+  RefPtr<nsFontMetrics> fm =
+      nsLayoutUtils::GetFontMetricsForFrame(this, inflation);
+  const WritingMode wm = GetWritingMode();
+  nscoord lineHeight = ReflowInput::CalcLineHeight(
+      *Style(), PresContext(), GetContent(), aBSize, inflation);
+  return nsLayoutUtils::GetCenteredFontBaseline(fm, lineHeight,
+                                                wm.IsLineInverted()) +
+         GetLogicalUsedBorderAndPadding(wm).BStart(wm);
 }
 
 const nsAtom* nsIFrame::ComputePageValue(const nsAtom* aAutoValue) const {
@@ -4651,9 +4637,18 @@ bool nsIFrame::IsSelectable(StyleUserSelect* aSelectStyle) const {
 }
 
 bool nsIFrame::ShouldHaveLineIfEmpty() const {
-  if (Style()->IsPseudoOrAnonBox() &&
-      Style()->GetPseudoType() != PseudoStyleType::scrolledContent) {
-    return false;
+  switch (Style()->GetPseudoType()) {
+    case PseudoStyleType::NotPseudo:
+      break;
+    case PseudoStyleType::scrolledContent:
+      return GetParent()->ShouldHaveLineIfEmpty();
+    case PseudoStyleType::mozTextControlEditingRoot:
+      return true;
+    case PseudoStyleType::buttonContent:
+      // HTML quirk.
+      return GetContent()->IsHTMLElement(nsGkAtoms::input);
+    default:
+      return false;
   }
   return IsEditingHost(this);
 }
@@ -5493,8 +5488,21 @@ static bool SelfIsSelectable(nsIFrame* aFrame, nsIFrame* aParentFrame,
       !aFrame->StyleVisibility()->IsVisible()) {
     return false;
   }
-  return !aFrame->IsGeneratedContentFrame() &&
-         aFrame->Style()->UserSelect() != StyleUserSelect::None;
+  if (aFrame->IsGeneratedContentFrame()) {
+    return false;
+  }
+  if (aFrame->Style()->UserSelect() == StyleUserSelect::None) {
+    return false;
+  }
+  if (aFrame->IsEmpty() &&
+      (!aFrame->IsTextFrame() || !aFrame->ContentIsEditable())) {
+    // FIXME(emilio): Historically we haven't treated empty frames as
+    // selectable, but also we had special-cases so that editable empty text
+    // frames returned false from IsEmpty(). Sort this out (probably by
+    // removing the IsEmpty() condition altogether).
+    return false;
+  }
+  return true;
 }
 
 static bool FrameContentCanHaveParentSelectionRange(nsIFrame* aFrame) {
@@ -5551,8 +5559,7 @@ static FrameTarget DrillDownToSelectionFrame(nsIFrame* aFrame, bool aEndFrame,
     nsIFrame* result = nullptr;
     nsIFrame* frame = aFrame->PrincipalChildList().FirstChild();
     if (!aEndFrame) {
-      while (frame &&
-             (!SelfIsSelectable(frame, aFrame, aFlags) || frame->IsEmpty())) {
+      while (frame && !SelfIsSelectable(frame, aFrame, aFlags)) {
         frame = frame->GetNextSibling();
       }
       if (frame) {
@@ -5564,7 +5571,7 @@ static FrameTarget DrillDownToSelectionFrame(nsIFrame* aFrame, bool aEndFrame,
       // XXX I have a feeling this could be slow for long blocks, although
       //     I can't find any slowdowns
       while (frame) {
-        if (!frame->IsEmpty() && SelfIsSelectable(frame, aFrame, aFlags)) {
+        if (SelfIsSelectable(frame, aFrame, aFlags)) {
           result = frame;
         }
         frame = frame->GetNextSibling();
@@ -5602,7 +5609,7 @@ static FrameTarget GetSelectionClosestFrameForLine(
     // the previous thing had a different editableness than us, since then we
     // may end up not being able to select after it if the br is the last thing
     // on the line.
-    if (!SelfIsSelectable(frame, aParent, aFlags) || frame->IsEmpty() ||
+    if (!SelfIsSelectable(frame, aParent, aFlags) ||
         (canSkipBr && frame->IsBrFrame() &&
          lastFrameWasEditable == frame->GetContent()->IsEditable())) {
       continue;
@@ -5791,7 +5798,7 @@ static FrameTarget GetSelectionClosestFrame(nsIFrame* aFrame,
     // Go through all the child frames to find the closest one
     nsIFrame::FrameWithDistance closest = {nullptr, nscoord_MAX, nscoord_MAX};
     for (; kid; kid = kid->GetNextSibling()) {
-      if (!SelfIsSelectable(kid, aFrame, aFlags) || kid->IsEmpty()) {
+      if (!SelfIsSelectable(kid, aFrame, aFlags)) {
         continue;
       }
 
@@ -6577,9 +6584,13 @@ nsIFrame::SizeComputationResult nsIFrame::ComputeSize(
     result.ISize(aWM) = std::min(maxISize, result.ISize(aWM));
   }
 
-  const IntrinsicSizeInput input(aRenderingContext,
-                                 Some(aCBSize.ConvertTo(GetWritingMode(), aWM)),
-                                 Nothing());
+  const nscoord bSizeAsPercentageBasis = ComputeBSizeValueAsPercentageBasis(
+      styleBSize, minBSizeCoord, maxBSizeCoord, aCBSize.BSize(aWM),
+      boxSizingAdjust.BSize(aWM));
+  const IntrinsicSizeInput input(
+      aRenderingContext, Some(aCBSize.ConvertTo(GetWritingMode(), aWM)),
+      Some(LogicalSize(aWM, NS_UNCONSTRAINEDSIZE, bSizeAsPercentageBasis)
+               .ConvertTo(GetWritingMode(), aWM)));
   const auto& minISizeCoord = stylePos->MinISize(aWM);
   nscoord minISize;
   if (!minISizeCoord.IsAuto() && !shouldIgnoreMinMaxISize) {
@@ -7494,7 +7505,6 @@ void nsIFrame::SetView(nsView* aView) {
 #ifdef DEBUG
     LayoutFrameType frameType = Type();
     NS_ASSERTION(frameType == LayoutFrameType::SubDocument ||
-                     frameType == LayoutFrameType::ListControl ||
                      frameType == LayoutFrameType::Viewport ||
                      frameType == LayoutFrameType::MenuPopup,
                  "Only specific frame types can have an nsView");
@@ -7517,16 +7527,6 @@ void nsIFrame::SetView(nsView* aView) {
     RemoveStateBits(NS_FRAME_HAS_VIEW);
     SetViewInternal(nullptr);
   }
-}
-
-// Find the first geometric parent that has a view
-nsIFrame* nsIFrame::GetAncestorWithView() const {
-  for (nsIFrame* f = GetParent(); nullptr != f; f = f->GetParent()) {
-    if (f->HasView()) {
-      return f;
-    }
-  }
-  return nullptr;
 }
 
 template <nsPoint (nsIFrame::*PositionGetter)() const>

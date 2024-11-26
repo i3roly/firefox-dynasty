@@ -313,12 +313,16 @@ bool js::jit::CanInlineNativeCrossRealm(InlinableNative native) {
     case InlinableNative::MapConstructor:
     case InlinableNative::MapGet:
     case InlinableNative::MapHas:
+    case InlinableNative::MapDelete:
+    case InlinableNative::MapSet:
     case InlinableNative::Number:
     case InlinableNative::NumberParseInt:
     case InlinableNative::NumberToString:
     case InlinableNative::ReflectGetPrototypeOf:
     case InlinableNative::SetConstructor:
     case InlinableNative::SetHas:
+    case InlinableNative::SetDelete:
+    case InlinableNative::SetAdd:
     case InlinableNative::SetSize:
     case InlinableNative::String:
     case InlinableNative::StringToString:
