@@ -760,6 +760,8 @@
 
   .tabbrowser-tab:last-of-type > .tab-stack > .tab-background > & {
     margin-inline-end: 0;
+    border-start-end-radius: 1px;
+    border-end-end-radius: 1px;
   }
 
   tab-group & {
@@ -769,6 +771,7 @@
   #tabbrowser-tabs[movingtab] &:is([selected],[multiselected]) {
     display: flex;
     background-color: light-dark(var(--dragover-tab-group-color), var(--dragover-tab-group-color-invert));
+    border-radius: 1px;
   }
 
   #tabbrowser-tabs:is([movingtab-createGroup],[movingtab-ungroup]) &:is([selected],[multiselected]) {
@@ -812,6 +815,8 @@ tab-group {
     height: 2px;
     position: absolute;
     inset: auto 0 0;
+    border-start-start-radius: 1px;
+    border-end-start-radius: 1px;
   }
 }
 
@@ -1478,8 +1483,29 @@ toolbar:not(#TabsToolbar) #firefox-view-button {
   }
 }
 
-.tab-contextmenu-group-icon {
+.menu-iconic.tab-group-icon,
+.menuitem-iconic.tab-group-icon,
+.subviewbutton-iconic.tab-group-icon {
   list-style-image: url("chrome://browser/skin/tabbrowser/tab-group-chicklet.svg");
-  -moz-context-properties: fill;
+  -moz-context-properties: fill, stroke;
   fill: light-dark(var(--tab-group-color), var(--tab-group-color-invert));
+  stroke: transparent;
+}
+
+.menu-iconic.tab-group-icon-collapsed,
+.menuitem-iconic.tab-group-icon-collapsed,
+.subviewbutton-iconic.tab-group-icon-collapsed {
+  list-style-image: url("chrome://browser/skin/tabbrowser/tab-group-chicklet.svg");
+  -moz-context-properties: fill, stroke;
+  fill: light-dark(var(--tab-group-color-pale), var(--tab-group-color));
+  stroke: light-dark(var(--tab-group-color), var(--tab-group-color-pale));
+}
+
+.menu-iconic.tab-group-icon-closed,
+.menuitem-iconic.tab-group-icon-closed,
+.subviewbutton-iconic.tab-group-icon-closed {
+  list-style-image: url("chrome://browser/skin/tabbrowser/tab-group-chicklet.svg");
+  -moz-context-properties: fill, stroke;
+  fill: transparent;
+  stroke: light-dark(var(--tab-group-color), var(--tab-group-color-invert));
 }

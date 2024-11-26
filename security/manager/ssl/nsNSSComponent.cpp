@@ -707,13 +707,9 @@ static nsresult GetNSS3Directory(nsCString& result) {
     MOZ_LOG(gPIPNSSLog, LogLevel::Debug, ("nss not loaded?"));
     return NS_ERROR_FAILURE;
   }
-  nsCOMPtr<nsIFile> nss3File(do_CreateInstance(NS_LOCAL_FILE_CONTRACTID));
-  if (!nss3File) {
-    MOZ_LOG(gPIPNSSLog, LogLevel::Debug, ("couldn't create a file?"));
-    return NS_ERROR_FAILURE;
-  }
-  nsAutoCString nss3PathAsString(nss3Path.get());
-  nsresult rv = nss3File->InitWithNativePath(nss3PathAsString);
+  nsCOMPtr<nsIFile> nss3File;
+  nsresult rv = NS_NewNativeLocalFile(nsDependentCString(nss3Path.get()),
+                                      getter_AddRefs(nss3File));
   if (NS_FAILED(rv)) {
     MOZ_LOG(gPIPNSSLog, LogLevel::Debug,
             ("couldn't initialize file with path '%s'", nss3Path.get()));
@@ -1331,14 +1327,9 @@ static nsresult GetNSSProfilePath(nsAutoCString& aProfilePath) {
 // |profilePath| is encoded in UTF-8.
 static nsresult AttemptToRenamePKCS11ModuleDB(const nsACString& profilePath) {
   nsCOMPtr<nsIFile> profileDir;
-#  ifdef XP_WIN
   // |profilePath| is encoded in UTF-8 because SQLite always takes UTF-8 file
   // paths regardless of the current system code page.
-  MOZ_TRY(NS_NewLocalFile(u""_ns, getter_AddRefs(profileDir)));
-  MOZ_TRY(profileDir->InitWithPath(NS_ConvertUTF8toUTF16(profilePath)));
-#  else
-  MOZ_TRY(NS_NewNativeLocalFile(profilePath, getter_AddRefs(profileDir)));
-#  endif
+  MOZ_TRY(NS_NewUTF8LocalFile(profilePath, getter_AddRefs(profileDir)));
   const char* moduleDBFilename = "pkcs11.txt";
   nsAutoCString destModuleDBFilename(moduleDBFilename);
   destModuleDBFilename.Append(".fips");
@@ -1838,13 +1829,6 @@ nsresult nsNSSComponent::GetNewPrompter(nsIPrompt** result) {
 }
 
 nsresult nsNSSComponent::LogoutAuthenticatedPK11() {
-  nsCOMPtr<nsICertOverrideService> icos =
-      do_GetService("@mozilla.org/security/certoverride;1");
-  if (icos) {
-    icos->ClearValidityOverride("all:temporary-certificates"_ns, 0,
-                                OriginAttributes());
-  }
-
   ClearSSLExternalAndInternalSessionCache();
 
   nsCOMPtr<nsIObserverService> os = mozilla::services::GetObserverService();

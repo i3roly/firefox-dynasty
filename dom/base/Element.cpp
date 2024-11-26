@@ -3878,60 +3878,15 @@ void Element::GetAnimations(const GetAnimationsOptions& aOptions,
   GetAnimationsWithoutFlush(aOptions, aAnimations);
 }
 
-void Element::GetAnimationsWithoutFlush(
-    const GetAnimationsOptions& aOptions,
-    nsTArray<RefPtr<Animation>>& aAnimations) {
-  Element* elem = this;
-  PseudoStyleType pseudoType = PseudoStyleType::NotPseudo;
-  // For animations on generated-content elements, the animations are stored
-  // on the parent element.
-  if (IsGeneratedContentContainerForBefore()) {
-    elem = GetParentElement();
-    pseudoType = PseudoStyleType::before;
-  } else if (IsGeneratedContentContainerForAfter()) {
-    elem = GetParentElement();
-    pseudoType = PseudoStyleType::after;
-  } else if (IsGeneratedContentContainerForMarker()) {
-    elem = GetParentElement();
-    pseudoType = PseudoStyleType::marker;
-  }
-
-  if (!elem) {
-    return;
-  }
-
-  if (!aOptions.mSubtree ||
-      AnimationUtils::IsSupportedPseudoForAnimations(pseudoType)) {
-    GetAnimationsUnsorted(elem, pseudoType, aAnimations);
-  } else {
-    for (nsIContent* node = this; node; node = node->GetNextNode(this)) {
-      if (!node->IsElement()) {
-        continue;
-      }
-      Element* element = node->AsElement();
-      Element::GetAnimationsUnsorted(element, PseudoStyleType::NotPseudo,
-                                     aAnimations);
-      Element::GetAnimationsUnsorted(element, PseudoStyleType::before,
-                                     aAnimations);
-      Element::GetAnimationsUnsorted(element, PseudoStyleType::after,
-                                     aAnimations);
-      Element::GetAnimationsUnsorted(element, PseudoStyleType::marker,
-                                     aAnimations);
-    }
-  }
-  aAnimations.Sort(AnimationPtrComparator<RefPtr<Animation>>());
-}
-
-/* static */
-void Element::GetAnimationsUnsorted(Element* aElement,
-                                    PseudoStyleType aPseudoType,
-                                    nsTArray<RefPtr<Animation>>& aAnimations) {
-  MOZ_ASSERT(aPseudoType == PseudoStyleType::NotPseudo ||
-                 AnimationUtils::IsSupportedPseudoForAnimations(aPseudoType),
+static void GetAnimationsUnsorted(Element* aElement,
+                                  const PseudoStyleRequest& aPseudoRequest,
+                                  nsTArray<RefPtr<Animation>>& aAnimations) {
+  MOZ_ASSERT(aPseudoRequest.IsNotPseudo() ||
+                 AnimationUtils::IsSupportedPseudoForAnimations(aPseudoRequest),
              "Unsupported pseudo type");
   MOZ_ASSERT(aElement, "Null element");
 
-  EffectSet* effects = EffectSet::Get(aElement, aPseudoType);
+  EffectSet* effects = EffectSet::Get(aElement, aPseudoRequest);
   if (!effects) {
     return;
   }
@@ -3949,18 +3904,64 @@ void Element::GetAnimationsUnsorted(Element* aElement,
   }
 }
 
+void Element::GetAnimationsWithoutFlush(
+    const GetAnimationsOptions& aOptions,
+    nsTArray<RefPtr<Animation>>& aAnimations) {
+  Element* elem = this;
+  // FIXME: Bug 1921109. Support getAnimations() for view transitions.
+  PseudoStyleRequest pseudoRequest;
+  // For animations on generated-content elements, the animations are stored
+  // on the parent element.
+  if (IsGeneratedContentContainerForBefore()) {
+    elem = GetParentElement();
+    pseudoRequest.mType = PseudoStyleType::before;
+  } else if (IsGeneratedContentContainerForAfter()) {
+    elem = GetParentElement();
+    pseudoRequest.mType = PseudoStyleType::after;
+  } else if (IsGeneratedContentContainerForMarker()) {
+    elem = GetParentElement();
+    pseudoRequest.mType = PseudoStyleType::marker;
+  }
+
+  if (!elem) {
+    return;
+  }
+
+  if (!aOptions.mSubtree ||
+      AnimationUtils::IsSupportedPseudoForAnimations(pseudoRequest)) {
+    GetAnimationsUnsorted(elem, pseudoRequest, aAnimations);
+  } else {
+    for (nsIContent* node = this; node; node = node->GetNextNode(this)) {
+      if (!node->IsElement()) {
+        continue;
+      }
+      Element* element = node->AsElement();
+      GetAnimationsUnsorted(element, PseudoStyleRequest::NotPseudo(),
+                            aAnimations);
+      GetAnimationsUnsorted(element, PseudoStyleRequest::Before(), aAnimations);
+      GetAnimationsUnsorted(element, PseudoStyleRequest::After(), aAnimations);
+      GetAnimationsUnsorted(element, PseudoStyleRequest::Marker(), aAnimations);
+    }
+  }
+  aAnimations.Sort(AnimationPtrComparator<RefPtr<Animation>>());
+}
+
 void Element::CloneAnimationsFrom(const Element& aOther) {
   AnimationTimeline* const timeline = OwnerDoc()->Timeline();
   MOZ_ASSERT(timeline, "Timeline has not been set on the document yet");
   // Iterate through all pseudo types and copy the effects from each of the
   // other element's effect sets into this element's effect set.
+  // FIXME: Bug 1929470. This funciton is for printing, and it may be tricky to
+  // support view transitions. We have to revisit here after we support view
+  // transitions to make sure we clone the animations properly.
   for (PseudoStyleType pseudoType :
        {PseudoStyleType::NotPseudo, PseudoStyleType::before,
         PseudoStyleType::after, PseudoStyleType::marker}) {
     // If the element has an effect set for this pseudo type (or not pseudo)
     // then copy the effects and animation properties.
-    if (auto* const effects = EffectSet::Get(&aOther, pseudoType)) {
-      auto* const clonedEffects = EffectSet::GetOrCreate(this, pseudoType);
+    const PseudoStyleRequest request(pseudoType);
+    if (auto* const effects = EffectSet::Get(&aOther, request)) {
+      auto* const clonedEffects = EffectSet::GetOrCreate(this, request);
       for (KeyframeEffect* const effect : *effects) {
         auto* animation = effect->GetAnimation();
         if (animation->AsCSSTransition()) {
@@ -3969,7 +3970,7 @@ void Element::CloneAnimationsFrom(const Element& aOther) {
         }
         // Clone the effect.
         RefPtr<KeyframeEffect> clonedEffect = new KeyframeEffect(
-            OwnerDoc(), OwningAnimationTarget{this, pseudoType}, *effect);
+            OwnerDoc(), OwningAnimationTarget{this, request}, *effect);
 
         // Clone the animation
         RefPtr<Animation> clonedAnimation = Animation::ClonePausedAnimation(
@@ -4313,11 +4314,12 @@ void Element::GetImplementedPseudoElement(nsAString& aPseudo) const {
   aPseudo.Append(pseudo);
 }
 
-const Element* Element::GetPseudoElement(
-    const PseudoStyleRequest& aRequest) const {
+Element* Element::GetPseudoElement(const PseudoStyleRequest& aRequest) const {
   switch (aRequest.mType) {
     case PseudoStyleType::NotPseudo:
-      return this;
+      // It's unfortunate we have to do const cast, so we don't have to write
+      // the almost duplicate function for the non-const function.
+      return const_cast<Element*>(this);
     case PseudoStyleType::before:
       return nsLayoutUtils::GetBeforePseudo(this);
     case PseudoStyleType::after:

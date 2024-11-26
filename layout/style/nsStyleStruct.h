@@ -103,6 +103,23 @@ struct ContainSizeAxes {
   const bool mBContained;
 };
 
+// Used value for the CSS 'float' property (logical 'inline-*' in the computed
+// value will have been resolved to 'left' or 'right').
+enum class UsedFloat : uint8_t {
+  None,
+  Left,
+  Right,
+};
+
+// Used value for the CSS 'clear' property (logical 'inline-*' in the computed
+// value will have been resolved to 'left' or 'right').
+enum class UsedClear : uint8_t {
+  None,
+  Left,
+  Right,
+  Both,
+};
+
 }  // namespace mozilla
 
 #define STYLE_STRUCT(name_)                          \
@@ -1329,6 +1346,10 @@ struct MOZ_NEEDS_MEMMOVABLE_MEMBERS nsStyleDisplay {
     return mContainerType != mozilla::StyleContainerType::Normal;
   }
 
+  // See WritingModes.h for the implementations.
+  inline mozilla::UsedFloat UsedFloat(mozilla::WritingMode aWM) const;
+  inline mozilla::UsedClear UsedClear(mozilla::WritingMode aWM) const;
+
  private:
   mozilla::StyleAppearance mAppearance;
   mozilla::StyleContain mContain;
@@ -1805,7 +1826,6 @@ struct MOZ_NEEDS_MEMMOVABLE_MEMBERS nsStyleUIReset {
   // The margin of the window region that should be transparent to events.
   mozilla::StyleLength mMozWindowInputRegionMargin;
   mozilla::StyleTransform mMozWindowTransform;
-  mozilla::StyleTransformOrigin mWindowTransformOrigin;
 
   nsStyleAutoArray<mozilla::StyleTransition> mTransitions;
   // The number of elements in mTransitions that are not from repeating

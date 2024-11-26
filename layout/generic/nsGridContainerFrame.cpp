@@ -230,23 +230,6 @@ struct BoxSizingAdjustment {
   Maybe<LogicalSize> mValue;
 };
 
-template <typename Type>
-static inline bool IsInitialSize(const Type&, const LogicalAxis);
-
-template <>
-inline bool IsInitialSize(const StyleSize& aSize, const LogicalAxis aAxis) {
-  return aAxis == LogicalAxis::Inline
-             ? aSize.IsAuto()
-             : aSize.BehavesLikeInitialValueOnBlockAxis();
-}
-
-template <>
-inline bool IsInitialSize(const StyleMaxSize& aSize, const LogicalAxis aAxis) {
-  return aAxis == LogicalAxis::Inline
-             ? aSize.IsNone()
-             : aSize.BehavesLikeInitialValueOnBlockAxis();
-}
-
 static Maybe<nscoord> GetPercentageBasisForAR(
     const LogicalAxis aRatioDeterminingAxis, const WritingMode aWM,
     const Maybe<LogicalSize>& aContainingBlockSize) {
@@ -320,7 +303,7 @@ struct RepeatTrackSizingInput {
                cbSizeInAxis != NS_UNCONSTRAINEDSIZE) {
       min = adjustForBoxSizing(
           styleMinSize.AsLengthPercentage().Resolve(cbSizeInAxis));
-    } else if (aAspectRatio && IsInitialSize(styleMinSize, aAxis)) {
+    } else if (aAspectRatio && styleMinSize.BehavesLikeInitialValue(aAxis)) {
       // Use GetOrthogonalAxis() to get the ratio-determining axis. Same for max
       // and size below in this function.
       const auto& styleRDMinSize = pos->MinSize(GetOrthogonalAxis(aAxis), aWM);
@@ -340,7 +323,7 @@ struct RepeatTrackSizingInput {
       max = std::max(
           min, adjustForBoxSizing(
                    styleMaxSize.AsLengthPercentage().Resolve(cbSizeInAxis)));
-    } else if (aAspectRatio && IsInitialSize(styleMaxSize, aAxis)) {
+    } else if (aAspectRatio && styleMaxSize.BehavesLikeInitialValue(aAxis)) {
       const auto& styleRDMaxSize = pos->MaxSize(GetOrthogonalAxis(aAxis), aWM);
       if (Maybe<nscoord> resolvedMaxSize = ComputeTransferredSize(
               styleRDMaxSize, aAxis, aWM, aAspectRatio, boxSizingAdjustment,
@@ -358,7 +341,7 @@ struct RepeatTrackSizingInput {
           std::clamp(adjustForBoxSizing(
                          styleSize.AsLengthPercentage().Resolve(cbSizeInAxis)),
                      min, max);
-    } else if (aAspectRatio && IsInitialSize(styleSize, aAxis)) {
+    } else if (aAspectRatio && styleSize.BehavesLikeInitialValue(aAxis)) {
       const auto& styleRDSize = pos->Size(GetOrthogonalAxis(aAxis), aWM);
       if (Maybe<nscoord> resolvedSize = ComputeTransferredSize(
               styleRDSize, aAxis, aWM, aAspectRatio, boxSizingAdjustment,
@@ -857,37 +840,32 @@ struct nsGridContainerFrame::GridItemInfo {
       // tracks may be flexible.
       return false;
     }
-    const bool isInlineAxis = aContainerAxis == LogicalAxis::Inline;
+    const LogicalAxis itemAxis =
+        aContainerWM.IsOrthogonalTo(mFrame->GetWritingMode())
+            ? GetOrthogonalAxis(aContainerAxis)
+            : aContainerAxis;
     const auto* pos =
         mFrame->IsTableWrapperFrame()
             ? mFrame->PrincipalChildList().FirstChild()->StylePosition()
             : mFrame->StylePosition();
-    const auto& size =
-        isInlineAxis ? pos->ISize(aContainerWM) : pos->BSize(aContainerWM);
+    const auto& size = pos->Size(aContainerAxis, aContainerWM);
     // max-content and min-content should behave as initial value in block axis.
     // FIXME: Bug 567039: moz-fit-content and -moz-available are not supported
     // for block size dimension on sizing properties (e.g. height), so we
     // treat it as `auto`.
-    bool isAuto = size.IsAuto() ||
-                  (isInlineAxis ==
-                       aContainerWM.IsOrthogonalTo(mFrame->GetWritingMode()) &&
-                   size.BehavesLikeInitialValueOnBlockAxis());
+    bool isAuto = size.BehavesLikeInitialValue(itemAxis);
     // NOTE: if we have a definite size then our automatic minimum size
     // can't affect our size.  Excluding these simplifies applying
     // the clamping in the right cases later.
     if (!isAuto && !::IsPercentOfIndefiniteSize(size, aPercentageBasis)) {
       return false;
     }
-    const auto& minSize = isInlineAxis ? pos->MinISize(aContainerWM)
-                                       : pos->MinBSize(aContainerWM);
+    const auto& minSize = pos->MinSize(aContainerAxis, aContainerWM);
     // max-content and min-content should behave as initial value in block axis.
     // FIXME: Bug 567039: moz-fit-content and -moz-available are not supported
     // for block size dimension on sizing properties (e.g. height), so we
     // treat it as `auto`.
-    isAuto = minSize.IsAuto() ||
-             (isInlineAxis ==
-                  aContainerWM.IsOrthogonalTo(mFrame->GetWritingMode()) &&
-              minSize.BehavesLikeInitialValueOnBlockAxis());
+    isAuto = minSize.BehavesLikeInitialValue(itemAxis);
     return isAuto && !mFrame->StyleDisplay()->IsScrollableOverflow();
   }
 
@@ -5862,21 +5840,17 @@ static nscoord MinSize(const GridItemInfo& aGridItem,
   nsIFrame* child = aGridItem.mFrame;
   PhysicalAxis axis(aCBWM.PhysicalAxis(aAxis));
   const nsStylePosition* stylePos = child->StylePosition();
-  StyleSize sizeStyle = axis == PhysicalAxis::Horizontal
-                            ? stylePos->GetWidth()
-                            : stylePos->GetHeight();
+  StyleSize styleSize = stylePos->Size(aAxis, aCBWM);
+  const LogicalAxis axisInItemWM = aCBWM.IsOrthogonalTo(child->GetWritingMode())
+                                       ? GetOrthogonalAxis(aAxis)
+                                       : aAxis;
 
-  auto ourInlineAxis =
-      child->GetWritingMode().PhysicalAxis(LogicalAxis::Inline);
   // max-content and min-content should behave as initial value in block axis.
   // FIXME: Bug 567039: moz-fit-content and -moz-available are not supported
   // for block size dimension on sizing properties (e.g. height), so we
   // treat it as `auto`.
-  if (axis != ourInlineAxis && sizeStyle.BehavesLikeInitialValueOnBlockAxis()) {
-    sizeStyle = StyleSize::Auto();
-  }
-
-  if (!sizeStyle.IsAuto() && !sizeStyle.HasPercent()) {
+  if (!styleSize.BehavesLikeInitialValue(axisInItemWM) &&
+      !styleSize.HasPercent()) {
     nscoord s =
         MinContentContribution(aGridItem, aState, aRC, aCBWM, aAxis, aCache);
     aCache->mMinSize.emplace(s);
@@ -5903,18 +5877,14 @@ static nscoord MinSize(const GridItemInfo& aGridItem,
                nsLayoutUtils::MinSizeContributionForAxis(
                    axis, aRC, child, IntrinsicISizeType::MinISize,
                    *aCache->mPercentageBasis);
-  const StyleSize& style = axis == PhysicalAxis::Horizontal
-                               ? stylePos->GetMinWidth()
-                               : stylePos->GetMinHeight();
+  const StyleSize& styleMinSize = stylePos->MinSize(aAxis, aCBWM);
   // max-content and min-content should behave as initial value in block axis.
   // FIXME: Bug 567039: moz-fit-content and -moz-available are not supported
   // for block size dimension on sizing properties (e.g. height), so we
   // treat it as `auto`.
-  const bool inInlineAxis = axis == ourInlineAxis;
-  const bool isAuto =
-      style.IsAuto() ||
-      (!inInlineAxis && style.BehavesLikeInitialValueOnBlockAxis());
-  if ((inInlineAxis && nsIFrame::ToExtremumLength(style)) ||
+  const bool isAuto = styleMinSize.BehavesLikeInitialValue(axisInItemWM);
+  if ((axisInItemWM == LogicalAxis::Inline &&
+       nsIFrame::ToExtremumLength(styleMinSize)) ||
       (isAuto && !child->StyleDisplay()->IsScrollableOverflow())) {
     // Now calculate the "content size" part and return whichever is smaller.
     MOZ_ASSERT(isAuto || sz == NS_UNCONSTRAINEDSIZE);

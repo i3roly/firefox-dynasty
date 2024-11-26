@@ -4,7 +4,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-#include "BaseProfilerSharedLibraries.h"
+#include "SharedLibraries.h"
 
 #define PATH_MAX_TOSTRING(x) #x
 #define PATH_MAX_STRING(x) PATH_MAX_TOSTRING(x)
@@ -163,7 +163,7 @@ class MemoryMappedFile {
   MemoryMappedFile(const MemoryMappedFile&) = delete;
   MemoryMappedFile& operator=(const MemoryMappedFile&) = delete;
 
-  ~MemoryMappedFile() {}
+  ~MemoryMappedFile() { Unmap(); }
 
   // Maps a file at |path| into memory, which can then be accessed via
   // content() as a MemoryRange object or via data(), and returns true on
@@ -553,8 +553,6 @@ class FileID {
   // a simple hash by XORing the first page worth of bytes into |identifier|.
   static bool HashElfTextSection(const void* elf_mapped_base,
                                  std::vector<uint8_t>& identifier) {
-    identifier.resize(kMDGUIDSize);
-
     void* text_section;
     size_t text_size;
     if (!FindElfSection(elf_mapped_base, ".text", SHT_PROGBITS,
@@ -565,6 +563,7 @@ class FileID {
 
     // Only provide |kMDGUIDSize| bytes to keep identifiers produced by this
     // function backwards-compatible.
+    identifier.resize(kMDGUIDSize);
     memset(&identifier[0], 0, kMDGUIDSize);
     const uint8_t* ptr = reinterpret_cast<const uint8_t*>(text_section);
     const uint8_t* ptr_end =
@@ -696,7 +695,7 @@ static SharedLibrary SharedLibraryAtPath(const char* path,
                                          unsigned long offset = 0) {
   std::string pathStr = path;
 
-  size_t pos = pathStr.rfind('\\');
+  size_t pos = pathStr.rfind('/');
   std::string nameStr =
       (pos != std::string::npos) ? pathStr.substr(pos + 1) : pathStr;
 

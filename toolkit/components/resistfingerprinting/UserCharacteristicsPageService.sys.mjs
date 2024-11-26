@@ -88,29 +88,31 @@ export class UserCharacteristicsPageService {
     return lazy.HiddenBrowserManager.withHiddenBrowser(async browser => {
       lazy.console.debug(`In withHiddenBrowser`);
       try {
-        let { promise, resolve } = Promise.withResolvers();
+        const { promise, resolve } = Promise.withResolvers();
         this._backgroundBrowsers.set(browser, resolve);
 
-        let loadURIOptions = {
+        const loadURIOptions = {
           triggeringPrincipal: principal,
         };
 
-        let userCharacteristicsPageURI = Services.io.newURI(
+        const userCharacteristicsPageURI = Services.io.newURI(
           "about:fingerprintingprotection" +
             (Cu.isInAutomation ? "#automation" : "")
         );
 
         browser.loadURI(userCharacteristicsPageURI, loadURIOptions);
 
-        let data = await promise;
+        const data = await promise;
         if (data.debug) {
           lazy.console.debug(`Debugging Output:`);
-          for (let line of data.debug) {
+          for (const line of data.debug) {
             lazy.console.debug(line);
           }
           lazy.console.debug(`(debugging output done)`);
         }
         lazy.console.debug(`Data:`, data.output);
+
+        lazy.console.debug(`Gamepad data:`, data.gamepads);
 
         lazy.console.debug("Populating Glean metrics...");
 
@@ -150,7 +152,7 @@ export class UserCharacteristicsPageService {
       [this.populateDisabledMediaPrefs, []],
       [this.populateMathOps, []],
       [this.populateMappableData, [data.output]],
-      [this.populateGamepads, [data.output.gamepads]],
+      [this.populateGamepads, [data.gamepads]],
       [this.populateClientInfo, []],
       [this.populateCPUInfo, []],
       [this.populateWindowInfo, []],
@@ -193,7 +195,8 @@ export class UserCharacteristicsPageService {
     data,
     { prefix = "", suffix = "", operation = "set" } = {}
   ) {
-    for (const [key, value] of Object.entries(data)) {
+    const entries = data instanceof Map ? data.entries() : Object.entries(data);
+    for (const [key, value] of entries) {
       Glean.characteristics[prefix + key + suffix][operation](value);
     }
   }
@@ -211,16 +214,6 @@ export class UserCharacteristicsPageService {
     // listener, but that assumes the user won't close already
     // existing tabs and continue on a new one before the page
     // is loaded. This is a rare case, but we want to cover it.
-
-    if (Cu.isInAutomation) {
-      // To safeguard against any possible weird empty
-      // documents, we check if the document is empty. If it is
-      // we wait for a valid document to be loaded.
-      // During testing, we load empty.html which doesn't
-      // have any body. So, we end up waiting forever.
-      // Because of this, we skip this part during automation.
-      return;
-    }
 
     const { promise: screenInfoPromise, resolve: screenInfoResolve } =
       Promise.withResolvers();
@@ -276,11 +269,10 @@ export class UserCharacteristicsPageService {
       }
     }
 
-    const screenResult = await screenInfoPromise;
-    this.collectGleanMetricsFromMap(screenResult);
-
-    const pointerResult = await pointerInfoPromise;
-    this.collectGleanMetricsFromMap(pointerResult);
+    await Promise.all([
+      screenInfoPromise.then(data => this.collectGleanMetricsFromMap(data)),
+      pointerInfoPromise.then(data => this.collectGleanMetricsFromMap(data)),
+    ]);
   }
 
   async populateCanvasData() {
@@ -295,7 +287,7 @@ export class UserCharacteristicsPageService {
       },
     });
 
-    let data = {};
+    let data = new Map();
     // Returns true if we need to try again
     const attemptRender = async allowSoftwareRenderer => {
       const diagnostics = {
@@ -434,13 +426,13 @@ export class UserCharacteristicsPageService {
     }
 
     // We may have HW + SW, or only SW rendered canvases - populate the metrics with what we have
-    this.collectGleanMetricsFromMap(data.renderings);
+    this.collectGleanMetricsFromMap(data.get("renderings"));
 
     ChromeUtils.unregisterWindowActor(actorName);
 
     // Record the errors
-    if (data.errors?.length) {
-      this.handledErrors.push(...data.errors);
+    if (data.get("errors")?.length) {
+      this.handledErrors.push(...data.get("errors"));
     }
   }
 
@@ -474,7 +466,7 @@ export class UserCharacteristicsPageService {
   }
 
   async populateGamepads(gamepads) {
-    for (let gamepad of gamepads) {
+    for (const gamepad of gamepads) {
       Glean.characteristics.gamepads.add(gamepad);
     }
   }
@@ -536,7 +528,7 @@ export class UserCharacteristicsPageService {
 
     for (const type in metrics) {
       for (const metric of metrics[type]) {
-        Glean.characteristics[metric][type](data[metric]);
+        Glean.characteristics[metric][type](data.get(metric));
       }
     }
   }
@@ -744,7 +736,7 @@ export class UserCharacteristicsPageService {
         "MEDIUM_INT",
         "HIGH_INT",
       ]) {
-        let { rangeMin, rangeMax, precision } = gl.getShaderPrecisionFormat(
+        const { rangeMin, rangeMax, precision } = gl.getShaderPrecisionFormat(
           gl[shaderType],
           gl[precisionType]
         );
@@ -869,9 +861,9 @@ export class UserCharacteristicsPageService {
       `pageLoaded browsingContext=${browsingContext} data=${data}`
     );
 
-    let browser = browsingContext.embedderElement;
+    const browser = browsingContext.embedderElement;
 
-    let backgroundResolve = this._backgroundBrowsers.get(browser);
+    const backgroundResolve = this._backgroundBrowsers.get(browser);
     if (backgroundResolve) {
       backgroundResolve(data);
       return;

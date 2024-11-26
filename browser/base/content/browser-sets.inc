@@ -38,15 +38,15 @@
     <command id="cmd_maximizeWindow" />
     <command id="cmd_restoreWindow" />
     <command id="cmd_toggleMute" />
-    <command id="cmd_CustomizeToolbars" oncommand="gCustomizeMode.enter();" />
+    <command id="cmd_CustomizeToolbars" />
     <command id="cmd_toggleOfflineStatus" />
     <command id="cmd_quitApplication" />
 
     <command id="View:AboutProcesses" />
     <command id="View:PageSource" />
     <command id="View:PageInfo" />
-    <command id="View:FullScreen" oncommand="BrowserCommands.fullScreen();" />
-    <command id="View:ReaderView" oncommand="AboutReaderParent.toggleReaderMode(event);" />
+    <command id="View:FullScreen" />
+    <command id="View:ReaderView" />
     <command id="View:PictureInPicture" />
     <command id="cmd_find" />
     <command id="cmd_findAgain" />

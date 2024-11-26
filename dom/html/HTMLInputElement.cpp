@@ -36,6 +36,7 @@
 #include "mozilla/StaticPrefs_signon.h"
 #include "mozilla/TextUtils.h"
 #include "mozilla/Try.h"
+#include "mozilla/Unused.h"
 #include "nsAttrValueInlines.h"
 #include "nsCRTGlue.h"
 #include "nsIFilePicker.h"
@@ -346,10 +347,8 @@ UploadLastDir::ContentPrefCallback::HandleCompletion(uint16_t aReason) {
   }
 
   if (!prefStr.IsEmpty()) {
-    localFile = do_CreateInstance(NS_LOCAL_FILE_CONTRACTID);
-    if (localFile && NS_WARN_IF(NS_FAILED(localFile->InitWithPath(prefStr)))) {
-      localFile = nullptr;
-    }
+    nsresult rv = NS_NewLocalFile(prefStr, getter_AddRefs(localFile));
+    Unused << NS_WARN_IF(NS_FAILED(rv));
   }
 
   if (localFile) {
@@ -736,8 +735,8 @@ nsresult HTMLInputElement::InitColorPicker() {
 
   nsCOMPtr<Document> doc = OwnerDoc();
 
-  nsCOMPtr<nsPIDOMWindowOuter> win = doc->GetWindow();
-  if (!win) {
+  RefPtr<BrowsingContext> bc = doc->GetBrowsingContext();
+  if (!bc) {
     return NS_ERROR_FAILURE;
   }
 
@@ -759,7 +758,7 @@ nsresult HTMLInputElement::InitColorPicker() {
   nsAutoString initialValue;
   GetNonFileValueInternal(initialValue);
   nsTArray<nsString> colors = GetColorsFromList();
-  nsresult rv = colorPicker->Init(win, title, initialValue, colors);
+  nsresult rv = colorPicker->Init(bc, title, initialValue, colors);
   NS_ENSURE_SUCCESS(rv, rv);
 
   nsCOMPtr<nsIColorPickerShownCallback> callback =
@@ -2163,13 +2162,13 @@ void HTMLInputElement::MozSetFileNameArray(const Sequence<nsString>& aFileNames,
                          nsASCIICaseInsensitiveStringComparator)) {
       // Converts the URL string into the corresponding nsIFile if possible
       // A local file will be created if the URL string begins with file://
-      NS_GetFileFromURLSpec(NS_ConvertUTF16toUTF8(aFileNames[i]),
-                            getter_AddRefs(file));
+      Unused << NS_GetFileFromURLSpec(NS_ConvertUTF16toUTF8(aFileNames[i]),
+                                      getter_AddRefs(file));
     }
 
     if (!file) {
       // this is no "file://", try as local file
-      NS_NewLocalFile(aFileNames[i], getter_AddRefs(file));
+      Unused << NS_NewLocalFile(aFileNames[i], getter_AddRefs(file));
     }
 
     if (!file) {

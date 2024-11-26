@@ -245,8 +245,7 @@ class MOZ_STACK_CLASS ScriptCompiler : public SourceAwareCompiler<Unit> {
 #endif  // JS_ENABLE_SMOOSH
 
 using BytecodeCompilerOutput =
-    mozilla::Variant<UniquePtr<ExtensibleCompilationStencil>,
-                     RefPtr<CompilationStencil>, CompilationGCOutput*>;
+    mozilla::Variant<RefPtr<CompilationStencil>, CompilationGCOutput*>;
 
 static constexpr ExtraBindingInfoVector* NoExtraBindings = nullptr;
 
@@ -280,10 +279,7 @@ template <typename Unit>
           WaitForAllDelazifyTasks(maybeCx->runtime());
         }
       }
-      if (output.is<UniquePtr<ExtensibleCompilationStencil>>()) {
-        output.as<UniquePtr<ExtensibleCompilationStencil>>() =
-            std::move(extensibleStencil);
-      } else if (output.is<RefPtr<CompilationStencil>>()) {
+      if (output.is<RefPtr<CompilationStencil>>()) {
         RefPtr<CompilationStencil> stencil =
             fc->getAllocator()->new_<frontend::CompilationStencil>(
                 std::move(extensibleStencil));
@@ -355,15 +351,7 @@ template <typename Unit>
     }
   }
 
-  if (output.is<UniquePtr<ExtensibleCompilationStencil>>()) {
-    auto stencil =
-        fc->getAllocator()->make_unique<ExtensibleCompilationStencil>(
-            std::move(compiler.stencil()));
-    if (!stencil) {
-      return false;
-    }
-    output.as<UniquePtr<ExtensibleCompilationStencil>>() = std::move(stencil);
-  } else if (output.is<RefPtr<CompilationStencil>>()) {
+  if (output.is<RefPtr<CompilationStencil>>()) {
     Maybe<AutoGeckoProfilerEntry> pseudoFrame;
     if (maybeCx) {
       pseudoFrame.emplace(maybeCx, "script emit",
@@ -427,42 +415,6 @@ already_AddRefed<CompilationStencil> frontend::CompileGlobalScriptToStencil(
     JS::SourceText<Utf8Unit>& srcBuf, ScopeKind scopeKind) {
   return CompileGlobalScriptToStencilImpl(cx, fc, tempLifoAlloc, input,
                                           scopeCache, srcBuf, scopeKind);
-}
-
-template <typename Unit>
-static UniquePtr<ExtensibleCompilationStencil>
-CompileGlobalScriptToExtensibleStencilImpl(JSContext* maybeCx,
-                                           FrontendContext* fc,
-                                           CompilationInput& input,
-                                           ScopeBindingCache* scopeCache,
-                                           JS::SourceText<Unit>& srcBuf,
-                                           ScopeKind scopeKind) {
-  using OutputType = UniquePtr<ExtensibleCompilationStencil>;
-  BytecodeCompilerOutput output((OutputType()));
-  if (!CompileGlobalScriptToStencilAndMaybeInstantiate(
-          maybeCx, fc, maybeCx->tempLifoAlloc(), input, scopeCache, srcBuf,
-          scopeKind, NoExtraBindings, output)) {
-    return nullptr;
-  }
-  return std::move(output.as<OutputType>());
-}
-
-UniquePtr<ExtensibleCompilationStencil>
-frontend::CompileGlobalScriptToExtensibleStencil(
-    JSContext* maybeCx, FrontendContext* fc, CompilationInput& input,
-    ScopeBindingCache* scopeCache, JS::SourceText<char16_t>& srcBuf,
-    ScopeKind scopeKind) {
-  return CompileGlobalScriptToExtensibleStencilImpl(
-      maybeCx, fc, input, scopeCache, srcBuf, scopeKind);
-}
-
-UniquePtr<ExtensibleCompilationStencil>
-frontend::CompileGlobalScriptToExtensibleStencil(
-    JSContext* cx, FrontendContext* fc, CompilationInput& input,
-    ScopeBindingCache* scopeCache, JS::SourceText<Utf8Unit>& srcBuf,
-    ScopeKind scopeKind) {
-  return CompileGlobalScriptToExtensibleStencilImpl(cx, fc, input, scopeCache,
-                                                    srcBuf, scopeKind);
 }
 
 static void FireOnNewScript(JSContext* cx,
@@ -1162,15 +1114,7 @@ template <typename Unit>
     return false;
   }
 
-  if (output.is<UniquePtr<ExtensibleCompilationStencil>>()) {
-    auto stencil =
-        fc->getAllocator()->make_unique<ExtensibleCompilationStencil>(
-            std::move(compiler.stencil()));
-    if (!stencil) {
-      return false;
-    }
-    output.as<UniquePtr<ExtensibleCompilationStencil>>() = std::move(stencil);
-  } else if (output.is<RefPtr<CompilationStencil>>()) {
+  if (output.is<RefPtr<CompilationStencil>>()) {
     Maybe<AutoGeckoProfilerEntry> pseudoFrame;
     if (maybeCx) {
       pseudoFrame.emplace(maybeCx, "script emit",
@@ -1233,40 +1177,6 @@ already_AddRefed<CompilationStencil> frontend::ParseModuleToStencil(
     SourceText<Utf8Unit>& srcBuf) {
   return ParseModuleToStencilImpl(maybeCx, fc, tempLifoAlloc, input, scopeCache,
                                   srcBuf);
-}
-
-template <typename Unit>
-UniquePtr<ExtensibleCompilationStencil> ParseModuleToExtensibleStencilImpl(
-    JSContext* cx, FrontendContext* fc, js::LifoAlloc& tempLifoAlloc,
-    CompilationInput& input, ScopeBindingCache* scopeCache,
-    SourceText<Unit>& srcBuf) {
-  using OutputType = UniquePtr<ExtensibleCompilationStencil>;
-  BytecodeCompilerOutput output((OutputType()));
-  if (!ParseModuleToStencilAndMaybeInstantiate(cx, fc, tempLifoAlloc, input,
-                                               scopeCache, srcBuf, output)) {
-    return nullptr;
-  }
-  return std::move(output.as<OutputType>());
-}
-
-UniquePtr<ExtensibleCompilationStencil>
-frontend::ParseModuleToExtensibleStencil(JSContext* cx, FrontendContext* fc,
-                                         js::LifoAlloc& tempLifoAlloc,
-                                         CompilationInput& input,
-                                         ScopeBindingCache* scopeCache,
-                                         SourceText<char16_t>& srcBuf) {
-  return ParseModuleToExtensibleStencilImpl(cx, fc, tempLifoAlloc, input,
-                                            scopeCache, srcBuf);
-}
-
-UniquePtr<ExtensibleCompilationStencil>
-frontend::ParseModuleToExtensibleStencil(JSContext* cx, FrontendContext* fc,
-                                         js::LifoAlloc& tempLifoAlloc,
-                                         CompilationInput& input,
-                                         ScopeBindingCache* scopeCache,
-                                         SourceText<Utf8Unit>& srcBuf) {
-  return ParseModuleToExtensibleStencilImpl(cx, fc, tempLifoAlloc, input,
-                                            scopeCache, srcBuf);
 }
 
 template <typename Unit>
@@ -1384,21 +1294,6 @@ static GetCachedResult GetCachedLazyFunctionStencilMaybeInstantiate(
     return GetCachedResult::Found;
   }
 
-  if (output.is<UniquePtr<ExtensibleCompilationStencil>>()) {
-    auto extensible =
-        fc->getAllocator()->make_unique<ExtensibleCompilationStencil>(input);
-    if (!extensible) {
-      return GetCachedResult::Error;
-    }
-    if (!extensible->cloneFrom(fc, *stencil)) {
-      return GetCachedResult::Error;
-    }
-
-    output.as<UniquePtr<ExtensibleCompilationStencil>>() =
-        std::move(extensible);
-    return GetCachedResult::Found;
-  }
-
   MOZ_ASSERT(maybeCx);
 
   if (!InstantiateLazyFunction(maybeCx, input, *stencil, output)) {
@@ -1506,15 +1401,7 @@ static bool CompileLazyFunctionToStencilMaybeInstantiate(
     }
   }
 
-  if (output.is<UniquePtr<ExtensibleCompilationStencil>>()) {
-    auto stencil =
-        fc->getAllocator()->make_unique<ExtensibleCompilationStencil>(
-            std::move(compilationState));
-    if (!stencil) {
-      return false;
-    }
-    output.as<UniquePtr<ExtensibleCompilationStencil>>() = std::move(stencil);
-  } else if (output.is<RefPtr<CompilationStencil>>()) {
+  if (output.is<RefPtr<CompilationStencil>>()) {
     Maybe<AutoGeckoProfilerEntry> pseudoFrame;
     if (maybeCx) {
       pseudoFrame.emplace(maybeCx, "script emit",

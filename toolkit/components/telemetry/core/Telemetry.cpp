@@ -258,8 +258,11 @@ using PathChar = filesystem::Path::value_type;
 using PathCharPtr = const PathChar*;
 
 static uint32_t ReadLastShutdownDuration(PathCharPtr filename) {
-  RefPtr<nsLocalFile> file =
-      new nsLocalFile(nsTDependentString<PathChar>(filename));
+  nsCOMPtr<nsIFile> file;
+  if (NS_FAILED(NS_NewPathStringLocalFile(DependentPathString(filename),
+                                          getter_AddRefs(file)))) {
+    return 0;
+  }
   FILE* f;
   if (NS_FAILED(file->OpenANSIFileDesc("r", &f)) || !f) {
     return 0;
@@ -718,7 +721,9 @@ class GetLoadedModulesResultRunnable final : public Runnable {
 
       // Module name.
       JS::Rooted<JSString*> moduleName(
-          cx, JS_NewUCStringCopyZ(cx, info.GetModuleName().get()));
+          cx,
+          JS_NewUCStringCopyZ(
+              cx, NS_ConvertUTF8toUTF16(info.GetModuleName().c_str()).get()));
       if (!moduleName || !JS_DefineProperty(cx, moduleObj, "name", moduleName,
                                             JSPROP_ENUMERATE)) {
         mPromise->MaybeReject(NS_ERROR_FAILURE);
@@ -728,9 +733,11 @@ class GetLoadedModulesResultRunnable final : public Runnable {
       // Module debug name.
       JS::Rooted<JS::Value> moduleDebugName(cx);
 
-      if (!info.GetDebugName().IsEmpty()) {
+      if (!info.GetDebugName().empty()) {
         JS::Rooted<JSString*> str_moduleDebugName(
-            cx, JS_NewUCStringCopyZ(cx, info.GetDebugName().get()));
+            cx,
+            JS_NewUCStringCopyZ(
+                cx, NS_ConvertUTF8toUTF16(info.GetDebugName().c_str()).get()));
         if (!str_moduleDebugName) {
           mPromise->MaybeReject(NS_ERROR_FAILURE);
           return NS_OK;
@@ -749,9 +756,9 @@ class GetLoadedModulesResultRunnable final : public Runnable {
       // Module Breakpad identifier.
       JS::Rooted<JS::Value> id(cx);
 
-      if (!info.GetBreakpadId().IsEmpty()) {
+      if (!info.GetBreakpadId().empty()) {
         JS::Rooted<JSString*> str_id(
-            cx, JS_NewStringCopyZ(cx, info.GetBreakpadId().get()));
+            cx, JS_NewStringCopyZ(cx, info.GetBreakpadId().c_str()));
         if (!str_id) {
           mPromise->MaybeReject(NS_ERROR_FAILURE);
           return NS_OK;
@@ -769,9 +776,9 @@ class GetLoadedModulesResultRunnable final : public Runnable {
       // Module version.
       JS::Rooted<JS::Value> version(cx);
 
-      if (!info.GetVersion().IsEmpty()) {
+      if (!info.GetVersion().empty()) {
         JS::Rooted<JSString*> v(
-            cx, JS_NewStringCopyZ(cx, info.GetVersion().BeginReading()));
+            cx, JS_NewStringCopyZ(cx, info.GetVersion().c_str()));
         if (!v) {
           mPromise->MaybeReject(NS_ERROR_FAILURE);
           return NS_OK;
@@ -789,7 +796,8 @@ class GetLoadedModulesResultRunnable final : public Runnable {
 
 #  if defined(XP_WIN)
       // Cert Subject.
-      if (auto subject = mCertSubjects.Lookup(info.GetModulePath())) {
+      if (auto subject = mCertSubjects.Lookup(
+              NS_ConvertUTF8toUTF16(info.GetModulePath().c_str()))) {
         JS::Rooted<JSString*> jsOrg(cx, ToJSString(cx, *subject));
         if (!jsOrg) {
           mPromise->MaybeReject(NS_ERROR_FAILURE);
@@ -829,10 +837,12 @@ class GetLoadedModulesResultRunnable final : public Runnable {
     for (unsigned int i = 0, n = mRawModules.GetSize(); i != n; i++) {
       const SharedLibrary& info = mRawModules.GetEntry(i);
 
-      auto orgName = dllSvc->GetBinaryOrgName(info.GetModulePath().get());
+      auto orgName = dllSvc->GetBinaryOrgName(
+          NS_ConvertUTF8toUTF16(info.GetModulePath().c_str()).get());
       if (orgName) {
-        mCertSubjects.InsertOrUpdate(info.GetModulePath(),
-                                     nsDependentString(orgName.get()));
+        mCertSubjects.InsertOrUpdate(
+            NS_ConvertUTF8toUTF16(info.GetModulePath().c_str()),
+            nsDependentString(orgName.get()));
       }
     }
   }
@@ -1751,9 +1761,12 @@ void RecordShutdownEndTimeStamp() {
     return;
   }
 
-  nsTAutoString<PathChar> tmpName(name);
+  AutoPathString tmpName(name);
   tmpName.AppendLiteral(".tmp");
-  RefPtr<nsLocalFile> tmpFile = new nsLocalFile(tmpName);
+  nsCOMPtr<nsIFile> tmpFile;
+  if (NS_FAILED(NS_NewPathStringLocalFile(tmpName, getter_AddRefs(tmpFile)))) {
+    return;
+  }
   FILE* f;
   if (NS_FAILED(tmpFile->OpenANSIFileDesc("w", &f)) || !f) return;
   // On a normal release build this should be called just before
@@ -1773,10 +1786,14 @@ void RecordShutdownEndTimeStamp() {
     tmpFile->Remove(false);
     return;
   }
-  RefPtr<nsLocalFile> file = new nsLocalFile(name);
+  nsCOMPtr<nsIFile> file;
+  if (NS_FAILED(NS_NewPathStringLocalFile(name, getter_AddRefs(file)))) {
+    return;
+  }
   nsAutoString leafName;
-  file->GetLeafName(leafName);
-  tmpFile->RenameTo(nullptr, leafName);
+  if (NS_SUCCEEDED(file->GetLeafName(leafName))) {
+    tmpFile->RenameTo(nullptr, leafName);
+  }
 }
 
 }  // namespace mozilla

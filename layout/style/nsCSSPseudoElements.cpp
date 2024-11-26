@@ -105,13 +105,6 @@ Maybe<PseudoStyleRequest> nsCSSPseudoElements::ParsePseudoElement(
 }
 
 /* static */
-mozilla::Maybe<PseudoStyleType> nsCSSPseudoElements::GetPseudoType(
-    const nsAString& aPseudoElement, CSSEnabledState aEnabledState) {
-  return ParsePseudoElement(aPseudoElement, aEnabledState)
-      .map([](const auto& r) { return r.mType; });
-}
-
-/* static */
 bool nsCSSPseudoElements::PseudoElementSupportsUserActionState(
     const Type aType) {
   return PseudoElementHasFlags(aType,
@@ -119,17 +112,31 @@ bool nsCSSPseudoElements::PseudoElementSupportsUserActionState(
 }
 
 /* static */
-nsString nsCSSPseudoElements::PseudoTypeAsString(Type aPseudoType) {
-  switch (aPseudoType) {
+nsString nsCSSPseudoElements::PseudoRequestAsString(
+    const Request& aPseudoRequest) {
+  switch (aPseudoRequest.mType) {
     case PseudoStyleType::before:
       return u"::before"_ns;
     case PseudoStyleType::after:
       return u"::after"_ns;
     case PseudoStyleType::marker:
       return u"::marker"_ns;
+    case PseudoStyleType::viewTransition:
+      return u"::view-transition"_ns;
+    case PseudoStyleType::viewTransitionGroup:
+      return u"::view-transition-group("_ns +
+             nsAtomString(aPseudoRequest.mIdentifier) + u")"_ns;
+    case PseudoStyleType::viewTransitionImagePair:
+      return u"::view-transition-image-pair("_ns +
+             nsAtomString(aPseudoRequest.mIdentifier) + u")"_ns;
+    case PseudoStyleType::viewTransitionOld:
+      return u"::view-transition-old("_ns +
+             nsAtomString(aPseudoRequest.mIdentifier) + u")"_ns;
+    case PseudoStyleType::viewTransitionNew:
+      return u"::view-transition-new("_ns +
+             nsAtomString(aPseudoRequest.mIdentifier) + u")"_ns;
     default:
-      MOZ_ASSERT(aPseudoType == PseudoStyleType::NotPseudo,
-                 "Unexpected pseudo type");
+      MOZ_ASSERT(aPseudoRequest.IsNotPseudo(), "Unexpected pseudo type");
       return u""_ns;
   }
 }

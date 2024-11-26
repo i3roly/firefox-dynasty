@@ -1025,8 +1025,8 @@ void HttpChannelChild::OnStopRequest(
         mLastStatusReported, now, mTransferSize, kCacheUnknown,
         mLoadInfo->GetInnerWindowID(),
         mLoadInfo->GetOriginAttributes().IsPrivateBrowsing(),
-        mRequestHead.Version(), &mTransactionTimings, std::move(mSource),
-        Some(nsDependentCString(contentType.get())));
+        mRequestHead.Version(), mClassOfService.Flags(), &mTransactionTimings,
+        std::move(mSource), Some(nsDependentCString(contentType.get())));
   }
 
   TimeDuration channelCompletionDuration = now - mAsyncOpenTime;
@@ -1507,9 +1507,9 @@ mozilla::ipc::IPCResult HttpChannelChild::RecvRedirect1Begin(
     const uint32_t& aRegistrarId, nsIURI* aNewUri,
     const uint32_t& aNewLoadFlags, const uint32_t& aRedirectFlags,
     const ParentLoadInfoForwarderArgs& aLoadInfoForwarder,
-    const nsHttpResponseHead& aResponseHead,
-    nsITransportSecurityInfo* aSecurityInfo, const uint64_t& aChannelId,
-    const NetAddr& aOldPeerAddr, const ResourceTimingStructArgs& aTiming) {
+    nsHttpResponseHead&& aResponseHead, nsITransportSecurityInfo* aSecurityInfo,
+    const uint64_t& aChannelId, const NetAddr& aOldPeerAddr,
+    const ResourceTimingStructArgs& aTiming) {
   // TODO: handle security info
   LOG(("HttpChannelChild::RecvRedirect1Begin [this=%p]\n", this));
   // We set peer address of child to the old peer,
@@ -1522,7 +1522,7 @@ mozilla::ipc::IPCResult HttpChannelChild::RecvRedirect1Begin(
   mEventQ->RunOrEnqueue(new NeckoTargetChannelFunctionEvent(
       this, [self = UnsafePtr<HttpChannelChild>(this), aRegistrarId,
              newUri = RefPtr{aNewUri}, aNewLoadFlags, aRedirectFlags,
-             aLoadInfoForwarder, aResponseHead,
+             aLoadInfoForwarder, aResponseHead = std::move(aResponseHead),
              aSecurityInfo = nsCOMPtr{aSecurityInfo}, aChannelId, aTiming]() {
         self->Redirect1Begin(aRegistrarId, newUri, aNewLoadFlags,
                              aRedirectFlags, aLoadInfoForwarder, aResponseHead,
@@ -1598,9 +1598,9 @@ void HttpChannelChild::Redirect1Begin(
         NetworkLoadType::LOAD_REDIRECT, mLastStatusReported, TimeStamp::Now(),
         0, kCacheUnknown, mLoadInfo->GetInnerWindowID(),
         mLoadInfo->GetOriginAttributes().IsPrivateBrowsing(),
-        mRequestHead.Version(), &mTransactionTimings, std::move(mSource),
-        Some(nsDependentCString(contentType.get())), newOriginalURI,
-        redirectFlags, channelId);
+        mRequestHead.Version(), mClassOfService.Flags(), &mTransactionTimings,
+        std::move(mSource), Some(nsDependentCString(contentType.get())),
+        newOriginalURI, redirectFlags, channelId);
   }
 
   mSecurityInfo = securityInfo;
@@ -1921,7 +1921,7 @@ HttpChannelChild::CompleteRedirectSetup(nsIStreamListener* aListener) {
         mChannelCreationTimestamp, mLastStatusReported, 0, kCacheUnknown,
         mLoadInfo->GetInnerWindowID(),
         mLoadInfo->GetOriginAttributes().IsPrivateBrowsing(),
-        mRequestHead.Version());
+        mRequestHead.Version(), mClassOfService.Flags());
   }
   StoreIsPending(true);
   StoreWasOpened(true);
@@ -2264,7 +2264,7 @@ nsresult HttpChannelChild::AsyncOpenInternal(nsIStreamListener* aListener) {
         mChannelCreationTimestamp, mLastStatusReported, 0, kCacheUnknown,
         mLoadInfo->GetInnerWindowID(),
         mLoadInfo->GetOriginAttributes().IsPrivateBrowsing(),
-        mRequestHead.Version());
+        mRequestHead.Version(), mClassOfService.Flags());
   }
   StoreIsPending(true);
   StoreWasOpened(true);

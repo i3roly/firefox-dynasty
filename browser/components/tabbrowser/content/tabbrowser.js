@@ -3661,7 +3661,7 @@
           args: { tabCount: tabsToClose },
         },
         { id: "tabbrowser-confirm-close-tabs-button" },
-        { id: "tabbrowser-confirm-close-tabs-checkbox" },
+        { id: "tabbrowser-ask-close-tabs-checkbox" },
       ]);
       let flags =
         ps.BUTTON_TITLE_IS_STRING * ps.BUTTON_POS_0 +
@@ -8274,7 +8274,12 @@ var TabContextMenu = {
             document.l10n.setAttributes(item, "tab-context-unnamed-group");
           }
 
-          item.classList.add("menuitem-iconic", "tab-contextmenu-group-icon");
+          item.classList.add("menuitem-iconic");
+          if (group.collapsed) {
+            item.classList.add("tab-group-icon-collapsed");
+          } else {
+            item.classList.add("tab-group-icon");
+          }
           item.style.setProperty(
             "--tab-group-color",
             group.style.getPropertyValue("--tab-group-color")
@@ -8282,6 +8287,10 @@ var TabContextMenu = {
           item.style.setProperty(
             "--tab-group-color-invert",
             group.style.getPropertyValue("--tab-group-color-invert")
+          );
+          item.style.setProperty(
+            "--tab-group-color-pale",
+            group.style.getPropertyValue("--tab-group-color-pale")
           );
           submenu.appendChild(item);
         });

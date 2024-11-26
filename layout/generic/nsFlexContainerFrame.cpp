@@ -1531,22 +1531,9 @@ void nsFlexContainerFrame::GenerateFlexItemForChild(
   ResolveAutoFlexBasisAndMinSize(item, childRI, aAxisTracker);
 }
 
-// Static helper-functions for ResolveAutoFlexBasisAndMinSize():
-// -------------------------------------------------------------
-// Partially resolves "min-[width|height]:auto" and returns the resulting value.
-// By "partially", I mean we don't consider the min-content size (but we do
-// consider the main-size and main max-size properties, and the preferred aspect
-// ratio). The caller is responsible for computing & considering the min-content
-// size in combination with the partially-resolved value that this function
-// returns.
-//
-// Basically, this function gets the specified size suggestion; if not, the
-// transferred size suggestion; if both sizes do not exist, return nscoord_MAX.
-//
-// Spec reference: https://drafts.csswg.org/css-flexbox-1/#min-size-auto
-static nscoord PartiallyResolveAutoMinSize(
+nscoord nsFlexContainerFrame::PartiallyResolveAutoMinSize(
     const FlexItem& aFlexItem, const ReflowInput& aItemReflowInput,
-    const FlexboxAxisTracker& aAxisTracker) {
+    const FlexboxAxisTracker& aAxisTracker) const {
   MOZ_ASSERT(aFlexItem.NeedsMinSizeAutoResolution(),
              "only call for FlexItems that need min-size auto resolution");
 
@@ -1561,16 +1548,20 @@ static nscoord PartiallyResolveAutoMinSize(
           ? aFlexItem.BorderPadding().Size(cbWM)
           : LogicalSize(cbWM);
 
-  // If this flex item is a compressible replaced element list in CSS Sizing 3
-  // §5.2.2, CSS Sizing 3 §5.2.1c requires us to resolve the percentage part of
-  // the preferred main size property against zero, yielding a definite
-  // specified size suggestion. Here we can use a zero percentage basis to
-  // fulfill this requirement.
-  const auto percentBasis =
-      aFlexItem.Frame()->IsPercentageResolvedAgainstZero(mainStyleSize,
-                                                         maxMainStyleSize)
-          ? LogicalSize(cbWM, 0, 0)
-          : aItemReflowInput.mContainingBlockSize.ConvertTo(cbWM, itemWM);
+  // Return the percentage basis in cbWM for computing the specified size
+  // suggestion.
+  auto PercentageBasisForItem = [&]() {
+    // If this flex item is a compressible replaced element, according to the
+    // list in CSS Sizing 3 §5.2.2, then CSS Sizing 3 §5.2.1c requires us to
+    // resolve the percentage part of the preferred main size property against
+    // zero, yielding a definite specified size suggestion. Here we can use a
+    // zero percentage basis to fulfill this requirement.
+    if (aFlexItem.Frame()->IsPercentageResolvedAgainstZero(mainStyleSize,
+                                                           maxMainStyleSize)) {
+      return LogicalSize(cbWM, 0, 0);
+    }
+    return aItemReflowInput.mContainingBlockSize.ConvertTo(cbWM, itemWM);
+  };
 
   // Compute the specified size suggestion, which is the main-size property if
   // it's definite.
@@ -1582,16 +1573,17 @@ static nscoord PartiallyResolveAutoMinSize(
       // responsible for computing the min-content inline-size and min()'ing it
       // with the value we return.
       specifiedSizeSuggestion = aFlexItem.Frame()->ComputeISizeValue(
-          cbWM, percentBasis, boxSizingAdjust,
+          cbWM, PercentageBasisForItem(), boxSizingAdjust,
           mainStyleSize.AsLengthPercentage());
     }
   } else {
-    if (!nsLayoutUtils::IsAutoBSize(mainStyleSize, percentBasis.BSize(cbWM))) {
+    const auto percentageBasisBSize = PercentageBasisForItem().BSize(cbWM);
+    if (!nsLayoutUtils::IsAutoBSize(mainStyleSize, percentageBasisBSize)) {
       // NOTE: We ignore auto and extremum block-size. This is OK because the
       // caller is responsible for computing the min-content block-size and
       // min()'ing it with the value we return.
       specifiedSizeSuggestion = nsLayoutUtils::ComputeBSizeValue(
-          percentBasis.BSize(cbWM), boxSizingAdjust.BSize(cbWM),
+          percentageBasisBSize, boxSizingAdjust.BSize(cbWM),
           mainStyleSize.AsLengthPercentage());
     }
   }
@@ -1653,10 +1645,18 @@ void nsFlexContainerFrame::ResolveAutoFlexBasisAndMinSize(
   nscoord resolvedMinSize;  // (only set/used if isMainMinSizeAuto==true)
   bool minSizeNeedsToMeasureContent = false;  // assume the best
   if (isMainMinSizeAuto) {
-    // Resolve the min-size, except for considering the min-content size.
-    // (We'll consider that later, if we need to.)
-    resolvedMinSize =
-        PartiallyResolveAutoMinSize(aFlexItem, aItemReflowInput, aAxisTracker);
+    if (IsLegacyBox(this)) {
+      // Allow flex items in a legacy flex container to shrink below their
+      // automatic minimum size by setting the resolved minimum size to zero.
+      // This behavior is not in the spec, but it aligns with blink and webkit's
+      // implementation.
+      resolvedMinSize = 0;
+    } else {
+      // Resolve the min-size, except for considering the min-content size.
+      // (We'll consider that later, if we need to.)
+      resolvedMinSize = PartiallyResolveAutoMinSize(aFlexItem, aItemReflowInput,
+                                                    aAxisTracker);
+    }
     if (resolvedMinSize > 0) {
       // If resolvedMinSize were already at 0, we could skip calculating content
       // size suggestion because it can't go any lower.

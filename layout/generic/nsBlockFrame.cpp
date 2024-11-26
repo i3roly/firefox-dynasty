@@ -936,11 +936,11 @@ nscoord nsBlockFrame::PrefISize(const IntrinsicSizeInput& aInput) {
 #endif
       if (line->IsBlock()) {
         nsIFrame* kid = line->mFirstChild;
-        StyleClear clearType;
+        UsedClear clearType;
         if (!data.mLineIsEmpty || BlockCanIntersectFloats(kid)) {
-          clearType = StyleClear::Both;
+          clearType = UsedClear::Both;
         } else {
-          clearType = kid->StyleDisplay()->mClear;
+          clearType = kid->StyleDisplay()->UsedClear(GetWritingMode());
         }
         data.ForceBreak(clearType);
         const IntrinsicSizeInput kidInput(aInput, kid->GetWritingMode(),
@@ -2207,7 +2207,7 @@ nscoord nsBlockFrame::ComputeFinalSize(const ReflowInput& aReflowInput,
     // Note: The block coordinate returned by ClearFloats is always greater than
     // or equal to blockEndEdgeOfChildren.
     std::tie(blockEndEdgeOfChildren, std::ignore) =
-        aState.ClearFloats(blockEndEdgeOfChildren, StyleClear::Both);
+        aState.ClearFloats(blockEndEdgeOfChildren, UsedClear::Both);
   }
 
   // undo cached alignment shift for sizing purposes
@@ -2840,9 +2840,8 @@ void nsBlockFrame::PrepareResizeReflow(BlockReflowState& aState) {
             line->HasForcedLineBreakAfter() ? "has-break-after " : "",
             line->HasFloats() ? "has-floats " : "",
             line->IsImpactedByFloat() ? "impacted " : "",
-            line->StyleClearToString(line->FloatClearTypeBefore()),
-            line->StyleClearToString(line->FloatClearTypeAfter()),
-            line->IEnd());
+            line->UsedClearToString(line->FloatClearTypeBefore()),
+            line->UsedClearToString(line->FloatClearTypeAfter()), line->IEnd());
       }
 #endif
     }
@@ -2920,8 +2919,9 @@ void nsBlockFrame::PropagateFloatDamage(BlockReflowState& aState,
     } else {
       bool wasImpactedByFloat = aLine->IsImpactedByFloat();
       nsFlowAreaRect floatAvailableSpace =
-          aState.GetFloatAvailableSpaceForBSize(aLine->BStart() + aDeltaBCoord,
-                                                aLine->BSize(), nullptr);
+          aState.GetFloatAvailableSpaceForBSize(
+              aState.mReflowInput.GetWritingMode(),
+              aLine->BStart() + aDeltaBCoord, aLine->BSize(), nullptr);
 
 #ifdef REALLY_NOISY_REFLOW
       printf("nsBlockFrame::PropagateFloatDamage %p was = %d, is=%d\n", this,
@@ -2999,7 +2999,7 @@ bool nsBlockFrame::LinesAreEmpty() const {
 bool nsBlockFrame::ReflowDirtyLines(BlockReflowState& aState) {
   bool keepGoing = true;
   bool repositionViews = false;  // should we really need this?
-  bool foundAnyClears = aState.mTrailingClearFromPIF != StyleClear::None;
+  bool foundAnyClears = aState.mTrailingClearFromPIF != UsedClear::None;
   bool willReflowAgain = false;
   bool usedOverflowWrap = false;
 
@@ -3043,7 +3043,7 @@ bool nsBlockFrame::ReflowDirtyLines(BlockReflowState& aState) {
       GetFloats()->FirstChild()->HasAnyStateBits(NS_FRAME_IS_PUSHED_FLOAT);
   bool lastLineMovedUp = false;
   // We save up information about BR-clearance here
-  StyleClear inlineFloatClearType = aState.mTrailingClearFromPIF;
+  UsedClear inlineFloatClearType = aState.mTrailingClearFromPIF;
 
   LineIterator line = LinesBegin(), line_end = LinesEnd();
 
@@ -3112,7 +3112,7 @@ bool nsBlockFrame::ReflowDirtyLines(BlockReflowState& aState) {
       nscoord curBCoord = aState.mBCoord;
       // See where we would be after applying any clearance due to
       // BRs.
-      if (inlineFloatClearType != StyleClear::None) {
+      if (inlineFloatClearType != UsedClear::None) {
         std::tie(curBCoord, std::ignore) =
             aState.ClearFloats(curBCoord, inlineFloatClearType);
       }
@@ -3139,7 +3139,7 @@ bool nsBlockFrame::ReflowDirtyLines(BlockReflowState& aState) {
     }
 
     // We might have to reflow a line that is after a clearing BR.
-    if (inlineFloatClearType != StyleClear::None) {
+    if (inlineFloatClearType != UsedClear::None) {
       std::tie(aState.mBCoord, std::ignore) =
           aState.ClearFloats(aState.mBCoord, inlineFloatClearType);
       if (aState.mBCoord != line->BStart() + deltaBCoord) {
@@ -3147,7 +3147,7 @@ bool nsBlockFrame::ReflowDirtyLines(BlockReflowState& aState) {
         // put it. Reflow the line to be sure.
         line->MarkDirty();
       }
-      inlineFloatClearType = StyleClear::None;
+      inlineFloatClearType = UsedClear::None;
     }
 
     bool previousMarginWasDirty = line->IsPreviousMarginDirty();
@@ -3479,7 +3479,7 @@ bool nsBlockFrame::ReflowDirtyLines(BlockReflowState& aState) {
   }
 
   // Handle BR-clearance from the last line of the block
-  if (inlineFloatClearType != StyleClear::None) {
+  if (inlineFloatClearType != UsedClear::None) {
     std::tie(aState.mBCoord, std::ignore) =
         aState.ClearFloats(aState.mBCoord, inlineFloatClearType);
   }
@@ -3829,7 +3829,7 @@ bool nsBlockFrame::ReflowLine(BlockReflowState& aState, LineIterator aLine,
     if (aState.mFlags.mCanHaveOverflowMarkers) {
       WritingMode wm = aLine->mWritingMode;
       nsFlowAreaRect r = aState.GetFloatAvailableSpaceForBSize(
-          aLine->BStart(), aLine->BSize(), nullptr);
+          wm, aLine->BStart(), aLine->BSize(), nullptr);
       if (r.HasFloats()) {
         LogicalRect so = aLine->GetOverflowArea(OverflowType::Scrollable, wm,
                                                 aLine->mContainerSize);
@@ -4168,16 +4168,17 @@ void nsBlockFrame::ReflowBlockFrame(BlockReflowState& aState,
   // Prepare the block reflow engine
   nsBlockReflowContext brc(aState.mPresContext, aState.mReflowInput);
 
-  StyleClear clearType = frame->StyleDisplay()->mClear;
-  if (aState.mTrailingClearFromPIF != StyleClear::None) {
+  WritingMode cbWM = frame->GetContainingBlock()->GetWritingMode();
+  UsedClear clearType = frame->StyleDisplay()->UsedClear(cbWM);
+  if (aState.mTrailingClearFromPIF != UsedClear::None) {
     clearType = nsLayoutUtils::CombineClearType(clearType,
                                                 aState.mTrailingClearFromPIF);
-    aState.mTrailingClearFromPIF = StyleClear::None;
+    aState.mTrailingClearFromPIF = UsedClear::None;
   }
 
   // Clear past floats before the block if the clear style is not none
   aLine->ClearForcedLineBreak();
-  if (clearType != StyleClear::None) {
+  if (clearType != UsedClear::None) {
     aLine->SetFloatClearTypeBefore(clearType);
   }
 
@@ -4195,7 +4196,7 @@ void nsBlockFrame::ReflowBlockFrame(BlockReflowState& aState,
   }
   bool treatWithClearance = aLine->HasClearance();
 
-  bool mightClearFloats = clearType != StyleClear::None;
+  bool mightClearFloats = clearType != UsedClear::None;
   nsIFrame* floatAvoidingBlock = nullptr;
   if (!nsBlockFrame::BlockCanIntersectFloats(frame)) {
     mightClearFloats = true;
@@ -4353,7 +4354,7 @@ void nsBlockFrame::ReflowBlockFrame(BlockReflowState& aState,
 
     // Here aState.mBCoord is the block-start border-edge of the block.
     // Compute the available space for the block
-    nsFlowAreaRect floatAvailableSpace = aState.GetFloatAvailableSpace();
+    nsFlowAreaRect floatAvailableSpace = aState.GetFloatAvailableSpace(cbWM);
     WritingMode wm = aState.mReflowInput.GetWritingMode();
     LogicalRect availSpace = aState.ComputeBlockAvailSpace(
         frame, floatAvailableSpace, (floatAvoidingBlock));
@@ -4510,7 +4511,7 @@ void nsBlockFrame::ReflowBlockFrame(BlockReflowState& aState,
 
       LogicalRect oldFloatAvailableSpaceRect(floatAvailableSpace.mRect);
       floatAvailableSpace = aState.GetFloatAvailableSpaceForBSize(
-          aState.mBCoord + bStartMargin, brc.GetMetrics().BSize(wm),
+          cbWM, aState.mBCoord + bStartMargin, brc.GetMetrics().BSize(wm),
           &floatManagerState);
       NS_ASSERTION(floatAvailableSpace.mRect.BStart(wm) ==
                        oldFloatAvailableSpaceRect.BStart(wm),
@@ -4543,11 +4544,11 @@ void nsBlockFrame::ReflowBlockFrame(BlockReflowState& aState,
         }
         // ClearFloats might be able to advance us further once we're there.
         std::tie(aState.mBCoord, std::ignore) =
-            aState.ClearFloats(newBCoord, StyleClear::None, floatAvoidingBlock);
+            aState.ClearFloats(newBCoord, UsedClear::None, floatAvoidingBlock);
 
         // Start over with a new available space rect at the new height.
         floatAvailableSpace = aState.GetFloatAvailableSpaceWithState(
-            aState.mBCoord, ShapeType::ShapeOutside, &floatManagerState);
+            cbWM, aState.mBCoord, ShapeType::ShapeOutside, &floatManagerState);
       }
 
       const LogicalRect oldAvailSpace = availSpace;
@@ -4836,7 +4837,8 @@ bool nsBlockFrame::ReflowInlineFrames(BlockReflowState& aState,
   if (ShouldApplyBStartMargin(aState, aLine)) {
     aState.mBCoord += aState.mPrevBEndMargin.Get();
   }
-  nsFlowAreaRect floatAvailableSpace = aState.GetFloatAvailableSpace();
+  nsFlowAreaRect floatAvailableSpace =
+      aState.GetFloatAvailableSpace(GetWritingMode());
 
   LineReflowStatus lineReflowStatus;
   do {
@@ -5119,7 +5121,7 @@ void nsBlockFrame::DoReflowInlineFrames(
         aState.mBCoord += aState.mPresContext->DevPixelsToAppUnits(1);
       }
 
-      aFloatAvailableSpace = aState.GetFloatAvailableSpace();
+      aFloatAvailableSpace = aState.GetFloatAvailableSpace(GetWritingMode());
     } else {
       // There's nowhere to retry placing the line, so we want to push
       // it to the next page/column where its contents can fit not
@@ -5183,7 +5185,7 @@ void nsBlockFrame::DoReflowInlineFrames(
  * The line reflow status is simple: true means keep placing frames
  * on the line; false means don't (the line is done). If the line
  * has some sort of breaking affect then aLine's break-type will be set
- * to something other than StyleClear::None.
+ * to something other than UsedClear::None.
  */
 void nsBlockFrame::ReflowInlineFrame(BlockReflowState& aState,
                                      nsLineLayout& aLineLayout,
@@ -5240,7 +5242,7 @@ void nsBlockFrame::ReflowInlineFrame(BlockReflowState& aState,
   // (fortunately, there is some overlap).
   aLine->ClearForcedLineBreak();
   if (frameReflowStatus.IsInlineBreak() ||
-      aState.mTrailingClearFromPIF != StyleClear::None) {
+      aState.mTrailingClearFromPIF != UsedClear::None) {
     // Always abort the line reflow (because a line break is the
     // minimal amount of break we do).
     *aLineReflowStatus = LineReflowStatus::Stop;
@@ -5268,20 +5270,20 @@ void nsBlockFrame::ReflowInlineFrame(BlockReflowState& aState,
       }
     } else {
       MOZ_ASSERT(frameReflowStatus.IsInlineBreakAfter() ||
-                     aState.mTrailingClearFromPIF != StyleClear::None,
+                     aState.mTrailingClearFromPIF != UsedClear::None,
                  "We should've handled inline break-before in the if-branch!");
 
       // If a float split and its prev-in-flow was followed by a <BR>, then
       // combine the <BR>'s float clear type with the inline's float clear type
       // (the inline will be the very next frame after the split float).
-      StyleClear clearType = frameReflowStatus.FloatClearType();
-      if (aState.mTrailingClearFromPIF != StyleClear::None) {
+      UsedClear clearType = frameReflowStatus.FloatClearType();
+      if (aState.mTrailingClearFromPIF != UsedClear::None) {
         clearType = nsLayoutUtils::CombineClearType(
             clearType, aState.mTrailingClearFromPIF);
-        aState.mTrailingClearFromPIF = StyleClear::None;
+        aState.mTrailingClearFromPIF = UsedClear::None;
       }
       // Break-after cases
-      if (clearType != StyleClear::None || aLineLayout.GetLineEndsInBR()) {
+      if (clearType != UsedClear::None || aLineLayout.GetLineEndsInBR()) {
         aLine->SetForcedLineBreakAfter(clearType);
       }
       if (frameReflowStatus.IsComplete()) {
@@ -5365,11 +5367,12 @@ void nsBlockFrame::SplitFloat(BlockReflowState& aState, nsIFrame* aFloat,
     nextInFlow->AddStateBits(NS_FRAME_IS_OVERFLOW_CONTAINER);
   }
 
-  StyleFloat floatStyle = aFloat->StyleDisplay()->mFloat;
-  if (floatStyle == StyleFloat::Left) {
+  UsedFloat floatStyle =
+      aFloat->StyleDisplay()->UsedFloat(aState.mReflowInput.GetWritingMode());
+  if (floatStyle == UsedFloat::Left) {
     aState.FloatManager()->SetSplitLeftFloatAcrossBreak();
   } else {
-    MOZ_ASSERT(floatStyle == StyleFloat::Right, "Unexpected float side!");
+    MOZ_ASSERT(floatStyle == UsedFloat::Right, "Unexpected float side!");
     aState.FloatManager()->SetSplitRightFloatAcrossBreak();
   }
 
@@ -5550,10 +5553,10 @@ bool nsBlockFrame::PlaceLine(BlockReflowState& aState,
   // the old BSize, but including the floats that were added in this line.
   LogicalRect floatAvailableSpaceWithOldLineBSize =
       aState.mLineBSize.isNothing()
-          ? aState.GetFloatAvailableSpace(aLine->BStart()).mRect
+          ? aState.GetFloatAvailableSpace(wm, aLine->BStart()).mRect
           : aState
                 .GetFloatAvailableSpaceForBSize(
-                    aLine->BStart(), aState.mLineBSize.value(), nullptr)
+                    wm, aLine->BStart(), aState.mLineBSize.value(), nullptr)
                 .mRect;
 
   // As we redo for floats, we can't reduce the amount of BSize we're
@@ -5561,8 +5564,8 @@ bool nsBlockFrame::PlaceLine(BlockReflowState& aState,
   aAvailableSpaceBSize = std::max(aAvailableSpaceBSize, aLine->BSize());
   LogicalRect floatAvailableSpaceWithLineBSize =
       aState
-          .GetFloatAvailableSpaceForBSize(aLine->BStart(), aAvailableSpaceBSize,
-                                          nullptr)
+          .GetFloatAvailableSpaceForBSize(wm, aLine->BStart(),
+                                          aAvailableSpaceBSize, nullptr)
           .mRect;
 
   // If the available space between the floats is smaller now that we
@@ -5580,7 +5583,7 @@ bool nsBlockFrame::PlaceLine(BlockReflowState& aState,
     // line is placed.
     LogicalRect oldFloatAvailableSpace(aFlowArea.mRect);
     aFlowArea = aState.GetFloatAvailableSpaceForBSize(
-        aLine->BStart(), aAvailableSpaceBSize, aFloatStateBeforeLine);
+        wm, aLine->BStart(), aAvailableSpaceBSize, aFloatStateBeforeLine);
 
     NS_ASSERTION(
         aFlowArea.mRect.BStart(wm) == oldFloatAvailableSpace.BStart(wm),
@@ -7525,7 +7528,7 @@ void nsBlockFrame::ReflowFloat(BlockReflowState& aState, ReflowInput& aFloatRI,
   aFloat->DidReflow(aState.mPresContext, &aFloatRI);
 }
 
-StyleClear nsBlockFrame::FindTrailingClear() {
+UsedClear nsBlockFrame::FindTrailingClear() {
   for (nsBlockFrame* b = this; b;
        b = static_cast<nsBlockFrame*>(b->GetPrevInFlow())) {
     auto endLine = b->LinesRBegin();
@@ -7533,7 +7536,7 @@ StyleClear nsBlockFrame::FindTrailingClear() {
       return endLine->FloatClearTypeAfter();
     }
   }
-  return StyleClear::None;
+  return UsedClear::None;
 }
 
 void nsBlockFrame::ReflowPushedFloats(BlockReflowState& aState,
@@ -7634,7 +7637,7 @@ void nsBlockFrame::ReflowPushedFloats(BlockReflowState& aState,
 
   // If there are pushed or split floats, then we may need to continue BR
   // clearance
-  if (auto [bCoord, result] = aState.ClearFloats(0, StyleClear::Both);
+  if (auto [bCoord, result] = aState.ClearFloats(0, UsedClear::Both);
       result != ClearFloatsResult::BCoordNoChange) {
     Unused << bCoord;
     if (auto* prevBlock = static_cast<nsBlockFrame*>(GetPrevInFlow())) {
@@ -8323,7 +8326,8 @@ void nsBlockFrame::ReflowOutsideMarker(nsIFrame* aMarkerFrame,
   // they reposition the line.
   LogicalRect floatAvailSpace =
       aState
-          .GetFloatAvailableSpaceWithState(aLineTop, ShapeType::ShapeOutside,
+          .GetFloatAvailableSpaceWithState(ri.GetWritingMode(), aLineTop,
+                                           ShapeType::ShapeOutside,
                                            &aState.mFloatManagerStateBefore)
           .mRect;
   // FIXME (bug 25888): need to check the entire region that the first
