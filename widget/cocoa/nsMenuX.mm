@@ -1064,8 +1064,8 @@ void nsMenuX::ObserveAttributeChanged(dom::Document* aDocument,
 }
 
 void nsMenuX::ObserveContentRemoved(dom::Document* aDocument,
-                                    nsIContent* aContainer, nsIContent* aChild,
-                                    nsIContent* aPreviousSibling) {
+                                    nsIContent* aContainer,
+                                    nsIContent* aChild) {
   if (gConstructingMenu) {
     return;
   }

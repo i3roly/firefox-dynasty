@@ -1442,9 +1442,10 @@ void ServoStyleSet::MaybeInvalidateRelativeSelectorForEmptyDependency(
 }
 
 void ServoStyleSet::MaybeInvalidateRelativeSelectorForNthEdgeDependency(
-    const Element& aElement) {
+    const Element& aElement,
+    StyleRelativeSelectorNthEdgeInvalidateFor aInvalidateFor) {
   Servo_StyleSet_MaybeInvalidateRelativeSelectorNthEdgeDependency(
-      mRawData.get(), &aElement);
+      mRawData.get(), &aElement, aInvalidateFor);
 }
 
 void ServoStyleSet::MaybeInvalidateRelativeSelectorForNthDependencyFromSibling(
@@ -1468,10 +1469,9 @@ void ServoStyleSet::MaybeInvalidateForElementAppend(
                                                           &aFirstContent);
 }
 
-void ServoStyleSet::MaybeInvalidateForElementRemove(
-    const Element& aElement, const nsIContent* aFollowingSibling) {
-  Servo_StyleSet_MaybeInvalidateRelativeSelectorForRemoval(
-      mRawData.get(), &aElement, aFollowingSibling);
+void ServoStyleSet::MaybeInvalidateForElementRemove(const Element& aElement) {
+  Servo_StyleSet_MaybeInvalidateRelativeSelectorForRemoval(mRawData.get(),
+                                                           &aElement);
 }
 
 bool ServoStyleSet::MightHaveNthOfAttributeDependency(

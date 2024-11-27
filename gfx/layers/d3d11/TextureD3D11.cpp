@@ -1101,13 +1101,16 @@ DXGITextureHostD3D11::GetAsSurfaceWithDevice(
       }
     }
 
-    if (!videoProcessor->Init(mSize)) {
-      gfxCriticalNoteOnce << "Failed to init VideoProcessorD3D11";
+    hr = videoProcessor->Init(mSize);
+    if (FAILED(hr)) {
+      gfxCriticalNoteOnce << "Failed to init VideoProcessorD3D11"
+                          << gfx::hexa(hr);
       return nullptr;
     }
 
-    if (!videoProcessor->CallVideoProcessorBlt(this, d3dTexture,
-                                               copiedTexture)) {
+    VideoProcessorD3D11::InputTextureInfo info(mColorSpace, mColorRange,
+                                               mArrayIndex, d3dTexture);
+    if (!videoProcessor->CallVideoProcessorBlt(info, copiedTexture)) {
       gfxCriticalNoteOnce << "CallVideoProcessorBlt failed";
       return nullptr;
     }

@@ -3099,6 +3099,11 @@ who = "Erich Gubler <erichdongubler@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "0.28.0 -> 0.29.0"
 
+[[audits.metal]]
+who = "Erich Gubler <erichdongubler@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.29.0 -> 0.30.0"
+
 [[audits.midir]]
 who = "Bobby Holley <bobbyholley@gmail.com>"
 criteria = "safe-to-deploy"
@@ -5397,6 +5402,11 @@ criteria = "safe-to-deploy"
 delta = "23.0.0 -> 23.0.0@git:47bfede63f82e09f5e50e9735c6d98dd19403d3c"
 importable = false
 
+[[audits.wgpu-core]]
+who = "Erich Gubler <erichdongubler@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "23.0.0 -> 23.0.1"
+
 [[audits.wgpu-hal]]
 who = "Dzmitry Malyshau <kvark@fastmail.com>"
 criteria = "safe-to-deploy"
@@ -5473,6 +5483,11 @@ who = [
 criteria = "safe-to-deploy"
 delta = "23.0.0 -> 23.0.0@git:47bfede63f82e09f5e50e9735c6d98dd19403d3c"
 importable = false
+
+[[audits.wgpu-hal]]
+who = "Erich Gubler <erichdongubler@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "23.0.0 -> 23.0.1"
 
 [[audits.wgpu-types]]
 who = "Dzmitry Malyshau <kvark@fastmail.com>"

@@ -128,7 +128,7 @@ declare_args() {
 
   # Used to specify an external OpenSSL include path when not compiling the
   # library that comes with WebRTC (i.e. rtc_build_ssl == 0).
-  rtc_ssl_root = "unused"
+  rtc_ssl_root = ""
 
   # Enable when an external authentication mechanism is used for performing
   # packet authentication for RTP packets instead of libsrtp.
@@ -354,7 +354,7 @@ declare_args() {
 }
 
 # Enable liboam only on non-mozilla builds.
-enable_libaom = !build_with_mozilla
+enable_libaom = true
 
 # Make it possible to provide custom locations for some libraries (move these
 # up into declare_args should we need to actually use them for the GN build).
@@ -1047,6 +1047,24 @@ template("rtc_executable") {
         # Give executables the default manifest on Windows (a no-op elsewhere).
         "//chromium/build/win:default_exe_manifest",
       ]
+    }
+
+    # Convert abseil dependencies to //third_party/abseil-cpp:absl_full when
+    # build_with_chromium=true so that webrtc targets won't need exceptions to
+    # depend on individual absl targets.
+    # Note that //third_party/abseil-cpp:absl_full build target includes flags,
+    # but //third_party/abseil-cpp:absl target - doesn't. That allows webrtc
+    # executables, but not libraries to use absl flags.
+    if (build_with_chromium && defined(deps)) {
+      absl_dependencies =
+          filter_labels_include(deps, [ "//third_party/abseil-cpp/*" ])
+      if (absl_dependencies != []) {
+        filtered_deps =
+            filter_labels_exclude(deps, [ "//third_party/abseil-cpp/*" ])
+        deps = []
+        deps = filtered_deps
+        deps += [ "//third_party/abseil-cpp:absl_full" ]
+      }
     }
   }
 }

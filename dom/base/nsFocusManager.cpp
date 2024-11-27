@@ -267,14 +267,11 @@ static bool ActionIdComparableAndLower(uint64_t aActionId,
 
 // given a frame content node, retrieve the nsIDOMWindow displayed in it
 static nsPIDOMWindowOuter* GetContentWindow(nsIContent* aContent) {
-  Document* doc = aContent->GetComposedDoc();
-  if (doc) {
-    Document* subdoc = doc->GetSubDocumentFor(aContent);
-    if (subdoc) {
+  if (Document* doc = aContent->GetComposedDoc()) {
+    if (Document* subdoc = doc->GetSubDocumentFor(aContent)) {
       return subdoc->GetWindow();
     }
   }
-
   return nullptr;
 }
 
@@ -440,10 +437,10 @@ nsresult nsFocusManager::SetFocusedWindowWithCallerType(
     // clear the focus. Otherwise, focus should already be in this frame, or
     // already cleared. This ensures that focus will be in this frame and not
     // in a child.
-    nsIContent* content = windowToFocus->GetFocusedElement();
-    if (content) {
-      if (nsCOMPtr<nsPIDOMWindowOuter> childWindow = GetContentWindow(content))
+    if (Element* el = windowToFocus->GetFocusedElement()) {
+      if (nsCOMPtr<nsPIDOMWindowOuter> childWindow = GetContentWindow(el)) {
         ClearFocus(windowToFocus);
+      }
     }
   }
 
@@ -1271,8 +1268,13 @@ void nsFocusManager::FireDelayedEvents(Document* aDocument) {
 
 void nsFocusManager::WasNuked(nsPIDOMWindowOuter* aWindow) {
   MOZ_ASSERT(aWindow, "Expected non-null window.");
-  MOZ_ASSERT(aWindow != mActiveWindow,
-             "How come we're nuking a window that's still active?");
+  if (aWindow == mActiveWindow) {
+    // TODO(emilio, bug 1933555): Figure out if we can assert below.
+    // MOZ_ASSERT_UNREACHABLE("How come we're nuking a window that's still
+    // active?");
+    mActiveWindow = nullptr;
+    SetActiveBrowsingContextInChrome(nullptr, GenerateFocusActionId());
+  }
   if (aWindow == mFocusedWindow) {
     mFocusedWindow = nullptr;
     SetFocusedBrowsingContext(nullptr, GenerateFocusActionId());
@@ -2539,6 +2541,18 @@ void nsFocusManager::ActivateRemoteFrameIfNeeded(Element& aElement,
     bbc->Activate(aActionId);
     LOGFOCUS(("Out-of-process iframe activated %p, actionid: %" PRIu64, bbc,
               aActionId));
+  }
+}
+
+void nsFocusManager::FixUpFocusAfterFrameLoaderChange(Element& aElement) {
+  MOZ_ASSERT(mFocusedElement == &aElement);
+  MOZ_ASSERT(nsContentUtils::IsSafeToRunScript());
+  if (GetContentWindow(&aElement)) {
+    // This will focus the content window.
+    SetFocusInner(&aElement, 0, false, false);
+  } else {
+    // If we're remote, activate the frame.
+    ActivateRemoteFrameIfNeeded(aElement, GenerateFocusActionId());
   }
 }
 

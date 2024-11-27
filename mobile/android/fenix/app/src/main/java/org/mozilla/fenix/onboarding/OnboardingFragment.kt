@@ -29,6 +29,7 @@ import mozilla.components.support.base.log.logger.Logger
 import mozilla.components.support.utils.BrowsersCache
 import org.mozilla.fenix.R
 import org.mozilla.fenix.components.accounts.FenixFxAEntryPoint
+import org.mozilla.fenix.components.initializeGlean
 import org.mozilla.fenix.components.lazyStore
 import org.mozilla.fenix.compose.LinkTextState
 import org.mozilla.fenix.ext.components
@@ -206,6 +207,14 @@ class OnboardingFragment : Fragment() {
             },
             onboardingAddOnsStore = onboardingAddOnsStore,
             onInstallAddOnButtonClick = { installUrl -> installAddon(installUrl) },
+            onCustomizeToolbarClick = {
+                // Todo as part of https://bugzilla.mozilla.org/show_bug.cgi?id=1918351
+                throw NotImplementedError()
+            },
+            onSkipCustomizeToolbarClick = {
+                // Todo as part of https://bugzilla.mozilla.org/show_bug.cgi?id=1918351
+                throw NotImplementedError()
+            },
         )
     }
 
@@ -254,6 +263,14 @@ class OnboardingFragment : Fragment() {
         }
 
         requireComponents.fenixOnboarding.finish()
+
+        initializeGlean(
+            requireContext().applicationContext,
+            logger,
+            requireContext().settings().isTelemetryEnabled,
+            requireComponents.core.client,
+        )
+
         findNavController().nav(
             id = R.id.onboardingFragment,
             directions = OnboardingFragmentDirections.actionHome(),

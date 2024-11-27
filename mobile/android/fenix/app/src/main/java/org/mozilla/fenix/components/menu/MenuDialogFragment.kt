@@ -424,9 +424,9 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                                     account = account,
                                     accountState = accountState,
                                     availableAddons = availableAddons,
+                                    showQuitMenu = settings.shouldDeleteBrowsingDataOnQuit,
                                     isPrivate = browsingModeManager.mode.isPrivate,
                                     isDesktopMode = isDesktopMode,
-                                    showQuitMenu = settings.shouldDeleteBrowsingDataOnQuit,
                                     isPdf = isPdf,
                                     isTranslationSupported = isTranslationSupported,
                                     isExtensionsProcessDisabled = isExtensionsProcessDisabled,
@@ -472,9 +472,11 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                                         store.dispatch(MenuAction.FindInPage)
                                     },
                                     onToolsMenuClick = {
+                                        store.dispatch(MenuAction.ToolsMenuClicked)
                                         contentState = Route.ToolsMenu
                                     },
                                     onSaveMenuClick = {
+                                        store.dispatch(MenuAction.SaveMenuClicked)
                                         contentState = Route.SaveMenu
                                     },
                                     onExtensionsMenuClick = {

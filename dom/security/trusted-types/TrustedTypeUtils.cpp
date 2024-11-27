@@ -14,6 +14,8 @@
 #include "mozilla/ErrorResult.h"
 #include "mozilla/dom/Document.h"
 #include "mozilla/dom/TrustedHTML.h"
+#include "mozilla/dom/TrustedScript.h"
+#include "mozilla/dom/TrustedScriptURL.h"
 #include "mozilla/dom/TrustedTypePolicy.h"
 #include "mozilla/dom/TrustedTypePolicyFactory.h"
 #include "nsGlobalWindowInner.h"
@@ -24,7 +26,6 @@
 #include "mozilla/dom/CSPViolationData.h"
 #include "mozilla/dom/ElementBinding.h"
 #include "mozilla/dom/nsCSPUtils.h"
-#include "mozilla/dom/TrustedHTML.h"
 
 #include "nsContentUtils.h"
 #include "nsIContentSecurityPolicy.h"
@@ -129,21 +130,21 @@ static nsPIDOMWindowInner* GetScopeObjectAsInnerWindow(
 
 constexpr size_t kNumArgumentsForDetermineTrustedTypePolicyValue = 2;
 
+template <typename ExpectedType>
 void ProcessValueWithADefaultPolicy(const Document& aDocument,
                                     const nsAString& aInput,
                                     const nsAString& aSink,
-                                    TrustedHTML** aResult,
+                                    ExpectedType** aResult,
                                     ErrorResult& aError) {
   *aResult = nullptr;
 
+  // TODO(bug 1928929): We should also be able to get the policy factory from
+  // a worker's global scope.
   nsPIDOMWindowInner* piDOMWindowInner =
       GetScopeObjectAsInnerWindow(aDocument, aError);
   if (aError.Failed()) {
     return;
   }
-
-  // Since this function is for `TrustedHTML`, the `TrustedTypePolicyFactory`
-  // has to stem from the inner window, not from a Worker.
   nsGlobalWindowInner* globalWindowInner =
       nsGlobalWindowInner::Cast(piDOMWindowInner);
   const TrustedTypePolicyFactory* trustedTypePolicyFactory =
@@ -159,12 +160,11 @@ void ProcessValueWithADefaultPolicy(const Document& aDocument,
     return;
   }
 
-  RefPtr<CreateHTMLCallback> callbackObject =
-      defaultPolicy->GetOptions().mCreateHTMLCallback;
-
   JS::Rooted<JS::Value> trustedTypeName{cx};
-  if (!xpc::NonVoidLatin1StringToJsval(cx, "TrustedHTML"_ns,
-                                       &trustedTypeName)) {
+  using ExpectedTypeArg =
+      std::remove_const_t<std::remove_reference_t<decltype(**aResult)>>;
+  if (!xpc::NonVoidStringToJsval(cx, GetTrustedTypeName<ExpectedTypeArg>(),
+                                 &trustedTypeName)) {
     aError.StealExceptionFromJSContext(cx);
     return;
   }
@@ -179,9 +179,26 @@ void ProcessValueWithADefaultPolicy(const Document& aDocument,
       arguments = {trustedTypeName, sink};
 
   nsString policyValue;
-  defaultPolicy->DetermineTrustedPolicyValue(callbackObject, aInput, arguments,
-                                             /* aThrowIfMissing */ false,
-                                             aError, policyValue);
+  if constexpr (std::is_same_v<ExpectedTypeArg, TrustedHTML>) {
+    RefPtr<CreateHTMLCallback> callbackObject =
+        defaultPolicy->GetOptions().mCreateHTMLCallback;
+    defaultPolicy->DetermineTrustedPolicyValue(
+        callbackObject, aInput, arguments,
+        /* aThrowIfMissing */ false, aError, policyValue);
+  } else if constexpr (std::is_same_v<ExpectedTypeArg, TrustedScript>) {
+    RefPtr<CreateScriptCallback> callbackObject =
+        defaultPolicy->GetOptions().mCreateScriptCallback;
+    defaultPolicy->DetermineTrustedPolicyValue(
+        callbackObject, aInput, arguments,
+        /* aThrowIfMissing */ false, aError, policyValue);
+  } else {
+    MOZ_ASSERT((std::is_same_v<ExpectedTypeArg, TrustedScriptURL>));
+    RefPtr<CreateScriptURLCallback> callbackObject =
+        defaultPolicy->GetOptions().mCreateScriptURLCallback;
+    defaultPolicy->DetermineTrustedPolicyValue(
+        callbackObject, aInput, arguments,
+        /* aThrowIfMissing */ false, aError, policyValue);
+  }
 
   if (aError.Failed()) {
     return;
@@ -191,81 +208,130 @@ void ProcessValueWithADefaultPolicy(const Document& aDocument,
     return;
   }
 
-  RefPtr<TrustedHTML>{new TrustedHTML(policyValue)}.forget(aResult);
+  MakeRefPtr<ExpectedType>(policyValue).forget(aResult);
 }
 
-#define IMPL_GET_TRUSTED_TYPES_COMPLIANT_STRING_FOR_TRUSTED_HTML(              \
-    _class, _stringCheck, _stringGetter)                                       \
-  const nsAString* GetTrustedTypesCompliantString(                             \
-      const _class& aInput, const nsAString& aSink,                            \
-      const nsAString& aSinkGroup, const nsINode& aNode,                       \
-      Maybe<nsAutoString>& aResultHolder, ErrorResult& aError) {               \
-    if (!StaticPrefs::dom_security_trusted_types_enabled()) {                  \
-      /* A `TrustedHTML` string might've been created before the pref was set  \
-        to `false`. */                                                         \
-      return &(aInput._stringCheck() ? aInput._stringGetter()                  \
-                                     : aInput.GetAsTrustedHTML().mData);       \
-    }                                                                          \
-                                                                               \
-    if (aInput.IsTrustedHTML()) {                                              \
-      return &aInput.GetAsTrustedHTML().mData;                                 \
-    }                                                                          \
-                                                                               \
-    /* Below, we use fast paths when there are no require-trusted-types-for */ \
-    /* directives. Note that the global object's CSP may differ from the    */ \
-    /* owner-document's one.                                                */ \
-    /* E.g. when aDocument was created by                                   */ \
-    /* `document.implementation.createHTMLDocument` and it's not connected  */ \
-    /* to a browsing context.                                               */ \
-    Document* ownerDoc = aNode.OwnerDoc();                                     \
-    const bool ownerDocLoadedAsData = ownerDoc->IsLoadedAsData();              \
-    if (!ownerDoc->HasPolicyWithRequireTrustedTypesForDirective() &&           \
-        !ownerDocLoadedAsData) {                                               \
-      return &aInput._stringGetter();                                          \
-    }                                                                          \
-    nsPIDOMWindowInner* piDOMWindowInner =                                     \
-        GetScopeObjectAsInnerWindow(*ownerDoc, aError);                        \
-    if (aError.Failed()) {                                                     \
-      return nullptr;                                                          \
-    }                                                                          \
-    if (ownerDocLoadedAsData && piDOMWindowInner->GetExtantDoc() &&            \
-        !piDOMWindowInner->GetExtantDoc()                                      \
-             ->HasPolicyWithRequireTrustedTypesForDirective()) {               \
-      return &aInput._stringGetter();                                          \
-    }                                                                          \
-    RefPtr<nsIContentSecurityPolicy> csp = piDOMWindowInner->GetCsp();         \
-                                                                               \
-    if (!DoesSinkTypeRequireTrustedTypes(csp, aSinkGroup)) {                   \
-      return &aInput._stringGetter();                                          \
-    }                                                                          \
-                                                                               \
-    RefPtr<TrustedHTML> convertedInput;                                        \
-    RefPtr<const Document> pinnedDoc{ownerDoc};                                \
-    ProcessValueWithADefaultPolicy(*pinnedDoc, aInput._stringGetter(), aSink,  \
-                                   getter_AddRefs(convertedInput), aError);    \
-                                                                               \
-    if (aError.Failed()) {                                                     \
-      return nullptr;                                                          \
-    }                                                                          \
-                                                                               \
-    if (!convertedInput) {                                                     \
-      if (ShouldSinkTypeMismatchViolationBeBlockedByCSP(                       \
-              csp, aSink, aSinkGroup, aInput._stringGetter()) ==               \
-          SinkTypeMismatch::Value::Allowed) {                                  \
-        return &aInput._stringGetter();                                        \
-      }                                                                        \
-                                                                               \
-      aError.ThrowTypeError("Sink type mismatch violation blocked by CSP"_ns); \
-      return nullptr;                                                          \
-    }                                                                          \
-                                                                               \
-    aResultHolder = Some(convertedInput->mData);                               \
-    return aResultHolder.ptr();                                                \
+template <typename ExpectedType, typename TrustedTypeOrString>
+MOZ_CAN_RUN_SCRIPT inline const nsAString* GetTrustedTypesCompliantString(
+    const TrustedTypeOrString& aInput, const nsAString& aSink,
+    const nsAString& aSinkGroup, const nsINode& aNode,
+    Maybe<nsAutoString>& aResultHolder, ErrorResult& aError) {
+  using TrustedTypeOrStringArg =
+      std::remove_const_t<std::remove_reference_t<decltype(aInput)>>;
+  auto isString = [&aInput] {
+    if constexpr (std::is_same_v<TrustedTypeOrStringArg, TrustedHTMLOrString>) {
+      return aInput.IsString();
+    }
+    if constexpr (std::is_same_v<TrustedTypeOrStringArg,
+                                 TrustedHTMLOrNullIsEmptyString>) {
+      return aInput.IsNullIsEmptyString();
+    }
+    MOZ_ASSERT_UNREACHABLE();
+    return false;
+  };
+  auto getAsString = [&aInput] {
+    if constexpr (std::is_same_v<TrustedTypeOrStringArg, TrustedHTMLOrString>) {
+      return &aInput.GetAsString();
+    }
+    if constexpr (std::is_same_v<TrustedTypeOrStringArg,
+                                 TrustedHTMLOrNullIsEmptyString>) {
+      return &aInput.GetAsNullIsEmptyString();
+    }
+    MOZ_ASSERT_UNREACHABLE();
+    return static_cast<const nsAString*>(&EmptyString());
+  };
+  auto isTrustedType = [&aInput] {
+    if constexpr (std::is_same_v<TrustedTypeOrStringArg, TrustedHTMLOrString> ||
+                  std::is_same_v<TrustedTypeOrStringArg,
+                                 TrustedHTMLOrNullIsEmptyString>) {
+      return aInput.IsTrustedHTML();
+    }
+    MOZ_ASSERT_UNREACHABLE();
+    return false;
+  };
+  auto getAsTrustedType = [&aInput] {
+    if constexpr (std::is_same_v<TrustedTypeOrStringArg, TrustedHTMLOrString> ||
+                  std::is_same_v<TrustedTypeOrStringArg,
+                                 TrustedHTMLOrNullIsEmptyString>) {
+      return &aInput.GetAsTrustedHTML().mData;
+    }
+    MOZ_ASSERT_UNREACHABLE();
+    return &EmptyString();
+  };
+
+  if (!StaticPrefs::dom_security_trusted_types_enabled()) {
+    // A trusted type might've been created before the pref was set to `false`.
+    return isString() ? getAsString() : getAsTrustedType();
   }
 
-IMPL_GET_TRUSTED_TYPES_COMPLIANT_STRING_FOR_TRUSTED_HTML(TrustedHTMLOrString,
-                                                         IsString, GetAsString)
-IMPL_GET_TRUSTED_TYPES_COMPLIANT_STRING_FOR_TRUSTED_HTML(
-    TrustedHTMLOrNullIsEmptyString, IsNullIsEmptyString, GetAsNullIsEmptyString)
+  if (isTrustedType()) {
+    return getAsTrustedType();
+  }
+
+  // Below, we use fast paths when there are no require-trusted-types-for
+  // directives. Note that the global object's CSP may differ from the
+  // owner-document's one. E.g. when aDocument was created by
+  // `document.implementation.createHTMLDocument` and it's not connected to a
+  // browsing context.
+  Document* ownerDoc = aNode.OwnerDoc();
+  const bool ownerDocLoadedAsData = ownerDoc->IsLoadedAsData();
+  if (!ownerDoc->HasPolicyWithRequireTrustedTypesForDirective() &&
+      !ownerDocLoadedAsData) {
+    return getAsString();
+  }
+  nsPIDOMWindowInner* piDOMWindowInner =
+      GetScopeObjectAsInnerWindow(*ownerDoc, aError);
+  if (aError.Failed()) {
+    return nullptr;
+  }
+  if (ownerDocLoadedAsData && piDOMWindowInner->GetExtantDoc() &&
+      !piDOMWindowInner->GetExtantDoc()
+           ->HasPolicyWithRequireTrustedTypesForDirective()) {
+    return getAsString();
+  }
+  RefPtr<nsIContentSecurityPolicy> csp = piDOMWindowInner->GetCsp();
+
+  if (!DoesSinkTypeRequireTrustedTypes(csp, aSinkGroup)) {
+    return getAsString();
+  }
+
+  RefPtr<ExpectedType> convertedInput;
+  RefPtr<const Document> pinnedDoc{ownerDoc};
+  ProcessValueWithADefaultPolicy<ExpectedType>(
+      *pinnedDoc, *getAsString(), aSink, getter_AddRefs(convertedInput),
+      aError);
+
+  if (aError.Failed()) {
+    return nullptr;
+  }
+
+  if (!convertedInput) {
+    if (ShouldSinkTypeMismatchViolationBeBlockedByCSP(csp, aSink, aSinkGroup,
+                                                      *getAsString()) ==
+        SinkTypeMismatch::Value::Allowed) {
+      return getAsString();
+    }
+
+    aError.ThrowTypeError("Sink type mismatch violation blocked by CSP"_ns);
+    return nullptr;
+  }
+
+  aResultHolder = Some(convertedInput->mData);
+  return aResultHolder.ptr();
+}
+
+#define IMPL_GET_TRUSTED_TYPES_COMPLIANT_STRING(_trustedTypeOrString, \
+                                                _expectedType)        \
+  const nsAString* GetTrustedTypesCompliantString(                    \
+      const _trustedTypeOrString& aInput, const nsAString& aSink,     \
+      const nsAString& aSinkGroup, const nsINode& aNode,              \
+      Maybe<nsAutoString>& aResultHolder, ErrorResult& aError) {      \
+    return GetTrustedTypesCompliantString<_expectedType>(             \
+        aInput, aSink, aSinkGroup, aNode, aResultHolder, aError);     \
+  }
+
+IMPL_GET_TRUSTED_TYPES_COMPLIANT_STRING(TrustedHTMLOrString, TrustedHTML);
+IMPL_GET_TRUSTED_TYPES_COMPLIANT_STRING(TrustedHTMLOrNullIsEmptyString,
+                                        TrustedHTML);
 
 }  // namespace mozilla::dom::TrustedTypeUtils

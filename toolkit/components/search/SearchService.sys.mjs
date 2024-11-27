@@ -26,6 +26,8 @@ ChromeUtils.defineESModuleGetters(lazy, {
   SearchSettings: "resource://gre/modules/SearchSettings.sys.mjs",
   SearchStaticData: "resource://gre/modules/SearchStaticData.sys.mjs",
   SearchUtils: "resource://gre/modules/SearchUtils.sys.mjs",
+  UserInstalledAppEngine:
+    "resource://gre/modules/AppProvidedSearchEngine.sys.mjs",
   UserSearchEngine: "resource://gre/modules/UserSearchEngine.sys.mjs",
 });
 
@@ -67,6 +69,15 @@ const OPENSEARCH_UPDATE_TIMER_INTERVAL = 60 * 60 * 24;
 // changes.
 const RECONFIG_IDLE_TIME_SEC = 5 * 60;
 
+// The key for the metadata we store about whether to prompt users to
+// install engines they are using.
+const ENGINES_SEEN_KEY = "contextual-engines-seen";
+
+// Value we store to indicate prompt should not be shown.
+const DONT_SHOW_PROMPT = -1;
+
+// Amount of times the engine has to be used before prompting.
+const ENGINES_SEEN_FOR_PROMPT = 1;
 /**
  * A reason that is used in the change of default search engine event telemetry.
  * These are mutally exclusive.
@@ -414,10 +425,35 @@ export class SearchService {
       host
     );
     if (config) {
-      let engine = new lazy.AppProvidedSearchEngine({ config, settings });
-      return engine;
+      return new lazy.UserInstalledAppEngine({ config, settings });
     }
     return null;
+  }
+
+  async shouldShowInstallPrompt(engine) {
+    let identifer = engine._loadPath;
+    let seenEngines =
+      this._settings.getMetaDataAttribute(ENGINES_SEEN_KEY) ?? {};
+
+    if (!(identifer in seenEngines)) {
+      seenEngines[identifer] = 1;
+      this._settings.setMetaDataAttribute(ENGINES_SEEN_KEY, seenEngines);
+      return false;
+    }
+
+    let value = seenEngines[identifer];
+    if (value == DONT_SHOW_PROMPT) {
+      return false;
+    }
+
+    if (value == ENGINES_SEEN_FOR_PROMPT) {
+      seenEngines[identifer] = DONT_SHOW_PROMPT;
+      this._settings.setMetaDataAttribute(ENGINES_SEEN_KEY, seenEngines);
+      return true;
+    }
+
+    console.error(`Unexpected value ${value} in seenEngines`);
+    return false;
   }
 
   /**
@@ -605,7 +641,7 @@ export class SearchService {
     this.#addEngineToStore(newEngine);
   }
 
-  async addContextualSearchEngine(engine) {
+  async addSearchEngine(engine) {
     await this.init();
     this.#addEngineToStore(engine);
   }
@@ -1968,17 +2004,21 @@ export class SearchService {
       }
 
       let index = configEngines.findIndex(e => e.identifier == engine.id);
+      let configuration = configEngines?.[index];
 
-      if (index == -1) {
+      if (!configuration && engine._metaData["user-installed"]) {
+        configuration =
+          await this.#engineSelector.findContextualSearchEngineById(engine.id);
+      }
+
+      if (!configuration) {
         engine.pendingRemoval = true;
         continue;
       } else {
         // This is an existing engine that we should update. (However
         // notification will happen only if the configuration for this engine
         // has changed).
-        await engine.update({
-          configuration: configEngines[index],
-        });
+        await engine.update({ configuration });
       }
 
       configEngines.splice(index, 1);
@@ -2325,7 +2365,10 @@ export class SearchService {
     for (let engineJSON of settings.engines) {
       // We renamed isBuiltin to isAppProvided in bug 1631898,
       // keep checking isBuiltin for older settings.
-      if (engineJSON._isAppProvided || engineJSON._isBuiltin) {
+      if (
+        (engineJSON._isAppProvided || engineJSON._isBuiltin) &&
+        !engineJSON._metaData?.["user-installed"]
+      ) {
         ++skippedEngines;
         continue;
       }
@@ -2377,6 +2420,15 @@ export class SearchService {
           engine = new lazy.AddonSearchEngine({
             json: engineJSON,
           });
+        } else if (
+          (engineJSON._isAppProvided || engineJSON._isBuiltin) &&
+          engineJSON._metaData?.["user-installed"]
+        ) {
+          let config =
+            await this.#engineSelector.findContextualSearchEngineById(
+              engineJSON.id
+            );
+          engine = new lazy.UserInstalledAppEngine({ config, settings });
         } else {
           engine = new lazy.OpenSearchEngine({
             json: engineJSON,

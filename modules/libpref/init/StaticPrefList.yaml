@@ -2325,12 +2325,6 @@
   value: true
   mirror: always
 
-# Block multiple window.open() per single event.
-- name: dom.block_multiple_popups
-  type: bool
-  value: true
-  mirror: always
-
 # The maximum number of popup that is allowed to be opened. Set to -1 for no
 # limit.
 - name: dom.popup_maximum
@@ -5525,7 +5519,11 @@
 # If true, crash when a blocklisted preference is accessed in a subprocess
 - name: fission.enforceBlocklistedPrefsInSubprocesses
   type: RelaxedAtomicBool
-  value: @IS_EARLY_BETA_OR_EARLIER@
+#ifdef DEBUG
+  value: true
+#else
+  value: false
+#endif
   mirror: always
 
 #---------------------------------------------------------------------------
@@ -11994,6 +11992,22 @@
 #else
   value: false
 #endif
+  mirror: always
+
+- name: media.webrtc.codec.video.av1.enabled
+  type: RelaxedAtomicBool
+#if defined(MOZ_AV1)
+  value: @IS_NIGHTLY_BUILD@
+#else
+  value: false
+#endif
+  mirror: always
+
+# If true, then AV1 will be used as the preferred codec for WebRTC video.
+# After the AV1 codec is enabled by default, this pref will be renamed.
+- name: media.webrtc.codec.video.av1.experimental_preferred
+  type: bool
+  value: false
   mirror: always
 
 - name: media.webrtc.tls_tunnel_for_all_proxy
