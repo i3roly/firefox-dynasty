@@ -9,12 +9,14 @@ const os = require("os");
 const path = require("path");
 const fs = require("fs");
 
-const usbPowerProfiler = require(path.join(
-  process.env.BROWSERTIME_ROOT,
-  "node_modules",
-  "usb-power-profiling",
-  "usb-power-profiling.js"
-));
+const usbPowerProfiler = require(
+  path.join(
+    process.env.BROWSERTIME_ROOT,
+    "node_modules",
+    "usb-power-profiling",
+    "usb-power-profiling.js"
+  )
+);
 
 const {
   gatherWindowsPowerUsage,
@@ -199,6 +201,7 @@ class SupportMeasurements {
     this.context.log.info("Finalizing power usage measurements");
     if (this.isAndroid) {
       await usbPowerProfiler.stopSampling();
+      await usbPowerProfiler.resetPowerData();
     } else if (this.isWindows11) {
       await stopWindowsPowerProfiling();
 

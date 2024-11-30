@@ -367,7 +367,7 @@ static float GetSuitableScale(float aMaxScale, float aMinScale,
     // (avoiding visually clunky delayerization).
     return aMaxScale;
   }
-  return std::max(std::min(aMaxScale, displayVisibleRatio), aMinScale);
+  return std::clamp(displayVisibleRatio, aMinScale, aMaxScale);
 }
 
 // The first value in this pair is the min scale, and the second one is the max
@@ -2346,6 +2346,23 @@ nsPoint nsLayoutUtils::TransformAncestorPointToFrame(RelativeTo aFrame,
                  NSFloatPixelsToAppUnits(float(result.y), factor));
 }
 
+nsPoint nsLayoutUtils::TransformFramePointToRoot(ViewportType aToType,
+                                                 RelativeTo aFromFrame,
+                                                 const nsPoint& aPoint) {
+  float factor = aFromFrame.mFrame->PresContext()->AppUnitsPerDevPixel();
+  Point result(NSAppUnitsToFloatPixels(aPoint.x, factor),
+               NSAppUnitsToFloatPixels(aPoint.y, factor));
+
+  RelativeTo ancestor = RelativeTo{nullptr, aToType};
+
+  Maybe<Matrix4x4Flagged> matrixCache;
+  Point res =
+      TransformGfxPointToAncestor(aFromFrame, result, ancestor, matrixCache);
+
+  return nsPoint(NSFloatPixelsToAppUnits(float(res.x), factor),
+                 NSFloatPixelsToAppUnits(float(res.y), factor));
+};
+
 nsRect nsLayoutUtils::TransformFrameRectToAncestor(
     const nsIFrame* aFrame, const nsRect& aRect, RelativeTo aAncestor,
     bool* aPreservesAxisAlignedRectangles /* = nullptr */,
@@ -2553,6 +2570,8 @@ nsresult nsLayoutUtils::GetFramesForArea(RelativeTo aRelativeTo,
 
   nsDisplayItem::HitTestState hitTestState;
   list.HitTest(&builder, aRect, &hitTestState, &aOutFrames);
+
+  builder.SetIsDestroying();
   list.DeleteAll(&builder);
   builder.EndFrame();
   return NS_OK;
@@ -2807,7 +2826,10 @@ struct TemporaryDisplayListBuilder {
                               const bool aBuildCaret)
       : mBuilder(aFrame, aBuilderMode, aBuildCaret), mList(&mBuilder) {}
 
-  ~TemporaryDisplayListBuilder() { mList.DeleteAll(&mBuilder); }
+  ~TemporaryDisplayListBuilder() {
+    mBuilder.SetIsDestroying();
+    mList.DeleteAll(&mBuilder);
+  }
 
   nsDisplayListBuilder mBuilder;
   nsDisplayList mList;
@@ -4391,7 +4413,7 @@ static nscoord GetFitContentSizeForMaxOrPreferredSize(
   }
 
   // 2. Clamp size by min-content and max-content.
-  return std::max(aMinContentSize, std::min(aMaxContentSize, size));
+  return std::clamp(size, aMinContentSize, aMaxContentSize);
 }
 
 /**
@@ -4529,8 +4551,7 @@ static nscoord AddIntrinsicSizeOffset(
       // such as min-width: fit-content(calc(50% + 50px)).
       minSize.emplace(0);
     }
-    nscoord fitContentFuncSize =
-        std::max(minContent, std::min(maxContent, *minSize));
+    nscoord fitContentFuncSize = CSSMinMax(*minSize, minContent, maxContent);
     *minSize = NSCoordSaturatingAdd(fitContentFuncSize, boxSizingToMarginDiff);
     if (result < *minSize) {
       result = *minSize;

@@ -585,6 +585,10 @@
       return this.selectedBrowser.canGoBack;
     }
 
+    get canGoBackIgnoringUserInteraction() {
+      return this.selectedBrowser.canGoBackIgnoringUserInteraction;
+    }
+
     get canGoForward() {
       return this.selectedBrowser.canGoForward;
     }
@@ -2672,12 +2676,6 @@
       // If we're opening a foreground tab, set the owner by default.
       ownerTab ??= inBackground ? null : this.selectedTab;
 
-      // Don't use document.l10n.setAttributes because the FTL file is loaded
-      // lazily and we won't be able to resolve the string.
-      document
-        .getElementById("History:UndoCloseTab")
-        .setAttribute("data-l10n-args", JSON.stringify({ tabCount: 1 }));
-
       // if we're adding tabs, we're past interrupt mode, ditch the owner
       if (this.selectedTab.owner) {
         this.selectedTab.owner = null;
@@ -4347,14 +4345,6 @@
 
       this._clearMultiSelectionLocked = false;
       this._avoidSingleSelectedTab();
-      // Don't use document.l10n.setAttributes because the FTL file is loaded
-      // lazily and we won't be able to resolve the string.
-      document.getElementById("History:UndoCloseTab").setAttribute(
-        "data-l10n-args",
-        JSON.stringify({
-          tabCount: SessionStore.getLastClosedTabCount(window),
-        })
-      );
     }
 
     removeCurrentTab(aParams) {
@@ -8103,31 +8093,29 @@ var TabBarVisibility = {
     }
 
     if (nonPopupWithVerticalTabs) {
-      // TabsInTitlebar decides if we can draw within the titlebar area.
+      // CustomTitlebar decides if we can draw within the titlebar area.
       // In vertical tabs mode, the toolbar with the horizontal tabstrip gets hidden
-      // and the navbar becomes a titlebar. This makes TabsInTitlebar a bit of a misnomer.
+      // and the navbar becomes a titlebar. This makes CustomTitlebar a bit of a misnomer.
       // We'll fix this in Bug 1921034.
       hideTabstrip = true;
-      TabsInTitlebar.allowedBy("tabs-visible", true);
+      CustomTitlebar.allowedBy("tabs-visible", true);
     } else {
-      TabsInTitlebar.allowedBy("tabs-visible", !hideTabstrip);
+      CustomTitlebar.allowedBy("tabs-visible", !hideTabstrip);
     }
 
     gNavToolbox.toggleAttribute("tabs-hidden", hideTabstrip);
     // Should the nav-bar look and function like a titlebar?
     navbar.classList.toggle(
       "browser-titlebar",
-      TabsInTitlebar.enabled && hideTabstrip
+      CustomTitlebar.enabled && hideTabstrip
     );
 
-    for (let id of ["sidebar-main", "sidebar-box"]) {
-      document
-        .getElementById(id)
-        .classList.toggle(
-          "browser-toolbox-background",
-          TabsInTitlebar.enabled && nonPopupWithVerticalTabs
-        );
-    }
+    document
+      .getElementById("browser")
+      .classList.toggle(
+        "browser-toolbox-background",
+        CustomTitlebar.enabled && nonPopupWithVerticalTabs
+      );
 
     if (
       hideTabstrip == toolbar.collapsed &&
@@ -8208,8 +8196,13 @@ var TabContextMenu = {
     );
 
     // Session store
-    document.getElementById("context_undoCloseTab").disabled =
-      SessionStore.getClosedTabCount() == 0;
+    let closedCount = SessionStore.getLastClosedTabCount(window);
+    document
+      .getElementById("History:UndoCloseTab")
+      .setAttribute("disabled", closedCount == 0);
+    document.l10n.setArgs(document.getElementById("context_undoCloseTab"), {
+      tabCount: closedCount,
+    });
 
     // Show/hide fullscreen context menu items and set the
     // autohide item's checked state to mirror the autohide pref.

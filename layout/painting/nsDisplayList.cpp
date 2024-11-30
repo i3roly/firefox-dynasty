@@ -145,6 +145,7 @@ void AssertUniqueItem(nsDisplayItem* aItem) {
 
 bool ShouldBuildItemForEvents(const DisplayItemType aType) {
   return aType == DisplayItemType::TYPE_COMPOSITOR_HITTEST_INFO ||
+         aType == DisplayItemType::TYPE_REMOTE ||
          (GetDisplayItemFlagsForType(aType) & TYPE_IS_CONTAINER);
 }
 
@@ -731,7 +732,8 @@ nsDisplayListBuilder::nsDisplayListBuilder(nsIFrame* aReferenceFrame,
       mBuildAsyncZoomContainer(false),
       mIsRelativeToLayoutViewport(false),
       mUseOverlayScrollbars(false),
-      mAlwaysLayerizeScrollbars(false) {
+      mAlwaysLayerizeScrollbars(false),
+      mIsDestroying(false) {
   MOZ_COUNT_CTOR(nsDisplayListBuilder);
 
   mBuildCompositorHitTestInfo = mAsyncPanZoomEnabled && IsForPainting();
@@ -6049,9 +6051,14 @@ void nsDisplayTransform::SetReferenceFrameToAncestor(
   // Can we instead apply the additional offset to us and not our children, like
   // we do for all other offsets (and how reference frames are supposed to
   // work)?
-  nsIFrame* outerFrame = nsLayoutUtils::GetCrossDocParentFrameInProcess(mFrame);
-  const nsIFrame* referenceFrame = aBuilder->FindReferenceFrameFor(outerFrame);
-  mToReferenceFrame = mFrame->GetOffsetToCrossDoc(referenceFrame);
+  // The reference frame on the builder has already been set to the ancestor
+  // reference frame by BuildDisplayListForStackingContext using
+  // SetReferenceFrameAndCurrentOffset, so we just compute the offset.
+  MOZ_ASSERT(aBuilder->FindReferenceFrameFor(
+                 nsLayoutUtils::GetCrossDocParentFrameInProcess(mFrame)) ==
+             aBuilder->GetCurrentReferenceFrame());
+  mToReferenceFrame =
+      mFrame->GetOffsetToCrossDoc(aBuilder->GetCurrentReferenceFrame());
 }
 
 void nsDisplayTransform::Init(nsDisplayListBuilder* aBuilder,

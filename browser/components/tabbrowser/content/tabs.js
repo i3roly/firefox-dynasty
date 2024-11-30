@@ -344,7 +344,7 @@
       // When the tabbar has an unified appearance with the titlebar
       // and menubar, a double-click in it should have the same behavior
       // as double-clicking the titlebar
-      if (TabsInTitlebar.enabled && !this.verticalMode) {
+      if (CustomTitlebar.enabled && !this.verticalMode) {
         return;
       }
 
@@ -2274,6 +2274,9 @@
       if (!pinned) {
         translate +=
           this.arrowScrollbox.scrollbox[scrollDirection] - dragData.scrollPos;
+      } else if (pinned && this.verticalMode) {
+        translate +=
+          this.verticalPinnedTabsContainer.scrollTop - dragData.scrollPos;
       }
       let firstBound = firstTab[screenAxis] - firstMovingTabScreen;
       let lastBound =

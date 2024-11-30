@@ -43,15 +43,16 @@ const notificationShell = ({
     >
       ${when(
         link,
-        () => html`<a
-          slot="support-link"
-          data-l10n-id=${link.dataL10nId}
-          href=${link.url}
-          @click=${e => {
-            e.preventDefault();
-            messageHandler(link.onClick);
-          }}
-        ></a>`,
+        () =>
+          html`<a
+            slot="support-link"
+            data-l10n-id=${link.dataL10nId}
+            href=${link.url}
+            @click=${e => {
+              e.preventDefault();
+              messageHandler(link.onClick);
+            }}
+          ></a>`,
         () => nothing
       )}
       ${when(
@@ -168,6 +169,23 @@ class NotificationMessageBar extends MozLitElement {
     `;
   }
 
+  #renderUpdateLoginSuccess() {
+    return html`
+      ${notificationShell({
+        onDismiss: this.onDismiss,
+        dataL10nId: "passwords-update-password-success-heading",
+        dataL10nAttrs: "heading",
+        type: "success",
+        primaryAction: {
+          type: "primary",
+          slot: "actions",
+          dataL10nId: "passwords-update-password-success-button",
+          onClick: this.onDismiss,
+        },
+      })}
+    `;
+  }
+
   render() {
     switch (this.notification?.id) {
       case "import-success":
@@ -176,8 +194,10 @@ class NotificationMessageBar extends MozLitElement {
         return this.#renderImportError();
       case "add-login-success":
         return this.#renderAddLoginSuccess();
-      case "add-login-already-exists-warning":
+      case "login-already-exists-warning":
         return this.#renderAddLoginAlreadyExistsWarning();
+      case "update-login-success":
+        return this.#renderUpdateLoginSuccess();
       default:
         return "";
     }

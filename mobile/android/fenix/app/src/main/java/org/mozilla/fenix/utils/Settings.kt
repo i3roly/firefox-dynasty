@@ -1323,7 +1323,7 @@ class Settings(private val appContext: Context) : PreferencesHolder {
 
     var openLinksInExternalAppOld by booleanPreference(
         appContext.getPreferenceKey(R.string.pref_key_open_links_in_external_app_old),
-        default = false,
+        default = true,
     )
 
     /**
@@ -1897,6 +1897,14 @@ class Settings(private val appContext: Context) : PreferencesHolder {
     var enableHomepageAsNewTab by booleanPreference(
         key = appContext.getPreferenceKey(R.string.pref_key_enable_homepage_as_new_tab),
         default = FeatureFlags.homepageAsNewTab,
+    )
+
+    /**
+     * Indicates if the Unified Trust Panel is enabled.
+     */
+    var enableUnifiedTrustPanel by booleanPreference(
+        key = appContext.getPreferenceKey(R.string.pref_key_enable_unified_trust_panel),
+        default = FeatureFlags.unifiedTrustPanel,
     )
 
     /**

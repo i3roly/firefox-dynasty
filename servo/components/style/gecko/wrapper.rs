@@ -1421,9 +1421,14 @@ impl<'le> TElement for GeckoElement<'le> {
             return None;
         }
 
+        let name = unsafe { bindings::Gecko_GetImplementedPseudoIdentifier(self.0) };
         PseudoElement::from_pseudo_type(
-            unsafe { bindings::Gecko_GetImplementedPseudo(self.0) },
-            None,
+            unsafe { bindings::Gecko_GetImplementedPseudoType(self.0) },
+            if name.is_null() {
+                None
+            } else {
+                Some(AtomIdent::new(unsafe { Atom::from_raw(name) }))
+            },
         )
     }
 
@@ -2156,16 +2161,18 @@ impl<'le> ::selectors::Element for GeckoElement<'le> {
 
     fn match_pseudo_element(
         &self,
-        pseudo_element: &PseudoElement,
+        pseudo_selector: &PseudoElement,
         _context: &mut MatchingContext<Self::Impl>,
     ) -> bool {
         // TODO(emilio): I believe we could assert we are a pseudo-element and
         // match the proper pseudo-element, given how we rulehash the stuff
         // based on the pseudo.
-        match self.implemented_pseudo_element() {
-            Some(ref pseudo) => *pseudo == *pseudo_element,
-            None => false,
-        }
+        let pseudo = match self.implemented_pseudo_element() {
+            Some(pseudo) => pseudo,
+            None => return false,
+        };
+
+        pseudo.matches(pseudo_selector)
     }
 
     #[inline]

@@ -2339,6 +2339,15 @@ JS_PUBLIC_API bool js::ShouldIgnorePropertyDefinition(JSContext* cx,
     return true;
   }
 
+  // It's gently surprising that this is JSProto_Function, but the trick
+  // to realize is that this is a -constructor function-, not a function
+  // on the prototype; and the proto of the constructor is JSProto_Function.
+  if (key == JSProto_Function &&
+      !JS::Prefs::experimental_iterator_sequencing() &&
+      id == NameToId(cx->names().concat)) {
+    return true;
+  }
+
   if (key == JSProto_Atomics && !JS::Prefs::experimental_atomics_pause() &&
       id == NameToId(cx->names().pause)) {
     return true;
@@ -2786,11 +2795,12 @@ class GetObjectSlotNameFunctor : public JS::TracingContext::Functor {
 
  public:
   explicit GetObjectSlotNameFunctor(JSObject* ctx) : obj(ctx) {}
-  virtual void operator()(JS::TracingContext* trc, char* buf,
+  virtual void operator()(JS::TracingContext* trc, const char* name, char* buf,
                           size_t bufsize) override;
 };
 
-void GetObjectSlotNameFunctor::operator()(JS::TracingContext* tcx, char* buf,
+void GetObjectSlotNameFunctor::operator()(JS::TracingContext* tcx,
+                                          const char* name, char* buf,
                                           size_t bufsize) {
   MOZ_ASSERT(tcx->index() != JS::TracingContext::InvalidIndex);
 

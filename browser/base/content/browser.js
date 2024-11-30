@@ -463,8 +463,10 @@ ChromeUtils.defineLazyGetter(this, "PopupNotifications", () => {
         return anchorElement;
       }
       let fallback = [
+        document.getElementById("searchmode-switcher-icon"),
         document.getElementById("identity-icon"),
         gURLBar.querySelector(".urlbar-search-button"),
+        document.getElementById("remote-control-icon"),
       ];
       return fallback.find(element => element?.checkVisibility()) ?? null;
     };
@@ -2524,10 +2526,8 @@ function FillHistoryMenu(event) {
       if (
         BrowserUtils.navigationRequireUserInteraction &&
         entry.hasUserInteraction === false &&
-        // Always allow going to the first and last navigation points.
+        // Always list the current and last navigation points.
         j != end - 1 &&
-        j != start &&
-        // Always display the current entry
         j != index
       ) {
         continue;
@@ -6642,7 +6642,7 @@ var ToolbarIconColor = {
   _windowState: {
     active: false,
     fullscreen: false,
-    tabsintitlebar: false,
+    customtitlebar: false,
   },
   init() {
     this._initialized = true;
@@ -6709,8 +6709,8 @@ var ToolbarIconColor = {
       case "toolbarvisibilitychange":
         // toolbar changes dont require reset of the cached color values
         break;
-      case "tabsintitlebar":
-        this._windowState.tabsintitlebar = reasonValue;
+      case "customtitlebar":
+        this._windowState.customtitlebar = reasonValue;
         break;
     }
 

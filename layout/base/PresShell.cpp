@@ -2868,11 +2868,8 @@ already_AddRefed<nsIContent> PresShell::GetContentForScrolling() const {
 already_AddRefed<nsIContent> PresShell::GetSelectedContentForScrolling() const {
   nsCOMPtr<nsIContent> selectedContent;
   if (mSelection) {
-    Selection* domSelection = mSelection->GetSelection(SelectionType::eNormal);
-    if (domSelection) {
-      selectedContent =
-          nsIContent::FromNodeOrNull(domSelection->GetFocusNode());
-    }
+    Selection& domSelection = mSelection->NormalSelection();
+    selectedContent = nsIContent::FromNodeOrNull(domSelection.GetFocusNode());
   }
   return selectedContent.forget();
 }
@@ -3250,14 +3247,14 @@ nsresult PresShell::GoToAnchor(const nsAString& aAnchorName,
         nodeToSelect = nodeToSelect->GetFirstChild();
       }
       jumpToRange->SelectNodeContents(*nodeToSelect, IgnoreErrors());
-      if (RefPtr sel = mSelection->GetSelection(SelectionType::eNormal)) {
-        sel->RemoveAllRanges(IgnoreErrors());
-        sel->AddRangeAndSelectFramesAndNotifyListeners(*jumpToRange,
-                                                       IgnoreErrors());
-        if (!StaticPrefs::layout_selectanchor()) {
-          // Use a caret (collapsed selection) at the start of the anchor.
-          sel->CollapseToStart(IgnoreErrors());
-        }
+      RefPtr sel = &mSelection->NormalSelection();
+      MOZ_ASSERT(sel);
+      sel->RemoveAllRanges(IgnoreErrors());
+      sel->AddRangeAndSelectFramesAndNotifyListeners(*jumpToRange,
+                                                     IgnoreErrors());
+      if (!StaticPrefs::layout_selectanchor()) {
+        // Use a caret (collapsed selection) at the start of the anchor.
+        sel->CollapseToStart(IgnoreErrors());
       }
     }
 
@@ -3474,7 +3471,7 @@ static nscoord ComputeWhereToScroll(WhereToScroll aWhereToScroll,
     // of it.
     nscoord min = std::min(aRectMin, aRectMax - scrollPortLength);
     nscoord max = std::max(aRectMin, aRectMax - scrollPortLength);
-    resultCoord = std::min(std::max(aOriginalCoord, min), max);
+    resultCoord = std::clamp(aOriginalCoord, min, max);
   } else {
     float percent = aWhereToScroll.mPercentage.value() / 100.0f;
     nscoord frameAlignCoord =

@@ -273,6 +273,9 @@ class nsWindow final : public nsBaseWidget {
 
   void UpdateOpaqueRegionInternal();
   void UpdateOpaqueRegion(const LayoutDeviceIntRegion&) override;
+  LayoutDeviceIntRegion GetOpaqueRegionForTesting() const override {
+    return GetOpaqueRegion();
+  }
   LayoutDeviceIntRegion GetOpaqueRegion() const;
 
   already_AddRefed<mozilla::gfx::DrawTarget> StartRemoteDrawingInRegion(
@@ -373,9 +376,7 @@ class nsWindow final : public nsBaseWidget {
   void GetCompositorWidgetInitData(
       mozilla::widget::CompositorWidgetInitData* aInitData) override;
 
-  nsresult SetNonClientMargins(const LayoutDeviceIntMargin&) override;
-  void SetDrawsInTitlebar(bool aState);
-  mozilla::LayoutDeviceIntCoord GetTitlebarRadius();
+  void SetCustomTitlebar(bool) override;
   void UpdateWindowDraggingRegion(
       const LayoutDeviceIntRegion& aRegion) override;
 

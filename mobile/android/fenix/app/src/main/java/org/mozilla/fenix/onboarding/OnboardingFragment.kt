@@ -62,6 +62,13 @@ import org.mozilla.fenix.utils.showAddSearchWidgetPrompt
 class OnboardingFragment : Fragment() {
     private val logger = Logger("OnboardingFragment")
 
+    private val termsOfServiceEventHandler by lazy {
+        DefaultOnboardingTermsOfServiceEventHandler(
+            telemetryRecorder = telemetryRecorder,
+            this::launchSandboxCustomTab,
+        )
+    }
+
     private val pagesToDisplay by lazy {
         pagesToDisplay(
             isNotDefaultBrowser(requireContext()) &&
@@ -129,7 +136,7 @@ class OnboardingFragment : Fragment() {
 
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     @Composable
-    @Suppress("LongMethod")
+    @Suppress("LongMethod", "ThrowsCount")
     private fun ScreenContent() {
         OnboardingScreen(
             pagesToDisplay = pagesToDisplay,
@@ -194,6 +201,14 @@ class OnboardingFragment : Fragment() {
                     pagesToDisplay.sequencePosition(OnboardingPageUiData.Type.ADD_ONS),
                 )
             },
+            onThemeSelectionButtonClick = {
+                // Todo as part of https://bugzilla.mozilla.org/show_bug.cgi?id=1918350
+                throw NotImplementedError()
+            },
+            onThemeSelectionSkipClick = {
+                // Todo as part of https://bugzilla.mozilla.org/show_bug.cgi?id=1918350
+                throw NotImplementedError()
+            },
             onFinish = {
                 onFinish(it)
                 disableNavBarCFRForNewUser()
@@ -207,6 +222,7 @@ class OnboardingFragment : Fragment() {
             },
             onboardingAddOnsStore = onboardingAddOnsStore,
             onInstallAddOnButtonClick = { installUrl -> installAddon(installUrl) },
+            termsOfServiceEventHandler = termsOfServiceEventHandler,
             onCustomizeToolbarClick = {
                 // Todo as part of https://bugzilla.mozilla.org/show_bug.cgi?id=1918351
                 throw NotImplementedError()
@@ -335,5 +351,13 @@ class OnboardingFragment : Fragment() {
             sequenceId = pagesToDisplay.telemetrySequenceId(),
             sequencePosition = pagesToDisplay.sequencePosition(OnboardingPageUiData.Type.DEFAULT_BROWSER),
         )
+    }
+
+    private fun launchSandboxCustomTab(url: String) {
+        val intent = SupportUtils.createSandboxCustomTabIntent(
+            context = requireContext(),
+            url = url,
+        )
+        requireContext().startActivity(intent)
     }
 }

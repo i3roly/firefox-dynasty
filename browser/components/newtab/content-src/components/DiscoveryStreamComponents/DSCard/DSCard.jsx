@@ -325,6 +325,7 @@ export class _DSCard extends React.PureComponent {
                 : {}),
               fetchTimestamp: this.props.fetchTimestamp,
               firstVisibleTimestamp: this.props.firstVisibleTimestamp,
+              corpus_item_id: this.props.corpus_item_id,
               scheduled_corpus_item_id: this.props.scheduled_corpus_item_id,
               recommended_at: this.props.recommended_at,
               received_rank: this.props.received_rank,
@@ -400,6 +401,7 @@ export class _DSCard extends React.PureComponent {
               : {}),
             fetchTimestamp: this.props.fetchTimestamp,
             firstVisibleTimestamp: this.props.firstVisibleTimestamp,
+            corpus_item_id: this.props.corpus_item_id,
             scheduled_corpus_item_id: this.props.scheduled_corpus_item_id,
             recommended_at: this.props.recommended_at,
             received_rank: this.props.received_rank,
@@ -466,6 +468,7 @@ export class _DSCard extends React.PureComponent {
         value: {
           recommendation_id: this.props.recommendation_id,
           tile_id: this.props.id,
+          corpus_item_id: this.props.corpus_item_id,
           scheduled_corpus_item_id: this.props.scheduled_corpus_item_id,
           recommended_at: this.props.recommended_at,
           received_rank: this.props.received_rank,
@@ -512,6 +515,7 @@ export class _DSCard extends React.PureComponent {
         card_type: "organic",
         recommendation_id: this.props.recommendation_id,
         tile_id: this.props.id,
+        corpus_item_id: this.props.corpus_item_id,
         scheduled_corpus_item_id: this.props.scheduled_corpus_item_id,
         recommended_at: this.props.recommended_at,
         received_rank: this.props.received_rank,
@@ -544,6 +548,7 @@ export class _DSCard extends React.PureComponent {
           value: {
             recommendation_id: this.props.recommendation_id,
             tile_id: this.props.id,
+            corpus_item_id: this.props.corpus_item_id,
             scheduled_corpus_item_id: this.props.scheduled_corpus_item_id,
             recommended_at: this.props.recommended_at,
             received_rank: this.props.received_rank,
@@ -721,6 +726,12 @@ export class _DSCard extends React.PureComponent {
     const isMediumRectangle = format === "rectangle";
     const spocFormatClassName = isMediumRectangle ? `ds-spoc-rectangle` : ``;
 
+    // Only update the "Saved" Pocket button UI for the Sections experiment.
+    const compactPocketSavedButtonClassName =
+      mayHaveSectionsCards && this.props.context_type === "pocket"
+        ? `ds-compact-pocket-saved-button`
+        : ``;
+
     let sizes = [];
     if (!isMediumRectangle) {
       sizes = isListCard ? this.listCardImageSizes : this.dsImageSizes;
@@ -738,7 +749,10 @@ export class _DSCard extends React.PureComponent {
                 role="img"
                 className="story-badge-icon icon icon-pocket"
               />
-              <span data-l10n-id="newtab-pocket-saved" />
+              <span
+                data-l10n-id="newtab-pocket-saved"
+                className="pocket-saved-copy"
+              />
             </>
           ) : (
             <>
@@ -801,6 +815,7 @@ export class _DSCard extends React.PureComponent {
                   : {}),
                 recommendation_id: this.props.recommendation_id,
                 fetchTimestamp: this.props.fetchTimestamp,
+                corpus_item_id: this.props.corpus_item_id,
                 scheduled_corpus_item_id: this.props.scheduled_corpus_item_id,
                 recommended_at: this.props.recommended_at,
                 received_rank: this.props.received_rank,
@@ -862,7 +877,9 @@ export class _DSCard extends React.PureComponent {
           />
         )}
 
-        <div className="card-stp-button-hover-background">
+        <div
+          className={`card-stp-button-hover-background ${compactPocketSavedButtonClassName}`}
+        >
           <div className="card-stp-button-position-wrapper">
             {saveToPocketCard && !isListCard && (
               <>{!this.props.flightId && stpButton()}</>
@@ -892,6 +909,7 @@ export class _DSCard extends React.PureComponent {
                 recommendation_id={this.props.recommendation_id}
                 tile_id={this.props.id}
                 block_key={this.props.id}
+                corpus_item_id={this.props.corpus_item_id}
                 scheduled_corpus_item_id={this.props.scheduled_corpus_item_id}
                 recommended_at={this.props.recommended_at}
                 received_rank={this.props.received_rank}

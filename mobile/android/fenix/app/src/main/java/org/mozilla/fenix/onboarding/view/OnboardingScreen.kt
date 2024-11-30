@@ -62,8 +62,11 @@ import org.mozilla.fenix.theme.FirefoxTheme
  * @param onboardingAddOnsStore The store which contains all the state related to the add-ons onboarding screen.
  * @param onAddOnsButtonClick Invoked when the primary button on add-ons page is clicked.
  * @param onInstallAddOnButtonClick Invoked when a button for installing an add-on is clicked.
+ * @param termsOfServiceEventHandler Invoked when the primary button on the terms of service page is clicked.
  * @param onCustomizeToolbarClick Invoked when positive button customize toolbar page is clicked.
  * @param onSkipCustomizeToolbarClick Invoked when negative button on customize toolbar page is clicked.
+ * @param onThemeSelectionButtonClick Invoked when the primary button on the theme selection page is clicked.
+ * @param onThemeSelectionSkipClick Invoked when the skip button on the theme selection page is clicked.
  * @param onFinish Invoked when the onboarding is completed.
  * @param onImpression Invoked when a page in the pager is displayed.
  */
@@ -82,8 +85,11 @@ fun OnboardingScreen(
     onboardingAddOnsStore: OnboardingAddOnsStore? = null,
     onAddOnsButtonClick: () -> Unit,
     onInstallAddOnButtonClick: (AddOn) -> Unit,
+    termsOfServiceEventHandler: OnboardingTermsOfServiceEventHandler,
     onCustomizeToolbarClick: () -> Unit,
     onSkipCustomizeToolbarClick: () -> Unit,
+    onThemeSelectionButtonClick: () -> Unit,
+    onThemeSelectionSkipClick: () -> Unit,
     onFinish: (pageType: OnboardingPageUiData) -> Unit,
     onImpression: (pageType: OnboardingPageUiData) -> Unit,
 ) {
@@ -176,6 +182,13 @@ fun OnboardingScreen(
             scrollToNextPageOrDismiss()
             onSkipCustomizeToolbarClick()
         },
+        onThemeSelectionButtonClick = onThemeSelectionButtonClick,
+        onThemeSelectionSkipClick = onThemeSelectionSkipClick,
+        termsOfServiceEventHandler = termsOfServiceEventHandler,
+        onAgreeAndConfirmTermsOfService = {
+            scrollToNextPageOrDismiss()
+            termsOfServiceEventHandler.onAcceptTermsButtonClicked()
+        },
         addOnsStore = onboardingAddOnsStore,
     )
 }
@@ -198,6 +211,10 @@ private fun OnboardingContent(
     onInstallAddOnButtonClick: (AddOn) -> Unit,
     onCustomizeToolbarButtonClick: () -> Unit,
     onCustomizeToolbarSkipClick: () -> Unit,
+    onThemeSelectionButtonClick: () -> Unit,
+    onThemeSelectionSkipClick: () -> Unit,
+    termsOfServiceEventHandler: OnboardingTermsOfServiceEventHandler,
+    onAgreeAndConfirmTermsOfService: () -> Unit,
 ) {
     val nestedScrollConnection = remember { DisableForwardSwipeNestedScrollConnection(pagerState) }
 
@@ -228,8 +245,17 @@ private fun OnboardingContent(
                 onAddOnsButtonClick = onAddOnsButtonClick,
                 onCustomizeToolbarButtonClick = onCustomizeToolbarButtonClick,
                 onCustomizeToolbarSkipClick = onCustomizeToolbarSkipClick,
+                onThemeSelectionButtonClick = onThemeSelectionButtonClick,
+                onThemeSelectionSkipClick = onThemeSelectionSkipClick,
+                onTermsOfServiceButtonClick = onAgreeAndConfirmTermsOfService,
             )
-            OnboardingPageForType(pageUiState.type, onboardingPageState, addOnsStore, onInstallAddOnButtonClick)
+            OnboardingPageForType(
+                type = pageUiState.type,
+                state = onboardingPageState,
+                onboardingAddOnsStore = addOnsStore,
+                termsOfServiceEventHandler = termsOfServiceEventHandler,
+                onInstallAddOnButtonClick = onInstallAddOnButtonClick,
+            )
         }
 
         PagerIndicator(
@@ -249,6 +275,7 @@ private fun OnboardingPageForType(
     type: OnboardingPageUiData.Type,
     state: OnboardingPageState,
     onboardingAddOnsStore: OnboardingAddOnsStore? = null,
+    termsOfServiceEventHandler: OnboardingTermsOfServiceEventHandler,
     onInstallAddOnButtonClick: (AddOn) -> Unit,
 ) {
     when (type) {
@@ -257,6 +284,7 @@ private fun OnboardingPageForType(
         OnboardingPageUiData.Type.ADD_SEARCH_WIDGET,
         OnboardingPageUiData.Type.NOTIFICATION_PERMISSION,
         OnboardingPageUiData.Type.TOOLBAR_PLACEMENT,
+        OnboardingPageUiData.Type.THEME_SELECTION,
         -> OnboardingPage(state)
 
         OnboardingPageUiData.Type.ADD_ONS,
@@ -266,6 +294,11 @@ private fun OnboardingPageForType(
             }
             AddOnsOnboardingPage(it, state, onInstallAddOnButtonClick)
         }
+
+        OnboardingPageUiData.Type.TERMS_OF_SERVICE -> TermsOfServiceOnboardingPage(
+            state,
+            termsOfServiceEventHandler,
+        )
     }
 }
 
@@ -312,6 +345,10 @@ private fun OnboardingScreenPreview() {
             onInstallAddOnButtonClick = {},
             onCustomizeToolbarButtonClick = {},
             onCustomizeToolbarSkipClick = {},
+            onThemeSelectionButtonClick = {},
+            onThemeSelectionSkipClick = {},
+            onAgreeAndConfirmTermsOfService = {},
+            termsOfServiceEventHandler = object : OnboardingTermsOfServiceEventHandler {},
         )
     }
 }

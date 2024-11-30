@@ -133,7 +133,16 @@ objects:
         description: >
           An optional list of toolbar placements for the toolbar placement card.
         default: []
+      customization-theme-data:
+        type: List<CustomizationThemeData>
+        description: An optional list of theme choices for the theme selection card.
+        default: []
 
+      term-of-service-data:
+        type: Option<TermsOfServiceData>
+        description: >
+          An optional terms of service data for the onboarding card.
+        default: null
   AddOnData:
       description: An object to describe an add-on to be installed from the onboarding card.
       fields:
@@ -192,6 +201,68 @@ objects:
         # This should never be defaulted.
         default: ic_onboarding_customize_toolbar
 
+  CustomizationThemeData:
+    description: Defines an option for theme selection.
+    fields:
+      theme-type:
+        type: ThemeType
+        description: The type of the theming option.
+        # This should never be defaulted.
+        default: theme-system
+      label:
+        type: Text
+        description: Display text for the theme option (e.g., "Light Theme").
+        # This should never be defaulted.
+        default: ""
+      image-res:
+        type: Image
+        description: The resource id of the image to be displayed.
+        # This should never be defaulted.
+        default: ic_pick_a_theme_system_auto
+
+  TermsOfServiceData:
+    description: An object to describe the terms of service onboarding card.
+    fields:
+      lineOneText:
+        type: Text
+        description: The text for line one.
+        # This should never be defaulted.
+        default: ""
+      lineOneLinkText:
+        type: Text
+        description: The text for the link of line one.
+        # This should never be defaulted.
+        default: ""
+      lineOneLinkURL:
+        type: Text
+        description: The url for the link of line one.
+        # This should never be defaulted.
+        default: ""
+      lineTwoText:
+        type: Text
+        description: The text for line two.
+        # This should never be defaulted.
+        default: ""
+      lineTwoLinkText:
+        type: Text
+        description: The text for the link of line two.
+        # This should never be defaulted.
+        default: ""
+      lineTwoLinkURL:
+        type: Text
+        description: The url for the link of line two.
+        # This should never be defaulted.
+        default: ""
+      lineThreeText:
+        type: Text
+        description: The text for line three.
+        # This should never be defaulted.
+        default: ""
+      lineThreeLinkText:
+        type: Text
+        description: The text for the link of line three.
+        # This should never be defaulted.
+        default: ""
 
 enums:
 
@@ -210,6 +281,10 @@ enums:
         description: Allows user to install add-ons from onboarding.
       toolbar-placement:
         description: Allows user to choose the toolbar position.
+      theme-selection:
+        description: Allows user to choose between dark and light themes.
+      terms-of-service:
+        description: Page to display the terms of services.
 
   ToolbarType:
     description: An enum to describe a toolbar placement option.
@@ -218,3 +293,13 @@ enums:
         description: Sets the toolbar placement on the top.
       toolbar-bottom:
         description: Sets the toolbar placement on the bottom.
+
+  ThemeType:
+    description: An enum to describe a theme selection option.
+    variants:
+      theme-system:
+        description: Adapts the theme to match the device's system setting.
+      theme-light:
+        description: Sets the theme to light mode.
+      theme-dark:
+        description: Sets the theme to dark mode.

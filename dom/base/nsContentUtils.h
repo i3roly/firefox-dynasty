@@ -194,6 +194,7 @@ class Selection;
 enum class ShadowRootMode : uint8_t;
 class ShadowRoot;
 struct StructuredSerializeOptions;
+class TrustedHTMLOrString;
 class WorkerPrivate;
 enum class ElementCallbackType;
 enum class ReferrerPolicy : uint8_t;
@@ -874,17 +875,6 @@ class nsContentUtils {
                                       ParseHTMLIntegerResultFlags* aResult);
 
  public:
-  /**
-   * Parse a margin string of format 'top, right, bottom, left' into
-   * an nsIntMargin.
-   *
-   * @param aString the string to parse
-   * @param aResult the resulting integer
-   * @return whether the value could be parsed
-   */
-  static bool ParseIntMarginValue(const nsAString& aString,
-                                  nsIntMargin& aResult);
-
   /**
    * Parse the value of the <font size=""> attribute according to the HTML5
    * spec as of April 16, 2012.
@@ -1881,7 +1871,9 @@ class nsContentUtils {
 
   MOZ_CAN_RUN_SCRIPT
   static void SetHTMLUnsafe(mozilla::dom::FragmentOrElement* aTarget,
-                            Element* aContext, const nsAString& aSource);
+                            Element* aContext,
+                            const mozilla::dom::TrustedHTMLOrString& aSource,
+                            bool aIsShadowRoot, mozilla::ErrorResult& aError);
   /**
    * Invoke the fragment parsing algorithm (innerHTML) using the HTML parser.
    *
