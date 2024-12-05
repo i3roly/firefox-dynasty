@@ -216,6 +216,10 @@ passwords-update-password-success-heading =
   .heading = Password saved
 passwords-update-password-success-button = Done
 
+passwords-delete-password-success-heading =
+  .heading = Password removed
+passwords-delete-password-success-button = Done
+#
 # Radiobutton label to display total number of passwords
 #   $total (number) - Total number of passwords
 passwords-radiobutton-all = All ({ $total })
@@ -224,12 +228,25 @@ passwords-radiobutton-all = All ({ $total })
 #   $total (number) - Total number of alerts
 passwords-radiobutton-alerts = Alerts ({ $total })
 
+# This message is displayed to make sure that a user wants to delete an existing login.
+passwords-remove-login-card-title = Remove password?
+# This message warns the user that deleting a login is permanent.
+passwords-remove-login-card-message = You can’t undo this.
+# This message gives the user an option to go back to the edit login form.
+passwords-remove-login-card-back-message = Back
+# This message confirms that the user wants to remove an existing login.
+passwords-remove-login-card-remove-button = Remove
+# This message gives the user the option to cancel their attempt to remove a login.
+passwords-remove-login-card-cancel-button = Cancel
+
 ## Login Form
 
 passwords-create-label =
   .label = Add password
 passwords-edit-label =
   .label = Edit password
+passwords-remove-label =
+  .title = Remove password
 passwords-origin-tooltip = Enter the exact address where you’ll sign in to this site.
 passwords-username-tooltip = Enter the username, email address, or account number you use to sign in.
 passwords-password-tooltip = Enter the password used to sign in to this account.
@@ -263,6 +280,10 @@ password-login-line =
   .title = Copy Password
 edit-login-button = Edit
   .tooltiptext = Edit Password
+view-alert-heading =
+  .heading = View alert
+view-alert-button =
+  .tooltiptext = Review alert
 
 show-password-button =
   .aria-label = Show Password

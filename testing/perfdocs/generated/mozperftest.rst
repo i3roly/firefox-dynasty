@@ -401,13 +401,31 @@ browser_ml_autofill_perf.js
 ::
 
  --perfherder
- --perfherder-metrics name:AUTOFILL-pipeline-ready-latency,unit:ms,shouldAlert:True, name:AUTOFILL-initialization-latency,unit:ms,shouldAlert:True, name:AUTOFILL-model-run-latency,unit:ms,shouldAlert:True, name:AUTOFILL-pipeline-ready-memory,unit:MB,shouldAlert:True, name:AUTOFILL-initialization-memory,unit:MB,shouldAlert:True, name:AUTOFILL-model-run-memory,unit:MB,shouldAlert:True, name:AUTOFILL-total-memory-usage,unit:MB,shouldAlert:True
+ --perfherder-metrics name:AUTOFILL-pipeline-ready-latency,unit:ms,shouldAlert:True, name:AUTOFILL-initialization-latency,unit:ms,shouldAlert:True, name:AUTOFILL-model-run-latency,unit:ms,shouldAlert:True, name:AUTOFILL-total-memory-usage,unit:MB,shouldAlert:True
  --verbose
  --manifest perftest.toml
  --manifest-flavor browser-chrome
  --try-platform linux, mac, win
 
 **Template test for latency for ML Autofill model**
+
+browser_ml_suggest_feature_perf.js
+==================================
+
+:owner: GenAI Team
+:name: ML Suggest Feature
+:Default options:
+
+::
+
+ --perfherder
+ --perfherder-metrics name:latency,unit:ms,shouldAlert:True, name:memory,unit:MB,shouldAlert:True
+ --verbose
+ --manifest perftest.toml
+ --manifest-flavor browser-chrome
+ --try-platform linux, mac, win
+
+**Template test for latency for ML suggest Feature**
 
 browser_ml_suggest_inference.js
 ===============================
@@ -419,49 +437,13 @@ browser_ml_suggest_inference.js
 ::
 
  --perfherder
- --perfherder-metrics name:inference-pipeline-ready-latency,unit:ms,shouldAlert:True, name:inference-initialization-latency,unit:ms,shouldAlert:True, name:inference-model-run-latency,unit:ms,shouldAlert:True, name:inference-pipeline-ready-memory,unit:MB,shouldAlert:True, name:inference-initialization-memory,unit:MB,shouldAlert:True, name:inference-model-run-memory,unit:MB,shouldAlert:True
+ --perfherder-metrics name:inference-pipeline-ready-latency,unit:ms,shouldAlert:True, name:inference-initialization-latency,unit:ms,shouldAlert:True, name:inference-model-run-latency,unit:ms,shouldAlert:True, name:inference-total-memory-usage,unit:ms,shouldAlert:True
  --verbose
  --manifest perftest.toml
  --manifest-flavor browser-chrome
  --try-platform linux, mac, win
 
 **Template test for ML suggest Inference Model**
-
-browser_ml_suggest_intent_perf.js
-=================================
-
-:owner: GenAI Team
-:name: ML Suggest Intent Model
-:Default options:
-
-::
-
- --perfherder
- --perfherder-metrics name:INTENT-pipeline-ready-latency,unit:ms,shouldAlert:True, name:INTENT-initialization-latency,unit:ms,shouldAlert:True, name:INTENT-model-run-latency,unit:ms,shouldAlert:True, name:INTENT-pipeline-ready-memory,unit:MB,shouldAlert:True, name:INTENT-initialization-memory,unit:MB,shouldAlert:True, name:INTENT-model-run-memory,unit:MB,shouldAlert:True, name:INTENT-total-memory-usage,unit:MB,shouldAlert:True
- --verbose
- --manifest perftest.toml
- --manifest-flavor browser-chrome
- --try-platform linux, mac, win
-
-**Template test for latency for ML suggest Intent Model**
-
-browser_ml_suggest_ner_perf.js
-==============================
-
-:owner: GenAI Team
-:name: ML Suggest NER Model
-:Default options:
-
-::
-
- --perfherder
- --perfherder-metrics name:NER-pipeline-ready-latency,unit:ms,shouldAlert:True, name:NER-initialization-latency,unit:ms,shouldAlert:True, name:NER-model-run-latency,unit:ms,shouldAlert:True, name:NER-pipeline-ready-memory,unit:MB,shouldAlert:True, name:NER-initialization-memory,unit:MB,shouldAlert:True, name:NER-model-run-memory,unit:MB,shouldAlert:True, name:NER-total-memory-usage,unit:MB,shouldAlert:True
- --verbose
- --manifest perftest.toml
- --manifest-flavor browser-chrome
- --try-platform linux, mac, win
-
-**Template test for latency for ML suggest NER model**
 
 browser_ml_summarizer_perf.js
 =============================
@@ -473,7 +455,7 @@ browser_ml_summarizer_perf.js
 ::
 
  --perfherder
- --perfherder-metrics name:SUM-XENOVA-DISTILBART-CNN-12-6_TINY-pipeline-ready-latency,unit:ms,shouldAlert:True, name:SUM-XENOVA-DISTILBART-CNN-12-6_TINY-initialization-latency,unit:ms,shouldAlert:True, name:SUM-XENOVA-DISTILBART-CNN-12-6_TINY-model-run-latency,unit:ms,shouldAlert:True, name:SUM-XENOVA-DISTILBART-CNN-12-6_TINY-pipeline-ready-memory,unit:MB,shouldAlert:True, name:SUM-XENOVA-DISTILBART-CNN-12-6_TINY-initialization-memory,unit:MB,shouldAlert:True, name:SUM-XENOVA-DISTILBART-CNN-12-6_TINY-model-run-memory,unit:MB,shouldAlert:True, name:SUM-XENOVA-DISTILBART-CNN-12-6_SMALL-pipeline-ready-latency,unit:ms,shouldAlert:True, name:SUM-XENOVA-DISTILBART-CNN-12-6_SMALL-initialization-latency,unit:ms,shouldAlert:True, name:SUM-XENOVA-DISTILBART-CNN-12-6_SMALL-model-run-latency,unit:ms,shouldAlert:True, name:SUM-XENOVA-DISTILBART-CNN-12-6_SMALL-pipeline-ready-memory,unit:MB,shouldAlert:True, name:SUM-XENOVA-DISTILBART-CNN-12-6_SMALL-initialization-memory,unit:MB,shouldAlert:True, name:SUM-XENOVA-DISTILBART-CNN-12-6_SMALL-model-run-memory,unit:MB,shouldAlert:True, name:SUM-XENOVA-DISTILBART-CNN-12-6_MEDIUM-pipeline-ready-latency,unit:ms,shouldAlert:True, name:SUM-XENOVA-DISTILBART-CNN-12-6_MEDIUM-initialization-latency,unit:ms,shouldAlert:True, name:SUM-XENOVA-DISTILBART-CNN-12-6_MEDIUM-model-run-latency,unit:ms,shouldAlert:True, name:SUM-XENOVA-DISTILBART-CNN-12-6_MEDIUM-pipeline-ready-memory,unit:MB,shouldAlert:True, name:SUM-XENOVA-DISTILBART-CNN-12-6_MEDIUM-initialization-memory,unit:MB,shouldAlert:True, name:SUM-XENOVA-DISTILBART-CNN-12-6_MEDIUM-model-run-memory,unit:MB,shouldAlert:True, name:SUM-XENOVA-DISTILBART-CNN-12-6_BIG-pipeline-ready-latency,unit:ms,shouldAlert:True, name:SUM-XENOVA-DISTILBART-CNN-12-6_BIG-initialization-latency,unit:ms,shouldAlert:True, name:SUM-XENOVA-DISTILBART-CNN-12-6_BIG-model-run-latency,unit:ms,shouldAlert:True, name:SUM-XENOVA-DISTILBART-CNN-12-6_BIG-pipeline-ready-memory,unit:MB,shouldAlert:True, name:SUM-XENOVA-DISTILBART-CNN-12-6_BIG-initialization-memory,unit:MB,shouldAlert:True, name:SUM-XENOVA-DISTILBART-CNN-12-6_BIG-model-run-memory,unit:MB,shouldAlert:True, name:SUM-ONNX-COMMUNITY-QWEN2.5-0.5B-INSTRUCT_TINY-pipeline-ready-latency,unit:ms,shouldAlert:True, name:SUM-ONNX-COMMUNITY-QWEN2.5-0.5B-INSTRUCT_TINY-initialization-latency,unit:ms,shouldAlert:True, name:SUM-ONNX-COMMUNITY-QWEN2.5-0.5B-INSTRUCT_TINY-model-run-latency,unit:ms,shouldAlert:True, name:SUM-ONNX-COMMUNITY-QWEN2.5-0.5B-INSTRUCT_TINY-pipeline-ready-memory,unit:MB,shouldAlert:True, name:SUM-ONNX-COMMUNITY-QWEN2.5-0.5B-INSTRUCT_TINY-initialization-memory,unit:MB,shouldAlert:True, name:SUM-ONNX-COMMUNITY-QWEN2.5-0.5B-INSTRUCT_TINY-model-run-memory,unit:MB,shouldAlert:True, name:SUM-ONNX-COMMUNITY-QWEN2.5-0.5B-INSTRUCT_SMALL-pipeline-ready-latency,unit:ms,shouldAlert:True, name:SUM-ONNX-COMMUNITY-QWEN2.5-0.5B-INSTRUCT_SMALL-initialization-latency,unit:ms,shouldAlert:True, name:SUM-ONNX-COMMUNITY-QWEN2.5-0.5B-INSTRUCT_SMALL-model-run-latency,unit:ms,shouldAlert:True, name:SUM-ONNX-COMMUNITY-QWEN2.5-0.5B-INSTRUCT_SMALL-pipeline-ready-memory,unit:MB,shouldAlert:True, name:SUM-ONNX-COMMUNITY-QWEN2.5-0.5B-INSTRUCT_SMALL-initialization-memory,unit:MB,shouldAlert:True, name:SUM-ONNX-COMMUNITY-QWEN2.5-0.5B-INSTRUCT_SMALL-model-run-memory,unit:MB,shouldAlert:True, name:SUM-ONNX-COMMUNITY-QWEN2.5-0.5B-INSTRUCT_MEDIUM-pipeline-ready-latency,unit:ms,shouldAlert:True, name:SUM-ONNX-COMMUNITY-QWEN2.5-0.5B-INSTRUCT_MEDIUM-initialization-latency,unit:ms,shouldAlert:True, name:SUM-ONNX-COMMUNITY-QWEN2.5-0.5B-INSTRUCT_MEDIUM-model-run-latency,unit:ms,shouldAlert:True, name:SUM-ONNX-COMMUNITY-QWEN2.5-0.5B-INSTRUCT_MEDIUM-pipeline-ready-memory,unit:MB,shouldAlert:True, name:SUM-ONNX-COMMUNITY-QWEN2.5-0.5B-INSTRUCT_MEDIUM-initialization-memory,unit:MB,shouldAlert:True, name:SUM-ONNX-COMMUNITY-QWEN2.5-0.5B-INSTRUCT_MEDIUM-model-run-memory,unit:MB,shouldAlert:True, name:SUM-ONNX-COMMUNITY-QWEN2.5-0.5B-INSTRUCT_BIG-pipeline-ready-latency,unit:ms,shouldAlert:True, name:SUM-ONNX-COMMUNITY-QWEN2.5-0.5B-INSTRUCT_BIG-initialization-latency,unit:ms,shouldAlert:True, name:SUM-ONNX-COMMUNITY-QWEN2.5-0.5B-INSTRUCT_BIG-model-run-latency,unit:ms,shouldAlert:True, name:SUM-ONNX-COMMUNITY-QWEN2.5-0.5B-INSTRUCT_BIG-pipeline-ready-memory,unit:MB,shouldAlert:True, name:SUM-ONNX-COMMUNITY-QWEN2.5-0.5B-INSTRUCT_BIG-initialization-memory,unit:MB,shouldAlert:True, name:SUM-ONNX-COMMUNITY-QWEN2.5-0.5B-INSTRUCT_BIG-model-run-memory,unit:MB,shouldAlert:True
+ --perfherder-metrics name:latency,unit:ms,shouldAlert:True, name:memory,unit:MB,shouldAlert:True
  --verbose
  --manifest perftest.toml
  --manifest-flavor browser-chrome
@@ -491,7 +473,7 @@ browser_ml_engine_perf.js
 ::
 
  --perfherder
- --perfherder-metrics name:EXAMPLE-cold-start-pipeline-ready-latency,unit:ms,shouldAlert:True, name:EXAMPLE-cold-start-initialization-latency,unit:ms,shouldAlert:True, name:EXAMPLE-cold-start-model-run-latency,unit:ms,shouldAlert:True, name:EXAMPLE-cold-start-pipeline-ready-memory,unit:MB,shouldAlert:True, name:EXAMPLE-cold-start-initialization-memory,unit:MB,shouldAlert:True, name:EXAMPLE-cold-start-model-run-memory,unit:MB,shouldAlert:True, name:EXAMPLE-cold-start-total-memory-usage,unit:MB,shouldAlert:True, name:EXAMPLE-pipeline-ready-latency,unit:ms,shouldAlert:True, name:EXAMPLE-initialization-latency,unit:ms,shouldAlert:True, name:EXAMPLE-model-run-latency,unit:ms,shouldAlert:True, name:EXAMPLE-pipeline-ready-memory,unit:MB,shouldAlert:True, name:EXAMPLE-initialization-memory,unit:MB,shouldAlert:True, name:EXAMPLE-model-run-memory,unit:MB,shouldAlert:True, name:EXAMPLE-total-memory-usage,unit:MB,shouldAlert:True
+ --perfherder-metrics name:latency,unit:ms,shouldAlert:True, name:memory,unit:MB,shouldAlert:True
  --verbose
  --manifest perftest.toml
  --manifest-flavor browser-chrome
@@ -509,7 +491,7 @@ browser_ml_engine_multi_perf.js
 ::
 
  --perfherder
- --perfherder-metrics name:intent-pipeline-ready-latency,unit:ms,shouldAlert:True, name:intent-initialization-latency,unit:ms,shouldAlert:True, name:intent-model-run-latency,unit:ms,shouldAlert:True, name:intent-pipeline-ready-memory,unit:MB,shouldAlert:True, name:intent-initialization-memory,unit:MB,shouldAlert:True, name:intent-model-run-memory,unit:MB,shouldAlert:True, name:intent-total-memory-usage,unit:MB,shouldAlert:True, name:suggest-pipeline-ready-latency,unit:ms,shouldAlert:True, name:suggest-initialization-latency,unit:ms,shouldAlert:True, name:suggest-model-run-latency,unit:ms,shouldAlert:True, name:suggest-pipeline-ready-memory,unit:MB,shouldAlert:True, name:suggest-initialization-memory,unit:MB,shouldAlert:True, name:suggest-model-run-memory,unit:MB,shouldAlert:True, name:suggest-total-memory-usage,unit:MB,shouldAlert:True, name:engine3-pipeline-ready-latency,unit:ms,shouldAlert:True, name:engine3-initialization-latency,unit:ms,shouldAlert:True, name:engine3-model-run-latency,unit:ms,shouldAlert:True, name:engine3-pipeline-ready-memory,unit:MB,shouldAlert:True, name:engine3-initialization-memory,unit:MB,shouldAlert:True, name:engine3-model-run-memory,unit:MB,shouldAlert:True, name:engine3-total-memory-usage,unit:MB,shouldAlert:True, name:engine4-pipeline-ready-latency,unit:ms,shouldAlert:True, name:engine4-initialization-latency,unit:ms,shouldAlert:True, name:engine4-model-run-latency,unit:ms,shouldAlert:True, name:engine4-pipeline-ready-memory,unit:MB,shouldAlert:True, name:engine4-initialization-memory,unit:MB,shouldAlert:True, name:engine4-model-run-memory,unit:MB,shouldAlert:True, name:engine4-total-memory-usage,unit:MB,shouldAlert:True
+ --perfherder-metrics name:latency,unit:ms,shouldAlert:True, name:memory,unit:MB,shouldAlert:True
  --verbose
  --manifest perftest.toml
  --manifest-flavor browser-chrome

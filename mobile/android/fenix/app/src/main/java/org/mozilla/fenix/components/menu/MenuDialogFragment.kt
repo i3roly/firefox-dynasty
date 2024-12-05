@@ -42,6 +42,8 @@ import mozilla.components.browser.state.selector.findCustomTab
 import mozilla.components.browser.state.selector.selectedTab
 import mozilla.components.concept.engine.translate.TranslationSupport
 import mozilla.components.concept.engine.translate.findLanguage
+import mozilla.components.feature.addons.Addon
+import mozilla.components.feature.addons.ui.displayName
 import mozilla.components.lib.state.ext.observeAsState
 import mozilla.components.service.fxa.manager.AccountState.NotAuthenticated
 import mozilla.components.support.base.feature.ViewBoundFeatureWrapper
@@ -68,6 +70,7 @@ import org.mozilla.fenix.components.menu.store.BrowserMenuState
 import org.mozilla.fenix.components.menu.store.MenuAction
 import org.mozilla.fenix.components.menu.store.MenuState
 import org.mozilla.fenix.components.menu.store.MenuStore
+import org.mozilla.fenix.components.menu.store.WebExtensionMenuItem
 import org.mozilla.fenix.ext.runIfFragmentIsAttached
 import org.mozilla.fenix.nimbus.FxNimbus
 import org.mozilla.fenix.settings.SupportUtils
@@ -298,7 +301,7 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                     val translateLanguageCode = selectedTab?.translationsState?.translationEngineState
                         ?.requestedTranslationPair?.toLanguage
                     val isExtensionsProcessDisabled = browserStore.state.extensionsProcessDisabled
-                    val isReportSiteIssueSupported =
+                    val isWebCompatReporterSupported =
                         FxNimbus.features.menuRedesign.value().reportSiteIssue
 
                     val isDesktopMode by store.observeAsState(initialValue = false) { state ->
@@ -342,10 +345,6 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
 
                     val browserWebExtensionMenuItem by store.observeAsState(initialValue = emptyList()) { state ->
                         state.extensionMenuState.browserWebExtensionMenuItem
-                    }
-
-                    val pageWebExtensionMenuItems by store.observeAsState(initialValue = emptyList()) { state ->
-                        state.toolsMenuState.pageWebExtensionMenuItem
                     }
 
                     val showExtensionsOnboarding by store.observeAsState(initialValue = false) { state ->
@@ -435,20 +434,18 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                                     accessPoint = args.accesspoint,
                                     account = account,
                                     accountState = accountState,
-                                    availableAddons = availableAddons,
                                     showQuitMenu = settings.shouldDeleteBrowsingDataOnQuit,
                                     isPrivate = browsingModeManager.mode.isPrivate,
                                     isDesktopMode = isDesktopMode,
                                     isPdf = isPdf,
                                     isTranslationSupported = isTranslationSupported,
+                                    isWebCompatReporterSupported = isWebCompatReporterSupported,
                                     isExtensionsProcessDisabled = isExtensionsProcessDisabled,
-                                    reportSiteIssueLabel = if (
-                                        isReportSiteIssueSupported && pageWebExtensionMenuItems.isNotEmpty()
-                                    ) {
-                                        pageWebExtensionMenuItems[0].label.removeSuffix("…")
-                                    } else {
-                                        null
-                                    },
+                                    extensionsMenuItemDescription = getExtensionsMenuItemDescription(
+                                        isExtensionsProcessDisabled = isExtensionsProcessDisabled,
+                                        availableAddons = availableAddons,
+                                        browserWebExtensionMenuItems = browserWebExtensionMenuItem,
+                                    ),
                                     onMozillaAccountButtonClick = {
                                         view?.slideDown {
                                             store.dispatch(
@@ -583,8 +580,7 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
 
                                 ToolsSubmenu(
                                     isPdf = isPdf,
-                                    webExtensionMenuItems = pageWebExtensionMenuItems,
-                                    isReportSiteIssueSupported = isReportSiteIssueSupported,
+                                    isWebCompatReporterSupported = isWebCompatReporterSupported,
                                     isReaderable = isReaderable,
                                     isReaderViewActive = isReaderViewActive,
                                     hasExternalApp = appLinksRedirect?.hasExternalApp() ?: false,
@@ -628,6 +624,9 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                                     },
                                     onOpenInAppMenuClick = {
                                         store.dispatch(MenuAction.OpenInApp)
+                                    },
+                                    onWebCompatReporterClick = {
+                                        store.dispatch(MenuAction.Navigate.WebCompatReporter)
                                     },
                                 )
                             }
@@ -719,6 +718,34 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                     }
                 }
             }
+        }
+    }
+
+    private fun getExtensionsMenuItemDescription(
+        isExtensionsProcessDisabled: Boolean,
+        availableAddons: List<Addon>,
+        browserWebExtensionMenuItems: List<WebExtensionMenuItem>,
+    ): String {
+        return when {
+            isExtensionsProcessDisabled -> {
+                requireContext().getString(R.string.browser_menu_extensions_disabled_description)
+            }
+
+            args.accesspoint == MenuAccessPoint.Home && availableAddons.isNotEmpty() -> {
+                availableAddons.joinToString(
+                    separator = ", ",
+                ) { it.displayName(requireContext()) }
+            }
+
+            args.accesspoint == MenuAccessPoint.Browser && browserWebExtensionMenuItems.isNotEmpty() -> {
+                browserWebExtensionMenuItems.joinToString(
+                    separator = ", ",
+                ) {
+                    it.label
+                }
+            }
+
+            else -> requireContext().getString(R.string.browser_menu_no_extensions_installed_description)
         }
     }
 

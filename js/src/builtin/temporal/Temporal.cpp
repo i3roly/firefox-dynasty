@@ -103,53 +103,32 @@ static bool GetStringOption(JSContext* cx, Handle<JSObject*> options,
 }
 
 /**
- * GetOption ( options, property, type, values, default )
- */
-static bool GetNumberOption(JSContext* cx, Handle<JSObject*> options,
-                            Handle<PropertyName*> property, double* number) {
-  // Step 1.
-  Rooted<Value> value(cx);
-  if (!GetProperty(cx, options, options, property, &value)) {
-    return false;
-  }
-
-  // Step 2. (Caller should fill in the fallback.)
-  if (value.isUndefined()) {
-    return true;
-  }
-
-  // Steps 3 and 5. (Not applicable in our implementation)
-
-  // Step 4.a.
-  if (!JS::ToNumber(cx, value, number)) {
-    return false;
-  }
-
-  // Step 4.b. (Caller must check for NaN values.)
-
-  // Step 7. (Not applicable in our implementation)
-
-  // Step 8.
-  return true;
-}
-
-/**
  * GetRoundingIncrementOption ( normalizedOptions, dividend, inclusive )
  */
 bool js::temporal::GetRoundingIncrementOption(JSContext* cx,
                                               Handle<JSObject*> options,
                                               Increment* increment) {
-  // Steps 1-3.
-  double number = 1;
-  if (!GetNumberOption(cx, options, cx->names().roundingIncrement, &number)) {
+  // Step 1.
+  Rooted<Value> value(cx);
+  if (!GetProperty(cx, options, options, cx->names().roundingIncrement,
+                   &value)) {
     return false;
   }
 
-  // Step 5. (Reordered)
-  number = std::trunc(number);
+  // Step 2.
+  if (value.isUndefined()) {
+    *increment = Increment{1};
+    return true;
+  }
 
-  // Steps 4 and 6.
-  if (!std::isfinite(number) || number < 1 || number > 1'000'000'000) {
+  // Step 3.
+  double number;
+  if (!ToIntegerWithTruncation(cx, value, "roundingIncrement", &number)) {
+    return false;
+  }
+
+  // Step 4.
+  if (number < 1 || number > 1'000'000'000) {
     ToCStringBuf cbuf;
     const char* numStr = NumberToCString(&cbuf, number);
 
@@ -159,7 +138,7 @@ bool js::temporal::GetRoundingIncrementOption(JSContext* cx,
     return false;
   }
 
-  // Step 7.
+  // Step 5.
   *increment = Increment{uint32_t(number)};
   return true;
 }
@@ -440,58 +419,17 @@ bool IsValidMul<Int128>(const Int128& x, const Int128& y) {
 /**
  * RoundNumberToIncrement ( x, increment, roundingMode )
  */
-Int128 js::temporal::RoundNumberToIncrement(int64_t numerator,
+Int128 js::temporal::RoundNumberToIncrement(const Int128& numerator,
                                             int64_t denominator,
                                             Increment increment,
                                             TemporalRoundingMode roundingMode) {
   MOZ_ASSERT(denominator > 0);
   MOZ_ASSERT(Increment::min() <= increment && increment <= Increment::max());
 
-  // Dividing zero is always zero.
-  if (numerator == 0) {
-    return Int128{0};
-  }
-
-  // We don't have to adjust the divisor when |increment=1|.
-  if (increment == Increment{1}) {
-    // Steps 1-8 and implicit step 9.
-    return Int128{Divide(numerator, denominator, roundingMode)};
-  }
-
-  // Fast-path when we can perform the whole computation with int64 values.
-  auto divisor = mozilla::CheckedInt64(denominator) * increment.value();
-  if (MOZ_LIKELY(divisor.isValid())) {
-    MOZ_ASSERT(divisor.value() > 0);
-
-    // Steps 1-8.
-    int64_t rounded = Divide(numerator, divisor.value(), roundingMode);
-
-    // Step 9.
-    auto result = mozilla::CheckedInt64(rounded) * increment.value();
-    if (MOZ_LIKELY(result.isValid())) {
-      return Int128{result.value()};
-    }
-  }
-
-  // Int128 path on overflow.
-  return RoundNumberToIncrement(Int128{numerator}, Int128{denominator},
-                                increment, roundingMode);
-}
-
-/**
- * RoundNumberToIncrement ( x, increment, roundingMode )
- */
-Int128 js::temporal::RoundNumberToIncrement(const Int128& numerator,
-                                            const Int128& denominator,
-                                            Increment increment,
-                                            TemporalRoundingMode roundingMode) {
-  MOZ_ASSERT(denominator > Int128{0});
-  MOZ_ASSERT(Increment::min() <= increment && increment <= Increment::max());
-
   auto inc = Int128{increment.value()};
-  MOZ_ASSERT(IsValidMul(denominator, inc), "unsupported overflow");
+  MOZ_ASSERT(IsValidMul(Int128{denominator}, inc), "unsupported overflow");
 
-  auto divisor = denominator * inc;
+  auto divisor = Int128{denominator} * inc;
   MOZ_ASSERT(divisor > Int128{0});
 
   // Steps 1-8.

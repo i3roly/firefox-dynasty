@@ -2610,6 +2610,36 @@
   value: @IS_NOT_EARLY_BETA_OR_EARLIER@
   mirror: always
 
+# Whether the result of screenX, screenY, clientX, clientY, offsetX, offsetY,
+# x and y of trusted MouseEvent and subclasses may be fractional values.
+# Enabling this may cause backward compatibility issues.
+# Note that this pref is referred only when
+# `dom.event.pointer.fractional_coordinates.enabled` is `true`.
+- name: dom.event.mouse.fractional_coordinates.trusted.enabled
+  type: bool
+  value: false
+  mirror: always
+
+# Whether the result of screenX, screenY, clientX, clientY, offsetX, offsetY,
+# x and y of untrusted MouseEvent and subclasses may be fractional values.
+# I.e., this allows web apps to use fractional values with their own DOM events
+# which have MouseEvent interface.  However, this might cause backward
+# compatibility issues if web apps initializes untrusted events with quotients.
+# Note that this pref is referred only when
+# `dom.event.pointer.fractional_coordinates.enabled` is `true`.
+- name: dom.event.mouse.fractional_coordinates.untrusted.enabled
+  type: bool
+  value: false
+  mirror: always
+
+# Whether the result of screenX, screenY, clientX, clientY, offsetX, offsetY,
+# x and y of PointerEvent may be fractional values (except `click`, `auxclick`
+# and `contextmenu`)
+- name: dom.event.pointer.fractional_coordinates.enabled
+  type: bool
+  value: @IS_NIGHTLY_BUILD@
+  mirror: always
+
 # Whether wheel event target's should be grouped. When enabled, all wheel
 # events that occur in a given wheel transaction have the same event target.
 - name: dom.event.wheel-event-groups.enabled
@@ -8293,7 +8323,7 @@
 
 -   name: javascript.options.experimental.json_parse_with_source
     type: bool
-    value: false
+    value: true
     mirror: always
     set_spidermonkey_pref: always
 
@@ -9109,6 +9139,13 @@
 #
 # Only for testing purposes.
 - name: layout.css.moz-control-character-visibility.enabled
+  type: RelaxedAtomicBool
+  value: false
+  mirror: always
+  rust: true
+
+# Whether the `-moz-user-input` property is exposed to content.
+- name: layout.css.moz-user-input.enabled
   type: RelaxedAtomicBool
   value: false
   mirror: always
@@ -12466,6 +12503,11 @@
   value: false
   mirror: always
 
+- name: network.cookie.sameSite.laxByDefaultWarningsForBeta
+  type: RelaxedAtomicBool
+  value: false
+  mirror: always
+
 # lax-by-default 2 minutes tollerance for unsafe methods. The value is in seconds.
 - name: network.cookie.sameSite.laxPlusPOST.timeout
   type: uint32_t
@@ -13960,7 +14002,7 @@
 # PRIORITY_UPDATE frames.
 - name: network.http.http2.priority_updates
   type: RelaxedAtomicBool
-  value: true
+  value: false
   mirror: always
 
 # This pref controls whether to send the
@@ -14331,6 +14373,13 @@
   value: ""
   mirror: never
 
+# This is only used for testing. When true, nsHttpChannel::mPeerAddr will be
+# overridden with the address provided by DNS prefetch.
+- name: network.dns.use_override_as_peer_address
+  type: RelaxedAtomicBool
+  value: false
+  mirror: always
+
 # Whether to add additional record IPs to the cache
 - name: network.trr.add_additional_records
   type: RelaxedAtomicBool
@@ -14615,6 +14664,13 @@
 - name: permissions.media.query.enabled
   type: RelaxedAtomicBool
   value: true
+  mirror: always
+
+# Whether default permissions should be imported from remote settings in
+# addition to importing them from browser/app/permissions.
+- name: permissions.manager.remote.enabled
+  type: bool
+  value: @IS_EARLY_BETA_OR_EARLIER@
   mirror: always
 
 #---------------------------------------------------------------------------
@@ -15924,7 +15980,11 @@
 # 3: Consult CRLite and enforce "Not Revoked" results, but defer to OCSP for "Revoked".
 - name: security.pki.crlite_mode
   type: RelaxedAtomicUint32
+#ifdef NIGHTLY_BUILD
+  value: 2
+#else
   value: 3
+#endif
   mirror: always
 
 # The CRLite filter channel to which the user is subscribed.

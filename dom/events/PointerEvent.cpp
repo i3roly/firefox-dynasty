@@ -117,10 +117,10 @@ already_AddRefed<PointerEvent> PointerEvent::Constructor(
   RefPtr<PointerEvent> e = new PointerEvent(aOwner, nullptr, nullptr);
   bool trusted = e->Init(aOwner);
 
-  e->InitMouseEvent(aType, aParam.mBubbles, aParam.mCancelable, aParam.mView,
-                    aParam.mDetail, aParam.mScreenX, aParam.mScreenY,
-                    aParam.mClientX, aParam.mClientY, false, false, false,
-                    false, aParam.mButton, aParam.mRelatedTarget);
+  e->InitMouseEventInternal(
+      aType, aParam.mBubbles, aParam.mCancelable, aParam.mView, aParam.mDetail,
+      aParam.mScreenX, aParam.mScreenY, aParam.mClientX, aParam.mClientY, false,
+      false, false, false, aParam.mButton, aParam.mRelatedTarget);
   e->InitializeExtraMouseEventDictionaryMembers(aParam);
   e->mPointerType = Some(aParam.mPointerType);
 
@@ -246,12 +246,12 @@ int32_t PointerEvent::PointerId() {
              : mEvent->AsPointerEvent()->pointerId;
 }
 
-int32_t PointerEvent::Width() {
-  return ShouldResistFingerprinting() ? 1 : mEvent->AsPointerEvent()->mWidth;
+double PointerEvent::Width() const {
+  return ShouldResistFingerprinting() ? 1.0 : mEvent->AsPointerEvent()->mWidth;
 }
 
-int32_t PointerEvent::Height() {
-  return ShouldResistFingerprinting() ? 1 : mEvent->AsPointerEvent()->mHeight;
+double PointerEvent::Height() const {
+  return ShouldResistFingerprinting() ? 1.0 : mEvent->AsPointerEvent()->mHeight;
 }
 
 float PointerEvent::Pressure() {

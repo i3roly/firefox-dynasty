@@ -3375,8 +3375,8 @@ class Document : public nsINode,
   void SetDocumentEditableFlag(bool);
   MOZ_CAN_RUN_SCRIPT
   bool ExecCommand(const nsAString& aHTMLCommandName, bool aShowUI,
-                   const nsAString& aValue, nsIPrincipal& aSubjectPrincipal,
-                   mozilla::ErrorResult& aRv);
+                   const TrustedHTMLOrString& aValue,
+                   nsIPrincipal& aSubjectPrincipal, mozilla::ErrorResult& aRv);
   MOZ_CAN_RUN_SCRIPT bool QueryCommandEnabled(const nsAString& aHTMLCommandName,
                                               nsIPrincipal& aSubjectPrincipal,
                                               mozilla::ErrorResult& aRv);
@@ -3688,6 +3688,9 @@ class Document : public nsINode,
     mHasPolicyWithRequireTrustedTypesForDirective =
         aHasPolicyWithRequireTrustedTypesForDirective;
   }
+  bool IsClipboardCopyTriggered() const { return mClipboardCopyTriggered; }
+  void ClearClipboardCopyTriggered() { mClipboardCopyTriggered = false; }
+  void SetClipboardCopyTriggered() { mClipboardCopyTriggered = true; }
 
   // Even if mutation events are disabled by default,
   // dom.mutation_events.forceEnable can be used to enable them per site.
@@ -4413,6 +4416,7 @@ class Document : public nsINode,
    *                            execCommand().
    * @param aValue              The value which is set to the 3rd parameter
    *                            of execCommand().
+   * @param aRv                 ErrorResult used for Trusted Type conversion.
    * @param aAdjustedValue      [out] Must be empty string if set non-nullptr.
    *                            Will be set to adjusted value for executing
    *                            the internal command.
@@ -4425,8 +4429,9 @@ class Document : public nsINode,
    *                            instance registered in
    *                            sInternalCommandDataHashtable.
    */
-  static InternalCommandData ConvertToInternalCommand(
-      const nsAString& aHTMLCommandName, const nsAString& aValue = u""_ns,
+  MOZ_CAN_RUN_SCRIPT InternalCommandData ConvertToInternalCommand(
+      const nsAString& aHTMLCommandName,
+      const TrustedHTMLOrString* aValue = nullptr, ErrorResult* aRv = nullptr,
       nsAString* aAdjustedValue = nullptr);
 
   /**
@@ -4963,6 +4968,10 @@ class Document : public nsINode,
 
   // Whether the document's CSP contains a require-trusted-types-for directive.
   bool mHasPolicyWithRequireTrustedTypesForDirective : 1;
+
+  // Whether a copy event happened. Used to detect when this happens
+  // while a paste event is being handled in JS.
+  bool mClipboardCopyTriggered : 1;
 
   Maybe<bool> mMutationEventsEnabled;
 

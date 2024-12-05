@@ -323,12 +323,16 @@
     <string name="browser_menu_tools_description" moz:removedIn="134" tools:ignore="UnusedResources">Reader View, Print, Share, Open app</string>
     <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu
          The first parameter is the label of the report site issue (for example: Report Site issue) -->
-    <string name="browser_menu_tools_description_with_translate_with_report_site">Reader View, Translate, %s, Print, Share, Open app</string>
+    <string name="browser_menu_tools_description_with_translate_with_report_site"  moz:removedIn="135" tools:ignore="UnusedResources">Reader View, Translate, %s, Print, Share, Open app</string>
+    <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu when the "Report broken site" feature is available-->
+    <string name="browser_menu_tools_description_with_translate_with_report_site_2">Reader View, Translate, Report broken site, Print, Share, Open app</string>
     <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
     <string name="browser_menu_tools_description_with_translate_without_report_site">Reader View, Translate, Print, Share, Open app</string>
     <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu
          The first parameter is the label of the report site issue (for example: Report Site issue) -->
-    <string name="browser_menu_tools_description_with_report_site">Reader View, %s, Print, Share, Open app</string>
+    <string name="browser_menu_tools_description_with_report_site" moz:removedIn="135" tools:ignore="UnusedResources">Reader View, %s, Print, Share, Open app</string>
+    <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu when the "Report broken site" feature is available-->
+    <string name="browser_menu_tools_description_with_report_site_2">Reader View, Report broken site, Print, Share, Open app</string>
     <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
     <string name="browser_menu_tools_description_without_report_site">Reader View, Print, Share, Open app</string>
     <!-- Browser menu label that navigates to the save sub-menu, which contains various save related menu items such as
@@ -348,6 +352,8 @@
     <string name="browser_menu_turn_off_reader_view">Turn off Reader View</string>
     <!-- Browser menu label for navigating to the translation feature, which provides language translation options the current visited page -->
     <string name="browser_menu_translate_page">Translate page…</string>
+    <!-- Browser menu label for navigating to the Web Compat Reporter feature, which provides users the ability to send bug reports for broken sites. -->
+    <string name="browser_menu_webcompat_reporter">Report broken site…</string>
     <!-- Browser menu label that is displayed when the current page has been translated by the translation feature.
          The first parameter is the name of the language that page was translated to (e.g. English). -->
     <string name="browser_menu_translated_to">Translated to %1$s</string>
@@ -552,18 +558,30 @@
     <string name="onboarding_welcome_to_firefox" tools:ignore="UnusedResources,BrandUsage">Welcome to Firefox</string>
     <!-- Terms of service onboarding page continue button label. -->
     <string name="onboarding_term_of_service_agree_and_continue_button_label" tools:ignore="UnusedResources">Agree and continue</string>
-    <!-- Terms of service onboarding page line one text. 'Firefox' intentionally hardcoded here-->
-    <string name="onboarding_term_of_service_line_one" tools:ignore="UnusedResources,BrandUsage">By continuing, you agree to the Firefox Terms of Service.</string>
-    <!-- Terms of service onboarding page line one text which should be displayed as a link. -->
+    <!-- Line one of the terms of service onboarding page. 'Firefox' is intentionally hardcoded. %1$s is replaced by an active link, using onboarding_term_of_service_line_one_link_text as text (“Terms of Service”). -->
+    <string name="onboarding_term_of_service_line_one" tools:ignore="UnusedResources,BrandUsage">By continuing, you agree to the Firefox %1$s.</string>
+    <!-- Used as text for the link in onboarding_term_of_service_line_one. -->
     <string name="onboarding_term_of_service_line_one_link_text" tools:ignore="UnusedResources,BrandUsage">Terms of Service</string>
-    <!-- Terms of service onboarding page line two text. 'Firefox' intentionally hardcoded here-->
-    <string name="onboarding_term_of_service_line_two" tools:ignore="UnusedResources,BrandUsage">Firefox cares about your privacy. Read more in our Privacy Notice.</string>
-    <!-- Terms of service onboarding page line two text which should be displayed as a link. -->
+    <!-- Line two of the terms of service onboarding page. 'Firefox' is intentionally hardcoded. %1$s is replaced by an active link, using onboarding_term_of_service_line_two_link_text as text (Privacy Notice”). -->
+    <string name="onboarding_term_of_service_line_two" tools:ignore="UnusedResources,BrandUsage">Firefox cares about your privacy. Read more in our %1$s.</string>
+    <!-- Used as text for the link in onboarding_term_of_service_line_two. -->
     <string name="onboarding_term_of_service_line_two_link_text" tools:ignore="UnusedResources,BrandUsage">Privacy Notice</string>
-    <!-- Terms of service onboarding page line three text. 'Firefox' intentionally hardcoded here-->
-    <string name="onboarding_term_of_service_line_three" tools:ignore="UnusedResources,BrandUsage">To help improve the browser, Firefox sends diagnostic and interaction data to Mozilla. Manage</string>
-    <!-- Terms of service onboarding page line three text which should be displayed as a link-->
+    <!-- Line three of the terms of service onboarding page. 'Firefox' and 'Mozilla' are intentionally hardcoded. %1$S is replaced by an active link, using onboarding_term_of_service_line_three_link_text as text (Manage”). -->
+    <string name="onboarding_term_of_service_line_three" tools:ignore="UnusedResources,BrandUsage">To help improve the browser, Firefox sends diagnostic and interaction data to Mozilla. %1$s</string>
+    <!-- Used as text for the link in onboarding_term_of_service_line_three. -->
     <string name="onboarding_term_of_service_line_three_link_text" tools:ignore="UnusedResources,BrandUsage">Manage</string>
+    <!-- Onboarding header for the toolbar selection card, used by Nimbus experiments. -->
+    <string name="onboarding_customize_toolbar_title" tools:ignore="UnusedResources">Pick a toolbar placement</string>
+    <!-- Onboarding sub header for toolbar selection card, used by Nimbus experiments. -->
+    <string name="onboarding_customize_toolbar_description" tools:ignore="UnusedResources">Keep searches within reach.</string>
+    <!-- Onboarding toolbar selection card label for 'save and continue' button, used by Nimbus experiments. -->
+    <string name="onboarding_customize_toolbar_save_and_continue_button">Save and continue</string>
+    <!-- Onboarding toolbar selection card label for 'skip' button, used by Nimbus experiments. -->
+    <string name="onboarding_customize_toolbar_skip_button">Skip</string>
+    <!-- Onboarding toolbar selection card label for 'top' option, used by Nimbus experiments. -->
+    <string name="onboarding_customize_toolbar_top_option">Top</string>
+    <!-- Onboarding toolbar selection card label for 'bottom' option, used by Nimbus experiments. -->
+    <string name="onboarding_customize_toolbar_bottom_option">Bottom</string>
 
     <!-- Search Widget -->
     <!-- Content description for searching with a widget. The first parameter is the name of the application.-->
@@ -953,7 +971,11 @@
     <!-- Preference switch for marketing data collection -->
     <string name="preferences_marketing_data">Marketing data</string>
     <!-- Preference description for marketing data collection -->
-    <string name="preferences_marketing_data_description2">Shares basic usage data with Adjust, our mobile marketing vendor</string>
+    <string name="preferences_marketing_data_description2" moz:removedIn="134" tools:ignore="UnusedResources">Shares basic usage data with Adjust, our mobile marketing vendor</string>
+    <!-- Preference description for marketing data collection. Note: The words "Firefox" and "Mozilla" should NOT be translated -->
+    <string name="preferences_marketing_data_description_3" tools:ignore="BrandUsage">Share information about how you discovered Firefox with Mozilla’s marketing partners. This helps us grow Firefox and build a better internet</string>
+    <!-- Learn more link for marketing data preference -->
+    <string name="preferences_marketing_data_learn_more">Learn more about marketing data</string>
     <!-- Preference switch title for automatically submitting crash reports -->
     <string name="preferences_automatically_submit_crashes_title">Automatically submit crash reports</string>
     <!-- Preference switch description for automatically submitting crash reports -->
@@ -2901,4 +2923,35 @@
     <!-- Beta Label Component !-->
     <!-- Text shown as a label or tag to indicate a feature or area is still undergoing active development. Note that here "Beta" should not be translated, as it is used as an icon styled element. -->
     <string name="beta_feature">BETA</string>
+
+    <!-- Root certificate expiration warnings -->
+    <!-- These strings for homepage cards and push notifications to be pushed to users running outdated versions of Firefox. We want to encourage these users to update to the latest version so their extensions and other features don't stop working when Firefox's old root certificate expires on 2025-03-14. For more information, see this SUMO article: https://support.mozilla.org/kb/root-certificate-expiration !-->
+    <!-- Homepage card button to open Google Play Store. "Update" is a verb. -->
+    <string name="certificate_warning_homepage_card_update_now_button" tools:ignore="UnusedResources">Update now</string>
+    <!-- Homepage card title about old Firefox version. "Update" is a verb. Note: The word "Firefox" should NOT be translated. -->
+    <string name="certificate_warning_homepage_card_hca1_title" tools:ignore="BrandUsage,UnusedResources">Update your Firefox browser</string>
+    <!-- Homepage card message about old Firefox version -->
+    <string name="certificate_warning_homepage_card_hca1_message" tools:ignore="UnusedResources">A root certificate will expire, causing some features to stop working on March 14.</string>
+    <!-- Homepage card title about old Firefox version. "Update" is a verb. -->
+    <string name="certificate_warning_homepage_card_hcr1_title" tools:ignore="UnusedResources">Update before March 14</string>
+    <!-- Homepage card message about old Firefox version. Note: The word "Firefox" should NOT be translated. -->
+    <string name="certificate_warning_homepage_card_hcr1_message" tools:ignore="BrandUsage,UnusedResources">A root certificate will expire, causing your version of Firefox to stop working properly.</string>
+    <!-- Homepage card title about old Firefox version -->
+    <string name="certificate_warning_homepage_card_hcw2_title" tools:ignore="UnusedResources">Less than 7 days to left to update</string>
+    <!-- Homepage card message about old Firefox version. Note: The word "Firefox" should NOT be translated. -->
+    <string name="certificate_warning_homepage_card_hcw2_message" tools:ignore="BrandUsage,UnusedResources">On March 14, add-ons and other Firefox features will stop working because a root certificate is expiring.</string>
+    <!-- Homepage card title about old Firefox version. Note: The word "Firefox" should NOT be translated. -->
+    <string name="certificate_warning_homepage_card_hcw3_title" tools:ignore="BrandUsage,UnusedResources">Last chance to keep your Firefox</string>
+    <!-- Homepage card message about old Firefox version. Note: The word "Firefox" should NOT be translated. -->
+    <string name="certificate_warning_homepage_card_hcw3_message" tools:ignore="BrandUsage,UnusedResources">Your version of Firefox will stop working properly on March 14 because a root certificate is expiring.</string>
+    <!-- Push notification title about old Firefox version. "Update" is a noun. -->
+    <string name="certificate_warning_push_notification_update_recommended_title" tools:ignore="UnusedResources">Update recommended</string>
+    <!-- Push notification message about old Firefox version -->
+    <string name="certificate_warning_push_notification_pnr1_message" tools:ignore="UnusedResources">Add-ons and some features will stop working on March 14.</string>
+    <!-- Push notification title about old Firefox version. Note: The word "Firefox" should NOT be translated. -->
+    <string name="certificate_warning_push_notification_pnw2_title" tools:ignore="BrandUsage,UnusedResources">You’re on an older version of Firefox</string>
+    <!-- Push notification message about old Firefox version. "Update" is a verb. -->
+    <string name="certificate_warning_push_notification_pnw2_message" tools:ignore="UnusedResources">Update before March 14 to keep using add-ons and other features.</string>
+    <!-- Push notification message about old Firefox version -->
+    <string name="certificate_warning_push_notification_pnw3_message" tools:ignore="UnusedResources">Some features will stop working tomorrow.</string>
 </resources>

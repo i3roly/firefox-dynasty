@@ -1433,9 +1433,13 @@ static Maybe<VarScope::ParserData*> NewVarScopeData(FrontendContext* fc,
         return Nothing();
       }
     } else {
-      MOZ_ASSERT(
-          bi.kind() == BindingKind::Let || bi.kind() == BindingKind::Const,
-          "bad var scope BindingKind");
+      MOZ_ASSERT(bi.kind() == BindingKind::Let ||
+                     bi.kind() == BindingKind::Const
+#ifdef ENABLE_EXPLICIT_RESOURCE_MANAGEMENT
+                     || bi.kind() == BindingKind::Using
+#endif
+                 ,
+                 "bad var scope BindingKind");
     }
   }
 

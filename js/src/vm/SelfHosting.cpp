@@ -53,6 +53,7 @@
 #include "frontend/BytecodeCompiler.h"    // CompileGlobalScriptToStencil
 #include "frontend/CompilationStencil.h"  // js::frontend::CompilationStencil
 #include "frontend/FrontendContext.h"     // AutoReportFrontendContext
+#include "frontend/StencilXdr.h"  // js::EncodeStencil, js::DecodeStencil
 #include "jit/AtomicOperations.h"
 #include "jit/InlinableNatives.h"
 #include "jit/TrampolineNatives.h"
@@ -2677,7 +2678,7 @@ bool JSRuntime::initSelfHostingStencil(JSContext* cx,
     JS::DecodeOptions decodeOption(options);
     RefPtr<frontend::CompilationStencil> stencil;
     JS::TranscodeResult result =
-        JS::DecodeStencil(&fc, decodeOption, xdrCache, getter_AddRefs(stencil));
+        js::DecodeStencil(&fc, decodeOption, xdrCache, getter_AddRefs(stencil));
     if (result == JS::TranscodeResult::Ok) {
       MOZ_ASSERT(input->atomCache.empty());
 
@@ -2716,9 +2717,9 @@ bool JSRuntime::initSelfHostingStencil(JSContext* cx,
   }
   frontend::NoScopeBindingCache scopeCache;
   RefPtr<frontend::CompilationStencil> stencil =
-      frontend::CompileGlobalScriptToStencil(cx, &fc, cx->tempLifoAlloc(),
-                                             *input, &scopeCache, srcBuf,
-                                             ScopeKind::Global);
+      frontend::CompileGlobalScriptToStencilWithInput(
+          cx, &fc, cx->tempLifoAlloc(), *input, &scopeCache, srcBuf,
+          ScopeKind::Global);
   if (!stencil) {
     return false;
   }
@@ -2726,7 +2727,7 @@ bool JSRuntime::initSelfHostingStencil(JSContext* cx,
   // Serialize the stencil to XDR.
   if (xdrWriter) {
     JS::TranscodeBuffer xdrBuffer;
-    JS::TranscodeResult result = JS::EncodeStencil(cx, stencil, xdrBuffer);
+    JS::TranscodeResult result = js::EncodeStencil(cx, stencil, xdrBuffer);
     if (result != JS::TranscodeResult::Ok) {
       JS_ReportErrorASCII(cx, "Encoding failure");
       return false;
@@ -2775,7 +2776,7 @@ void JSRuntime::finishSelfHosting() {
       // instance.
       RefPtr<frontend::CompilationStencil> stencil;
       *getter_AddRefs(stencil) = selfHostStencil_;
-      MOZ_ASSERT(stencil->refCount == 1);
+      MOZ_ASSERT(!stencil->hasMultipleReference());
     }
   }
 

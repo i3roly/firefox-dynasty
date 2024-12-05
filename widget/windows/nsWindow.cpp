@@ -746,10 +746,6 @@ nsWindow::~nsWindow() {
  *
  **************************************************************/
 
-// Allow Derived classes to modify the height that is passed
-// when the window is created or resized.
-int32_t nsWindow::GetHeight(int32_t aProposedHeight) { return aProposedHeight; }
-
 void nsWindow::SendAnAPZEvent(InputData& aEvent) {
   LRESULT popupHandlingResult;
   if (DealWithPopups(mWnd, MOZ_WM_DMANIP, 0, 0, &popupHandlingResult)) {
@@ -816,14 +812,14 @@ void nsWindow::RecreateDirectManipulationIfNeeded() {
   mDmOwner = MakeUnique<DirectManipulationOwner>(this);
 
   LayoutDeviceIntRect bounds(mBounds.X(), mBounds.Y(), mBounds.Width(),
-                             GetHeight(mBounds.Height()));
+                             mBounds.Height());
   mDmOwner->Init(bounds);
 }
 
 void nsWindow::ResizeDirectManipulationViewport() {
   if (mDmOwner) {
     LayoutDeviceIntRect bounds(mBounds.X(), mBounds.Y(), mBounds.Width(),
-                               GetHeight(mBounds.Height()));
+                               mBounds.Height());
     mDmOwner->ResizeViewport(bounds);
   }
 }
@@ -958,10 +954,10 @@ nsresult nsWindow::Create(nsIWidget* aParent, const LayoutDeviceIntRect& aRect,
   }
 
   if (!mWnd) {
-    mWnd = ::CreateWindowExW(desiredStyles.ex, className, L"",
-                             desiredStyles.style, aRect.X(), aRect.Y(),
-                             aRect.Width(), GetHeight(aRect.Height()), parent,
-                             nullptr, nsToolkit::mDllInstance, nullptr);
+    mWnd =
+        ::CreateWindowExW(desiredStyles.ex, className, L"", desiredStyles.style,
+                          aRect.X(), aRect.Y(), aRect.Width(), aRect.Height(),
+                          parent, nullptr, nsToolkit::mDllInstance, nullptr);
     if (!mWnd) {
       NS_WARNING("nsWindow CreateWindowEx failed.");
       return NS_ERROR_FAILURE;
@@ -1979,7 +1975,7 @@ void nsWindow::Resize(double aWidth, double aHeight, bool aRepaint) {
     WINDOWPLACEMENT pl = {sizeof(WINDOWPLACEMENT)};
     VERIFY(::GetWindowPlacement(mWnd, &pl));
     pl.rcNormalPosition.right = pl.rcNormalPosition.left + width;
-    pl.rcNormalPosition.bottom = pl.rcNormalPosition.top + GetHeight(height);
+    pl.rcNormalPosition.bottom = pl.rcNormalPosition.top + height;
     mResizeState = RESIZING;
     VERIFY(::SetWindowPlacement(mWnd, &pl));
     mResizeState = NOT_RESIZING;
@@ -2000,8 +1996,7 @@ void nsWindow::Resize(double aWidth, double aHeight, bool aRepaint) {
     }
     double oldScale = mDefaultScale;
     mResizeState = RESIZING;
-    VERIFY(
-        ::SetWindowPos(mWnd, nullptr, 0, 0, width, GetHeight(height), flags));
+    VERIFY(::SetWindowPos(mWnd, nullptr, 0, 0, width, height, flags));
     mResizeState = NOT_RESIZING;
     if (WinUtils::LogToPhysFactor(mWnd) != oldScale) {
       ChangedDPI();
@@ -2061,7 +2056,7 @@ void nsWindow::Resize(double aX, double aY, double aWidth, double aHeight,
     pl.rcNormalPosition.left += deltaX;
     pl.rcNormalPosition.right = pl.rcNormalPosition.left + width;
     pl.rcNormalPosition.top += deltaY;
-    pl.rcNormalPosition.bottom = pl.rcNormalPosition.top + GetHeight(height);
+    pl.rcNormalPosition.bottom = pl.rcNormalPosition.top + height;
     VERIFY(::SetWindowPlacement(mWnd, &pl));
     return;
   }
@@ -2077,8 +2072,7 @@ void nsWindow::Resize(double aX, double aY, double aWidth, double aHeight,
 
     double oldScale = mDefaultScale;
     mResizeState = RESIZING;
-    VERIFY(
-        ::SetWindowPos(mWnd, nullptr, x, y, width, GetHeight(height), flags));
+    VERIFY(::SetWindowPos(mWnd, nullptr, x, y, width, height, flags));
     mResizeState = NOT_RESIZING;
     if (WinUtils::LogToPhysFactor(mWnd) != oldScale) {
       ChangedDPI();
@@ -2229,6 +2223,15 @@ void nsWindow::ConstrainPosition(DesktopIntPoint& aPoint) {
     return;
   }
 
+  // If the window is already at (0, 0), nothing we do to it here can help.
+  // Leave it alone.
+  //
+  // (This also happens to cover the case where the window was Aero Snapped into
+  // the upper-left corner.)
+  if (aPoint == DesktopIntPoint{0, 0}) {
+    return;
+  }
+
   double dpiScale = GetDesktopToDeviceScale().scale;
 
   // We need to use the window size in the kind of pixels used for window-
@@ -2240,7 +2243,7 @@ void nsWindow::ConstrainPosition(DesktopIntPoint& aPoint) {
 
   /* get our playing field. use the current screen, or failing that
   for any reason, use device caps for the default screen. */
-  RECT screenRect;
+  DesktopIntRect screenRect;
 
   nsCOMPtr<nsIScreenManager> screenmgr =
       do_GetService(sScreenManagerContractID);
@@ -2248,37 +2251,47 @@ void nsWindow::ConstrainPosition(DesktopIntPoint& aPoint) {
     return;
   }
   nsCOMPtr<nsIScreen> screen;
-  int32_t left, top, width, height;
 
   screenmgr->ScreenForRect(aPoint.x, aPoint.y, logWidth, logHeight,
                            getter_AddRefs(screen));
   if (mFrameState->GetSizeMode() != nsSizeMode_Fullscreen) {
     // For normalized windows, use the desktop work area.
-    nsresult rv = screen->GetAvailRectDisplayPix(&left, &top, &width, &height);
-    if (NS_FAILED(rv)) {
-      return;
-    }
+    screenRect = screen->GetAvailRectDisplayPix();
   } else {
     // For full screen windows, use the desktop.
-    nsresult rv = screen->GetRectDisplayPix(&left, &top, &width, &height);
-    if (NS_FAILED(rv)) {
-      return;
+    screenRect = screen->GetRectDisplayPix();
+  }
+
+  // Check for the case where the window was Aero Snapped to the right. (The
+  // window will extend off the right and bottom of the screen in this case by a
+  // small but DPI-dependent value.)
+  //
+  // We do not check WINDOWPLACEMENT for a position mismatch. That would catch
+  // whether the window is _currently_ Aero Snapped to the right, but we may be
+  // restoring the window. (We can't guarantee a restore into a snapped state:
+  // there is no known API to do so. Fortunately, the shell seems to detect this
+  // case anyway, and treats the window as snapped.)
+  //
+  // Note that this _is_ a heuristic. False positives are possible; but they
+  // seem unlikely (it would require manually positioning a window to extend
+  // just barely offscreen to the lower right), and anyway are probably
+  // harmless: the effect will simply be that we leave the window exactly where
+  // the user put it, instead of nudging it slightly.
+  if (aPoint.y == 0) {
+    auto const xMax = aPoint.x + logWidth;
+    auto const yMax = aPoint.y + logHeight;
+    auto const deltaX = xMax - screenRect.XMost();
+    auto const deltaY = yMax - screenRect.YMost();
+    if (deltaX == deltaY) {
+      if (8 <= deltaX && deltaX <= 16) {
+        // If so, don't try to fix the position; Windows will (probably) deal
+        // with it.
+        return;
+      }
     }
   }
-  screenRect.left = left;
-  screenRect.right = left + width;
-  screenRect.top = top;
-  screenRect.bottom = top + height;
 
-  if (aPoint.x < screenRect.left)
-    aPoint.x = screenRect.left;
-  else if (aPoint.x >= screenRect.right - logWidth)
-    aPoint.x = screenRect.right - logWidth;
-
-  if (aPoint.y < screenRect.top)
-    aPoint.y = screenRect.top;
-  else if (aPoint.y >= screenRect.bottom - logHeight)
-    aPoint.y = screenRect.bottom - logHeight;
+  aPoint = ConstrainPositionToBounds(aPoint, {logWidth, logHeight}, screenRect);
 }
 
 /**************************************************************
@@ -2671,10 +2684,35 @@ void nsWindow::SetCustomTitlebar(bool aCustomTitlebar) {
 
   mCustomNonClient = aCustomTitlebar;
 
+  const LONG_PTR style = GetWindowLongPtrW(mWnd, GWL_STYLE);
   // Force a reflow of content based on the new client dimensions.
   if (mCustomNonClient) {
+    if (style & WS_SYSMENU) {
+      // Remove the WS_SYSMENU style, so that DWM doesn't draw the caption
+      // buttons. Note that we still need WS_MAXIMIZEBOX at least to
+      // support Snap Layouts / Aero Snap.
+      //
+      // This behavior is not documented: per MSDN, WS_MAXIMIZEBOX simply
+      // requires WS_SYSMENU, and is not valid without it. However, omitting it
+      // doesn't seem to have negative side-effects on any version of Windows
+      // tested (other than losing the default system menu handling, which we
+      // implement ourselves in DisplaySystemMenu()).
+      //
+      // Since the system menu is lazily initialized (see [1]), we have to call
+      // GetSystemMenu() here in order to get it created before it is too late.
+      // An alternative would be to play with window styles later to force it
+      // to be created, but that seems a bit more finicky.
+      //
+      // [1]: https://devblogs.microsoft.com/oldnewthing/20100528-00/?p=13893
+      ::GetSystemMenu(mWnd, FALSE);
+      ::SetWindowLongPtrW(mWnd, GWL_STYLE, style & ~WS_SYSMENU);
+    }
     UpdateNonClientMargins();
   } else {
+    if (WindowStyle() & WS_SYSMENU) {
+      // Restore the WS_SYSMENU style if appropriate.
+      ::SetWindowLongPtrW(mWnd, GWL_STYLE, style | WS_SYSMENU);
+    }
     ResetLayout();
   }
 }
@@ -4493,53 +4531,55 @@ void nsWindow::IPCWindowProcHandler(UINT& msg, WPARAM& wParam, LPARAM& lParam) {
 static bool DisplaySystemMenu(HWND hWnd, nsSizeMode sizeMode, bool isRtl,
                               int32_t x, int32_t y) {
   HMENU hMenu = GetSystemMenu(hWnd, FALSE);
-  if (hMenu) {
-    MENUITEMINFO mii;
-    mii.cbSize = sizeof(MENUITEMINFO);
-    mii.fMask = MIIM_STATE;
-    mii.fType = 0;
-
-    // update the options
-    mii.fState = MF_ENABLED;
-    SetMenuItemInfo(hMenu, SC_RESTORE, FALSE, &mii);
-    SetMenuItemInfo(hMenu, SC_SIZE, FALSE, &mii);
-    SetMenuItemInfo(hMenu, SC_MOVE, FALSE, &mii);
-    SetMenuItemInfo(hMenu, SC_MAXIMIZE, FALSE, &mii);
-    SetMenuItemInfo(hMenu, SC_MINIMIZE, FALSE, &mii);
-
-    mii.fState = MF_GRAYED;
-    switch (sizeMode) {
-      case nsSizeMode_Fullscreen:
-        // intentional fall through
-      case nsSizeMode_Maximized:
-        SetMenuItemInfo(hMenu, SC_SIZE, FALSE, &mii);
-        SetMenuItemInfo(hMenu, SC_MOVE, FALSE, &mii);
-        SetMenuItemInfo(hMenu, SC_MAXIMIZE, FALSE, &mii);
-        break;
-      case nsSizeMode_Minimized:
-        SetMenuItemInfo(hMenu, SC_MINIMIZE, FALSE, &mii);
-        break;
-      case nsSizeMode_Normal:
-        SetMenuItemInfo(hMenu, SC_RESTORE, FALSE, &mii);
-        break;
-      case nsSizeMode_Invalid:
-        NS_ASSERTION(false, "Did the argument come from invalid IPC?");
-        break;
-      default:
-        MOZ_ASSERT_UNREACHABLE("Unhnalded nsSizeMode value detected");
-        break;
-    }
-    LPARAM cmd = TrackPopupMenu(
-        hMenu,
-        (TPM_LEFTBUTTON | TPM_RIGHTBUTTON | TPM_RETURNCMD | TPM_TOPALIGN |
-         (isRtl ? TPM_RIGHTALIGN : TPM_LEFTALIGN)),
-        x, y, 0, hWnd, nullptr);
-    if (cmd) {
-      PostMessage(hWnd, WM_SYSCOMMAND, cmd, 0);
-      return true;
-    }
+  if (NS_WARN_IF(!hMenu)) {
+    return false;
   }
-  return false;
+
+  MENUITEMINFO mii;
+  mii.cbSize = sizeof(MENUITEMINFO);
+  mii.fMask = MIIM_STATE;
+  mii.fType = 0;
+
+  // update the options
+  mii.fState = MF_ENABLED;
+  SetMenuItemInfo(hMenu, SC_RESTORE, FALSE, &mii);
+  SetMenuItemInfo(hMenu, SC_SIZE, FALSE, &mii);
+  SetMenuItemInfo(hMenu, SC_MOVE, FALSE, &mii);
+  SetMenuItemInfo(hMenu, SC_MAXIMIZE, FALSE, &mii);
+  SetMenuItemInfo(hMenu, SC_MINIMIZE, FALSE, &mii);
+
+  mii.fState = MF_GRAYED;
+  switch (sizeMode) {
+    case nsSizeMode_Fullscreen:
+      // intentional fall through
+    case nsSizeMode_Maximized:
+      SetMenuItemInfo(hMenu, SC_SIZE, FALSE, &mii);
+      SetMenuItemInfo(hMenu, SC_MOVE, FALSE, &mii);
+      SetMenuItemInfo(hMenu, SC_MAXIMIZE, FALSE, &mii);
+      break;
+    case nsSizeMode_Minimized:
+      SetMenuItemInfo(hMenu, SC_MINIMIZE, FALSE, &mii);
+      break;
+    case nsSizeMode_Normal:
+      SetMenuItemInfo(hMenu, SC_RESTORE, FALSE, &mii);
+      break;
+    case nsSizeMode_Invalid:
+      NS_ASSERTION(false, "Did the argument come from invalid IPC?");
+      break;
+    default:
+      MOZ_ASSERT_UNREACHABLE("Unhnalded nsSizeMode value detected");
+      break;
+  }
+  LPARAM cmd = TrackPopupMenu(hMenu,
+                              TPM_LEFTBUTTON | TPM_RIGHTBUTTON | TPM_RETURNCMD |
+                                  TPM_TOPALIGN |
+                                  (isRtl ? TPM_RIGHTALIGN : TPM_LEFTALIGN),
+                              x, y, 0, hWnd, nullptr);
+  if (!cmd) {
+    return false;
+  }
+  PostMessage(hWnd, WM_SYSCOMMAND, cmd, 0);
+  return true;
 }
 
 // The WndProc procedure for all nsWindows in this toolkit. This merely catches
@@ -5695,13 +5735,20 @@ bool nsWindow::ProcessMessageInternal(UINT msg, WPARAM& wParam, LPARAM& lParam,
         result = true;
       }
 
-      // Handle the system menu manually when we're in full screen mode
-      // so we can set the appropriate options.
-      if (filteredWParam == SC_KEYMENU && lParam == VK_SPACE &&
-          mFrameState->GetSizeMode() == nsSizeMode_Fullscreen) {
-        DisplaySystemMenu(mWnd, mFrameState->GetSizeMode(), mIsRTL,
-                          MOZ_SYSCONTEXT_X_POS, MOZ_SYSCONTEXT_Y_POS);
-        result = true;
+      if (filteredWParam == SC_KEYMENU && lParam == VK_SPACE) {
+        const auto sizeMode = mFrameState->GetSizeMode();
+        // Handle the system menu manually when we're in full screen mode or
+        // with custom titlebar so we can set the appropriate options.
+        if (sizeMode == nsSizeMode_Fullscreen || mCustomNonClient) {
+          // Historically on fullscreen windows we've used this offset from the
+          // top left as our context menu position. Note that if the point we
+          // supply is offscreen, Windows will still try to put our menu in the
+          // right place.
+          constexpr LayoutDeviceIntPoint offset(20, 20);
+          auto pos = GetScreenBounds().TopLeft() + offset;
+          DisplaySystemMenu(mWnd, sizeMode, mIsRTL, pos.x, pos.y);
+          result = true;
+        }
       }
     } break;
 

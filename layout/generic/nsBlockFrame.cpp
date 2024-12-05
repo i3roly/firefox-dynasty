@@ -2465,7 +2465,7 @@ void nsBlockFrame::ComputeOverflowAreas(OverflowAreas& aOverflowAreas,
   }
 
   // We rely here on our caller having called SetOverflowAreasToDesiredBounds().
-  nsRect frameBounds = aOverflowAreas.ScrollableOverflow();
+  const nsRect frameBounds = aOverflowAreas.ScrollableOverflow();
 
   const auto wm = GetWritingMode();
   const auto borderPadding =
@@ -2500,6 +2500,12 @@ void nsBlockFrame::ComputeOverflowAreas(OverflowAreas& aOverflowAreas,
       continue;
     }
 
+    if (line.IsInline()) {
+      // This is the maximum contribution for inline line-participating frames -
+      // See `GetLineFrameInFlowBounds`.
+      inFlowChildBounds =
+          inFlowChildBounds.UnionEdges(line.GetPhysicalBounds());
+    }
     auto lineInFlowChildBounds = line.GetInFlowChildBounds();
     if (lineInFlowChildBounds) {
       inFlowChildBounds = inFlowChildBounds.UnionEdges(*lineInFlowChildBounds);
@@ -2539,62 +2545,46 @@ void nsBlockFrame::ComputeOverflowAreas(OverflowAreas& aOverflowAreas,
 #endif
 }
 
-enum class RestrictPaddingInflation {
-  No,
-  Block,
-  Inline,
-};
-
-// Depending on our ancestor, determine if we need to restrict padding
-// inflation. This assumes that the passed-in frame is a scrolled frame.
-// HACK(dshin): Reaching out and querying the type like this isn't ideal.
-static RestrictPaddingInflation RestrictPaddingInflation(
-    const nsIFrame* aFrame) {
-  MOZ_ASSERT(aFrame && aFrame->Style()->GetPseudoType() ==
-                           PseudoStyleType::scrolledContent,
-             "expecting a scrolled frame");
+// Depending on our ancestor, determine if we need to restrict padding inflation
+// in inline direction. This assumes that the passed-in frame is a scrolled
+// frame. HACK(dshin): Reaching out and querying the type like this isn't ideal.
+static bool RestrictPaddingInflationInInline(const nsIFrame* aFrame) {
+  MOZ_ASSERT(aFrame);
+  if (aFrame->Style()->GetPseudoType() != PseudoStyleType::scrolledContent) {
+    // This can only happen when computing scrollable overflow for overflow:
+    // visible frames (for scroll{Width,Height}).
+    return false;
+  }
   // If we're `input` or `textarea`, our grandparent element must be the text
   // control element that we can query.
   const auto* parent = aFrame->GetParent();
   if (!parent) {
-    return RestrictPaddingInflation::No;
+    return false;
   }
   MOZ_ASSERT(parent->IsScrollContainerOrSubclass(), "Not a scrolled frame?");
 
   nsTextControlFrame* textControl = do_QueryFrame(parent->GetParent());
   if (MOZ_LIKELY(!textControl)) {
-    return RestrictPaddingInflation::No;
+    return false;
   }
 
-  // We use `textarea` as a special case of a div, but based on
+  // We implement `textarea` as a special case of a div, but based on
   // web-platform-tests, different rules apply for it - namely, no inline
   // padding inflation. See
   // `textarea-padding-iend-overlaps-content-001.tentative.html`.
-  // Single-line text types do not padding-inflate in block direction -
-  // see bug 1932840.
-  return textControl->IsTextArea() ? RestrictPaddingInflation::Inline
-                                   : RestrictPaddingInflation::Block;
+  if (!textControl->IsTextArea()) {
+    return false;
+  }
+  return true;
 }
 
 nsRect nsBlockFrame::ComputePaddingInflatedScrollableOverflow(
     const nsRect& aInFlowChildBounds) const {
-  MOZ_ASSERT(Style()->GetPseudoType() == PseudoStyleType::scrolledContent,
-             "Expected scrolled frame");
   auto result = aInFlowChildBounds;
   const auto wm = GetWritingMode();
   auto padding = GetLogicalUsedPadding(wm);
-  MOZ_ASSERT(GetLogicalUsedBorderAndPadding(wm) == padding,
-             "A scrolled inner frame shouldn't have any border!");
-  const auto restriction = RestrictPaddingInflation(this);
-  switch (restriction) {
-    case RestrictPaddingInflation::Block:
-      padding.BStart(wm) = padding.BEnd(wm) = 0;
-      break;
-    case RestrictPaddingInflation::Inline:
-      padding.IStart(wm) = padding.IEnd(wm) = 0;
-      break;
-    case RestrictPaddingInflation::No:
-      break;
+  if (RestrictPaddingInflationInInline(this)) {
+    padding.IStart(wm) = padding.IEnd(wm) = 0;
   }
   result.Inflate(padding.GetPhysicalMargin(wm));
   return result;
@@ -2604,7 +2594,12 @@ Maybe<nsRect> nsBlockFrame::GetLineFrameInFlowBounds(
     const nsLineBox& aLine, const nsIFrame& aLineChildFrame) const {
   MOZ_ASSERT(aLineChildFrame.GetParent() == this,
              "Line's frame doesn't belong to this block frame?");
-  if (aLineChildFrame.IsPlaceholderFrame()) {
+  // Line participants are considered in-flow for content within the line
+  // bounds, which should be accounted for from the line bounds. This is
+  // consistent with e.g. inline element's `margin-bottom` not affecting the
+  // placement of the next line.
+  if (aLineChildFrame.IsPlaceholderFrame() ||
+      aLineChildFrame.IsLineParticipant()) {
     return Nothing{};
   }
   if (aLine.IsInline()) {
@@ -2638,23 +2633,26 @@ void nsBlockFrame::UnionChildOverflow(OverflowAreas& aOverflowAreas,
   // frame children, so calling UnionChildOverflow alone will end up
   // using the old cached values.
   const auto wm = GetWritingMode();
-  const auto borderPadding =
-      GetLogicalUsedBorderAndPadding(wm).GetPhysicalMargin(wm);
   // Overflow area computed here should agree with one computed in
   // `ComputeOverflowAreas` (See bug 1800939 and bug 1800719). So the
   // documentation in that function applies here as well.
-  const bool isScrolled =
-      Style()->GetPseudoType() == PseudoStyleType::scrolledContent;
+  const bool isScrolled = aAsIfScrolled || Style()->GetPseudoType() ==
+                                               PseudoStyleType::scrolledContent;
 
-  // Relying on aOverflowAreas having been set to frame border rect.
+  // Relying on aOverflowAreas having been set to frame border rect (if
+  // aAsIfScrolled is false), or padding rect (if true).
   auto frameContentBounds = aOverflowAreas.ScrollableOverflow();
-  frameContentBounds.Deflate(borderPadding);
+  frameContentBounds.Deflate((aAsIfScrolled
+                                  ? GetLogicalUsedPadding(wm)
+                                  : GetLogicalUsedBorderAndPadding(wm))
+                                 .GetPhysicalMargin(wm));
   // We need to take in-flow children's margin rect into account, and inflate
   // it by the padding.
   auto inFlowChildBounds = frameContentBounds;
   auto inFlowScrollableOverflow = frameContentBounds;
 
-  const auto inkOverflowOnly = StyleDisplay()->IsContainLayout();
+  const auto inkOverflowOnly =
+      !aAsIfScrolled && StyleDisplay()->IsContainLayout();
 
   for (auto& line : Lines()) {
     nsRect bounds = line.GetPhysicalBounds();
@@ -2664,7 +2662,7 @@ void nsBlockFrame::UnionChildOverflow(OverflowAreas& aOverflowAreas,
     for (nsIFrame* lineFrame = line.mFirstChild; n > 0;
          lineFrame = lineFrame->GetNextSibling(), --n) {
       // Ensure this is called for each frame in the line
-      ConsiderChildOverflow(lineAreas, lineFrame);
+      ConsiderChildOverflow(lineAreas, lineFrame, aAsIfScrolled);
 
       if (inkOverflowOnly || !isScrolled) {
         continue;
@@ -2678,7 +2676,7 @@ void nsBlockFrame::UnionChildOverflow(OverflowAreas& aOverflowAreas,
     // Consider the overflow areas of the floats attached to the line as well
     if (line.HasFloats()) {
       for (nsIFrame* f : line.Floats()) {
-        ConsiderChildOverflow(lineAreas, f);
+        ConsiderChildOverflow(lineAreas, f, aAsIfScrolled);
         if (inkOverflowOnly || !isScrolled) {
           continue;
         }
@@ -2687,7 +2685,9 @@ void nsBlockFrame::UnionChildOverflow(OverflowAreas& aOverflowAreas,
       }
     }
 
-    line.SetOverflowAreas(lineAreas);
+    if (!aAsIfScrolled) {
+      line.SetOverflowAreas(lineAreas);
+    }
     aOverflowAreas.InkOverflow() =
         aOverflowAreas.InkOverflow().Union(lineAreas.InkOverflow());
     if (!inkOverflowOnly) {

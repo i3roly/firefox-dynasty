@@ -44,7 +44,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
@@ -149,6 +148,11 @@ import org.mozilla.fenix.perf.StartupTypeTelemetry
 import org.mozilla.fenix.session.PrivateNotificationService
 import org.mozilla.fenix.settings.SupportUtils
 import org.mozilla.fenix.shortcut.NewTabShortcutIntentProcessor.Companion.ACTION_OPEN_PRIVATE_TAB
+import org.mozilla.fenix.splashscreen.ApplyExperimentsOperation
+import org.mozilla.fenix.splashscreen.DefaultExperimentsOperationStorage
+import org.mozilla.fenix.splashscreen.DefaultSplashScreenStorage
+import org.mozilla.fenix.splashscreen.FetchExperimentsOperation
+import org.mozilla.fenix.splashscreen.SplashScreenManager
 import org.mozilla.fenix.tabhistory.TabHistoryDialogFragment
 import org.mozilla.fenix.tabstray.TabsTrayFragment
 import org.mozilla.fenix.theme.DefaultThemeManager
@@ -277,8 +281,6 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity {
         components.strictMode.attachListenerToDisablePenaltyDeath(supportFragmentManager)
         MarkersFragmentLifecycleCallbacks.register(supportFragmentManager, components.core.engine)
 
-        maybeShowSplashScreen()
-
         // There is disk read violations on some devices such as samsung and pixel for android 9/10
         components.strictMode.resetAfter(StrictMode.allowThreadDiskReads()) {
             // Browsing mode & theme setup should always be called before super.onCreate.
@@ -309,6 +311,40 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity {
         window.setupPersistentInsets()
 
         binding = ActivityHomeBinding.inflate(layoutInflater)
+
+        val shouldShowOnboarding = settings().shouldShowOnboarding(
+            hasUserBeenOnboarded = components.fenixOnboarding.userHasBeenOnboarded(),
+            isLauncherIntent = intent.toSafeIntent().isLauncherIntent,
+        )
+
+        SplashScreenManager(
+            splashScreenOperation = if (FxNimbus.features.splashScreen.value().offTrainOnboarding) {
+                ApplyExperimentsOperation(
+                    storage = DefaultExperimentsOperationStorage(components.settings),
+                    nimbus = components.nimbus.sdk,
+                )
+            } else {
+                FetchExperimentsOperation(
+                    storage = DefaultExperimentsOperationStorage(components.settings),
+                    nimbus = components.nimbus.sdk,
+                )
+            },
+            splashScreenTimeout = FxNimbus.features.splashScreen.value().maximumDurationMs.toLong(),
+            isDeviceSupported = { Build.VERSION.SDK_INT > Build.VERSION_CODES.M },
+            storage = DefaultSplashScreenStorage(components.settings),
+            showSplashScreen = { installSplashScreen().setKeepOnScreenCondition(it) },
+            onSplashScreenFinished = { result ->
+                if (result.sendTelemetry) {
+                    SplashScreen.firstLaunchExtended.record(
+                        SplashScreen.FirstLaunchExtendedExtra(dataFetched = result.wasDataFetched),
+                    )
+                }
+
+                if (savedInstanceState == null && shouldShowOnboarding) {
+                    navHost.navController.navigate(NavGraphDirections.actionGlobalOnboarding())
+                }
+            },
+        ).showSplashScreen()
 
         lifecycleScope.launch {
             val debugSettingsRepository = DefaultDebugSettingsRepository(
@@ -356,16 +392,7 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity {
             it.start()
         }
 
-        if (settings().shouldShowOnboarding(
-                hasUserBeenOnboarded = components.fenixOnboarding.userHasBeenOnboarded(),
-                isLauncherIntent = intent.toSafeIntent().isLauncherIntent,
-            )
-        ) {
-            // Unless activity is recreated due to config change, navigate to onboarding
-            if (savedInstanceState == null) {
-                navHost.navController.navigate(NavGraphDirections.actionGlobalOnboarding())
-            }
-        } else {
+        if (!shouldShowOnboarding) {
             lifecycleScope.launch(IO) {
                 showFullscreenMessageIfNeeded(applicationContext)
             }
@@ -505,39 +532,6 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity {
         )
 
         StartupTimeline.onActivityCreateEndHome(this) // DO NOT MOVE ANYTHING BELOW HERE.
-    }
-
-    private fun maybeShowSplashScreen() {
-        if (components.settings.isFirstSplashScreenShown) {
-            return
-        } else {
-            components.settings.isFirstSplashScreenShown = true
-            // Splash screen compat fails to draw icons on earlier versions.
-            if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.M) {
-                return
-            }
-        }
-
-        if (FxNimbus.features.splashScreen.value().enabled) {
-            val splashScreen = installSplashScreen()
-            var maxDurationReached = false
-            val delay = FxNimbus.features.splashScreen.value().maximumDurationMs.toLong()
-            splashScreen.setKeepOnScreenCondition {
-                val dataFetched = components.settings.nimbusExperimentsFetched
-
-                val keepOnScreen = !maxDurationReached && !dataFetched
-                if (!keepOnScreen) {
-                    SplashScreen.firstLaunchExtended.record(
-                        SplashScreen.FirstLaunchExtendedExtra(dataFetched = dataFetched),
-                    )
-                }
-                keepOnScreen
-            }
-            MainScope().launch {
-                delay(timeMillis = delay)
-                maxDurationReached = true
-            }
-        }
     }
 
     private fun checkAndExitPiP() {

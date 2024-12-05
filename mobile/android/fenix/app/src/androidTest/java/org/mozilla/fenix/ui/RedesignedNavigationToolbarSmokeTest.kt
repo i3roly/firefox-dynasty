@@ -1,3 +1,6 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 @file:Suppress("DEPRECATION")
 
 package org.mozilla.fenix.ui
@@ -41,6 +44,8 @@ class RedesignedNavigationToolbarSmokeTest : TestSetup() {
                 isNavigationToolbarEnabled = true,
                 isNavigationBarCFREnabled = false,
                 isSetAsDefaultBrowserPromptEnabled = false,
+                isMenuRedesignEnabled = true,
+                isMenuRedesignCFREnabled = false,
             ),
         ) { it.activity }
 
@@ -114,7 +119,7 @@ class RedesignedNavigationToolbarSmokeTest : TestSetup() {
         val helpPageUrl = "mozilla.org"
 
         homeScreen {
-        }.openThreeDotMenuFromRedesignedToolbar {
+        }.openThreeDotMenuFromRedesignedToolbar(composeTestRule) {
         }.openHelp {
         }.openSiteSecuritySheet {
             clickQuickActionSheetClearSiteData()
@@ -148,7 +153,7 @@ class RedesignedNavigationToolbarSmokeTest : TestSetup() {
         }.closeTabDrawer {
         }.goToHomescreenWithRedesignedToolbar {
             verifyExistingTopSitesList()
-        }.openThreeDotMenuFromRedesignedToolbar {
+        }.openThreeDotMenuFromRedesignedToolbar(composeTestRule) {
             verifySettingsButton()
         }
     }
@@ -236,32 +241,6 @@ class RedesignedNavigationToolbarSmokeTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2767072
-    // Verifies the main menu of a custom tab with a custom menu item
-    @SmokeTest
-    @Test
-    fun verifyCustomTabMenuItemsTest() {
-        val customMenuItem = "TestMenuItem"
-        val customTabPage = TestAssetHelper.getGenericAsset(mockWebServer, 1)
-
-        intentReceiverActivityTestRule.launchActivity(
-            createCustomTabIntent(
-                customTabPage.url.toString(),
-                customMenuItem,
-            ),
-        )
-
-        customTabScreen {
-            verifyCustomTabCloseButton()
-        }.openMainMenuFromRedesignedToolbar {
-            verifyPoweredByTextIsDisplayed()
-            verifyCustomMenuItem(customMenuItem)
-            verifyDesktopSiteButtonExists()
-            verifyRequestDesktopSiteToggleState(isEnabled = false)
-            verifyFindInPageButtonExists()
-        }
-    }
-
     // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2767071
     // The test opens a link in a custom tab then sends it to the browser
     @SmokeTest
@@ -287,7 +266,7 @@ class RedesignedNavigationToolbarSmokeTest : TestSetup() {
     @Test
     fun verifyToolbarWithAddressBarAtTheTopTest() {
         homeScreen {
-        }.openThreeDotMenuFromRedesignedToolbar {
+        }.openThreeDotMenuFromRedesignedToolbar(composeTestRule) {
         }.openSettings {
         }.openCustomizeSubMenu {
             verifyAddressBarPositionPreference("Top")
@@ -313,7 +292,7 @@ class RedesignedNavigationToolbarSmokeTest : TestSetup() {
         }
 
         homeScreen {
-        }.openThreeDotMenuFromRedesignedToolbar {
+        }.openThreeDotMenuFromRedesignedToolbar(composeTestRule) {
         }.openSettings {
         }.openCustomizeSubMenu {
             verifyAddressBarPositionPreference("Bottom")
@@ -344,7 +323,7 @@ class RedesignedNavigationToolbarSmokeTest : TestSetup() {
         }.enterURLAndEnterToBrowser(genericURL.url) {
         }.goToHomescreenWithRedesignedToolbar {
             verifyHomeScreen()
-        }.openThreeDotMenuFromRedesignedToolbar {
+        }.openThreeDotMenuFromRedesignedToolbar(composeTestRule) {
         }.openSettings {
         }.openCustomizeSubMenu {
             clickBottomToolbarToggle()

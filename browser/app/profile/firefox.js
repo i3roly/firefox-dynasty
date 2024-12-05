@@ -453,9 +453,6 @@ pref("browser.urlbar.scotchBonnet.enableOverride", true);
 pref("browser.urlbar.scotchBonnet.enableOverride", false);
 #endif
 
-// Enable displaying dynamic Unified Search Button.
-pref("browser.urlbar.usb.dynamic", true);
-
 // Enable trending suggestions and recent searches.
 pref("browser.urlbar.trending.featureGate", true);
 pref("browser.urlbar.trending.requireSearchMode", false);
@@ -2024,6 +2021,12 @@ pref("pdfjs.handleOctetStream", true);
 // Is the sidebar positioned ahead of the content browser
 pref("sidebar.position_start", true);
 pref("sidebar.revamp", false);
+// This is nightly only for now, as we need to address bug 1933527 and bug 1934039.
+#ifdef NIGHTLY_BUILD
+pref("sidebar.revamp.round-content-area", true);
+#else
+pref("sidebar.revamp.round-content-area", false);
+#endif
 pref("sidebar.animation.enabled", true);
 pref("sidebar.animation.duration-ms", 200);
 pref("sidebar.main.tools", "aichat,syncedtabs,history");

@@ -714,6 +714,7 @@ nsDisplayListBuilder::nsDisplayListBuilder(nsIFrame* aReferenceFrame,
       mIsInChromePresContext(false),
       mSyncDecodeImages(false),
       mIsPaintingToWindow(false),
+      mAsyncPanZoomEnabled(nsLayoutUtils::AsyncPanZoomEnabled(aReferenceFrame)),
       mUseHighQualityScaling(false),
       mIsPaintingForWebRender(false),
       mAncestorHasApzAwareEventHandler(false),
@@ -722,7 +723,6 @@ nsDisplayListBuilder::nsDisplayListBuilder(nsIFrame* aReferenceFrame,
       mIsBuildingForPopup(nsLayoutUtils::IsPopup(aReferenceFrame)),
       mForceLayerForScrollParent(false),
       mContainsNonMinimalDisplayPort(false),
-      mAsyncPanZoomEnabled(nsLayoutUtils::AsyncPanZoomEnabled(aReferenceFrame)),
       mBuildingInvisibleItems(false),
       mIsBuilding(false),
       mInInvalidSubtree(false),
@@ -735,8 +735,6 @@ nsDisplayListBuilder::nsDisplayListBuilder(nsIFrame* aReferenceFrame,
       mAlwaysLayerizeScrollbars(false),
       mIsDestroying(false) {
   MOZ_COUNT_CTOR(nsDisplayListBuilder);
-
-  mBuildCompositorHitTestInfo = mAsyncPanZoomEnabled && IsForPainting();
 
   ShouldRebuildDisplayListDueToPrefChange();
 
@@ -2931,9 +2929,11 @@ nsDisplayBackgroundImage::nsDisplayBackgroundImage(
 
 nsDisplayBackgroundImage::~nsDisplayBackgroundImage() {
   MOZ_COUNT_DTOR(nsDisplayBackgroundImage);
-  if (mDependentFrame) {
-    mDependentFrame->RemoveDisplayItem(this);
-  }
+}
+
+void nsDisplayBackgroundImage::Destroy(nsDisplayListBuilder* aBuilder) {
+  RemoveDisplayItemFromFrame(aBuilder, mDependentFrame);
+  nsPaintedDisplayItem::Destroy(aBuilder);
 }
 
 static void SetBackgroundClipRegion(
@@ -3631,10 +3631,9 @@ nsDisplayTableBackgroundImage::nsDisplayTableBackgroundImage(
   }
 }
 
-nsDisplayTableBackgroundImage::~nsDisplayTableBackgroundImage() {
-  if (mStyleFrame) {
-    mStyleFrame->RemoveDisplayItem(this);
-  }
+void nsDisplayTableBackgroundImage::Destroy(nsDisplayListBuilder* aBuilder) {
+  RemoveDisplayItemFromFrame(aBuilder, mStyleFrame);
+  nsDisplayBackgroundImage::Destroy(aBuilder);
 }
 
 bool nsDisplayTableBackgroundImage::IsInvalid(nsRect& aRect) const {
@@ -3777,6 +3776,11 @@ nsRect nsDisplayThemedBackground::GetBoundsInternal() {
   return r + ToReferenceFrame();
 }
 
+void nsDisplayTableThemedBackground::Destroy(nsDisplayListBuilder* aBuilder) {
+  RemoveDisplayItemFromFrame(aBuilder, mAncestorFrame);
+  nsDisplayThemedBackground::Destroy(aBuilder);
+}
+
 #if defined(MOZ_REFLOW_PERF_DSP) && defined(MOZ_REFLOW_PERF)
 void nsDisplayReflowCount::Paint(nsDisplayListBuilder* aBuilder,
                                  gfxContext* aCtx) {
@@ -3784,6 +3788,11 @@ void nsDisplayReflowCount::Paint(nsDisplayListBuilder* aBuilder,
                                   mFrame, ToReferenceFrame(), mColor);
 }
 #endif
+
+void nsDisplayBackgroundColor::Destroy(nsDisplayListBuilder* aBuilder) {
+  RemoveDisplayItemFromFrame(aBuilder, mDependentFrame);
+  nsPaintedDisplayItem::Destroy(aBuilder);
+}
 
 bool nsDisplayBackgroundColor::CanApplyOpacity(
     WebRenderLayerManager* aManager, nsDisplayListBuilder* aBuilder) const {
@@ -5138,6 +5147,16 @@ bool nsDisplayBlendContainer::CreateWebRenderCommands(
       aBuilder, aResources, sc, aManager, aDisplayListBuilder);
 }
 
+void nsDisplayTableBlendContainer::Destroy(nsDisplayListBuilder* aBuilder) {
+  RemoveDisplayItemFromFrame(aBuilder, mAncestorFrame);
+  nsDisplayBlendContainer::Destroy(aBuilder);
+}
+
+void nsDisplayTableBlendMode::Destroy(nsDisplayListBuilder* aBuilder) {
+  RemoveDisplayItemFromFrame(aBuilder, mAncestorFrame);
+  nsDisplayBlendMode::Destroy(aBuilder);
+}
+
 nsDisplayOwnLayer::nsDisplayOwnLayer(
     nsDisplayListBuilder* aBuilder, nsIFrame* aFrame, nsDisplayList* aList,
     const ActiveScrolledRoot* aActiveScrolledRoot,
@@ -5317,9 +5336,11 @@ nsDisplaySubDocument::nsDisplaySubDocument(nsDisplayListBuilder* aBuilder,
 
 nsDisplaySubDocument::~nsDisplaySubDocument() {
   MOZ_COUNT_DTOR(nsDisplaySubDocument);
-  if (mSubDocFrame) {
-    mSubDocFrame->RemoveDisplayItem(this);
-  }
+}
+
+void nsDisplaySubDocument::Destroy(nsDisplayListBuilder* aBuilder) {
+  RemoveDisplayItemFromFrame(aBuilder, mSubDocFrame);
+  nsDisplayOwnLayer::Destroy(aBuilder);
 }
 
 nsIFrame* nsDisplaySubDocument::FrameForInvalidation() const {
@@ -5501,6 +5522,11 @@ nsDisplayTableFixedPosition::nsDisplayTableFixedPosition(
   if (aBuilder->IsRetainingDisplayList()) {
     mAncestorFrame->AddDisplayItem(this);
   }
+}
+
+void nsDisplayTableFixedPosition::Destroy(nsDisplayListBuilder* aBuilder) {
+  RemoveDisplayItemFromFrame(aBuilder, mAncestorFrame);
+  nsDisplayFixedPosition::Destroy(aBuilder);
 }
 
 nsDisplayStickyPosition::nsDisplayStickyPosition(
@@ -6338,6 +6364,11 @@ bool nsDisplayTransform::CanUseAsyncAnimations(nsDisplayListBuilder* aBuilder) {
 bool nsDisplayBackgroundColor::CanUseAsyncAnimations(
     nsDisplayListBuilder* aBuilder) {
   return StaticPrefs::gfx_omta_background_color();
+}
+
+void nsDisplayTableBackgroundColor::Destroy(nsDisplayListBuilder* aBuilder) {
+  RemoveDisplayItemFromFrame(aBuilder, mAncestorFrame);
+  nsDisplayBackgroundColor::Destroy(aBuilder);
 }
 
 static bool IsInStickyPositionedSubtree(const nsIFrame* aFrame) {

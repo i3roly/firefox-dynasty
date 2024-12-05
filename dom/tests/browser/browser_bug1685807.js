@@ -68,7 +68,7 @@ add_task(async function doTests() {
       browser,
       "pageshow"
     );
-    browser.goBack();
+    browser.goBack(false);
     await awaitPageShow;
 
     // Check the window.name.

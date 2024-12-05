@@ -11,7 +11,12 @@ add_setup(async function () {
 add_task(async () => {
   await BrowserTestUtils.withNewTab(TEST_URI, async () => {
     // Navigate away, without causing a user interaction.
+    let loaded = BrowserTestUtils.waitForLocationChange(
+      gBrowser,
+      TEST_URI + "2.html"
+    );
     await followLink(TEST_URI + "2.html");
+    await loaded;
 
     // Wait for the session data to be flushed before continuing the test
     await new Promise(resolve =>

@@ -47,36 +47,6 @@ const SPOOFED_APPVERSION = {
   other: "5.0 (X11)",
 };
 
-let cpuArch = Services.sysinfo.get("arch");
-if (cpuArch == "x86-64") {
-    // Convert CPU arch "x86-64" to "x86_64" used in Linux and Android UAs.
-    cpuArch = "x86_64";
-}
-
-// Hard code the User-Agent string's CPU arch on Android, Linux, and other
-// Unix-like platforms. This pref can be removed after we're confident there
-// are no webcompat problems.
-const freezeCpu = Services.prefs.getBoolPref(
-                                             "network.http.useragent.freezeCpu",
-                                             false
-                                             );
-
-let defaultLinuxCpu;
-if (freezeCpu) {
-    defaultLinuxCpu = AppConstants.platform == "android" ? "armv81" : "x86_64";
-} else {
-    defaultLinuxCpu = cpuArch;
-}
-
-const DEFAULT_PLATFORM = {
-linux: `Linux ${defaultLinuxCpu}`,
-win: "Win32",
-macosx: "MacIntel",
-android: `Linux ${defaultLinuxCpu}`,
-other: `Linux ${defaultLinuxCpu}`,
-};
-
-
 const DEFAULT_PLATFORM = {
   linux: "Linux x86_64",
   win: "Win32",
@@ -103,11 +73,11 @@ const WindowsOscpuPromise = (async () => {
 })();
 
 const DEFAULT_OSCPU = {
-  linux: `Linux ${defaultLinuxCpu}`,
-     win: WindowsOscpu,
-   macosx: `Intel Mac OS X ${osVersion}`,
-    android: `Linux ${defaultLinuxCpu}`,
-  other: `Linux ${defaultLinuxCpu}`,
+  linux: "Linux x86_64",
+  // `win` will be set in add_setup() by WindowsOscpuPromise.
+  macosx: "Intel Mac OS X 10.15",
+  android: "Linux armv81",
+  other: "Linux x86_64",
 };
 
 const SPOOFED_OSCPU = {
@@ -119,11 +89,11 @@ const SPOOFED_OSCPU = {
 };
 
 const DEFAULT_UA_OS = {
-  linux: `X11; Linux ${defaultLinuxCpu}`,
-       win: WindowsOscpu,
-   macosx: `Intel Mac OS X ${osVersion}`,
-    android: `Android ${osVersion}; Mobile`,
-  other: `X11; Linux ${defaultLinuxCpu}`,
+  linux: "X11; Linux x86_64",
+  // `win` will be set in add_setup() by WindowsOscpuPromise.
+  macosx: "Macintosh; Intel Mac OS X 10.15",
+  android: `Android ${osVersion}; Mobile`,
+  other: "X11; Linux x86_64",
 };
 
 const SPOOFED_UA_NAVIGATOR_OS = {

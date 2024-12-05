@@ -128,7 +128,6 @@
 #include "vm/SavedStacks.h"
 #include "vm/ScopeKind.h"
 #include "vm/Stack.h"
-#include "vm/StencilCache.h"   // DelazificationCache
 #include "vm/StencilObject.h"  // StencilObject, StencilXDRBufferObject
 #include "vm/StringObject.h"
 #include "vm/StringType.h"
@@ -2398,7 +2397,8 @@ static bool IsRelazifiableFunction(JSContext* cx, unsigned argc, Value* vp) {
   return true;
 }
 
-static bool IsInStencilCache(JSContext* cx, unsigned argc, Value* vp) {
+static bool IsCollectingDelazifications(JSContext* cx, unsigned argc,
+                                        Value* vp) {
   CallArgs args = CallArgsFromVp(argc, vp);
   if (args.length() != 1) {
     JS_ReportErrorASCII(cx, "The function takes exactly one argument.");
@@ -2419,21 +2419,47 @@ static bool IsInStencilCache(JSContext* cx, unsigned argc, Value* vp) {
 
   JSFunction* fun = &args[0].toObject().as<JSFunction>();
   BaseScript* script = fun->baseScript();
-  RefPtr<ScriptSource> ss = script->scriptSource();
-  DelazificationCache& cache = DelazificationCache::getSingleton();
-  auto guard = cache.isSourceCached(ss);
-  if (!guard) {
+  args.rval().setBoolean(
+      bool(script->sourceObject()->isCollectingDelazifications()));
+  return true;
+}
+
+static bool IsDelazificationsPopulated(JSContext* cx, unsigned argc,
+                                       Value* vp) {
+  CallArgs args = CallArgsFromVp(argc, vp);
+  if (args.length() != 1) {
+    JS_ReportErrorASCII(cx, "The function takes exactly one argument.");
+    return false;
+  }
+
+  if (!args[0].isObject() || !args[0].toObject().is<JSFunction>()) {
+    JS_ReportErrorASCII(cx, "The first argument should be a function.");
+    return false;
+  }
+
+  if (fuzzingSafe) {
+    // When running code concurrently to fill-up the stencil cache, the content
+    // is not garanteed to be present.
     args.rval().setBoolean(false);
     return true;
   }
 
-  StencilContext key(ss, script->extent());
-  frontend::CompilationStencil* stencil = cache.lookup(guard, key);
+  JSFunction* fun = &args[0].toObject().as<JSFunction>();
+  BaseScript* script = fun->baseScript();
+  RefPtr<frontend::InitialStencilAndDelazifications> stencils =
+      script->sourceObject()->maybeGetStencils();
+  if (!stencils) {
+    args.rval().setBoolean(false);
+    return true;
+  }
+
+  const frontend::CompilationStencil* stencil =
+      stencils->getDelazificationFor(script->extent());
   args.rval().setBoolean(bool(stencil));
   return true;
 }
 
-static bool WaitForStencilCache(JSContext* cx, unsigned argc, Value* vp) {
+static bool WaitForDelazificationOf(JSContext* cx, unsigned argc, Value* vp) {
   CallArgs args = CallArgsFromVp(argc, vp);
   if (args.length() != 1) {
     JS_ReportErrorASCII(cx, "The function takes exactly one argument.");
@@ -2448,9 +2474,13 @@ static bool WaitForStencilCache(JSContext* cx, unsigned argc, Value* vp) {
 
   JSFunction* fun = &args[0].toObject().as<JSFunction>();
   BaseScript* script = fun->baseScript();
-  RefPtr<ScriptSource> ss = script->scriptSource();
-  DelazificationCache& cache = DelazificationCache::getSingleton();
-  StencilContext key(ss, script->extent());
+
+  if (!script->sourceObject()->isSharingDelazifications()) {
+    return true;
+  }
+
+  RefPtr<frontend::InitialStencilAndDelazifications> stencils =
+      script->sourceObject()->maybeGetStencils();
 
   AutoLockHelperThreadState lock;
   if (!HelperThreadState().isInitialized(lock)) {
@@ -2458,18 +2488,10 @@ static bool WaitForStencilCache(JSContext* cx, unsigned argc, Value* vp) {
   }
 
   while (true) {
-    {
-      // This capture a Mutex that we have to release before using the wait
-      // function.
-      auto guard = cache.isSourceCached(ss);
-      if (!guard) {
-        return true;
-      }
-
-      frontend::CompilationStencil* stencil = cache.lookup(guard, key);
-      if (stencil) {
-        break;
-      }
+    const frontend::CompilationStencil* stencil =
+        stencils->getDelazificationFor(script->extent());
+    if (stencil) {
+      break;
     }
 
     HelperThreadState().wait(lock);
@@ -5413,7 +5435,11 @@ class CloneBufferObject : public NativeObject {
   static bool getCloneBuffer_impl(JSContext* cx, const CallArgs& args) {
     Rooted<CloneBufferObject*> obj(
         cx, &args.thisv().toObject().as<CloneBufferObject>());
-    MOZ_ASSERT(args.length() == 0);
+    if (args.length() != 0) {
+      RootedObject callee(cx, &args.callee());
+      ReportUsageErrorASCII(cx, callee, "Too many arguments");
+      return false;
+    }
 
     JSStructuredCloneData* data;
     if (!getData(cx, obj, &data)) {
@@ -5453,7 +5479,11 @@ class CloneBufferObject : public NativeObject {
                                                const CallArgs& args) {
     Rooted<CloneBufferObject*> obj(
         cx, &args.thisv().toObject().as<CloneBufferObject>());
-    MOZ_ASSERT(args.length() == 0);
+    if (args.length() != 0) {
+      RootedObject callee(cx, &args.callee());
+      ReportUsageErrorASCII(cx, callee, "Too many arguments");
+      return false;
+    }
 
     JSStructuredCloneData* data;
     if (!getData(cx, obj, &data)) {
@@ -7545,7 +7575,8 @@ static bool CompileToStencil(JSContext* cx, uint32_t argc, Value* vp) {
   JS::InstantiationStorage storage;
   {
     AutoReportFrontendContext fc(cx);
-    if (!SetSourceOptions(cx, &fc, stencil->source, displayURL, sourceMapURL)) {
+    if (!SetSourceOptions(cx, &fc, stencil->getInitial()->source, displayURL,
+                          sourceMapURL)) {
       return false;
     }
 
@@ -7585,7 +7616,7 @@ static bool EvalStencil(JSContext* cx, uint32_t argc, Value* vp) {
     return false;
   }
 
-  if (stencilObj->stencil()->isModule()) {
+  if (stencilObj->stencil()->getInitial()->isModule()) {
     JS_ReportErrorASCII(cx,
                         "evalStencil: Module stencil cannot be evaluated. Use "
                         "instantiateModuleStencil instead");
@@ -7621,7 +7652,7 @@ static bool EvalStencil(JSContext* cx, uint32_t argc, Value* vp) {
     instantiateOptions.hideScriptFromDebugger = true;
   }
 
-  if (!js::ValidateLazinessOfStencilAndGlobal(cx, *stencilObj->stencil())) {
+  if (!js::ValidateLazinessOfStencilAndGlobal(cx, stencilObj->stencil())) {
     return false;
   }
 
@@ -7709,7 +7740,8 @@ static bool CompileToStencilXDR(JSContext* cx, uint32_t argc, Value* vp) {
 
   {
     AutoReportFrontendContext fc(cx);
-    if (!SetSourceOptions(cx, &fc, stencil->source, displayURL, sourceMapURL)) {
+    if (!SetSourceOptions(cx, &fc, stencil->getInitial()->source, displayURL,
+                          sourceMapURL)) {
       return false;
     }
   }
@@ -7791,14 +7823,14 @@ static bool EvalStencilXDR(JSContext* cx, uint32_t argc, Value* vp) {
     return false;
   }
 
-  if (stencil->isModule()) {
+  if (stencil->getInitial()->isModule()) {
     JS_ReportErrorASCII(cx,
                         "evalStencilXDR: Module stencil cannot be evaluated. "
                         "Use instantiateModuleStencilXDR instead");
     return false;
   }
 
-  if (!js::ValidateLazinessOfStencilAndGlobal(cx, *stencil)) {
+  if (!js::ValidateLazinessOfStencilAndGlobal(cx, stencil.get())) {
     return false;
   }
 
@@ -7809,7 +7841,7 @@ static bool EvalStencilXDR(JSContext* cx, uint32_t argc, Value* vp) {
     instantiateOptions.hideScriptFromDebugger = true;
   }
   RootedScript script(
-      cx, JS::InstantiateGlobalStencil(cx, instantiateOptions, stencil));
+      cx, JS::InstantiateGlobalStencil(cx, instantiateOptions, stencil.get()));
   if (!script) {
     return false;
   }
@@ -10593,13 +10625,18 @@ JS_FN_HELP("setDefaultLocale", SetDefaultLocale, 1, 0,
 "  An empty string or undefined resets the runtime locale to its default value.\n"
 "  NOTE: The input string is not fully validated, it must be a valid BCP-47 language tag."),
 
-JS_FN_HELP("isInStencilCache", IsInStencilCache, 1, 0,
-"isInStencilCache(fun)",
-"  True if fun is available in the stencil cache."),
+JS_FN_HELP("isCollectingDelazifications", IsCollectingDelazifications, 1, 0,
+"isCollectingDelazifications(fun)",
+"  True if script for the function is collecting delazifications."),
 
-JS_FN_HELP("waitForStencilCache", WaitForStencilCache, 1, 0,
-"waitForStencilCache(fun)",
-"  Block main thread execution until the function is made available in the cache."),
+JS_FN_HELP("isDelazificationPopulatedFor", IsDelazificationsPopulated, 1, 0,
+"isDelazificationPopulatedFor(fun)",
+"  True if fun is available in the shared stencils."),
+
+JS_FN_HELP("waitForDelazificationOf", WaitForDelazificationOf, 1, 0,
+"waitForDelazificationOf(fun)",
+"  Block main thread execution until the function is made available in the\n"
+"  shared stencils. If this function isn't sharing stencils, return immediately."),
 
 JS_FN_HELP("getInnerMostEnvironmentObject", GetInnerMostEnvironmentObject, 0, 0,
 "getInnerMostEnvironmentObject()",

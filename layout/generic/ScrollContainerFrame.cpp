@@ -3404,7 +3404,7 @@ void ScrollContainerFrame::AppendScrollPartsTo(nsDisplayListBuilder* aBuilder,
   AutoTArray<nsIFrame*, 3> scrollParts;
   for (nsIFrame* kid : PrincipalChildList()) {
     if (kid == mScrolledFrame ||
-        (kid->IsAbsPosContainingBlock() || overlayScrollbars) != aPositioned) {
+        (overlayScrollbars || kid->IsAbsPosContainingBlock()) != aPositioned) {
       continue;
     }
 
@@ -3418,7 +3418,7 @@ void ScrollContainerFrame::AppendScrollPartsTo(nsDisplayListBuilder* aBuilder,
   // This means that we will build scroll bar layers for out of budget
   // will-change: scroll position.
   const mozilla::layers::ScrollableLayerGuid::ViewID scrollTargetId =
-      IsScrollingActive()
+      aBuilder->BuildCompositorHitTestInfo() && IsScrollingActive()
           ? nsLayoutUtils::FindOrCreateIDFor(mScrolledFrame->GetContent())
           : mozilla::layers::ScrollableLayerGuid::NULL_SCROLL_ID;
 

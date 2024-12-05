@@ -1635,6 +1635,40 @@ void nsBaseWidget::OnDestroy() {
   ReleaseContentController();
 }
 
+/* static */
+DesktopIntPoint nsBaseWidget::ConstrainPositionToBounds(
+    const DesktopIntPoint& aPoint, const DesktopIntSize& aSize,
+    const DesktopIntRect& aScreenRect) {
+  DesktopIntPoint point = aPoint;
+
+  // The maximum position to which the window can be moved while keeping its
+  // bottom-right corner within screenRect.
+  auto const maxX = aScreenRect.XMost() - aSize.Width();
+  auto const maxY = aScreenRect.YMost() - aSize.Height();
+
+  // Note that the conditional-pairs below are not exclusive with each other,
+  // and cannot be replaced with a simple call to `std::clamp`! If the window
+  // provided is too large to fit on the screen, they will both fire. Their
+  // order has been chosen to ensure that the window's top left corner will be
+  // onscreen.
+
+  if (point.x >= maxX) {
+    point.x = maxX;
+  }
+  if (point.x < aScreenRect.x) {
+    point.x = aScreenRect.x;
+  }
+
+  if (point.y >= maxY) {
+    point.y = maxY;
+  }
+  if (point.y < aScreenRect.y) {
+    point.y = aScreenRect.y;
+  }
+
+  return point;
+}
+
 void nsBaseWidget::MoveClient(const DesktopPoint& aOffset) {
   LayoutDeviceIntPoint clientOffset(GetClientOffset());
 
