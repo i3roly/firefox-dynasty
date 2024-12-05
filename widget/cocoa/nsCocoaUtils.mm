@@ -672,7 +672,7 @@ NSEvent* nsCocoaUtils::MakeNewCocoaEventWithType(NSEventType aEventType,
                         modifierFlags:[aEvent modifierFlags]
                             timestamp:[aEvent timestamp]
                          windowNumber:[aEvent windowNumber]
-                              context:nil
+                              context:[aEvent context]
                            characters:[aEvent characters]
           charactersIgnoringModifiers:[aEvent charactersIgnoringModifiers]
                             isARepeat:[aEvent isARepeat]
