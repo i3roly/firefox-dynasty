@@ -439,7 +439,11 @@ static NSString* GetRealFamilyName(NSFont* aFont) {
 void gfxMacPlatformFontList::InitSystemFontNames() {
   // On Catalina+, the system font uses optical sizing rather than individual
   // faces, so we don't need to look for a separate display-sized face.
-  mUseSizeSensitiveSystemFont = !nsCocoaFeatures::OnCatalinaOrLater();
+  if(!nsCocoaFeatures::OnCatalinaOrLater()) {
+    mUseSizeSensitiveSystemFont = nsCocoaFeatures::OnElCapitanOrLater();
+  } else {
+    mUseSizeSensitiveSystemFont = false; 
+  }
 
   // text font family
   NSFont* sys = [NSFont systemFontOfSize:0.0];

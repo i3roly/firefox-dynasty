@@ -2987,7 +2987,7 @@ static void DrawTopLeftCornerMask(CGContextRef aCtx, int aRadius) {
   usingElCapitanOrLaterSDK = false;
 #endif
 
-  if (usingElCapitanOrLaterSDK) {
+  if (nsCocoaFeatures::OnElCapitanOrLater() && usingElCapitanOrLaterSDK) {
     if (aEvent.phase == NSEventPhaseBegan) {
       [self beginGestureWithEvent:aEvent];
       return true;
@@ -3320,7 +3320,7 @@ static void DrawTopLeftCornerMask(CGContextRef aCtx, int aRadius) {
                                        modifierFlags:theEvent.modifierFlags
                                            timestamp:theEvent.timestamp
                                         windowNumber:theEvent.windowNumber
-                                             context:nil
+                                             context:theEvent.context
                                          eventNumber:theEvent.eventNumber
                                           clickCount:theEvent.clickCount
                                             pressure:theEvent.pressure];
