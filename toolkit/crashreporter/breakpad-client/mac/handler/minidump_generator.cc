@@ -1647,7 +1647,7 @@ bool MinidumpGenerator::WriteCVRecord(MDRawModule *module, int cpu_type, int cpu
   while (true) {
     if (in_memory) {
       if ((out_of_process && !dyld_or_in_dyld_shared_cache) 
-              || (darwinVersion() == 13)) {
+              || (darwinVersion() <= 13)) {
         break;
       }
       MacFileUtilities::MachoID macho(module_path,
