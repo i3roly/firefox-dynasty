@@ -51,6 +51,9 @@ export class MegalistAlpha extends MozLitElement {
     window.addEventListener("MessageFromViewModel", ev =>
       this.#onMessageFromViewModel(ev)
     );
+    window.addEventListener("SidebarWillHide", ev =>
+      this.#onSidebarWillHide(ev)
+    );
   }
 
   static get properties() {
@@ -120,6 +123,16 @@ export class MegalistAlpha extends MozLitElement {
     this.#sendCommand(this.displayMode);
   }
 
+  #onCancelLoginForm() {
+    switch (this.viewMode) {
+      case VIEW_MODES.EDIT:
+        this.#sendCommand("DiscardChanges");
+        return;
+      default:
+        this.viewMode = VIEW_MODES.LIST;
+    }
+  }
+
   #openMenu(e) {
     const panelList = this.shadowRoot.querySelector("panel-list");
     panelList.toggle(e);
@@ -163,6 +176,12 @@ export class MegalistAlpha extends MozLitElement {
     this.reauthResolver?.(isAuthorized);
   }
 
+  receiveDiscardChangesConfirmed() {
+    this.viewMode = VIEW_MODES.LIST;
+    this.editingRecord = null;
+    this.notification = null;
+  }
+
   reauthCommandHandler(commandFn) {
     return new Promise((resolve, _reject) => {
       this.reauthResolver = resolve;
@@ -192,6 +211,20 @@ export class MegalistAlpha extends MozLitElement {
         callback();
       }, delay);
     };
+  }
+
+  #onSidebarWillHide(e) {
+    // Prevent hiding the sidebar if a password is being edited and show a
+    // message asking to confirm if the user wants to discard their changes.
+    const shouldShowDiscardChangesPrompt =
+      this.viewMode === VIEW_MODES.EDIT &&
+      (!this.notification || this.notification?.id === "discard-changes") &&
+      !this.notification?.fromSidebar;
+
+    if (shouldShowDiscardChangesPrompt) {
+      this.#sendCommand("DiscardChanges", { value: { fromSidebar: true } });
+      e.preventDefault();
+    }
   }
 
   // TODO: This should be passed to virtualized list with an explicit height.
@@ -313,7 +346,7 @@ export class MegalistAlpha extends MozLitElement {
         return this.renderList();
       case VIEW_MODES.ADD:
         return html` <login-form
-          .onClose=${() => (this.viewMode = VIEW_MODES.LIST)}
+          .onClose=${() => this.#onCancelLoginForm()}
           .onSaveClick=${loginForm => {
             this.#sendCommand("AddLogin", { value: loginForm });
           }}
@@ -331,14 +364,7 @@ export class MegalistAlpha extends MozLitElement {
               this.editingRecord.password.concealed,
               this.editingRecord.password.lineIndex
             )}
-          .onClose=${() => {
-            this.#messageToViewModel("Command", {
-              commandId: "Cancel",
-              snapshotId: this.editingRecord.password.lineIndex,
-            });
-            this.viewMode = VIEW_MODES.LIST;
-            this.editingRecord = null;
-          }}
+          .onClose=${() => this.#onCancelLoginForm()}
           .onSaveClick=${loginForm => {
             loginForm.guid = this.editingRecord.origin.guid;
             this.#sendCommand("UpdateLogin", { value: loginForm });
@@ -507,7 +533,8 @@ export class MegalistAlpha extends MozLitElement {
         .onDismiss=${() => {
           this.notification = null;
         }}
-        .messageHandler=${commandId => this.#sendCommand(commandId)}
+        .messageHandler=${(commandId, options) =>
+          this.#sendCommand(commandId, options)}
         @view-login=${e => this.#scrollPasswordCardIntoView(e.detail.guid)}
       >
       </notification-message-bar>

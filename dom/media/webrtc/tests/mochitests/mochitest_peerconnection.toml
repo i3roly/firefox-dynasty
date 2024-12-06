@@ -242,6 +242,10 @@ scheme = "http"
 
 ["test_peerConnection_glean.html"]
 
+["test_peerConnection_iceCandidateSelection.html"]
+skip-if = ["os == 'android'"] # websockets don't work on android (bug 1266217)
+scheme = "http"
+
 ["test_peerConnection_iceFailure.html"]
 skip-if = ["true"] # (Bug 1180388 for win, mac and linux), android(Bug 1189784), Bug 1180388
 scheme = "http"
@@ -374,45 +378,27 @@ skip-if = ["os == 'android'"] # Bug 1614460
 ["test_peerConnection_sillyCodecPriorities.html"]
 
 ["test_peerConnection_simulcastAnswer.html"]
-skip-if = ["os == 'android'"] # no simulcast support on android
 
 ["test_peerConnection_simulcastAnswer_lowResFirst.html"]
-skip-if = [
-  "os == 'android'", # no simulcast support on android
-]
 
 ["test_peerConnection_simulcastAnswer_lowResFirst_oldSetParameters.html"]
-skip-if = [
-  "os == 'android'", # no simulcast support on android
-]
 
 ["test_peerConnection_simulcastAnswer_oldSetParameters.html"]
-skip-if = ["os == 'android'"] # no simulcast support on android
 
 ["test_peerConnection_simulcastOddResolution.html"]
-skip-if = ["os == 'android'"] # no simulcast support on android
 
 ["test_peerConnection_simulcastOddResolution_oldSetParameters.html"]
-skip-if = ["os == 'android'"] # no simulcast support on android
 
 ["test_peerConnection_simulcastOffer.html"]
-skip-if = ["os == 'android'"] # no simulcast support on android
 
 ["test_peerConnection_simulcastOffer_lowResFirst.html"]
-skip-if = [
-  "os == 'android'", # no simulcast support on android
-]
 
 ["test_peerConnection_simulcastOffer_lowResFirst_oldSetParameters.html"]
-skip-if = [
-  "os == 'android'", # no simulcast support on android
-]
 
 ["test_peerConnection_simulcastOffer_oldSetParameters.html"]
-skip-if = ["os == 'android'"] # no simulcast support on android
 
 ["test_peerConnection_simulcastOffer_screenshare.html"]
-skip-if = ["os == 'android'"] # no simulcast support on android
+skip-if = ["os == 'android'"] # no screenshare on android
 
 ["test_peerConnection_stats.html"]
 
