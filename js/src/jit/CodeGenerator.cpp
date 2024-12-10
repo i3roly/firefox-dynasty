@@ -990,8 +990,7 @@ CodeGenerator::CodeGenerator(MIRGenerator* gen, LIRGraph* graph,
     : CodeGeneratorSpecific(gen, graph, masm),
       ionScriptLabels_(gen->alloc()),
       ionNurseryObjectLabels_(gen->alloc()),
-      scriptCounts_(nullptr),
-      zoneStubsToReadBarrier_(0) {}
+      scriptCounts_(nullptr) {}
 
 CodeGenerator::~CodeGenerator() { js_delete(scriptCounts_); }
 
@@ -3118,9 +3117,8 @@ void CodeGenerator::visitRegExpMatcher(LRegExpMatcher* lir) {
   OutOfLineRegExpMatcher* ool = new (alloc()) OutOfLineRegExpMatcher(lir);
   addOutOfLineCode(ool, lir->mir());
 
-  const JitZone* jitZone = gen->realm->zone()->jitZone();
   JitCode* regExpMatcherStub =
-      jitZone->regExpMatcherStubNoBarrier(&zoneStubsToReadBarrier_);
+      snapshot_->getZoneStub(JitZone::StubKind::RegExpMatcher);
   masm.call(regExpMatcherStub);
   masm.branchTestUndefined(Assembler::Equal, JSReturnOperand, ool->entry());
   masm.bind(ool->rejoin());
@@ -3188,9 +3186,8 @@ void CodeGenerator::visitRegExpExecMatch(LRegExpExecMatch* lir) {
   auto* ool = new (alloc()) OutOfLineRegExpExecMatch(lir);
   addOutOfLineCode(ool, lir->mir());
 
-  const JitZone* jitZone = gen->realm->zone()->jitZone();
   JitCode* regExpExecMatchStub =
-      jitZone->regExpExecMatchStubNoBarrier(&zoneStubsToReadBarrier_);
+      snapshot_->getZoneStub(JitZone::StubKind::RegExpExecMatch);
   masm.call(regExpExecMatchStub);
   masm.branchTestUndefined(Assembler::Equal, JSReturnOperand, ool->entry());
 
@@ -3378,9 +3375,8 @@ void CodeGenerator::visitRegExpSearcher(LRegExpSearcher* lir) {
   OutOfLineRegExpSearcher* ool = new (alloc()) OutOfLineRegExpSearcher(lir);
   addOutOfLineCode(ool, lir->mir());
 
-  const JitZone* jitZone = gen->realm->zone()->jitZone();
   JitCode* regExpSearcherStub =
-      jitZone->regExpSearcherStubNoBarrier(&zoneStubsToReadBarrier_);
+      snapshot_->getZoneStub(JitZone::StubKind::RegExpSearcher);
   masm.call(regExpSearcherStub);
   masm.branch32(Assembler::Equal, ReturnReg, Imm32(RegExpSearcherResultFailed),
                 ool->entry());
@@ -3551,9 +3547,8 @@ void CodeGenerator::visitRegExpExecTest(LRegExpExecTest* lir) {
   auto* ool = new (alloc()) OutOfLineRegExpExecTest(lir);
   addOutOfLineCode(ool, lir->mir());
 
-  const JitZone* jitZone = gen->realm->zone()->jitZone();
   JitCode* regExpExecTestStub =
-      jitZone->regExpExecTestStubNoBarrier(&zoneStubsToReadBarrier_);
+      snapshot_->getZoneStub(JitZone::StubKind::RegExpExecTest);
   masm.call(regExpExecTestStub);
 
   masm.branch32(Assembler::Equal, ReturnReg, Imm32(RegExpExecTestResultFailed),
@@ -12054,9 +12049,9 @@ void CodeGenerator::visitInt32ToStringWithBase(LInt32ToStringWithBase* lir) {
 
   bool lowerCase = lir->mir()->lowerCase();
 
-  using Fn = JSString* (*)(JSContext*, int32_t, int32_t, bool);
+  using Fn = JSLinearString* (*)(JSContext*, int32_t, int32_t, bool);
   if (base.is<Register>()) {
-    auto* ool = oolCallVM<Fn, js::Int32ToStringWithBase>(
+    auto* ool = oolCallVM<Fn, js::Int32ToStringWithBase<CanGC>>(
         lir, ArgList(input, base.as<Register>(), Imm32(lowerCase)),
         StoreRegisterTo(output));
 
@@ -12066,7 +12061,7 @@ void CodeGenerator::visitInt32ToStringWithBase(LInt32ToStringWithBase* lir) {
                                    liveRegs, lowerCase, ool->entry());
     masm.bind(ool->rejoin());
   } else {
-    auto* ool = oolCallVM<Fn, js::Int32ToStringWithBase>(
+    auto* ool = oolCallVM<Fn, js::Int32ToStringWithBase<CanGC>>(
         lir, ArgList(input, Imm32(base.as<int32_t>()), Imm32(lowerCase)),
         StoreRegisterTo(output));
 
@@ -13030,9 +13025,8 @@ void CodeGenerator::emitConcat(LInstruction* lir, Register lhs, Register rhs,
       lir, ArgList(lhs, rhs, static_cast<Imm32>(int32_t(gc::Heap::Default))),
       StoreRegisterTo(output));
 
-  const JitZone* jitZone = gen->realm->zone()->jitZone();
   JitCode* stringConcatStub =
-      jitZone->stringConcatStubNoBarrier(&zoneStubsToReadBarrier_);
+      snapshot_->getZoneStub(JitZone::StubKind::StringConcat);
   masm.call(stringConcatStub);
   masm.branchTestPtr(Assembler::Zero, output, output, ool->entry());
 
@@ -14525,7 +14519,7 @@ void CodeGenerator::visitStringToLowerCase(LStringToLowerCase* lir) {
       lir->temp3()->isBogusTemp() ? string : ToRegister(lir->temp3());
   Register temp4 = ToRegister(lir->temp4());
 
-  using Fn = JSString* (*)(JSContext*, HandleString);
+  using Fn = JSLinearString* (*)(JSContext*, JSString*);
   OutOfLineCode* ool = oolCallVM<Fn, js::StringToLowerCase>(
       lir, ArgList(string), StoreRegisterTo(output));
 
@@ -14653,7 +14647,7 @@ void CodeGenerator::visitStringToLowerCase(LStringToLowerCase* lir) {
 void CodeGenerator::visitStringToUpperCase(LStringToUpperCase* lir) {
   pushArg(ToRegister(lir->string()));
 
-  using Fn = JSString* (*)(JSContext*, HandleString);
+  using Fn = JSLinearString* (*)(JSContext*, JSString*);
   callVM<Fn, js::StringToUpperCase>(lir);
 }
 
@@ -16591,8 +16585,11 @@ bool CodeGenerator::generateWasm(
   return true;
 }
 
-bool CodeGenerator::generate() {
+bool CodeGenerator::generate(const WarpSnapshot* snapshot) {
   AutoCreatedBy acb(masm, "CodeGenerator::generate");
+
+  MOZ_ASSERT(snapshot);
+  snapshot_ = snapshot;
 
   JitSpew(JitSpew_Codegen, "# Emitting code for script %s:%u:%u",
           gen->outerInfo().script()->filename(),
@@ -16770,7 +16767,7 @@ bool CodeGenerator::addHasSeenObjectEmulateUndefinedFuseDependency() {
   return mirGen().tracker.addDependency(dep);
 }
 
-bool CodeGenerator::link(JSContext* cx, const WarpSnapshot* snapshot) {
+bool CodeGenerator::link(JSContext* cx) {
   AutoCreatedBy acb(masm, "CodeGenerator::link");
 
   // We cancel off-thread Ion compilations in a few places during GC, but if
@@ -16781,15 +16778,12 @@ bool CodeGenerator::link(JSContext* cx, const WarpSnapshot* snapshot) {
   RootedScript script(cx, gen->outerInfo().script());
   MOZ_ASSERT(!script->hasIonScript());
 
-  // Perform any read barriers which were skipped while compiling the
-  // script, which may have happened off-thread.
-  JitZone* jitZone = cx->zone()->jitZone();
-  jitZone->performStubReadBarriers(zoneStubsToReadBarrier_);
-
   if (scriptCounts_ && !script->hasScriptCounts() &&
       !script->initScriptCounts(cx)) {
     return false;
   }
+
+  JitZone* jitZone = cx->zone()->jitZone();
 
   IonCompilationId compilationId =
       cx->runtime()->jitRuntime()->nextCompilationId();
@@ -16804,7 +16798,7 @@ bool CodeGenerator::link(JSContext* cx, const WarpSnapshot* snapshot) {
 
   // If an inlined script is invalidated (for example, by attaching
   // a debugger), we must also invalidate the parent IonScript.
-  if (!AddInlinedCompilations(cx, script, compilationId, snapshot, &isValid)) {
+  if (!AddInlinedCompilations(cx, script, compilationId, snapshot_, &isValid)) {
     return false;
   }
 
@@ -16830,7 +16824,7 @@ bool CodeGenerator::link(JSContext* cx, const WarpSnapshot* snapshot) {
 
   uint32_t argumentSlots = (gen->outerInfo().nargs() + 1) * sizeof(Value);
 
-  size_t numNurseryObjects = snapshot->nurseryObjects().length();
+  size_t numNurseryObjects = snapshot_->nurseryObjects().length();
 
   IonScript* ionScript = IonScript::New(
       cx, compilationId, graph.localSlotsSize(), argumentSlots, frameDepth_,
@@ -16842,7 +16836,7 @@ bool CodeGenerator::link(JSContext* cx, const WarpSnapshot* snapshot) {
     return false;
   }
 #ifdef DEBUG
-  ionScript->setICHash(snapshot->icHash());
+  ionScript->setICHash(snapshot_->icHash());
 #endif
 
   auto freeIonScript = mozilla::MakeScopeExit([&ionScript] {
@@ -17011,7 +17005,7 @@ bool CodeGenerator::link(JSContext* cx, const WarpSnapshot* snapshot) {
   // Copy the list of nursery objects. Note that the store buffer can add
   // HeapPtr edges that must be cleared in IonScript::Destroy. See the
   // infallibility warning above.
-  const auto& nurseryObjects = snapshot->nurseryObjects();
+  const auto& nurseryObjects = snapshot_->nurseryObjects();
   for (size_t i = 0; i < nurseryObjects.length(); i++) {
     ionScript->nurseryObjects()[i].init(nurseryObjects[i]);
   }
@@ -19886,7 +19880,11 @@ void CodeGenerator::visitIsTypedArray(LIsTypedArray* lir) {
   masm.jump(&done);
   masm.bind(&notTypedArray);
   if (ool) {
-    masm.branchTestClassIsProxy(true, output, ool->entry());
+    Label notProxy;
+    masm.branchTestClassIsProxy(false, output, &notProxy);
+    masm.branchTestProxyHandlerFamily(Assembler::Equal, object, output,
+                                      &Wrapper::family, ool->entry());
+    masm.bind(&notProxy);
   }
   masm.move32(Imm32(0), output);
   masm.bind(&done);

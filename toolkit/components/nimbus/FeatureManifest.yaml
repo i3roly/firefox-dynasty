@@ -1074,6 +1074,13 @@ newTabSectionsExperiment:
         pref: browser.newtabpage.activity-stream.discoverystream.sections.region-content-config
       description: >-
         A comma-separated list of regions that get contextual content by default.
+    sectionsPersonalization:
+      type: boolean
+      setPref:
+        branch: user
+        pref: browser.newtabpage.activity-stream.discoverystream.sections.personalization.enabled
+      description: >-
+        Enable personalized sections layout. Allow users to follow/unfollow topic sections.
 
 pocketNewtab:
   description: The Pocket section in newtab
@@ -4010,13 +4017,16 @@ sidebar:
       description: Minimum Firefox version to apply prefs
     main.tools:
       type: string
-      description: sidebar.main.tools pref value to set on user branch
+      description: sidebar.main.tools pref value to set on user branch; which tools for sidebar panels show in the launcher
     revamp:
       type: boolean
-      description: sidebar.revamp pref value to set on user branch
+      description: sidebar.revamp pref value to set on user branch; true for new experience
     verticalTabs:
       type: boolean
-      description: sidebar.verticalTabs pref value to set on user branch
+      description: sidebar.verticalTabs pref value to set on user branch; true to enable vertical tabs
+    visibility:
+      type: string
+      description: sidebar.visibility pref value ("hide" or "always-show") to set on user branch
 
 fxms_bmb_button:
   description: A feature for the Firefox Messaging System Bookmarks Bar button surface

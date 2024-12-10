@@ -6,6 +6,7 @@ package org.mozilla.fenix.onboarding.view
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,6 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Icon
 import androidx.compose.material.Text
@@ -40,19 +42,19 @@ import org.mozilla.fenix.R
 import org.mozilla.fenix.compose.annotation.FlexibleWindowLightDarkPreview
 import org.mozilla.fenix.compose.button.PrimaryButton
 import org.mozilla.fenix.compose.button.SecondaryButton
-import org.mozilla.fenix.onboarding.store.OnboardingToolbarStore
+import org.mozilla.fenix.onboarding.store.OnboardingStore
 import org.mozilla.fenix.theme.FirefoxTheme
 
 /**
  * A Composable for displaying toolbar placement onboarding page content.
  *
- * @param store The [OnboardingToolbarStore] that holds the toolbar selection state.
+ * @param onboardingStore The [OnboardingStore] that holds the toolbar selection state.
  * @param pageState The page content that's displayed.
  * @param onToolbarSelectionClicked Callback for when a toolbar selection is clicked.
  */
 @Composable
 fun ToolbarOnboardingPage(
-    store: OnboardingToolbarStore,
+    onboardingStore: OnboardingStore,
     pageState: OnboardingPageState,
     onToolbarSelectionClicked: (ToolbarOptionType) -> Unit,
 ) {
@@ -97,12 +99,12 @@ fun ToolbarOnboardingPage(
 
                 Spacer(Modifier.height(34.dp))
 
-                val state by store.observeAsState(initialValue = store.state) { state -> state }
+                val state by onboardingStore.observeAsState(initialValue = onboardingStore.state) { state -> state }
 
                 Row(Modifier.width(176.dp), horizontalArrangement = Arrangement.Center) {
                     ToolbarOptions(
                         options = toolbarOptions!!,
-                        selectedOption = state.selected,
+                        selectedOption = state.toolbarOptionSelected,
                         onClick = onToolbarSelectionClicked,
                     )
                 }
@@ -141,12 +143,12 @@ fun ToolbarOnboardingPage(
 
 @Composable
 private fun ToolbarOptions(
-    options: ToolbarOptions,
+    options: List<ToolbarOption>,
     selectedOption: ToolbarOptionType,
     onClick: (ToolbarOptionType) -> Unit,
 ) {
     SelectableImageItem(
-        toolbarOption = options.top,
+        toolbarOption = options[0],
         selectedOption = selectedOption,
         onClick = onClick,
     )
@@ -154,7 +156,7 @@ private fun ToolbarOptions(
     Spacer(Modifier.width(40.dp))
 
     SelectableImageItem(
-        toolbarOption = options.bottom,
+        toolbarOption = options[1],
         selectedOption = selectedOption,
         onClick = onClick,
     )
@@ -166,18 +168,27 @@ private fun SelectableImageItem(
     selectedOption: ToolbarOptionType,
     onClick: (ToolbarOptionType) -> Unit,
 ) {
+    val isSelectedOption = toolbarOption.toolbarType == selectedOption
+
     Column(
-        modifier = Modifier.clickable(onClick = {
-            // Only call action if option selected is different.
-            if (toolbarOption.toolbarType != selectedOption) {
-                onClick(toolbarOption.toolbarType)
-            }
-        }),
+        modifier = Modifier.clickable(
+            onClick = {
+                // Only call action if option selected is different.
+                if (!isSelectedOption) {
+                    onClick(toolbarOption.toolbarType)
+                }
+            },
+        ),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Image(
             painter = painterResource(id = toolbarOption.imageRes),
             contentDescription = "",
+            modifier = if (isSelectedOption) {
+                Modifier.border(2.dp, FirefoxTheme.colors.actionPrimary, RoundedCornerShape(10.dp))
+            } else {
+                Modifier
+            },
         )
 
         Text(
@@ -187,7 +198,7 @@ private fun SelectableImageItem(
             style = FirefoxTheme.typography.caption,
         )
 
-        if (toolbarOption.toolbarType == selectedOption) {
+        if (isSelectedOption) {
             Box(
                 modifier = Modifier
                     .background(
@@ -215,7 +226,7 @@ private fun SelectableImageItem(
 private fun OnboardingPagePreview() {
     FirefoxTheme {
         ToolbarOnboardingPage(
-            store = OnboardingToolbarStore(),
+            onboardingStore = OnboardingStore(),
             pageState = OnboardingPageState(
                 imageRes = R.drawable.ic_onboarding_customize_toolbar,
                 title = stringResource(id = R.string.onboarding_customize_toolbar_title),
@@ -232,13 +243,13 @@ private fun OnboardingPagePreview() {
                     ),
                     onClick = {},
                 ),
-                toolbarOptions = ToolbarOptions(
-                    top = ToolbarOption(
+                toolbarOptions = listOf(
+                    ToolbarOption(
                         toolbarType = ToolbarOptionType.TOOLBAR_TOP,
                         imageRes = R.drawable.ic_onboarding_top_toolbar,
                         label = stringResource(R.string.onboarding_customize_toolbar_top_option),
                     ),
-                    bottom = ToolbarOption(
+                    ToolbarOption(
                         toolbarType = ToolbarOptionType.TOOLBAR_BOTTOM,
                         imageRes = R.drawable.ic_onboarding_bottom_toolbar,
                         label = stringResource(R.string.onboarding_customize_toolbar_bottom_option),

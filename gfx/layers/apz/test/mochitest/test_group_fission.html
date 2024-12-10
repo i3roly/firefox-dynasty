@@ -26,6 +26,10 @@
     ];
 
     var subtests = [
+      {
+        "file": "helper_fission_inactivescroller_positionedcontent.html",
+        "prefs": hit_test_prefs
+      },
       { "file": "helper_fission_setResolution.html", "prefs": prefs },
       {
         "file": "helper_fission_tap.html",
@@ -56,6 +60,10 @@
       {
         file: "helper_fission_unresolved_clip.html",
         "prefs": hit_test_prefs
+      },
+      {
+        "file": "helper_fission_inactivescroller_under_oopif.html",
+        "prefs": hit_test_prefs
       }
     ];
 
@@ -64,20 +72,13 @@
         { // Skip on Android because of missing native wheel event support
           "file": "helper_fission_scroll_handoff.html",
           "prefs": prefs
-        }
+        },
+        {
+          "file": "helper_fission_scroll_oopif.html",
+          "prefs": [["apz.test.mac.synth_wheel_input", true]]
+        },
       );
-
-      if (getPlatform() != "linux") {
-        subtests.push(
-          { // Fails on try runs for Android and Linux
-            // https://bugzilla.mozilla.org/show_bug.cgi?id=1915378
-            "file": "helper_fission_inactivescroller_under_oopif.html",
-            "prefs": hit_test_prefs
-          }
-        );
-      }
     }
-
 
     if (isApzEnabled()) {
       // This has a lot of subtests, and Android emulators are slow.

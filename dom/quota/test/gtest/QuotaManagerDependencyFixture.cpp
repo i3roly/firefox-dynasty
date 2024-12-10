@@ -222,18 +222,12 @@ void QuotaManagerDependencyFixture::ShutdownTemporaryStorage() {
 // static
 void QuotaManagerDependencyFixture::InitializeTemporaryOrigin(
     const OriginMetadata& aOriginMetadata, bool aCreateIfNonExistent) {
-  mozilla::ipc::PrincipalInfo principalInfo;
-  ASSERT_NO_FATAL_FAILURE(
-      CreateContentPrincipalInfo(aOriginMetadata.mOrigin, principalInfo));
-
-  PerformOnBackgroundThread([persistenceType = aOriginMetadata.mPersistenceType,
-                             principalInfo = std::move(principalInfo),
-                             aCreateIfNonExistent]() {
+  PerformOnBackgroundThread([aOriginMetadata, aCreateIfNonExistent]() {
     QuotaManager* quotaManager = QuotaManager::Get();
     ASSERT_TRUE(quotaManager);
 
-    Await(quotaManager->InitializeTemporaryOrigin(
-        persistenceType, principalInfo, aCreateIfNonExistent));
+    Await(quotaManager->InitializeTemporaryOrigin(aOriginMetadata,
+                                                  aCreateIfNonExistent));
   });
 }
 
@@ -242,18 +236,12 @@ void QuotaManagerDependencyFixture::TemporaryOriginInitialized(
     const OriginMetadata& aOriginMetadata, bool* aResult) {
   ASSERT_TRUE(aResult);
 
-  mozilla::ipc::PrincipalInfo principalInfo;
-  ASSERT_NO_FATAL_FAILURE(
-      CreateContentPrincipalInfo(aOriginMetadata.mOrigin, principalInfo));
-
-  PerformOnBackgroundThread([persistenceType = aOriginMetadata.mPersistenceType,
-                             principalInfo = std::move(principalInfo),
-                             aResult]() {
+  PerformOnBackgroundThread([aOriginMetadata, aResult]() {
     QuotaManager* quotaManager = QuotaManager::Get();
     ASSERT_TRUE(quotaManager);
 
-    auto value = Await(quotaManager->TemporaryOriginInitialized(persistenceType,
-                                                                principalInfo));
+    auto value =
+        Await(quotaManager->TemporaryOriginInitialized(aOriginMetadata));
     if (value.IsResolve()) {
       *aResult = value.ResolveValue();
     } else {
@@ -363,6 +351,12 @@ PrincipalMetadata QuotaManagerDependencyFixture::GetTestPrincipalMetadata() {
   return {""_ns, "example.com"_ns, "http://example.com"_ns,
           "http://example.com"_ns,
           /* aIsPrivate */ false};
+}
+
+// static
+OriginMetadata
+QuotaManagerDependencyFixture::GetTestPersistentOriginMetadata() {
+  return {GetTestPrincipalMetadata(), PERSISTENCE_TYPE_PERSISTENT};
 }
 
 // static

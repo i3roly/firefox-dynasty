@@ -6,6 +6,7 @@ package org.mozilla.fenix.ext
 
 import androidx.annotation.VisibleForTesting
 import mozilla.components.service.pocket.PocketStory
+import mozilla.components.service.pocket.PocketStory.ContentRecommendation
 import mozilla.components.service.pocket.PocketStory.PocketRecommendedStory
 import mozilla.components.service.pocket.PocketStory.PocketSponsoredStory
 import mozilla.components.service.pocket.ext.hasFlightImpressionsLimitReached
@@ -24,6 +25,13 @@ import org.mozilla.fenix.utils.Settings
  */
 @VisibleForTesting
 internal const val POCKET_STORIES_TO_SHOW_COUNT = 8
+
+/**
+ * Total count of content recommendations to show.
+ * This is an optimistic value taking into account that fewer than this stories may actually be available.
+ */
+@VisibleForTesting
+internal const val CONTENT_RECOMMENDATIONS_TO_SHOW_COUNT = 9
 
 /**
  * Total count of all sponsored Pocket stories to show.
@@ -81,6 +89,28 @@ fun AppState.getFilteredStories(): List<PocketStory> {
 }
 
 /**
+ * Get the list of stories to be displayed based on the content recommendations and sponsored
+ * stories state.
+ *
+ * @return A list of [PocketStory]s containing the content recommendations and sponsored stories
+ * to display.
+ */
+fun AppState.getStories(): List<PocketStory> {
+    val recommendations = recommendationState.contentRecommendations
+        .sortedBy { it.impressions }
+        .take(CONTENT_RECOMMENDATIONS_TO_SHOW_COUNT)
+    val sponsoredStories = getFilteredSponsoredStories(
+        stories = recommendationState.pocketSponsoredStories,
+        limit = POCKET_SPONSORED_STORIES_TO_SHOW_COUNT,
+    )
+
+    return combineRecommendationsAndSponsoredStories(
+        recommendations = recommendations,
+        sponsoredStories = sponsoredStories,
+    )
+}
+
+/**
  * Combine all available Pocket recommended and sponsored stories to show at max [POCKET_STORIES_TO_SHOW_COUNT]
  * stories of both types but based on a specific split.
  */
@@ -98,6 +128,27 @@ internal fun combineRecommendedAndSponsoredStories(
     return recommendedStories.take(1) +
         sponsoredStories.take(1) +
         recommendedStories.take(recommendedStoriesToShow).drop(1) +
+        sponsoredStories.take(2).drop(1)
+}
+
+/**
+ * Combine all available content recommendations and sponsored stories to show at max
+ * [CONTENT_RECOMMENDATIONS_TO_SHOW_COUNT] stories of both types but based on a specific split.
+ */
+@VisibleForTesting
+internal fun combineRecommendationsAndSponsoredStories(
+    recommendations: List<ContentRecommendation>,
+    sponsoredStories: List<PocketSponsoredStory>,
+): List<PocketStory> {
+    val recommendedStoriesToShow =
+        CONTENT_RECOMMENDATIONS_TO_SHOW_COUNT - sponsoredStories.size.coerceAtMost(
+            POCKET_SPONSORED_STORIES_TO_SHOW_COUNT,
+        )
+
+    // Sponsored stories should be shown at position 2 and 9 if possible.
+    return recommendations.take(1) +
+        sponsoredStories.take(1) +
+        recommendations.take(recommendedStoriesToShow).drop(1) +
         sponsoredStories.take(2).drop(1)
 }
 

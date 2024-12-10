@@ -15,6 +15,7 @@ import mozilla.components.lib.state.Action
 import mozilla.components.service.nimbus.messaging.Message
 import mozilla.components.service.nimbus.messaging.MessageSurfaceId
 import mozilla.components.service.pocket.PocketStory
+import mozilla.components.service.pocket.PocketStory.ContentRecommendation
 import mozilla.components.service.pocket.PocketStory.PocketSponsoredStory
 import org.mozilla.fenix.browser.StandardSnackbarError
 import org.mozilla.fenix.browser.browsingmode.BrowsingMode
@@ -513,6 +514,15 @@ sealed class AppAction : Action {
      */
     sealed class ContentRecommendationsAction : AppAction() {
         /**
+         * [ContentRecommendationsAction] dispatched when content recommendations were fetched.
+         *
+         * @property recommendations The new list of [ContentRecommendation] that was fetched.
+         */
+        data class ContentRecommendationsFetched(
+            val recommendations: List<ContentRecommendation>,
+        ) : ContentRecommendationsAction()
+
+        /**
          * Indicates the given [categoryName] was selected by the user.
          */
         data class SelectPocketStoriesCategory(val categoryName: String) :
@@ -537,9 +547,15 @@ sealed class AppAction : Action {
 
         /**
          * Replaces the current list of Pocket sponsored stories.
+         *
+         * @property sponsoredStories The new list of [PocketSponsoredStory] that was fetched.
+         * @property showContentRecommendations Whether or not to show Merino content
+         * recommendations.
          */
-        data class PocketSponsoredStoriesChange(val sponsoredStories: List<PocketSponsoredStory>) :
-            ContentRecommendationsAction()
+        data class PocketSponsoredStoriesChange(
+            val sponsoredStories: List<PocketSponsoredStory>,
+            val showContentRecommendations: Boolean,
+        ) : ContentRecommendationsAction()
 
         /**
          * Replaces the list of available Pocket recommended stories categories.

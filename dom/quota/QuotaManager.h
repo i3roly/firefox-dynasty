@@ -398,16 +398,16 @@ class QuotaManager final : public BackgroundThreadObject {
 
  public:
   RefPtr<BoolPromise> InitializeTemporaryGroup(
-      const PrincipalInfo& aPrincipalInfo);
+      const PrincipalMetadata& aPrincipalMetadata);
 
   RefPtr<BoolPromise> InitializeTemporaryGroup(
-      const PrincipalInfo& aPrincipalInfo,
+      const PrincipalMetadata& aPrincipalMetadata,
       RefPtr<UniversalDirectoryLock> aDirectoryLock);
 
   RefPtr<BoolPromise> TemporaryGroupInitialized(
-      const PrincipalInfo& aPrincipalInfo);
+      const PrincipalMetadata& aPrincipalMetadata);
 
-  bool IsTemporaryGroupInitialized(const PrincipalInfo& aPrincipalInfo);
+  bool IsTemporaryGroupInitialized(const PrincipalMetadata& aPrincipalMetadata);
 
   bool IsTemporaryGroupInitializedInternal(
       const PrincipalMetadata& aPrincipalMetadata) const;
@@ -418,16 +418,16 @@ class QuotaManager final : public BackgroundThreadObject {
 
  public:
   RefPtr<BoolPromise> InitializePersistentOrigin(
-      const PrincipalInfo& aPrincipalInfo);
+      const OriginMetadata& aOriginMetadata);
 
   RefPtr<BoolPromise> InitializePersistentOrigin(
-      const PrincipalInfo& aPrincipalInfo,
+      const OriginMetadata& aOriginMetadata,
       RefPtr<UniversalDirectoryLock> aDirectoryLock);
 
   RefPtr<BoolPromise> PersistentOriginInitialized(
-      const PrincipalInfo& aPrincipalInfo);
+      const OriginMetadata& aOriginMetadata);
 
-  bool IsPersistentOriginInitialized(const PrincipalInfo& aPrincipalInfo);
+  bool IsPersistentOriginInitialized(const OriginMetadata& aOriginMetadata);
 
   bool IsPersistentOriginInitializedInternal(
       const OriginMetadata& aOriginMetadata) const;
@@ -441,18 +441,16 @@ class QuotaManager final : public BackgroundThreadObject {
 
  public:
   RefPtr<BoolPromise> InitializeTemporaryOrigin(
-      PersistenceType aPersistenceType, const PrincipalInfo& aPrincipalInfo,
-      bool aCreateIfNonExistent);
+      const OriginMetadata& aOriginMetadata, bool aCreateIfNonExistent);
 
   RefPtr<BoolPromise> InitializeTemporaryOrigin(
-      PersistenceType aPersistenceType, const PrincipalInfo& aPrincipalInfo,
-      bool aCreateIfNonExistent, RefPtr<UniversalDirectoryLock> aDirectoryLock);
+      const OriginMetadata& aOriginMetadata, bool aCreateIfNonExistent,
+      RefPtr<UniversalDirectoryLock> aDirectoryLock);
 
   RefPtr<BoolPromise> TemporaryOriginInitialized(
-      PersistenceType aPersistenceType, const PrincipalInfo& aPrincipalInfo);
+      const OriginMetadata& aOriginMetadata);
 
-  bool IsTemporaryOriginInitialized(PersistenceType aPersistenceType,
-                                    const PrincipalInfo& aPrincipalInfo);
+  bool IsTemporaryOriginInitialized(const OriginMetadata& aOriginMetadata);
 
   bool IsTemporaryOriginInitializedInternal(
       const OriginMetadata& aOriginMetadata) const;

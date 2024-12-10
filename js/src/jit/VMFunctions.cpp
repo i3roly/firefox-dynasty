@@ -41,6 +41,7 @@
 #include "vm/TypedArrayObject.h"
 #include "vm/TypeofEqOperand.h"  // TypeofEqOperand
 #include "vm/Watchtower.h"
+#include "vm/WrapperObject.h"
 #include "wasm/WasmGcObject.h"
 
 #include "debugger/DebugAPI-inl.h"
@@ -818,7 +819,7 @@ int32_t StringTrimEndIndex(const JSString* str, int32_t start) {
 }
 
 JSString* CharCodeToLowerCase(JSContext* cx, int32_t code) {
-  RootedString str(cx, StringFromCharCode(cx, code));
+  JSString* str = StringFromCharCode(cx, code);
   if (!str) {
     return nullptr;
   }
@@ -826,7 +827,7 @@ JSString* CharCodeToLowerCase(JSContext* cx, int32_t code) {
 }
 
 JSString* CharCodeToUpperCase(JSContext* cx, int32_t code) {
-  RootedString str(cx, StringFromCharCode(cx, code));
+  JSString* str = StringFromCharCode(cx, code);
   if (!str) {
     return nullptr;
   }
@@ -2458,6 +2459,8 @@ bool DoConcatStringObject(JSContext* cx, HandleValue lhs, HandleValue rhs,
 }
 
 bool IsPossiblyWrappedTypedArray(JSContext* cx, JSObject* obj, bool* result) {
+  MOZ_ASSERT(obj->is<WrapperObject>(), "non-wrappers are handled in JIT code");
+
   JSObject* unwrapped = CheckedUnwrapDynamic(obj, cx);
   if (!unwrapped) {
     ReportAccessDenied(cx);

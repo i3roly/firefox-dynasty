@@ -10741,6 +10741,15 @@
 #endif
   mirror: always
 
+- name: media.ffvpx-hw.enabled
+  type: RelaxedAtomicBool
+#if defined(XP_WIN)
+  value: @IS_NIGHTLY_BUILD@
+#else
+  value: false
+#endif
+  mirror: always
+
 # The codecs in the vendored ffmpeg copy are usually prefered to the other
 # codecs. This allows changing this policy for testing purposes.
 - name: media.prefer-non-ffvpx
@@ -17707,6 +17716,16 @@
 - name: widget.use-xdg-desktop-portal.mime-handler
   type: int32_t
   value: 2
+  mirror: always
+
+# Whether to use XDG portal for native messaging.
+# https://github.com/flatpak/xdg-desktop-portal/issues/655
+#  - 0: never
+#  - 1: always
+#  - 2: auto (true for snap and flatpak or GTK_USE_PORTAL=1, false otherwise)
+- name: widget.use-xdg-desktop-portal.native-messaging
+  type: int32_t
+  value: 0
   mirror: always
 
 # Whether to try to use XDG portal for settings / look-and-feel information.

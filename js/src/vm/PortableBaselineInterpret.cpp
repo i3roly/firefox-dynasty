@@ -54,6 +54,7 @@
 #include "vm/PlainObject.h"
 #include "vm/Shape.h"
 #include "vm/TypeofEqOperand.h"  // TypeofEqOperand
+#include "vm/WrapperObject.h"
 
 #include "debugger/DebugAPI-inl.h"
 #include "jit/BaselineFrame-inl.h"
@@ -4664,8 +4665,7 @@ uint64_t ICInterpretOps(uint64_t arg0, uint64_t arg1, ICStub* stub,
         JSString* str = reinterpret_cast<JSString*>(READ_REG(strId.id()));
         {
           PUSH_IC_FRAME();
-          ReservedRooted<JSString*> str0(&ctx.state.str0, str);
-          auto* result = StringToLowerCase(cx, str0);
+          auto* result = StringToLowerCase(cx, str);
           if (!result) {
             ctx.error = PBIResult::Error;
             return IC_ERROR_SENTINEL();
@@ -4681,8 +4681,7 @@ uint64_t ICInterpretOps(uint64_t arg0, uint64_t arg1, ICStub* stub,
         JSString* str = reinterpret_cast<JSString*>(READ_REG(strId.id()));
         {
           PUSH_IC_FRAME();
-          ReservedRooted<JSString*> str0(&ctx.state.str0, str);
-          auto* result = StringToUpperCase(cx, str0);
+          auto* result = StringToUpperCase(cx, str);
           if (!result) {
             ctx.error = PBIResult::Error;
             return IC_ERROR_SENTINEL();
@@ -4929,7 +4928,7 @@ uint64_t ICInterpretOps(uint64_t arg0, uint64_t arg1, ICStub* stub,
         JSObject* obj = reinterpret_cast<JSObject*>(READ_REG(objId.id()));
         if (IsTypedArrayClass(obj->getClass())) {
           retValue = BooleanValue(true).asRawBits();
-        } else if (isPossiblyWrapped) {
+        } else if (isPossiblyWrapped && obj->is<WrapperObject>()) {
           PUSH_IC_FRAME();
           bool result;
           if (!IsPossiblyWrappedTypedArray(cx, obj, &result)) {
@@ -5169,7 +5168,7 @@ uint64_t ICInterpretOps(uint64_t arg0, uint64_t arg1, ICStub* stub,
         }
         {
           PUSH_IC_FRAME();
-          auto* result = Int32ToStringWithBase(cx, input, base, true);
+          auto* result = Int32ToStringWithBase<CanGC>(cx, input, base, true);
           if (!result) {
             ctx.error = PBIResult::Error;
             return IC_ERROR_SENTINEL();

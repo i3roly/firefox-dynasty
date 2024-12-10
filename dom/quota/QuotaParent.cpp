@@ -379,7 +379,12 @@ mozilla::ipc::IPCResult Quota::RecvTemporaryGroupInitialized(
                 QuotaManager::GetOrCreate(),
                 ResolveBoolResponseAndReturn(aResolve));
 
-  quotaManager->TemporaryGroupInitialized(aPrincipalInfo)
+  QM_TRY_UNWRAP(
+      PrincipalMetadata principalMetadata,
+      GetInfoFromValidatedPrincipalInfo(*quotaManager, aPrincipalInfo),
+      ResolveBoolResponseAndReturn(aResolve));
+
+  quotaManager->TemporaryGroupInitialized(principalMetadata)
       ->Then(GetCurrentSerialEventTarget(), __func__,
              BoolPromiseResolveOrRejectCallback(this, std::move(aResolve)));
 
@@ -403,7 +408,14 @@ mozilla::ipc::IPCResult Quota::RecvPersistentOriginInitialized(
                 QuotaManager::GetOrCreate(),
                 ResolveBoolResponseAndReturn(aResolve));
 
-  quotaManager->PersistentOriginInitialized(aPrincipalInfo)
+  QM_TRY_UNWRAP(
+      PrincipalMetadata principalMetadata,
+      GetInfoFromValidatedPrincipalInfo(*quotaManager, aPrincipalInfo),
+      ResolveBoolResponseAndReturn(aResolve));
+
+  quotaManager
+      ->PersistentOriginInitialized(OriginMetadata{std::move(principalMetadata),
+                                                   PERSISTENCE_TYPE_PERSISTENT})
       ->Then(GetCurrentSerialEventTarget(), __func__,
              BoolPromiseResolveOrRejectCallback(this, std::move(aResolve)));
 
@@ -431,7 +443,14 @@ mozilla::ipc::IPCResult Quota::RecvTemporaryOriginInitialized(
                 QuotaManager::GetOrCreate(),
                 ResolveBoolResponseAndReturn(aResolve));
 
-  quotaManager->TemporaryOriginInitialized(aPersistenceType, aPrincipalInfo)
+  QM_TRY_UNWRAP(
+      PrincipalMetadata principalMetadata,
+      GetInfoFromValidatedPrincipalInfo(*quotaManager, aPrincipalInfo),
+      ResolveBoolResponseAndReturn(aResolve));
+
+  quotaManager
+      ->TemporaryOriginInitialized(
+          OriginMetadata{std::move(principalMetadata), aPersistenceType})
       ->Then(GetCurrentSerialEventTarget(), __func__,
              BoolPromiseResolveOrRejectCallback(this, std::move(aResolve)));
 
@@ -491,7 +510,12 @@ mozilla::ipc::IPCResult Quota::RecvInitializeTemporaryGroup(
                 QuotaManager::GetOrCreate(),
                 ResolveBoolResponseAndReturn(aResolve));
 
-  quotaManager->InitializeTemporaryGroup(aPrincipalInfo)
+  QM_TRY_UNWRAP(
+      PrincipalMetadata principalMetadata,
+      GetInfoFromValidatedPrincipalInfo(*quotaManager, aPrincipalInfo),
+      ResolveBoolResponseAndReturn(aResolve));
+
+  quotaManager->InitializeTemporaryGroup(principalMetadata)
       ->Then(GetCurrentSerialEventTarget(), __func__,
              BoolPromiseResolveOrRejectCallback(this, std::move(aResolve)));
 
@@ -515,7 +539,14 @@ mozilla::ipc::IPCResult Quota::RecvInitializePersistentOrigin(
                 QuotaManager::GetOrCreate(),
                 ResolveBoolResponseAndReturn(aResolve));
 
-  quotaManager->InitializePersistentOrigin(aPrincipalInfo)
+  QM_TRY_UNWRAP(
+      PrincipalMetadata principalMetadata,
+      GetInfoFromValidatedPrincipalInfo(*quotaManager, aPrincipalInfo),
+      ResolveBoolResponseAndReturn(aResolve));
+
+  quotaManager
+      ->InitializePersistentOrigin(OriginMetadata{std::move(principalMetadata),
+                                                  PERSISTENCE_TYPE_PERSISTENT})
       ->Then(GetCurrentSerialEventTarget(), __func__,
              BoolPromiseResolveOrRejectCallback(this, std::move(aResolve)));
 
@@ -543,9 +574,15 @@ mozilla::ipc::IPCResult Quota::RecvInitializeTemporaryOrigin(
                 QuotaManager::GetOrCreate(),
                 ResolveBoolResponseAndReturn(aResolve));
 
+  QM_TRY_UNWRAP(
+      PrincipalMetadata principalMetadata,
+      GetInfoFromValidatedPrincipalInfo(*quotaManager, aPrincipalInfo),
+      ResolveBoolResponseAndReturn(aResolve));
+
   quotaManager
-      ->InitializeTemporaryOrigin(aPersistenceType, aPrincipalInfo,
-                                  aCreateIfNonExistent)
+      ->InitializeTemporaryOrigin(
+          OriginMetadata{std::move(principalMetadata), aPersistenceType},
+          aCreateIfNonExistent)
       ->Then(GetCurrentSerialEventTarget(), __func__,
              BoolPromiseResolveOrRejectCallback(this, std::move(aResolve)));
 

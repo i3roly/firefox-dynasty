@@ -1707,6 +1707,7 @@ abstract class BaseBrowserFragment :
                     NavigationBar.browserTabTrayLongTapped.record(NoExtras())
                 },
                 onMenuButtonClick = {
+                    NavigationBar.browserMenuTapped.record(NoExtras())
                     findNavController().nav(
                         R.id.browserFragment,
                         BrowserFragmentDirections.actionGlobalMenuDialogFragment(
@@ -1876,10 +1877,12 @@ abstract class BaseBrowserFragment :
      * Useful when needed to force an update of it's layout.
      */
     private fun resetNavbar() {
-        if (context?.shouldAddNavigationBar() != true) return
+        if (context?.shouldAddNavigationBar() != true || !webAppToolbarShouldBeVisible) return
 
         // Prevent showing two navigation bars at the same time.
-        binding.browserLayout.removeView(bottomToolbarContainerView.toolbarContainerView)
+        _bottomToolbarContainerView?.toolbarContainerView?.let {
+            binding.browserLayout.removeView(it)
+        }
         reinitializeNavBar()
     }
 

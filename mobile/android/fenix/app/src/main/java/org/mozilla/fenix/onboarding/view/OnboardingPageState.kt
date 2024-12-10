@@ -20,7 +20,7 @@ import org.mozilla.fenix.onboarding.store.OnboardingAddonStatus
  * @property addOns Optional list of add-ons to install during onboarding.
  * @property themeOptions Optional list of theme customizing options during onboarding.
  * @property termsOfService Optional term of service page data.
- * @property toolbarOptions Optional toolbar selection options.
+ * @property toolbarOptions Optional list of toolbar selection options.
  * @property onRecordImpressionEvent Callback for recording impression event.
  */
 data class OnboardingPageState(
@@ -33,7 +33,7 @@ data class OnboardingPageState(
     val addOns: List<OnboardingAddOn>? = null,
     val themeOptions: List<ThemeOption>? = null,
     val termsOfService: OnboardingTermsOfService? = null,
-    val toolbarOptions: ToolbarOptions? = null,
+    val toolbarOptions: List<ToolbarOption>? = null,
     val onRecordImpressionEvent: () -> Unit = {},
 )
 
@@ -68,14 +68,6 @@ data class OnboardingAddOn(
 )
 
 /**
- * Model containing data for the top and bottom toolbar options.
- */
-data class ToolbarOptions(
-    val top: ToolbarOption,
-    val bottom: ToolbarOption,
-)
-
-/**
  * Model containing data for a toolbar placement.
  */
 data class ToolbarOption(
@@ -86,17 +78,19 @@ data class ToolbarOption(
 
 /**
  * Types of toolbar placement options available.
+ *
+ * @property id Identifier for the toolbar option type, used in telemetry.
  */
-enum class ToolbarOptionType {
+enum class ToolbarOptionType(val id: String) {
     /**
      * Sets the toolbar placement to the top.
      */
-    TOOLBAR_TOP,
+    TOOLBAR_TOP("toolbar_top"),
 
     /**
      * Sets the toolbar placement to the bottom.
      */
-    TOOLBAR_BOTTOM,
+    TOOLBAR_BOTTOM("toolbar_bottom"),
 }
 
 /**

@@ -67,6 +67,7 @@ function expectPermissions(perms) {
 }
 
 add_setup(async function () {
+  Services.prefs.setCharPref("permissions.manager.defaultsUrl", "");
   do_get_profile();
 
   // This needs to be restored on cleanup
@@ -75,6 +76,7 @@ add_setup(async function () {
   );
 
   // Initialize remote permission service
+  Services.prefs.setBoolPref("permissions.manager.remote.enabled", true);
   let permObserver = Services.perms.QueryInterface(Ci.nsIObserver);
   permObserver.observe(null, "profile-after-change", "");
   await rps.isInitialized;

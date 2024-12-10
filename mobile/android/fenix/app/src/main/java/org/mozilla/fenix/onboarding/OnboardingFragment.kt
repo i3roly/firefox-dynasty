@@ -42,11 +42,11 @@ import org.mozilla.fenix.ext.openSetDefaultBrowserOption
 import org.mozilla.fenix.ext.requireComponents
 import org.mozilla.fenix.ext.settings
 import org.mozilla.fenix.nimbus.FxNimbus
-import org.mozilla.fenix.onboarding.store.OnboardingAddOnsAction
-import org.mozilla.fenix.onboarding.store.OnboardingAddOnsStore
+import org.mozilla.fenix.onboarding.store.OnboardingAction.OnboardingAddOnsAction
 import org.mozilla.fenix.onboarding.store.OnboardingAddonStatus
-import org.mozilla.fenix.onboarding.store.OnboardingToolbarStore
+import org.mozilla.fenix.onboarding.store.OnboardingStore
 import org.mozilla.fenix.onboarding.view.Caption
+import org.mozilla.fenix.onboarding.view.ManagePrivacyPreferencesDialogFragment
 import org.mozilla.fenix.onboarding.view.OnboardingAddOn
 import org.mozilla.fenix.onboarding.view.OnboardingPageUiData
 import org.mozilla.fenix.onboarding.view.OnboardingScreen
@@ -69,6 +69,7 @@ class OnboardingFragment : Fragment() {
         DefaultOnboardingTermsOfServiceEventHandler(
             telemetryRecorder = telemetryRecorder,
             this::launchSandboxCustomTab,
+            this::showPrivacyPreferencesDialog,
         )
     }
 
@@ -81,8 +82,7 @@ class OnboardingFragment : Fragment() {
         )
     }
     private val telemetryRecorder by lazy { OnboardingTelemetryRecorder() }
-    private val onboardingAddOnsStore by lazyStore { OnboardingAddOnsStore() }
-    private val onboardingToolbarStore by lazyStore { OnboardingToolbarStore() }
+    private val onboardingStore by lazyStore { OnboardingStore() }
     private val pinAppWidgetReceiver = WidgetPinnedReceiver()
 
     @SuppressLint("SourceLockedOrientationActivity")
@@ -224,16 +224,17 @@ class OnboardingFragment : Fragment() {
                     sequencePosition = pagesToDisplay.sequencePosition(it.type),
                 )
             },
-            onboardingAddOnsStore = onboardingAddOnsStore,
+            onboardingStore = onboardingStore,
             onInstallAddOnButtonClick = { installUrl -> installAddon(installUrl) },
             termsOfServiceEventHandler = termsOfServiceEventHandler,
             onCustomizeToolbarClick = {
                 requireContext().settings().shouldUseBottomToolbar =
-                    onboardingToolbarStore.state.selected == ToolbarOptionType.TOOLBAR_BOTTOM
+                    onboardingStore.state.toolbarOptionSelected == ToolbarOptionType.TOOLBAR_BOTTOM
 
                 telemetryRecorder.onSelectToolbarPlacementClick(
                     pagesToDisplay.telemetrySequenceId(),
                     pagesToDisplay.sequencePosition(OnboardingPageUiData.Type.TOOLBAR_PLACEMENT),
+                    onboardingStore.state.toolbarOptionSelected.id,
                 )
             },
             onSkipCustomizeToolbarClick = {
@@ -246,7 +247,7 @@ class OnboardingFragment : Fragment() {
     }
 
     private fun installAddon(addOn: OnboardingAddOn) {
-        onboardingAddOnsStore.dispatch(
+        onboardingStore.dispatch(
             OnboardingAddOnsAction.UpdateStatus(
                 addOnId = addOn.id,
                 status = OnboardingAddonStatus.INSTALLING,
@@ -258,7 +259,7 @@ class OnboardingFragment : Fragment() {
             onSuccess = { addon ->
                 logger.info("Extension installed successfully")
                 telemetryRecorder.onAddOnInstalled(addon.id)
-                onboardingAddOnsStore.dispatch(
+                onboardingStore.dispatch(
                     OnboardingAddOnsAction.UpdateStatus(
                         addOnId = addOn.id,
                         status = OnboardingAddonStatus.INSTALLED,
@@ -267,7 +268,7 @@ class OnboardingFragment : Fragment() {
             },
             onError = { e ->
                 logger.error("Unable to install extension", e)
-                onboardingAddOnsStore.dispatch(
+                onboardingStore.dispatch(
                     OnboardingAddOnsAction.UpdateStatus(
                         addOn.id,
                         status = OnboardingAddonStatus.NOT_INSTALLED,
@@ -378,5 +379,12 @@ class OnboardingFragment : Fragment() {
             url = url,
         )
         requireContext().startActivity(intent)
+    }
+
+    private fun showPrivacyPreferencesDialog() {
+        ManagePrivacyPreferencesDialogFragment(
+            onCrashReportingLinkClick = {},
+            onUsageDataLinkClick = {},
+        ).show(parentFragmentManager, ManagePrivacyPreferencesDialogFragment.TAG)
     }
 }

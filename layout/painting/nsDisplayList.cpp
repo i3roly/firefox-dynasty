@@ -394,8 +394,7 @@ void nsDisplayListBuilder::InvalidateCaretFramesIfNeeded() {
   while (i--) {
     nsCaret* caret = mPaintedCarets[i];
     nsIFrame* oldCaret = caret->GetLastPaintedFrame();
-    nsRect caretRect;
-    nsIFrame* currentCaret = caret->GetPaintGeometry(&caretRect);
+    nsIFrame* currentCaret = caret->GetPaintGeometry();
     if (oldCaret == currentCaret) {
       // Keep tracking this caret, it hasn't changed.
       continue;
@@ -2904,8 +2903,7 @@ nsDisplayBackgroundImage::nsDisplayBackgroundImage(
       mFillRect(aInitData.fillArea),
       mDestRect(aInitData.destArea),
       mLayer(aInitData.layer),
-      mIsRasterImage(aInitData.isRasterImage),
-      mShouldFixToViewport(aInitData.shouldFixToViewport) {
+      mIsRasterImage(aInitData.isRasterImage) {
   MOZ_COUNT_CTOR(nsDisplayBackgroundImage);
 #ifdef DEBUG
   if (mBackgroundStyle && mBackgroundStyle != mFrame->Style()) {
@@ -2916,7 +2914,7 @@ nsDisplayBackgroundImage::nsDisplayBackgroundImage(
 #endif
 
   mBounds = GetBoundsInternal(aInitData.builder, aFrameForBounds);
-  if (mShouldFixToViewport) {
+  if (aInitData.shouldFixToViewport) {
     // Expand the item's visible rect to cover the entire bounds, limited to the
     // viewport rect. This is necessary because the background's clip can move
     // asynchronously.
@@ -2925,10 +2923,6 @@ nsDisplayBackgroundImage::nsDisplayBackgroundImage(
       SetBuildingRect(mBounds.Intersect(*viewportRect));
     }
   }
-}
-
-nsDisplayBackgroundImage::~nsDisplayBackgroundImage() {
-  MOZ_COUNT_DTOR(nsDisplayBackgroundImage);
 }
 
 void nsDisplayBackgroundImage::Destroy(nsDisplayListBuilder* aBuilder) {
@@ -4117,10 +4111,6 @@ nsDisplayCaret::nsDisplayCaret(nsDisplayListBuilder* aBuilder,
   SetBuildingRect(mBounds);
 }
 
-#ifdef NS_BUILD_REFCNT_LOGGING
-nsDisplayCaret::~nsDisplayCaret() { MOZ_COUNT_DTOR(nsDisplayCaret); }
-#endif
-
 nsRect nsDisplayCaret::GetBounds(nsDisplayListBuilder* aBuilder,
                                  bool* aSnap) const {
   *aSnap = true;
@@ -4573,8 +4563,6 @@ nsDisplayWrapList::nsDisplayWrapList(nsDisplayListBuilder* aBuilder,
 
   SetBuildingRect(visible);
 }
-
-nsDisplayWrapList::~nsDisplayWrapList() { MOZ_COUNT_DTOR(nsDisplayWrapList); }
 
 void nsDisplayWrapList::HitTest(nsDisplayListBuilder* aBuilder,
                                 const nsRect& aRect, HitTestState* aState,
@@ -5334,10 +5322,6 @@ nsDisplaySubDocument::nsDisplaySubDocument(nsDisplayListBuilder* aBuilder,
   }
 }
 
-nsDisplaySubDocument::~nsDisplaySubDocument() {
-  MOZ_COUNT_DTOR(nsDisplaySubDocument);
-}
-
 void nsDisplaySubDocument::Destroy(nsDisplayListBuilder* aBuilder) {
   RemoveDisplayItemFromFrame(aBuilder, mSubDocFrame);
   nsDisplayOwnLayer::Destroy(aBuilder);
@@ -5964,12 +5948,6 @@ nsDisplayAsyncZoom::nsDisplayAsyncZoom(
       mViewID(aViewID) {
   MOZ_COUNT_CTOR(nsDisplayAsyncZoom);
 }
-
-#ifdef NS_BUILD_REFCNT_LOGGING
-nsDisplayAsyncZoom::~nsDisplayAsyncZoom() {
-  MOZ_COUNT_DTOR(nsDisplayAsyncZoom);
-}
-#endif
 
 void nsDisplayAsyncZoom::HitTest(nsDisplayListBuilder* aBuilder,
                                  const nsRect& aRect, HitTestState* aState,
@@ -8583,12 +8561,6 @@ nsDisplayForeignObject::nsDisplayForeignObject(nsDisplayListBuilder* aBuilder,
     : nsDisplayWrapList(aBuilder, aFrame, aList) {
   MOZ_COUNT_CTOR(nsDisplayForeignObject);
 }
-
-#ifdef NS_BUILD_REFCNT_LOGGING
-nsDisplayForeignObject::~nsDisplayForeignObject() {
-  MOZ_COUNT_DTOR(nsDisplayForeignObject);
-}
-#endif
 
 bool nsDisplayForeignObject::ShouldFlattenAway(nsDisplayListBuilder* aBuilder) {
   return !aBuilder->GetWidgetLayerManager();
