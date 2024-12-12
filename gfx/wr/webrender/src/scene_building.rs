@@ -514,6 +514,10 @@ pub struct SceneBuilder<'a> {
     /// dependencies, without relying on recursion for those passes.
     picture_graph: PictureGraph,
 
+    /// Keep track of snapshot pictures to ensure that they are rendered even if they
+    /// are off-screen and the visibility traversal does not reach them.
+    snapshot_pictures: Vec<PictureIndex>,
+
     /// Keep track of allocated plane splitters for this scene. A plane
     /// splitter is allocated whenever we encounter a new 3d rendering context.
     /// They are stored outside the picture since it makes it easier for them
@@ -591,6 +595,8 @@ impl<'a> SceneBuilder<'a> {
             ),
             snap_to_device,
             picture_graph: mem::take(&mut recycler.picture_graph),
+            // This vector is empty most of the time, don't bother with recycling it for now.
+            snapshot_pictures: Vec::new(),
             next_plane_splitter_index: 0,
             prim_instances: mem::take(&mut recycler.prim_instances),
             pipeline_instance_ids: FastHashMap::default(),
@@ -663,6 +669,7 @@ impl<'a> SceneBuilder<'a> {
             clip_store: builder.clip_store,
             config: builder.config,
             tile_cache_config,
+            snapshot_pictures: builder.snapshot_pictures,
             tile_cache_pictures,
             picture_graph: builder.picture_graph,
             num_plane_splitters: builder.next_plane_splitter_index,
@@ -941,12 +948,22 @@ impl<'a> SceneBuilder<'a> {
                             continue;
                         }
 
+                        let snapshot = info.snapshot.map(|snapshot| {
+                            // Offset the snapshot area by the stacking context origin
+                            // so that the area is expressed in the same coordinate space
+                            // as the items in the stacking context.
+                            SnapshotInfo {
+                                area: snapshot.area.translate(info.origin.to_vector()),
+                                key: snapshot.key,
+                            }
+                        });
+
                         let composition_operations = CompositeOps::new(
                             filter_ops_for_compositing(item.filters()),
                             filter_datas_for_compositing(item.filter_datas()),
                             filter_primitives_for_compositing(item.filter_primitives()),
                             info.stacking_context.mix_blend_mode_for_compositing(),
-                            info.snapshot,
+                            snapshot,
                         );
 
                         let sc_info = self.push_stacking_context(
@@ -2630,6 +2647,11 @@ impl<'a> SceneBuilder<'a> {
             &mut self.clip_tree_builder,
             stacking_context.composite_ops.snapshot,
         );
+
+        if stacking_context.composite_ops.snapshot.is_some() {
+            let pic_index = cur_instance.kind.as_pic();
+            self.snapshot_pictures.push(pic_index);
+        }
 
         // The primitive instance for the remainder of flat children of this SC
         // if it's a part of 3D hierarchy but not the root of it.

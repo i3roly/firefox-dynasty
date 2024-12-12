@@ -1,8 +1,8 @@
 #!/bin/bash
 
-#name: applink-startup-cnve
+#name: shopify-applink-startup
 #owner: perftest
-#description: Runs the applink startup(cvne) test for chrome/fenix
+#description: Runs the shopify applink startup(cvne) test for chrome/fenix
 
 # Path to the Python script
 SCRIPT_PATH="testing/performance/mobile-startup/android_startup_videoapplink.py"

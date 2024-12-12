@@ -11,12 +11,15 @@ add_task(async function () {
 
   let dbg = await initDebugger("doc-content-script-sources.html");
   ok(
-    sourceExists(dbg, "content_script.js"),
-    "The extension content script exists in the reducer"
+    !sourceExists(dbg, "content_script.js"),
+    "The extension content script isn't reported to the frontend and isn't in the reducer"
   );
 
   info("But the content script isn't visible by default");
-  await waitForSourcesInSourceTree(dbg, []);
+  await waitForSourcesInSourceTree(dbg, [
+    "doc-content-script-sources.html",
+    "doc-strict.html",
+  ]);
 
   info("Enable the content script setting");
   await toggleSourcesTreeSettingsMenuItem(dbg, {
@@ -25,11 +28,38 @@ add_task(async function () {
   });
 
   info("The extension content script should now be visible in the source tree");
-  await waitForSourcesInSourceTree(dbg, ["content_script.js"]);
+  await waitForSourcesInSourceTree(dbg, [
+    "doc-content-script-sources.html",
+    "doc-strict.html",
+    "content_script.js",
+  ]);
 
   await waitForSources(dbg, "content_script.js");
   await selectSource(dbg, "content_script.js");
   await closeTab(dbg, "content_script.js");
+
+  const sourceTreeThreadLabels = [
+    ...findAllElements(dbg, "sourceTreeThreads"),
+  ].map(el => {
+    return el.textContent;
+  });
+  // Verify that the content script is below the target of the frame it was executed against
+  Assert.deepEqual(
+    sourceTreeThreadLabels,
+    ["Main Thread", "Test content script extension", "Debugger test page"],
+    "The threads are correctly ordered"
+  );
+  const threadPanelLabels = [...findAllElements(dbg, "threadsPaneItems")].map(
+    el => {
+      return el.textContent;
+    }
+  );
+  // Verify that we get the exact same ordering in the threads panel
+  Assert.deepEqual(
+    threadPanelLabels,
+    sourceTreeThreadLabels,
+    "The threads are correctly ordered in the threads panel"
+  );
 
   // Destroy the toolbox and repeat the test in a new toolbox
   // and ensures that the content script is still listed.
@@ -60,7 +90,20 @@ add_task(async function () {
     await resume(dbg);
   }
 
+  await resume(dbg);
+  assertNotPaused(dbg);
+
   await closeTab(dbg, "content_script.js");
 
+  is(
+    dbg.selectors.getAllThreads().length,
+    2,
+    "Ensure that we only get the main thread and the content script thread"
+  );
+
   await extension.unload();
+  await waitFor(
+    () => dbg.selectors.getAllThreads().length == 1,
+    "After unloading the add-on, the content script thread is removed"
+  );
 });

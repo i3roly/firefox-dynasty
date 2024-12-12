@@ -43,8 +43,8 @@ class OnboardingMapperTest {
             onAddOnsButtonClick = {},
             onCustomizeToolbarButtonClick = {},
             onCustomizeToolbarSkipClick = {},
-            onThemeSelectionButtonClick = {},
-            onThemeSelectionSkipClick = {},
+            onCustomizeThemeClick = {},
+            onCustomizeThemeSkip = {},
             onTermsOfServiceButtonClick = {},
         )
 
@@ -83,8 +83,8 @@ class OnboardingMapperTest {
             onAddOnsButtonClick = {},
             onCustomizeToolbarButtonClick = {},
             onCustomizeToolbarSkipClick = {},
-            onThemeSelectionButtonClick = {},
-            onThemeSelectionSkipClick = {},
+            onCustomizeThemeClick = {},
+            onCustomizeThemeSkip = {},
             onTermsOfServiceButtonClick = {},
         )
 
@@ -123,8 +123,8 @@ class OnboardingMapperTest {
             onAddOnsButtonClick = {},
             onCustomizeToolbarButtonClick = {},
             onCustomizeToolbarSkipClick = {},
-            onThemeSelectionButtonClick = {},
-            onThemeSelectionSkipClick = {},
+            onCustomizeThemeClick = {},
+            onCustomizeThemeSkip = {},
             onTermsOfServiceButtonClick = {},
         )
 
@@ -163,8 +163,8 @@ class OnboardingMapperTest {
             onAddOnsButtonClick = {},
             onCustomizeToolbarButtonClick = {},
             onCustomizeToolbarSkipClick = {},
-            onThemeSelectionButtonClick = {},
-            onThemeSelectionSkipClick = {},
+            onCustomizeThemeClick = {},
+            onCustomizeThemeSkip = {},
             onTermsOfServiceButtonClick = {},
         )
 
@@ -235,8 +235,8 @@ class OnboardingMapperTest {
             onAddOnsButtonClick = unitLambda,
             onCustomizeToolbarButtonClick = {},
             onCustomizeToolbarSkipClick = {},
-            onThemeSelectionButtonClick = {},
-            onThemeSelectionSkipClick = {},
+            onCustomizeThemeClick = {},
+            onCustomizeThemeSkip = {},
             onTermsOfServiceButtonClick = {},
         )
 
@@ -264,6 +264,7 @@ class OnboardingMapperTest {
             description = "Keep searches within reach",
             primaryButton = Action("Save and continue", unitLambda),
             secondaryButton = Action("Skip", unitLambda),
+            toolbarOptions = toolbarOptions,
         )
 
         val onboardingPageUiData = OnboardingPageUiData(
@@ -289,8 +290,8 @@ class OnboardingMapperTest {
             onAddOnsButtonClick = {},
             onCustomizeToolbarButtonClick = unitLambda,
             onCustomizeToolbarSkipClick = unitLambda,
-            onThemeSelectionButtonClick = {},
-            onThemeSelectionSkipClick = {},
+            onCustomizeThemeClick = {},
+            onCustomizeThemeSkip = {},
             onTermsOfServiceButtonClick = {},
         )
 
@@ -356,8 +357,8 @@ class OnboardingMapperTest {
             onAddOnsButtonClick = {},
             onCustomizeToolbarButtonClick = {},
             onCustomizeToolbarSkipClick = {},
-            onThemeSelectionButtonClick = unitLambda,
-            onThemeSelectionSkipClick = unitLambda,
+            onCustomizeThemeClick = unitLambda,
+            onCustomizeThemeSkip = unitLambda,
             onTermsOfServiceButtonClick = {},
         )
 

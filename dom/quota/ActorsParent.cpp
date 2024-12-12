@@ -283,6 +283,8 @@ constexpr auto kStorageName = u"storage"_ns;
 const int32_t kLocalStorageArchiveVersion = 4;
 
 const char kProfileDoChangeTopic[] = "profile-do-change";
+const char kSessionstoreWindowsRestoredTopic[] =
+    "sessionstore-windows-restored";
 const char kPrivateBrowsingObserverTopic[] = "last-pb-context-exited";
 
 const int32_t kCacheVersion = 2;
@@ -1435,46 +1437,86 @@ void QuotaManager::Observer::ShutdownCompleted() {
 nsresult QuotaManager::Observer::Init() {
   MOZ_ASSERT(NS_IsMainThread());
 
+  /**
+   * A RAII utility class to manage the registration and automatic
+   * unregistration of observers with `nsIObserverService`. This class is
+   * designed to simplify observer management, particularly when registering
+   * for multiple topics, by ensuring that already registered topics are
+   * unregistered if a failure occurs during subsequent registrations.
+   */
+  class MOZ_RAII Registrar {
+   public:
+    Registrar(nsIObserverService* aObserverService, nsIObserver* aObserver,
+              const char* aTopic)
+        : mObserverService(std::move(aObserverService)),
+          mObserver(aObserver),
+          mTopic(aTopic),
+          mUnregisterOnDestruction(false) {
+      MOZ_ASSERT(aObserverService);
+      MOZ_ASSERT(aObserver);
+      MOZ_ASSERT(aTopic);
+    }
+
+    ~Registrar() {
+      if (mUnregisterOnDestruction) {
+        mObserverService->RemoveObserver(mObserver, mTopic);
+      }
+    }
+
+    nsresult Register() {
+      MOZ_ASSERT(!mUnregisterOnDestruction);
+
+      nsresult rv = mObserverService->AddObserver(mObserver, mTopic, false);
+      if (NS_WARN_IF(NS_FAILED(rv))) {
+        return rv;
+      }
+
+      mUnregisterOnDestruction = true;
+
+      return NS_OK;
+    }
+
+    void Commit() { mUnregisterOnDestruction = false; }
+
+   private:
+    nsIObserverService* mObserverService;
+    nsIObserver* mObserver;
+    const char* mTopic;
+    bool mUnregisterOnDestruction;
+  };
+
   nsCOMPtr<nsIObserverService> obs = services::GetObserverService();
   if (NS_WARN_IF(!obs)) {
     return NS_ERROR_FAILURE;
   }
 
-  // XXX: Improve the way that we remove observer in failure cases.
-  nsresult rv = obs->AddObserver(this, NS_XPCOM_SHUTDOWN_OBSERVER_ID, false);
-  if (NS_WARN_IF(NS_FAILED(rv))) {
-    return rv;
-  }
+  Registrar xpcomShutdownRegistrar(obs, this, NS_XPCOM_SHUTDOWN_OBSERVER_ID);
+  QM_TRY(MOZ_TO_RESULT(xpcomShutdownRegistrar.Register()));
 
-  rv = obs->AddObserver(this, kProfileDoChangeTopic, false);
-  if (NS_WARN_IF(NS_FAILED(rv))) {
-    obs->RemoveObserver(this, NS_XPCOM_SHUTDOWN_OBSERVER_ID);
-    return rv;
-  }
+  Registrar profileDoChangeRegistrar(obs, this, kProfileDoChangeTopic);
+  QM_TRY(MOZ_TO_RESULT(profileDoChangeRegistrar.Register()));
 
-  rv = obs->AddObserver(this, PROFILE_BEFORE_CHANGE_QM_OBSERVER_ID, false);
-  if (NS_WARN_IF(NS_FAILED(rv))) {
-    obs->RemoveObserver(this, kProfileDoChangeTopic);
-    obs->RemoveObserver(this, NS_XPCOM_SHUTDOWN_OBSERVER_ID);
-    return rv;
-  }
+  Registrar sessionstoreWindowsRestoredRegistrar(
+      obs, this, kSessionstoreWindowsRestoredTopic);
+  QM_TRY(MOZ_TO_RESULT(sessionstoreWindowsRestoredRegistrar.Register()));
 
-  rv = obs->AddObserver(this, NS_WIDGET_WAKE_OBSERVER_TOPIC, false);
-  if (NS_WARN_IF(NS_FAILED(rv))) {
-    obs->RemoveObserver(this, PROFILE_BEFORE_CHANGE_QM_OBSERVER_ID);
-    obs->RemoveObserver(this, kProfileDoChangeTopic);
-    obs->RemoveObserver(this, NS_XPCOM_SHUTDOWN_OBSERVER_ID);
-    return rv;
-  }
+  Registrar profileBeforeChangeQmRegistrar(
+      obs, this, PROFILE_BEFORE_CHANGE_QM_OBSERVER_ID);
+  QM_TRY(MOZ_TO_RESULT(profileBeforeChangeQmRegistrar.Register()));
 
-  rv = obs->AddObserver(this, kPrivateBrowsingObserverTopic, false);
-  if (NS_WARN_IF(NS_FAILED(rv))) {
-    obs->RemoveObserver(this, NS_WIDGET_WAKE_OBSERVER_TOPIC);
-    obs->RemoveObserver(this, PROFILE_BEFORE_CHANGE_QM_OBSERVER_ID);
-    obs->RemoveObserver(this, kProfileDoChangeTopic);
-    obs->RemoveObserver(this, NS_XPCOM_SHUTDOWN_OBSERVER_ID);
-    return rv;
-  }
+  Registrar wakeNotificationRegistrar(obs, this, NS_WIDGET_WAKE_OBSERVER_TOPIC);
+  QM_TRY(MOZ_TO_RESULT(wakeNotificationRegistrar.Register()));
+
+  Registrar lastPbContextExitedRegistrar(obs, this,
+                                         kPrivateBrowsingObserverTopic);
+  QM_TRY(MOZ_TO_RESULT(lastPbContextExitedRegistrar.Register()));
+
+  xpcomShutdownRegistrar.Commit();
+  profileDoChangeRegistrar.Commit();
+  sessionstoreWindowsRestoredRegistrar.Commit();
+  profileBeforeChangeQmRegistrar.Commit();
+  wakeNotificationRegistrar.Commit();
+  lastPbContextExitedRegistrar.Commit();
 
   return NS_OK;
 }
@@ -1491,6 +1533,8 @@ nsresult QuotaManager::Observer::Shutdown() {
   MOZ_ALWAYS_SUCCEEDS(obs->RemoveObserver(this, NS_WIDGET_WAKE_OBSERVER_TOPIC));
   MOZ_ALWAYS_SUCCEEDS(
       obs->RemoveObserver(this, PROFILE_BEFORE_CHANGE_QM_OBSERVER_ID));
+  MOZ_ALWAYS_SUCCEEDS(
+      obs->RemoveObserver(this, kSessionstoreWindowsRestoredTopic));
   MOZ_ALWAYS_SUCCEEDS(obs->RemoveObserver(this, kProfileDoChangeTopic));
   MOZ_ALWAYS_SUCCEEDS(obs->RemoveObserver(this, NS_XPCOM_SHUTDOWN_OBSERVER_ID));
 
@@ -1568,6 +1612,16 @@ QuotaManager::Observer::Observe(nsISupports* aSubject, const char* aTopic,
     rv = platformInfo->GetPlatformBuildID(*gBuildId);
     if (NS_WARN_IF(NS_FAILED(rv))) {
       return rv;
+    }
+
+    return NS_OK;
+  }
+
+  if (!strcmp(aTopic, kSessionstoreWindowsRestoredTopic)) {
+    if (NS_WARN_IF(!gBasePath)) {
+      NS_WARNING(
+          "profile-do-change must precede sessionstore-windows-restored!");
+      return NS_OK;
     }
 
     return NS_OK;

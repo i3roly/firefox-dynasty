@@ -211,7 +211,12 @@ void MediaHardwareKeysEventSourceMacMediaCenter::SetMediaMetadata(
     if(@available(macOS 10.13.2, *)) {
       [nowPlayingInfo removeObjectForKey:MPMediaItemPropertyArtwork];
     } 
-      
+    
+    if (mFetchingUrl.IsEmpty() ||
+        !IsImageIn(aMetadata.mArtwork, mFetchingUrl)) {
+        mNextImageIndex = 0;
+        LoadImageAtIndex(mNextImageIndex++);
+    }
   }
 
   // The procedure of updating `nowPlayingInfo` is actually an async operation
@@ -219,11 +224,6 @@ void MediaHardwareKeysEventSourceMacMediaCenter::SetMediaMetadata(
   // aware that checking `nowPlayingInfo` immedately after setting it might not
   // yield the expected result.
   center.nowPlayingInfo = nowPlayingInfo;
-
-  if (mFetchingUrl.IsEmpty() || !IsImageIn(aMetadata.mArtwork, mFetchingUrl)) {
-    mNextImageIndex = 0;
-    LoadImageAtIndex(mNextImageIndex++);
-  }
 }
 
 void MediaHardwareKeysEventSourceMacMediaCenter::SetSupportedMediaKeys(

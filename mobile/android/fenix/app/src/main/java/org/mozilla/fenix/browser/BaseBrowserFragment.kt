@@ -79,6 +79,7 @@ import mozilla.components.browser.state.state.content.DownloadState
 import mozilla.components.browser.state.store.BrowserStore
 import mozilla.components.browser.thumbnails.BrowserThumbnails
 import mozilla.components.browser.toolbar.BrowserToolbar
+import mozilla.components.compose.base.Divider
 import mozilla.components.compose.cfr.CFRPopup
 import mozilla.components.compose.cfr.CFRPopupLayout
 import mozilla.components.compose.cfr.CFRPopupProperties
@@ -130,7 +131,6 @@ import mozilla.components.support.base.feature.ActivityResultHandler
 import mozilla.components.support.base.feature.PermissionsFeature
 import mozilla.components.support.base.feature.UserInteractionHandler
 import mozilla.components.support.base.feature.ViewBoundFeatureWrapper
-import mozilla.components.support.ktx.android.view.ImeInsetsSynchronizer
 import mozilla.components.support.ktx.android.view.enterImmersiveMode
 import mozilla.components.support.ktx.android.view.exitImmersiveMode
 import mozilla.components.support.ktx.android.view.hideKeyboard
@@ -187,7 +187,6 @@ import org.mozilla.fenix.components.toolbar.navbar.BrowserNavBar
 import org.mozilla.fenix.components.toolbar.navbar.EngineViewClippingBehavior
 import org.mozilla.fenix.components.toolbar.navbar.shouldAddNavigationBar
 import org.mozilla.fenix.components.toolbar.navbar.updateNavBarForConfigurationChange
-import org.mozilla.fenix.compose.Divider
 import org.mozilla.fenix.compose.core.Action
 import org.mozilla.fenix.compose.snackbar.Snackbar
 import org.mozilla.fenix.compose.snackbar.SnackbarState
@@ -465,7 +464,6 @@ abstract class BaseBrowserFragment :
         val tab = getCurrentTab()
         browserInitialized = if (tab != null) {
             initializeUI(view, tab)
-            setupIMEInsetsHandling(view)
             true
         } else {
             false
@@ -1541,13 +1539,14 @@ abstract class BaseBrowserFragment :
 
                         if (isToolbarAtBottom) {
                             AndroidView(factory = { _ -> browserToolbar })
-                        } else if (!areLoginBarsShown &&
-                            (currentMicrosurvey == null || activity.isMicrosurveyPromptDismissed.value)
-                        ) {
-                            Divider()
                         }
 
-                        NavigationButtonsCFR(context = context, activity = activity)
+                        NavigationButtonsCFR(
+                            context = context,
+                            activity = activity,
+                            showDivider = !isToolbarAtBottom && !areLoginBarsShown &&
+                                (currentMicrosurvey == null || activity.isMicrosurveyPromptDismissed.value),
+                        )
                     }
                 }
             },
@@ -1569,6 +1568,7 @@ abstract class BaseBrowserFragment :
     internal fun NavigationButtonsCFR(
         context: Context,
         activity: HomeActivity,
+        showDivider: Boolean,
     ) {
         var showCFR by remember { mutableStateOf(false) }
         val lastTimeNavigationButtonsClicked = remember { mutableLongStateOf(0L) }
@@ -1638,6 +1638,7 @@ abstract class BaseBrowserFragment :
 
             BrowserNavBar(
                 isPrivateMode = activity.browsingModeManager.mode.isPrivate,
+                showDivider = showDivider,
                 browserStore = context.components.core.store,
                 menuButton = menuButton,
                 newTabMenu = NewTabMenu(
@@ -2492,8 +2493,6 @@ abstract class BaseBrowserFragment :
                 reinitializeMicrosurveyPrompt = ::initializeMicrosurveyPrompt,
             )
         }
-
-        view?.let { setupIMEInsetsHandling(it) }
     }
 
     private fun reinitializeNavBar() {
@@ -2695,63 +2694,6 @@ abstract class BaseBrowserFragment :
             Logins.openLogins.record(NoExtras())
             val directions = BrowserFragmentDirections.actionLoginsListFragment()
             navController.navigate(directions)
-        }
-    }
-
-    private fun setupIMEInsetsHandling(view: View) {
-        when (context?.settings()?.toolbarPosition) {
-            ToolbarPosition.BOTTOM -> {
-                val toolbar = listOf(
-                    _bottomToolbarContainerView?.toolbarContainerView,
-                    _browserToolbarView?.layout,
-                ).firstOrNull { it != null } ?: return
-
-                ImeInsetsSynchronizer.setup(
-                    targetView = toolbar,
-                    onIMEAnimationStarted = { isKeyboardShowingUp, keyboardHeight ->
-                        // If the keyboard is hiding have the engine view immediately expand to the entire height of the
-                        // screen and ensure the toolbar is shown above keyboard before both would be animated down.
-                        if (!isKeyboardShowingUp) {
-                            (view.layoutParams as? ViewGroup.MarginLayoutParams)?.bottomMargin = 0
-                            (toolbar.layoutParams as? ViewGroup.MarginLayoutParams)?.bottomMargin = keyboardHeight
-                            view.requestLayout()
-                        }
-                    },
-                    onIMEAnimationFinished = { isKeyboardShowingUp, keyboardHeight ->
-                        // If the keyboard is showing up keep the engine view covering the entire height
-                        // of the screen until the animation is finished to avoid reflowing the web content
-                        // together with the keyboard animation in a short burst of updates.
-                        if (isKeyboardShowingUp || keyboardHeight == 0) {
-                            (view.layoutParams as? ViewGroup.MarginLayoutParams)?.bottomMargin = keyboardHeight
-                            (toolbar.layoutParams as? ViewGroup.MarginLayoutParams)?.bottomMargin = 0
-                            view.requestLayout()
-                        }
-                    },
-                )
-            }
-
-            ToolbarPosition.TOP -> {
-                ImeInsetsSynchronizer.setup(
-                    targetView = view,
-                    synchronizeViewWithIME = false,
-                    onIMEAnimationStarted = { isKeyboardShowingUp, _ ->
-                        if (!isKeyboardShowingUp) {
-                            (view.layoutParams as? ViewGroup.MarginLayoutParams)?.bottomMargin = 0
-                            view.requestLayout()
-                        }
-                    },
-                    onIMEAnimationFinished = { isKeyboardShowingUp, keyboardHeight ->
-                        if (isKeyboardShowingUp || keyboardHeight == 0) {
-                            (view.layoutParams as? ViewGroup.MarginLayoutParams)?.bottomMargin = keyboardHeight
-                            view.requestLayout()
-                        }
-                    },
-                )
-            }
-
-            else -> {
-                // no-op
-            }
         }
     }
 }

@@ -7,13 +7,16 @@
 #include "OriginParser.h"
 
 #include "gtest/gtest.h"
+#include "nsFmtString.h"
 
-using namespace mozilla::dom::quota;
+namespace mozilla::dom::quota {
 
-TEST(OriginParser_IsUUIDOrigin, Valid)
-{ EXPECT_TRUE(IsUUIDOrigin("uuid://1ef9867c-e754-4303-a18b-684f0321f6e2"_ns)); }
+TEST(DOM_Quota_OriginParser_IsUUIDOrigin, Valid)
+{
+  EXPECT_TRUE(IsUUIDOrigin("uuid://1ef9867c-e754-4303-a18b-684f0321f6e2"_ns));
+}
 
-TEST(OriginParser_IsUUIDOrigin, Invalid)
+TEST(DOM_Quota_OriginParser_IsUUIDOrigin, Invalid)
 {
   EXPECT_FALSE(IsUUIDOrigin("Invalid UUID Origin"_ns));
 
@@ -23,3 +26,28 @@ TEST(OriginParser_IsUUIDOrigin, Invalid)
 
   EXPECT_FALSE(IsUUIDOrigin("uuid+++1ef9867c-e754-4303-a18b-684f0321f6e2"_ns));
 }
+
+TEST(DOM_Quota_OriginParser_IsUserContextSuffix, True)
+{
+  const uint32_t userContextId = 5;
+
+  EXPECT_TRUE(IsUserContextSuffix(
+      nsFmtCString(FMT_STRING("^userContextId={}"), userContextId),
+      userContextId));
+  EXPECT_TRUE(IsUserContextSuffix(
+      nsFmtCString(FMT_STRING("^inBrowser=1&userContextId={}"), userContextId),
+      userContextId));
+}
+
+TEST(DOM_Quota_OriginParser_IsUserContextSuffix, False)
+{
+  const uint32_t userContextId = 5;
+
+  EXPECT_FALSE(IsUserContextSuffix(""_ns, userContextId));
+  EXPECT_FALSE(IsUserContextSuffix("^inBrowser=1"_ns, userContextId));
+  EXPECT_FALSE(IsUserContextSuffix("^userContextId=1"_ns, userContextId));
+  EXPECT_FALSE(
+      IsUserContextSuffix("^inBrowser=1&userContextId=1"_ns, userContextId));
+}
+
+}  //  namespace mozilla::dom::quota

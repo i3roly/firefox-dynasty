@@ -997,9 +997,11 @@ class nsWindow final : public nsBaseWidget {
   void RequestRepaint(LayoutDeviceIntRegion& aRepaintRegion);
 
 #ifdef MOZ_X11
-  typedef enum {GTK_WIDGET_COMPOSITED_DEFAULT = 0,
-                GTK_WIDGET_COMPOSITED_DISABLED = 1,
-                GTK_WIDGET_COMPOSITED_ENABLED = 2} WindowComposeRequest;
+  typedef enum {
+    GTK_WIDGET_COMPOSITED_DEFAULT = 0,
+    GTK_WIDGET_COMPOSITED_DISABLED = 1,
+    GTK_WIDGET_COMPOSITED_ENABLED = 2
+  } WindowComposeRequest;
   void SetCompositorHint(WindowComposeRequest aState);
   bool ConfigureX11GLVisual();
 #endif

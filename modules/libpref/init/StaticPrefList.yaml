@@ -6055,7 +6055,7 @@
 
 - name: gfx.canvas.accelerated.cache-items
   type: RelaxedAtomicUint32
-  value: 2048
+  value: 8192
   mirror: always
 
 - name: gfx.canvas.accelerated.cache-size
@@ -7053,6 +7053,15 @@
   value: false
 #endif
   mirror: once
+
+#ifdef NIGHTLY_BUILD
+  # Keep this pref hidden on non-nightly builds to avoid people accidentally
+  # turning it on.
+- name: gfx.webrender.layer-compositor
+  type: bool
+  value: false
+  mirror: once
+#endif
 
 - name: gfx.webrender.scissored-cache-clears.enabled
   type: bool
@@ -8586,14 +8595,15 @@
   mirror: always
   set_spidermonkey_pref: always
 
-# When selecting a call_ref target for speculative inlining, this is the minimum
+# When selecting call_ref targets for speculative inlining, this is the minimum
 # percentage of the total number of calls from the call site that a candidate
-# must have in order to be elegible for inlining.  Allowable: 10 .. 100 (%).
-# Setting it (eg) 75 means the hottest target must be 75% of all observed calls
-# to be considered for inlining.  Probably unwise to let this be much below 50.
+# set of targets must collectively have in order to be elegible for inlining.
+# Allowable: 10 .. 100 (%).  Setting it (eg) 75 means the targets must collectively
+# be 75% of all observed calls to be considered for inlining.  Probably unwise to
+# let this be much below 40.
 - name: javascript.options.wasm_call_ref_inlining_percent
   type: uint32_t
-  value: 50
+  value: 40
   mirror: always
   set_spidermonkey_pref: always
 
@@ -10743,11 +10753,7 @@
 
 - name: media.ffvpx-hw.enabled
   type: RelaxedAtomicBool
-#if defined(XP_WIN)
-  value: @IS_NIGHTLY_BUILD@
-#else
   value: false
-#endif
   mirror: always
 
 # The codecs in the vendored ffmpeg copy are usually prefered to the other
@@ -12623,7 +12629,7 @@
   # in response to a Refresh header.
 - name: network.http.referer.sendFromRefresh
   type: bool
-  value: false
+  value: @IS_NIGHTLY_BUILD@
   mirror: always
 
 # false=real referer, true=spoof referer (use target URI as referer).
@@ -14509,6 +14515,13 @@
 - name: network.http.digest_auth_cnonce_length
   type: uint32_t
   value: 16
+  mirror: always
+
+# When a primary or backup half-open socket fails while another is still
+# connecting, retry with the remaining one
+- name: network.http.retry_with_another_half_open
+  type: RelaxedAtomicBool
+  value: @IS_EARLY_BETA_OR_EARLIER@
   mirror: always
 
   # If true, HTTP response content-type headers will be parsed using the standards-compliant MimeType parser
@@ -16722,6 +16735,33 @@
 - name: ui.menu.incremental_search.timeout
   type: uint32_t
   value: 1000
+  mirror: always
+
+# If true, popups are attached to their native parent window (and move with it)
+# and can't overlap the OS chrome. Otherwise they are topmost.
+# NOTE(emilio): Comments below might not be accurate anymore.
+- name: ui.panel.default_level_parent
+  type: RelaxedAtomicBool
+#if defined(XP_WIN) || defined(XP_MACOSX)
+  # See bug 448927, on topmost panel, some IMEs are not usable on Windows.
+  # See bug 404131, topmost <panel> element wins to Dashboard on MacOSX.
+  value: true
+#else
+  # Setting default_level_parent to true makes the default level for popup
+  # windows "top" instead of "parent".  On GTK2 platform, this is implemented
+  # with override-redirect windows which is the normal way to implement
+  # temporary popup windows.  Setting this to false would make the default
+  # level "parent" which is implemented with managed windows. A problem with
+  # using managed windows is that metacity sometimes deactivates the parent
+  # window when the managed popup is shown, see bug 526941.
+  #
+  # TODO(emilio): Re-evaluate this default, the comment above is no longer
+  # true since bug 552982 (where we started looking at mNoAutohide rather than
+  # popup level to make the override-redirect vs. managed window distinction).
+  #
+  # The Android default was copied from GTK in bug 568700.
+  value: false
+#endif
   mirror: always
 
 # If true, all popups won't hide automatically on blur

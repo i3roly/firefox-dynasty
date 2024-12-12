@@ -52,6 +52,18 @@ add_task(function test_gifft_counter() {
   let telemetryValue = scalarValue("telemetry.test.mirror_for_counter");
   Assert.equal(20, telemetryValue);
   Assert.equal("number", typeof telemetryValue);
+
+  Glean.testOnlyIpc.aCounterForHgram.add(20);
+  Assert.equal(20, Glean.testOnlyIpc.aCounterForHgram.testGetValue());
+  const data = Telemetry.getHistogramById("TELEMETRY_TEST_COUNT").snapshot();
+  const expected = {
+    bucket_count: 3,
+    histogram_type: 4,
+    sum: 20,
+    range: [1, 2],
+    values: { 0: 1, 1: 0 },
+  };
+  Assert.deepEqual(data, expected, "histogram successfully mirrored-to.");
 });
 
 add_task(function test_gifft_boolean() {
@@ -301,6 +313,41 @@ add_task(function test_gifft_labeled_counter() {
       ["1".repeat(72)]: 3,
     },
     value
+  );
+
+  // What about a labeled_counter that maps to a boolean hgram?
+  Assert.equal(
+    undefined,
+    Glean.testOnlyIpc.aLabeledCounterForHgram.true.testGetValue()
+  );
+  Assert.equal(
+    undefined,
+    Glean.testOnlyIpc.aLabeledCounterForHgram.false.testGetValue()
+  );
+
+  Glean.testOnlyIpc.aLabeledCounterForHgram.true.add(1);
+  Glean.testOnlyIpc.aLabeledCounterForHgram.true.add(1);
+  Glean.testOnlyIpc.aLabeledCounterForHgram.false.add(1);
+
+  Assert.equal(
+    2,
+    Glean.testOnlyIpc.aLabeledCounterForHgram.true.testGetValue()
+  );
+  Assert.equal(
+    1,
+    Glean.testOnlyIpc.aLabeledCounterForHgram.false.testGetValue()
+  );
+
+  value = Telemetry.getHistogramById("TELEMETRY_TEST_BOOLEAN");
+  Assert.deepEqual(
+    {
+      bucket_count: 3,
+      histogram_type: 2,
+      sum: 2,
+      range: [1, 2],
+      values: { 0: 1, 1: 2, 2: 0 },
+    },
+    value.snapshot()
   );
 });
 

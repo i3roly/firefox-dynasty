@@ -242,7 +242,9 @@ export class _ExperimentManager {
 
     if (isFirefoxLabsOptIn) {
       this.optInRecipes.push(recipe);
-    } else if (isTargetingMatch) {
+    }
+
+    if (isTargetingMatch) {
       if (!this.sessions.has(source)) {
         this.sessions.set(source, new Set());
       }
@@ -250,14 +252,18 @@ export class _ExperimentManager {
 
       if (this.store.has(slug)) {
         await this.updateEnrollment(recipe, source);
-      } else if (isEnrollmentPaused) {
-        lazy.log.debug(`Enrollment is paused for "${slug}"`);
-      } else if (!(await this.isInBucketAllocation(recipe.bucketConfig))) {
-        lazy.log.debug(
-          "Client was not enrolled because of the bucket sampling"
-        );
-      } else {
-        await this.enroll(recipe, source);
+      } else if (!isFirefoxLabsOptIn) {
+        // Firefox Labs opt-ins cannot be paused and we do not enroll in them
+        // directly.
+        if (isEnrollmentPaused) {
+          lazy.log.debug(`Enrollment is paused for "${slug}"`);
+        } else if (!(await this.isInBucketAllocation(recipe.bucketConfig))) {
+          lazy.log.debug(
+            "Client was not enrolled because of the bucket sampling"
+          );
+        } else {
+          await this.enroll(recipe, source);
+        }
       }
     }
   }
@@ -617,6 +623,8 @@ export class _ExperimentManager {
       isFirefoxLabsOptIn,
       firefoxLabsTitle,
       firefoxLabsDescription,
+      firefoxLabsGroup,
+      requiresRestart = false,
     },
     branch,
     source,
@@ -673,6 +681,8 @@ export class _ExperimentManager {
         isFirefoxLabsOptIn,
         firefoxLabsTitle,
         firefoxLabsDescription,
+        firefoxLabsGroup,
+        requiresRestart,
       });
     }
 
@@ -778,7 +788,12 @@ export class _ExperimentManager {
         enrollment.unenrollReason !== "individual-opt-out"
       ) {
         lazy.log.debug(`Re-enrolling in rollout "${recipe.slug}`);
-        return !!(await this.enroll(recipe, source, { reenroll: true }));
+        const options = { reenroll: true };
+        if (recipe.isFirefoxLabsOptIn) {
+          // Opt-In rollouts only have a single branch.
+          options.optInRecipeBranchSlug = recipe.branches[0].slug;
+        }
+        return !!(await this.enroll(recipe, source, options));
       }
     }
 

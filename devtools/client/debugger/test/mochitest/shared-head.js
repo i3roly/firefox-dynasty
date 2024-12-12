@@ -646,21 +646,43 @@ function isSelectedFrameSelected(dbg) {
 }
 
 /**
- * Checks to see if the frame is selected and the title is correct.
+ * Checks to see if the frame is selected and the displayed title is correct.
  *
  * @param {Object} dbg
- * @param {Integer} index
- * @param {String} title
+ * @param {DOM Node} frameElement
+ * @param {String} expectedTitle
  */
-function isFrameSelected(dbg, index, title) {
-  const $frame = findElement(dbg, "frame", index);
+function assertFrameIsSelected(dbg, frameElement, expectedTitle) {
+  const selectedFrame = dbg.selectors.getSelectedFrame();
+  ok(frameElement.classList.contains("selected"), "The frame is selected");
+  is(
+    frameElement.querySelector(".title").innerText,
+    expectedTitle,
+    "The selected frame element has the expected title"
+  );
+  // For `<anonymous>` frames, there is likely no displayName
+  is(
+    selectedFrame.displayName,
+    expectedTitle == "<anonymous>" ? undefined : expectedTitle,
+    "The selected frame has the correct display title"
+  );
+}
 
-  const frame = dbg.selectors.getSelectedFrame();
-
-  const elSelected = $frame.classList.contains("selected");
-  const titleSelected = frame.displayName == title;
-
-  return elSelected && titleSelected;
+/**
+ * Checks to see if the frame is  not selected.
+ *
+ * @param {Object} dbg
+ * @param {DOM Node} frameElement
+ * @param {String} expectedTitle
+ */
+function assertFrameIsNotSelected(dbg, frameElement, expectedTitle) {
+  const selectedFrame = dbg.selectors.getSelectedFrame();
+  ok(!frameElement.classList.contains("selected"), "The frame is selected");
+  is(
+    frameElement.querySelector(".title").innerText,
+    expectedTitle,
+    "The selected frame element has the expected title"
+  );
 }
 
 /**
@@ -1259,6 +1281,12 @@ function findSourceTreeThreadByName(dbg, name) {
   });
 }
 
+function findSourceTreeGroupByName(dbg, name) {
+  return [...findAllElements(dbg, "sourceTreeGroups")].find(el => {
+    return el.textContent.includes(name);
+  });
+}
+
 function findSourceNodeWithText(dbg, text) {
   return [...findAllElements(dbg, "sourceNodes")].find(el => {
     return el.textContent.includes(text);
@@ -1837,8 +1865,10 @@ const selectors = {
   scopeValue: i =>
     `.scopes-list .tree-node:nth-child(${i}) .object-delimiter + *`,
   mapScopesCheckbox: ".map-scopes-header input",
-  frame: i => `.frames [role="list"] [role="listitem"]:nth-child(${i})`,
-  frames: '.frames [role="list"] [role="listitem"]',
+  asyncframe: i =>
+    `.frames div[role=listbox] .location-async-cause:nth-child(${i})`,
+  frame: i => `.frames div[role=listbox] .frame:nth-child(${i})`,
+  frames: ".frames [role='listbox'] .frame",
   gutterBreakpoint: isCm6Enabled ? "breakpoint-marker" : "new-breakpoint",
   // This is used to trigger events (click etc) on the gutter
   gutterElement: i =>
@@ -1879,6 +1909,7 @@ const selectors = {
   sourceNode: i => `.sources-list .tree-node:nth-child(${i}) .node`,
   sourceNodes: ".sources-list .tree-node",
   sourceTreeThreads: '.sources-list .tree-node[aria-level="1"]',
+  sourceTreeGroups: '.sources-list .tree-node[aria-level="2"]',
   sourceTreeFiles: ".sources-list .tree-node[data-expandable=false]",
   threadSourceTree: i => `.threads-list .sources-pane:nth-child(${i})`,
   sourceDirectoryLabel: i => `.sources-list .tree-node:nth-child(${i}) .label`,

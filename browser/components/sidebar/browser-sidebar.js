@@ -146,6 +146,7 @@ var SidebarController = {
       {
         elementId: "sidebar-switcher-genai-chat",
         url: "chrome://browser/content/genai/chat.html",
+        keyId: "viewGenaiChatSidebarKb",
         menuId: "menu_genaiChatSidebar",
         menuL10nId: "menu-view-genai-chat",
         // Bug 1900915 to expose as conditional tool
@@ -161,7 +162,7 @@ var SidebarController = {
         "viewReviewCheckerSidebar",
         {
           elementId: "sidebar-switcher-review-checker",
-          url: "chrome://browser/content/shopping/shopping.html",
+          url: "chrome://browser/content/shopping/review-checker.xhtml",
           menuId: "menu_reviewCheckerSidebar",
           menuL10nId: "menu-view-review-checker",
           revampL10nId: "sidebar-menu-review-checker-label",

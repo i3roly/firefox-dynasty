@@ -128,9 +128,8 @@ class ProviderQuickSuggest extends UrlbarProvider {
 
     // Fetch suggestions from all enabled sources.
     let promises = [];
-    let { backend } = lazy.QuickSuggest;
-    if (backend?.isEnabled) {
-      promises.push(backend.query(searchString));
+    if (lazy.QuickSuggest.rustBackend?.isEnabled) {
+      promises.push(lazy.QuickSuggest.rustBackend.query(searchString));
     }
     if (
       lazy.UrlbarPrefs.get("quicksuggest.dataCollection.enabled") &&
@@ -319,7 +318,7 @@ class ProviderQuickSuggest extends UrlbarProvider {
    * @param {object} options
    *   Options object.
    * @param {string} options.source
-   *   The suggestion source, one of: "merino", "ml", "remote-settings", "rust"
+   *   The suggestion source, one of: "merino", "ml", "rust"
    * @param {string} options.provider
    *   This value depends on `source`. The possible values per source are:
    *
@@ -327,9 +326,6 @@ class ProviderQuickSuggest extends UrlbarProvider {
    *     The name of the Merino provider that serves the suggestion type
    *   ml:
    *     The name of the intent as determined by `MLSuggest`
-   *   remote-settings:
-   *     The name of the `BaseFeature` instance (`feature.name`) that manages
-   *     the suggestion type
    *   rust:
    *     The name of the suggestion type as defined in Rust
    * @returns {BaseFeature}
@@ -337,8 +333,6 @@ class ProviderQuickSuggest extends UrlbarProvider {
    */
   #getFeature({ source, provider }) {
     switch (source) {
-      case "remote-settings":
-        return lazy.QuickSuggest.getFeature(provider);
       case "merino":
         return lazy.QuickSuggest.getFeatureByMerinoProvider(provider);
       case "rust":
@@ -633,10 +627,7 @@ class ProviderQuickSuggest extends UrlbarProvider {
    */
   cancelQuery() {
     // Cancel the Rust query.
-    let backend = lazy.QuickSuggest.getFeature("SuggestBackendRust");
-    if (backend?.isEnabled) {
-      backend.cancelQuery();
-    }
+    lazy.QuickSuggest.rustBackend?.cancelQuery();
 
     // Cancel the Merino timeout timer so it doesn't fire and record a timeout.
     // If it's already canceled or has fired, this is a no-op.

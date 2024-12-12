@@ -41,12 +41,6 @@ XPCOMUtils.defineLazyPreferenceGetter(
 );
 XPCOMUtils.defineLazyPreferenceGetter(
   lazy,
-  "adsExposure",
-  "browser.shopping.experience2023.ads.exposure",
-  false
-);
-XPCOMUtils.defineLazyPreferenceGetter(
-  lazy,
   "autoOpenEnabled",
   "browser.shopping.experience2023.autoOpen.enabled",
   true
@@ -302,6 +296,9 @@ export class ShoppingSidebarChild extends RemotePageChild {
           return;
         }
         let url = await this.sendQuery("GetProductURL");
+        if (!url) {
+          return;
+        }
 
         // Bail out if we opted out in the meantime, or don't have a URI.
         if (!canContinue(null, false)) {
@@ -413,6 +410,9 @@ export class ShoppingSidebarChild extends RemotePageChild {
         return;
       }
       let url = await this.sendQuery("GetProductURL");
+      if (!url) {
+        return;
+      }
 
       // Similar to canContinue() above, check to see if things
       // have changed while we were waiting. Bail out if the user
@@ -438,7 +438,7 @@ export class ShoppingSidebarChild extends RemotePageChild {
     return (
       uri.equalsExceptRef(this.#productURI) &&
       this.canFetchAndShowData &&
-      (lazy.adsExposure || this.canFetchAndShowAd)
+      this.canFetchAndShowAd
     );
   }
 
@@ -466,15 +466,6 @@ export class ShoppingSidebarChild extends RemotePageChild {
     }
 
     let recommendationData = await this.#product.requestRecommendations();
-
-    // Note: this needs to be separate from the inverse conditional check below
-    // because here we want to know if an ad exists for the product, regardless
-    // of whether ads are enabled, while for the surfaceNoAdsAvailable Glean
-    // probe, we want to know if ads would have been shown, but one wasn't
-    // available.
-    if (recommendationData.length) {
-      Glean.shopping.adsExposure.record();
-    }
 
     // Check if the product URI or opt in changed while we waited.
     if (!this.canShowAds(uri)) {

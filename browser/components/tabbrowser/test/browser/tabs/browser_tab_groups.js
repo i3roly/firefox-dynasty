@@ -27,7 +27,7 @@ add_task(async function test_tabGroupCreateAndAddTab() {
   group.addTabs([tab2]);
 
   Assert.equal(group.tabs.length, 2, "group has 2 tabs");
-  Assert.ok(group.tabs.includes(tab2), "tab1 is in group");
+  Assert.ok(group.tabs.includes(tab2), "tab2 is in group");
 
   await removeTabGroup(group);
 });
@@ -43,6 +43,29 @@ add_task(async function test_tabGroupCreateAndAddTabAtPosition() {
   tabs.forEach(t => {
     BrowserTestUtils.removeTab(t);
   });
+});
+
+add_task(async function test_pinned() {
+  let tab1 = BrowserTestUtils.addTab(gBrowser, "about:blank");
+  gBrowser.pinTab(tab1);
+  let group = gBrowser.addTabGroup([tab1]);
+  Assert.ok(
+    !group,
+    "addTabGroup shouldn't create a group when only supplied with pinned tabs"
+  );
+
+  let tab2 = BrowserTestUtils.addTab(gBrowser, "about:blank");
+  group = gBrowser.addTabGroup([tab1, tab2]);
+  Assert.ok(
+    group,
+    "addTabGroup should create a group when supplied with both pinned and non-pinned tabs"
+  );
+
+  Assert.equal(group.tabs.length, 1, "group has only the non-pinned tab");
+  Assert.equal(group.tabs[0], tab2, "tab2 is in group");
+
+  BrowserTestUtils.removeTab(tab1);
+  await removeTabGroup(group);
 });
 
 add_task(async function test_getTabGroups() {
@@ -1723,9 +1746,7 @@ add_task(async function test_saveAndCloseGroup() {
     "#tabGroupEditor_saveAndCloseGroup"
   );
 
-  let groupMatch = gBrowser.tabGroups.find(
-    possibleMatch => possibleMatch.id == group.id
-  );
+  let groupMatch = gBrowser.getTabGroupById(group.id);
   Assert.ok(groupMatch, "Group exists in browser");
 
   let events = [
@@ -1735,14 +1756,12 @@ add_task(async function test_saveAndCloseGroup() {
   saveAndCloseGroupButton.click();
   await Promise.all(events);
 
-  groupMatch = gBrowser.tabGroups.find(
-    possibleMatch => possibleMatch.id == group.id
-  );
+  groupMatch = gBrowser.getTabGroupById(group.id);
   Assert.ok(!groupMatch, "Group was removed from browser");
-  let savedGroupMatch = SessionStore.savedGroups.find(
-    savedGroup => savedGroup.id == group.id
-  );
+  let savedGroupMatch = SessionStore.getSavedTabGroup(group.id);
   Assert.ok(savedGroupMatch, "Group is in savedGroups");
+
+  SessionStore.forgetSavedTabGroup(group.id);
 
   BrowserTestUtils.removeTab(tab);
 });

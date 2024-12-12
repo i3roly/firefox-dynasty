@@ -867,6 +867,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   overflow: hidden;
+  text-shadow: none;
   border-radius: var(--tab-border-radius);
   line-height: calc(var(--tab-group-label-height) - var(--tab-group-line-thickness));
   min-height: var(--tab-group-label-height);
@@ -1312,26 +1313,6 @@
   appearance: none;
   opacity: 0.65;
   -moz-window-shadow: none;
-}
-
-/* Drag space */
-
-.titlebar-spacer[type="pre-tabs"],
-.titlebar-spacer[type="post-tabs"] {
-  width: 40px;
-}
-
-@media (max-width: 500px) {
-  .titlebar-spacer[type="post-tabs"] {
-    display: none;
-  }
-}
-
-/* stylelint-disable-next-line media-query-no-invalid */
-@media (-moz-bool-pref: "sidebar.verticalTabs") {
-  .titlebar-spacer[type="pre-tabs"] {
-    display: none;
-  }
 }
 
 /* Firefox View button and menu item */

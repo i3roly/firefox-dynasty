@@ -103,6 +103,7 @@ for (const type of [
   "ADDONS_INFO_REQUEST",
   "ADDONS_INFO_RESPONSE",
   "ARCHIVE_FROM_POCKET",
+  "BLOCK_SECTION",
   "BLOCK_URL",
   "BOOKMARK_URL",
   "CARD_SECTION_IMPRESSION",
@@ -1969,6 +1970,14 @@ const LinkMenuOptions = {
       type: actionTypes.OPEN_ABOUT_FAKESPOT,
     }),
   }),
+  SectionBlock: () => ({
+    id: "newtab-menu-section-block",
+    // Note: action TBA. It will send a list of blocked sections back to the API.
+    action: null,
+    impression: actionCreators.OnlyToMain({
+      type: actionTypes.BLOCK_SECTION,
+    }),
+  }),
 };
 
 ;// CONCATENATED MODULE: ./content-src/components/LinkMenu/LinkMenu.jsx
@@ -2272,7 +2281,7 @@ const INTERSECTION_RATIO = 0.5;
 /**
  * Impression wrapper for Discovery Stream related React components.
  *
- * It makses use of the Intersection Observer API to detect the visibility,
+ * It makes use of the Intersection Observer API to detect the visibility,
  * and relies on page visibility to ensure the impression is reported
  * only when the component is visible on the page.
  *
@@ -4088,10 +4097,109 @@ function ListFeed({
   }, ctaCopy)))));
 }
 
+;// CONCATENATED MODULE: ./content-src/components/DiscoveryStreamComponents/AdBanner/AdBanner.jsx
+/* eslint-disable no-console */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this file,
+ * You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+
+
+
+
+const AdBanner = ({
+  spoc,
+  dispatch,
+  firstVisibleTimestamp
+}) => {
+  const getDimensions = format => {
+    switch (format) {
+      case "leaderboard":
+        return {
+          width: "728",
+          height: "90"
+        };
+      case "billboard":
+        return {
+          width: "970",
+          height: "250"
+        };
+    }
+    return {
+      // image will still render with default values
+      width: undefined,
+      height: undefined
+    };
+  };
+  const {
+    width: imgWidth,
+    height: imgHeight
+  } = getDimensions(spoc.format);
+  const handleDismissClick = () => {
+    dispatch(actionCreators.AlsoToMain({
+      type: actionTypes.BLOCK_URL,
+      data: [{
+        block_key: spoc.block_key,
+        fetchTimestamp: spoc.fetchTimestamp,
+        flight_id: spoc.flight_id,
+        format: spoc.format,
+        id: spoc.id,
+        is_pocket_card: spoc.is_pocket_card,
+        position: spoc.pos,
+        sponsor: spoc.sponsor,
+        title: spoc.title,
+        url: spoc.url || spoc.shim.url,
+        personalization_models: spoc.personalization_models,
+        priority: spoc.priority,
+        score: spoc.score,
+        alt_text: spoc.alt_text
+      }]
+    }));
+  };
+  return /*#__PURE__*/external_React_default().createElement("aside", {
+    className: `ad-banner-wrapper ${spoc.format}`
+  }, /*#__PURE__*/external_React_default().createElement("div", {
+    className: "ad-banner-dismiss"
+  }, /*#__PURE__*/external_React_default().createElement("button", {
+    className: "icon icon-dismiss",
+    onClick: handleDismissClick,
+    "data-l10n-id": "newtab-toast-dismiss-button"
+  })), /*#__PURE__*/external_React_default().createElement(SafeAnchor, {
+    className: "ad-banner-link",
+    url: spoc.url,
+    title: spoc.title
+  }, /*#__PURE__*/external_React_default().createElement(ImpressionStats_ImpressionStats, {
+    flightId: spoc.flight_id,
+    rows: [{
+      id: spoc.id,
+      pos: spoc.pos,
+      corpus_item_id: spoc.corpus_item_id,
+      scheduled_corpus_item_id: spoc.scheduled_corpus_item_id,
+      recommended_at: spoc.recommended_at,
+      received_rank: spoc.received_rank
+    }],
+    dispatch: dispatch,
+    firstVisibleTimestamp: firstVisibleTimestamp
+  }), /*#__PURE__*/external_React_default().createElement("div", {
+    className: "ad-banner-content"
+  }, /*#__PURE__*/external_React_default().createElement("img", {
+    src: spoc.raw_image_src,
+    alt: spoc.alt_text,
+    loading: "lazy",
+    width: imgWidth,
+    height: imgHeight
+  }))), /*#__PURE__*/external_React_default().createElement("div", {
+    className: "ad-banner-sponsored"
+  }, /*#__PURE__*/external_React_default().createElement("span", {
+    className: "ad-banner-sponsored-label",
+    "data-l10n-id": "newtab-topsite-sponsored"
+  })));
+};
 ;// CONCATENATED MODULE: ./content-src/components/DiscoveryStreamComponents/CardGrid/CardGrid.jsx
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
+
 
 
 
@@ -4400,52 +4508,62 @@ class _CardGrid extends (external_React_default()).PureComponent {
     let editorsPicksCards = [];
     for (let index = 0; index < items; index++) {
       const rec = recs[index];
-      cards.push(topicsLoading || !rec || rec.placeholder || rec.flight_id && !spocsStartupCacheEnabled && this.props.App.isForStartupCache ? /*#__PURE__*/external_React_default().createElement(PlaceholderDSCard, {
-        key: `dscard-${index}`
-      }) : /*#__PURE__*/external_React_default().createElement(DSCard, {
-        key: `dscard-${rec.id}`,
-        pos: rec.pos,
-        flightId: rec.flight_id,
-        image_src: rec.image_src,
-        raw_image_src: rec.raw_image_src,
-        word_count: rec.word_count,
-        time_to_read: rec.time_to_read,
-        title: rec.title,
-        topic: rec.topic,
-        showTopics: showTopics,
-        selectedTopics: selectedTopics,
-        availableTopics: availableTopics,
-        excerpt: rec.excerpt,
-        url: rec.url,
-        id: rec.id,
-        shim: rec.shim,
-        fetchTimestamp: rec.fetchTimestamp,
-        type: this.props.type,
-        context: rec.context,
-        sponsor: rec.sponsor,
-        sponsored_by_override: rec.sponsored_by_override,
-        dispatch: this.props.dispatch,
-        source: rec.domain,
-        publisher: rec.publisher,
-        pocket_id: rec.pocket_id,
-        context_type: rec.context_type,
-        bookmarkGuid: rec.bookmarkGuid,
-        is_collection: this.props.is_collection,
-        saveToPocketCard: saveToPocketCard,
-        ctaButtonSponsors: ctaButtonSponsors,
-        ctaButtonVariant: ctaButtonVariant,
-        spocMessageVariant: spocMessageVariant,
-        recommendation_id: rec.recommendation_id,
-        firstVisibleTimestamp: this.props.firstVisibleTimestamp,
-        mayHaveThumbsUpDown: mayHaveThumbsUpDown,
-        mayHaveSectionsCards: mayHaveSectionsCards,
-        corpus_item_id: rec.corpus_item_id,
-        scheduled_corpus_item_id: rec.scheduled_corpus_item_id,
-        recommended_at: rec.recommended_at,
-        received_rank: rec.received_rank,
-        format: rec.format,
-        alt_text: rec.alt_text
-      }));
+      if (rec?.format === "billboard" || rec?.format === "leaderboard") {
+        cards.push( /*#__PURE__*/external_React_default().createElement(AdBanner, {
+          spoc: rec,
+          key: `dscard-${rec.id}`,
+          dispatch: this.props.dispatch,
+          type: this.props.type,
+          firstVisibleTimestamp: this.props.firstVisibleTimestamp
+        }));
+      } else {
+        cards.push(topicsLoading || !rec || rec.placeholder || rec.flight_id && !spocsStartupCacheEnabled && this.props.App.isForStartupCache ? /*#__PURE__*/external_React_default().createElement(PlaceholderDSCard, {
+          key: `dscard-${index}`
+        }) : /*#__PURE__*/external_React_default().createElement(DSCard, {
+          key: `dscard-${rec.id}`,
+          pos: rec.pos,
+          flightId: rec.flight_id,
+          image_src: rec.image_src,
+          raw_image_src: rec.raw_image_src,
+          word_count: rec.word_count,
+          time_to_read: rec.time_to_read,
+          title: rec.title,
+          topic: rec.topic,
+          showTopics: showTopics,
+          selectedTopics: selectedTopics,
+          availableTopics: availableTopics,
+          excerpt: rec.excerpt,
+          url: rec.url,
+          id: rec.id,
+          shim: rec.shim,
+          fetchTimestamp: rec.fetchTimestamp,
+          type: this.props.type,
+          context: rec.context,
+          sponsor: rec.sponsor,
+          sponsored_by_override: rec.sponsored_by_override,
+          dispatch: this.props.dispatch,
+          source: rec.domain,
+          publisher: rec.publisher,
+          pocket_id: rec.pocket_id,
+          context_type: rec.context_type,
+          bookmarkGuid: rec.bookmarkGuid,
+          is_collection: this.props.is_collection,
+          saveToPocketCard: saveToPocketCard,
+          ctaButtonSponsors: ctaButtonSponsors,
+          ctaButtonVariant: ctaButtonVariant,
+          spocMessageVariant: spocMessageVariant,
+          recommendation_id: rec.recommendation_id,
+          firstVisibleTimestamp: this.props.firstVisibleTimestamp,
+          mayHaveThumbsUpDown: mayHaveThumbsUpDown,
+          mayHaveSectionsCards: mayHaveSectionsCards,
+          corpus_item_id: rec.corpus_item_id,
+          scheduled_corpus_item_id: rec.scheduled_corpus_item_id,
+          recommended_at: rec.recommended_at,
+          received_rank: rec.received_rank,
+          format: rec.format,
+          alt_text: rec.alt_text
+        }));
+      }
     }
     if (widgets?.positions?.length && widgets?.data?.length) {
       let positionIndex = 0;
@@ -9607,6 +9725,52 @@ function useIntersectionObserver(callback, threshold = 0.3) {
   return elementsRef;
 }
 
+;// CONCATENATED MODULE: ./content-src/components/DiscoveryStreamComponents/SectionContextMenu/SectionContextMenu.jsx
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+
+
+
+/**
+ * A context menu for blocking, following and unfollowing sections.
+ *
+ * @param props
+ * @returns {React.FunctionComponent}
+ */
+function SectionContextMenu(props) {
+  const type = props.type || "DISCOVERY_STREAM";
+  const title = props.title || props.source;
+  const {
+    index,
+    dispatch
+  } = props;
+
+  // Initial context menu options: block this section only.
+  const SECTIONS_CONTEXT_MENU_OPTIONS = ["SectionBlock"];
+  const [showContextMenu, setShowContextMenu] = (0,external_React_namespaceObject.useState)(false);
+  const onClick = e => {
+    e.preventDefault();
+    setShowContextMenu(!showContextMenu);
+  };
+  return /*#__PURE__*/external_React_default().createElement("div", {
+    className: "section-context-menu"
+  }, /*#__PURE__*/external_React_default().createElement("moz-button", {
+    type: "icon",
+    size: "default",
+    iconsrc: "chrome://global/skin/icons/more.svg",
+    title: title,
+    onClick: onClick
+  }), showContextMenu && /*#__PURE__*/external_React_default().createElement(LinkMenu, {
+    dispatch: dispatch,
+    index: index,
+    source: type.toUpperCase(),
+    options: SECTIONS_CONTEXT_MENU_OPTIONS,
+    shouldSendImpressionStats: false,
+    site: {}
+  }));
+}
 ;// CONCATENATED MODULE: ./content-src/components/DiscoveryStreamComponents/CardSections/CardSections.jsx
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -9619,16 +9783,46 @@ function useIntersectionObserver(callback, threshold = 0.3) {
 
 
 
+
 // Prefs
 const CardSections_PREF_SECTIONS_CARDS_ENABLED = "discoverystream.sections.cards.enabled";
 const PREF_SECTIONS_CARDS_THUMBS_UP_DOWN_ENABLED = "discoverystream.sections.cards.thumbsUpDown.enabled";
+const PREF_SECTIONS_PERSONALIZATION_ENABLED = "discoverystream.sections.personalization.enabled";
 const CardSections_PREF_TOPICS_ENABLED = "discoverystream.topicLabels.enabled";
 const CardSections_PREF_TOPICS_SELECTED = "discoverystream.topicSelection.selectedTopics";
+const PREF_FOLLOWED_SECTIONS = "discoverystream.sections.following";
 const CardSections_PREF_TOPICS_AVAILABLE = "discoverystream.topicSelection.topics";
 const CardSections_PREF_THUMBS_UP_DOWN_ENABLED = "discoverystream.thumbsUpDown.enabled";
-function CardSections({
-  data,
-  feed,
+function getLayoutData(responsiveLayouts, index) {
+  let layoutData = {
+    classNames: []
+  };
+  responsiveLayouts.forEach(layout => {
+    layout.tiles.forEach((tile, tileIndex) => {
+      if (tile.position === index) {
+        layoutData.classNames.push(`col-${layout.columnCount}-${tile.size}`);
+        layoutData.classNames.push(`col-${layout.columnCount}-position-${tileIndex}`);
+      }
+    });
+  });
+  return layoutData;
+}
+
+// function to determine amount of tiles shown per section per viewport
+function getMaxTiles(responsiveLayouts) {
+  return responsiveLayouts.flatMap(responsiveLayout => responsiveLayout).reduce((acc, t) => {
+    acc[t.columnCount] = t.tiles.length;
+
+    // Update maxTile if current tile count is greater
+    if (!acc.maxTile || t.tiles.length > acc.maxTile) {
+      acc.maxTile = t.tiles.length;
+    }
+    return acc;
+  }, {});
+}
+function CardSection({
+  sectionPosition,
+  section,
   dispatch,
   type,
   firstVisibleTimestamp,
@@ -9644,60 +9838,165 @@ function CardSections({
   const mayHaveThumbsUpDown = prefs[CardSections_PREF_THUMBS_UP_DOWN_ENABLED];
   const selectedTopics = prefs[CardSections_PREF_TOPICS_SELECTED];
   const availableTopics = prefs[CardSections_PREF_TOPICS_AVAILABLE];
+  const followedSectionsPref = prefs[PREF_FOLLOWED_SECTIONS] || "";
   const {
     saveToPocketCard
   } = (0,external_ReactRedux_namespaceObject.useSelector)(state => state.DiscoveryStream);
-  const handleIntersection = (0,external_React_namespaceObject.useCallback)(el => {
+  const mayHaveSectionsPersonalization = prefs[PREF_SECTIONS_PERSONALIZATION_ENABLED];
+  const {
+    sectionKey,
+    title,
+    subtitle
+  } = section;
+  const {
+    responsiveLayouts
+  } = section.layout;
+  const followedSections = followedSectionsPref.split(",").map(s => s.trim()).filter(item => item);
+  const following = followedSections.includes(sectionKey);
+  const handleIntersection = (0,external_React_namespaceObject.useCallback)(() => {
     dispatch(actionCreators.AlsoToMain({
       type: actionTypes.CARD_SECTION_IMPRESSION,
       data: {
-        section: el.id,
-        section_position: el.dataset.sectionPosition
+        section: sectionKey,
+        section_position: sectionPosition
       }
     }));
-  }, [dispatch]);
+  }, [dispatch, sectionKey, sectionPosition]);
 
-  // Ref to hold all of the section elements
+  // Ref to hold the section element
   const sectionRefs = useIntersectionObserver(handleIntersection);
 
+  // Only show thumbs up/down buttons if both default thumbs and sections thumbs prefs are enabled
+  const mayHaveCombinedThumbsUpDown = mayHaveSectionsCardsThumbsUpDown && mayHaveThumbsUpDown;
+  const onFollowClick = (0,external_React_namespaceObject.useCallback)(() => {
+    dispatch(actionCreators.SetPref(PREF_FOLLOWED_SECTIONS, [...followedSections, sectionKey].join(", ")));
+  }, [dispatch, sectionKey, followedSections]);
+  const onUnfollowClick = (0,external_React_namespaceObject.useCallback)(() => {
+    dispatch(actionCreators.SetPref(PREF_FOLLOWED_SECTIONS, [...followedSections.filter(item => item !== sectionKey)].join(", ")));
+  }, [dispatch, sectionKey, followedSections]);
+  const {
+    maxTile
+  } = getMaxTiles(responsiveLayouts);
+  const displaySections = section.data.slice(0, maxTile);
+  const isSectionEmpty = !displaySections?.length;
+  const shouldShowLabels = sectionKey === "top_stories_section" && showTopics;
+  if (isSectionEmpty) {
+    return null;
+  }
+  const sectionContextWrapper = /*#__PURE__*/external_React_default().createElement("div", {
+    className: "section-context-wrapper"
+  }, /*#__PURE__*/external_React_default().createElement("div", {
+    className: following ? "section-follow following" : "section-follow"
+  }, /*#__PURE__*/external_React_default().createElement("moz-button", {
+    onClick: following ? onUnfollowClick : onFollowClick,
+    type: following ? "destructive" : "default"
+  }, /*#__PURE__*/external_React_default().createElement("span", {
+    className: "section-button-follow-text",
+    "data-l10n-id": "newtab-section-follow-button"
+  }), /*#__PURE__*/external_React_default().createElement("span", {
+    className: "section-button-following-text",
+    "data-l10n-id": "newtab-section-following-button"
+  }), /*#__PURE__*/external_React_default().createElement("span", {
+    className: "section-button-unfollow-text",
+    "data-l10n-id": "newtab-section-unfollow-button"
+  }))), /*#__PURE__*/external_React_default().createElement(SectionContextMenu, {
+    dispatch: dispatch,
+    index: sectionPosition,
+    title: title,
+    type: type
+  }));
+  return /*#__PURE__*/external_React_default().createElement("section", {
+    className: "ds-section",
+    ref: el => {
+      sectionRefs.current[0] = el;
+    }
+  }, /*#__PURE__*/external_React_default().createElement("div", {
+    className: "section-heading"
+  }, /*#__PURE__*/external_React_default().createElement("div", {
+    className: "section-title-wrapper"
+  }, /*#__PURE__*/external_React_default().createElement("h2", {
+    className: "section-title"
+  }, title), subtitle && /*#__PURE__*/external_React_default().createElement("p", {
+    className: "section-subtitle"
+  }, subtitle)), mayHaveSectionsPersonalization ? sectionContextWrapper : null), /*#__PURE__*/external_React_default().createElement("div", {
+    className: "ds-section-grid ds-card-grid"
+  }, section.data.slice(0, maxTile).map((rec, index) => {
+    const {
+      classNames
+    } = getLayoutData(responsiveLayouts, index);
+    if (!rec || rec.placeholder) {
+      return /*#__PURE__*/external_React_default().createElement(PlaceholderDSCard, {
+        key: `dscard-${index}`
+      });
+    }
+    return /*#__PURE__*/external_React_default().createElement(DSCard, {
+      key: `dscard-${rec.id}`,
+      pos: rec.pos,
+      flightId: rec.flight_id,
+      image_src: rec.image_src,
+      raw_image_src: rec.raw_image_src,
+      word_count: rec.word_count,
+      time_to_read: rec.time_to_read,
+      title: rec.title,
+      topic: rec.topic,
+      excerpt: rec.excerpt,
+      url: rec.url,
+      id: rec.id,
+      shim: rec.shim,
+      fetchTimestamp: rec.fetchTimestamp,
+      type: type,
+      context: rec.context,
+      sponsor: rec.sponsor,
+      sponsored_by_override: rec.sponsored_by_override,
+      dispatch: dispatch,
+      source: rec.domain,
+      publisher: rec.publisher,
+      pocket_id: rec.pocket_id,
+      context_type: rec.context_type,
+      bookmarkGuid: rec.bookmarkGuid,
+      recommendation_id: rec.recommendation_id,
+      firstVisibleTimestamp: firstVisibleTimestamp,
+      corpus_item_id: rec.corpus_item_id,
+      scheduled_corpus_item_id: rec.scheduled_corpus_item_id,
+      recommended_at: rec.recommended_at,
+      received_rank: rec.received_rank,
+      format: rec.format,
+      alt_text: rec.alt_text,
+      mayHaveThumbsUpDown: mayHaveCombinedThumbsUpDown,
+      mayHaveSectionsCards: mayHaveSectionsCards,
+      showTopics: shouldShowLabels,
+      selectedTopics: selectedTopics,
+      availableTopics: availableTopics,
+      is_collection: is_collection,
+      saveToPocketCard: saveToPocketCard,
+      ctaButtonSponsors: ctaButtonSponsors,
+      ctaButtonVariant: ctaButtonVariant,
+      spocMessageVariant: spocMessageVariant,
+      sectionsClassNames: classNames.join(" "),
+      section: sectionKey,
+      sectionPosition: sectionPosition
+    });
+  })));
+}
+function CardSections({
+  data,
+  feed,
+  dispatch,
+  type,
+  firstVisibleTimestamp,
+  is_collection,
+  spocMessageVariant,
+  ctaButtonVariant,
+  ctaButtonSponsors
+}) {
   // Handle a render before feed has been fetched by displaying nothing
   if (!data) {
     return null;
   }
-
-  // Only show thumbs up/down buttons if both default thumbs and sections thumbs prefs are enabled
-  const mayHaveCombinedThumbsUpDown = mayHaveSectionsCardsThumbsUpDown && mayHaveThumbsUpDown;
   const {
     sections
   } = data;
   const isEmpty = sections.length === 0;
-  function getLayoutData(responsiveLayout, index) {
-    let layoutData = {
-      classNames: []
-    };
-    responsiveLayout.forEach(layout => {
-      layout.tiles.forEach((tile, tileIndex) => {
-        if (tile.position === index) {
-          layoutData.classNames.push(`col-${layout.columnCount}-${tile.size}`);
-          layoutData.classNames.push(`col-${layout.columnCount}-position-${tileIndex}`);
-        }
-      });
-    });
-    return layoutData;
-  }
-
-  // function to determine amount of tiles shown per section per viewport
-  function getMaxTiles(responsiveLayouts) {
-    return responsiveLayouts.flatMap(responsiveLayout => responsiveLayout).reduce((acc, t) => {
-      acc[t.columnCount] = t.tiles.length;
-
-      // Update maxTile if current tile count is greater
-      if (!acc.maxTile || t.tiles.length > acc.maxTile) {
-        acc.maxTile = t.tiles.length;
-      }
-      return acc;
-    }, {});
-  }
   return isEmpty ? /*#__PURE__*/external_React_default().createElement("div", {
     className: "ds-card-grid empty"
   }, /*#__PURE__*/external_React_default().createElement(DSEmptyState, {
@@ -9706,97 +10005,19 @@ function CardSections({
     feed: feed
   })) : /*#__PURE__*/external_React_default().createElement("div", {
     className: "ds-section-wrapper"
-  }, sections.map((section, sectionIndex) => {
-    const {
-      sectionKey,
-      title,
-      subtitle
-    } = section;
-    const {
-      responsiveLayouts
-    } = section.layout;
-    const {
-      maxTile
-    } = getMaxTiles(responsiveLayouts);
-    const displaySections = section.data.slice(0, maxTile);
-    const isSectionEmpty = !displaySections?.length;
-    const shouldShowLabels = sectionKey === "top_stories_section" && showTopics;
-    if (isSectionEmpty) {
-      return null;
-    }
-    return /*#__PURE__*/external_React_default().createElement("section", {
-      key: sectionKey,
-      id: sectionKey,
-      className: "ds-section",
-      "data-section-position": sectionIndex,
-      ref: el => {
-        sectionRefs.current[sectionIndex] = el;
-      }
-    }, /*#__PURE__*/external_React_default().createElement("div", {
-      className: "section-heading"
-    }, /*#__PURE__*/external_React_default().createElement("h2", {
-      className: "section-title"
-    }, title), subtitle && /*#__PURE__*/external_React_default().createElement("p", {
-      className: "section-subtitle"
-    }, subtitle)), /*#__PURE__*/external_React_default().createElement("div", {
-      className: "ds-section-grid ds-card-grid"
-    }, section.data.slice(0, maxTile).map((rec, index) => {
-      const {
-        classNames
-      } = getLayoutData(responsiveLayouts, index);
-      if (!rec || rec.placeholder) {
-        return /*#__PURE__*/external_React_default().createElement(PlaceholderDSCard, {
-          key: `dscard-${index}`
-        });
-      }
-      return /*#__PURE__*/external_React_default().createElement(DSCard, {
-        key: `dscard-${rec.id}`,
-        pos: rec.pos,
-        flightId: rec.flight_id,
-        image_src: rec.image_src,
-        raw_image_src: rec.raw_image_src,
-        word_count: rec.word_count,
-        time_to_read: rec.time_to_read,
-        title: rec.title,
-        topic: rec.topic,
-        excerpt: rec.excerpt,
-        url: rec.url,
-        id: rec.id,
-        shim: rec.shim,
-        fetchTimestamp: rec.fetchTimestamp,
-        type: type,
-        context: rec.context,
-        sponsor: rec.sponsor,
-        sponsored_by_override: rec.sponsored_by_override,
-        dispatch: dispatch,
-        source: rec.domain,
-        publisher: rec.publisher,
-        pocket_id: rec.pocket_id,
-        context_type: rec.context_type,
-        bookmarkGuid: rec.bookmarkGuid,
-        recommendation_id: rec.recommendation_id,
-        firstVisibleTimestamp: firstVisibleTimestamp,
-        corpus_item_id: rec.corpus_item_id,
-        scheduled_corpus_item_id: rec.scheduled_corpus_item_id,
-        recommended_at: rec.recommended_at,
-        received_rank: rec.received_rank,
-        format: rec.format,
-        alt_text: rec.alt_text,
-        mayHaveThumbsUpDown: mayHaveCombinedThumbsUpDown,
-        mayHaveSectionsCards: mayHaveSectionsCards,
-        showTopics: shouldShowLabels,
-        selectedTopics: selectedTopics,
-        availableTopics: availableTopics,
-        is_collection: is_collection,
-        saveToPocketCard: saveToPocketCard,
-        ctaButtonSponsors: ctaButtonSponsors,
-        ctaButtonVariant: ctaButtonVariant,
-        spocMessageVariant: spocMessageVariant,
-        sectionsClassNames: classNames.join(" "),
-        section: sectionKey,
-        sectionPosition: sectionIndex
-      });
-    })));
+  }, sections.map((section, sectionPosition) => {
+    return /*#__PURE__*/external_React_default().createElement(CardSection, {
+      key: `section-${section.sectionKey}`,
+      sectionPosition: sectionPosition,
+      section: section,
+      dispatch: dispatch,
+      type: type,
+      firstVisibleTimestamp: firstVisibleTimestamp,
+      is_collection: is_collection,
+      spocMessageVariant: spocMessageVariant,
+      ctaButtonVariant: ctaButtonVariant,
+      ctaButtonSponsors: ctaButtonSponsors
+    });
   }));
 }
 

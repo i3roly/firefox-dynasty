@@ -522,7 +522,7 @@ class TIPMessageHandler {
         return;
       }
       ++TIPMessageHandler::sInstance->mA11yBlockCount;
-    }
+    }  // namespace mozilla
 
     ~A11yInstantiationBlocker() {
       if (!TIPMessageHandler::sInstance) {
@@ -1202,7 +1202,7 @@ void nsWindow::Destroy() {
 
   // Our windows can be subclassed which may prevent us receiving WM_DESTROY. If
   // OnDestroy() didn't get called, call it now.
-  if (false == mOnDestroyCalled) {
+  if (!mOnDestroyCalled) {
     MSGResult msgResult;
     mWindowHook.Notify(mWnd, WM_DESTROY, 0, 0, msgResult);
     OnDestroy();
@@ -2324,23 +2324,24 @@ bool nsWindow::IsEnabled() const {
  **************************************************************/
 
 void nsWindow::SetFocus(Raise aRaise, mozilla::dom::CallerType aCallerType) {
-  if (mWnd) {
-#ifdef WINSTATE_DEBUG_OUTPUT
-    if (mWnd == WinUtils::GetTopLevelHWND(mWnd)) {
-      MOZ_LOG(gWindowsLog, LogLevel::Info,
-              ("*** SetFocus: [  top] raise=%d\n", aRaise == Raise::Yes));
-    } else {
-      MOZ_LOG(gWindowsLog, LogLevel::Info,
-              ("*** SetFocus: [child] raise=%d\n", aRaise == Raise::Yes));
-    }
-#endif
-    // Uniconify, if necessary
-    HWND toplevelWnd = WinUtils::GetTopLevelHWND(mWnd);
-    if (aRaise == Raise::Yes && ::IsIconic(toplevelWnd)) {
-      ::ShowWindow(toplevelWnd, SW_RESTORE);
-    }
-    ::SetFocus(mWnd);
+  if (!mWnd) {
+    return;
   }
+#ifdef WINSTATE_DEBUG_OUTPUT
+  if (mWnd == WinUtils::GetTopLevelHWND(mWnd)) {
+    MOZ_LOG(gWindowsLog, LogLevel::Info,
+            ("*** SetFocus: [  top] raise=%d\n", aRaise == Raise::Yes));
+  } else {
+    MOZ_LOG(gWindowsLog, LogLevel::Info,
+            ("*** SetFocus: [child] raise=%d\n", aRaise == Raise::Yes));
+  }
+#endif
+  // Uniconify, if necessary
+  HWND toplevelWnd = WinUtils::GetTopLevelHWND(mWnd);
+  if (aRaise == Raise::Yes && ::IsIconic(toplevelWnd)) {
+    ::ShowWindow(toplevelWnd, SW_RESTORE);
+  }
+  ::SetFocus(mWnd);
 }
 
 /**************************************************************
@@ -2712,6 +2713,10 @@ void nsWindow::SetCustomTitlebar(bool aCustomTitlebar) {
     if (WindowStyle() & WS_SYSMENU) {
       // Restore the WS_SYSMENU style if appropriate.
       ::SetWindowLongPtrW(mWnd, GWL_STYLE, style | WS_SYSMENU);
+      // Reset the small icon as a workaround for a dwm bug, see bug 1935542.
+      HICON icon =
+          (HICON)::SendMessageW(mWnd, WM_SETICON, (WPARAM)ICON_SMALL, 0);
+      ::SendMessageW(mWnd, WM_SETICON, (WPARAM)ICON_SMALL, (LPARAM)icon);
     }
     ResetLayout();
   }
@@ -4626,8 +4631,9 @@ LRESULT CALLBACK nsWindow::WindowProcInternal(HWND hWnd, UINT msg,
   nsAutoRollup autoRollup;
 
   LRESULT popupHandlingResult;
-  if (DealWithPopups(hWnd, msg, wParam, lParam, &popupHandlingResult))
+  if (DealWithPopups(hWnd, msg, wParam, lParam, &popupHandlingResult)) {
     return popupHandlingResult;
+  }
 
   // Call ProcessMessage
   LRESULT retValue;
@@ -5554,40 +5560,42 @@ bool nsWindow::ProcessMessageInternal(UINT msg, WPARAM& wParam, LPARAM& lParam,
     // events arrive.
     case WM_ACTIVATE: {
       int32_t fActive = LOWORD(wParam);
-      if (mWidgetListener) {
-        if (WA_INACTIVE == fActive) {
-          // when minimizing a window, the deactivation and focus events will
-          // be fired in the reverse order. Instead, just deactivate right away.
-          // This can also happen when a modal system dialog is opened, so check
-          // if the last window to receive the WM_KILLFOCUS message was this one
-          // or a child of this one.
-          if (HIWORD(wParam) ||
-              (mLastKillFocusWindow &&
-               (GetTopLevelForFocus(mLastKillFocusWindow) == mWnd))) {
-            DispatchFocusToTopLevelWindow(false);
-          } else {
-            sJustGotDeactivate = true;
-          }
-          if (IsTopLevelWidget()) {
-            mLastKeyboardLayout = KeyboardLayout::GetLayout();
-          }
+      if (!mWidgetListener) {
+        break;
+      }
+      if (WA_INACTIVE == fActive) {
+        // when minimizing a window, the deactivation and focus events will
+        // be fired in the reverse order. Instead, just deactivate right away.
+        // This can also happen when a modal system dialog is opened, so check
+        // if the last window to receive the WM_KILLFOCUS message was this one
+        // or a child of this one.
+        if (HIWORD(wParam) ||
+            (mLastKillFocusWindow &&
+             (GetTopLevelForFocus(mLastKillFocusWindow) == mWnd))) {
+          DispatchFocusToTopLevelWindow(false);
         } else {
-          StopFlashing();
+          sJustGotDeactivate = true;
+        }
+        if (IsTopLevelWidget()) {
+          mLastKeyboardLayout = KeyboardLayout::GetLayout();
+        }
+      } else {
+        StopFlashing();
 
-          sJustGotActivate = true;
-          WidgetMouseEvent event(true, eMouseActivate, this,
-                                 WidgetMouseEvent::eReal);
-          InitEvent(event);
-          ModifierKeyState modifierKeyState;
-          modifierKeyState.InitInputEvent(event);
-          DispatchInputEvent(&event);
-          if (sSwitchKeyboardLayout && mLastKeyboardLayout)
-            ActivateKeyboardLayout(mLastKeyboardLayout, 0);
+        sJustGotActivate = true;
+        WidgetMouseEvent event(true, eMouseActivate, this,
+                               WidgetMouseEvent::eReal);
+        InitEvent(event);
+        ModifierKeyState modifierKeyState;
+        modifierKeyState.InitInputEvent(event);
+        DispatchInputEvent(&event);
+        if (sSwitchKeyboardLayout && mLastKeyboardLayout) {
+          ActivateKeyboardLayout(mLastKeyboardLayout, 0);
+        }
 
 #ifdef ACCESSIBILITY
-          a11y::LazyInstantiator::ResetUiaDetectionCache();
+        a11y::LazyInstantiator::ResetUiaDetectionCache();
 #endif
-        }
       }
     } break;
 

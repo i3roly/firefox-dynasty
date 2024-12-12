@@ -65,7 +65,7 @@ const kSubviewEvents = ["ViewShowing", "ViewHiding"];
  * The current version. We can use this to auto-add new default widgets as necessary.
  * (would be const but isn't because of testing purposes)
  */
-var kVersion = 20;
+var kVersion = 21;
 
 /**
  * Buttons removed from built-ins by version they were removed. kVersion must be
@@ -314,6 +314,7 @@ var CustomizableUIInternal = {
         ? null
         : "home-button",
       "spring",
+      "vertical-spacer",
       "urlbar-container",
       "spring",
       "save-to-pocket-button",
@@ -775,6 +776,20 @@ var CustomizableUIInternal = {
         !navbarPlacements.includes("reset-pbm-toolbar-button")
       ) {
         navbarPlacements.push("reset-pbm-toolbar-button");
+      }
+    }
+
+    if (currentVersion < 21) {
+      // If the vertical-spacer has not yet been added, ensure its to the left of the urlbar initially
+      let navbarPlacements = gSavedState.placements[CustomizableUI.AREA_NAVBAR];
+      if (!navbarPlacements.includes("vertical-spacer")) {
+        let urlbarContainerPosition =
+          navbarPlacements.indexOf("urlbar-container");
+        gSavedState.placements[CustomizableUI.AREA_NAVBAR].splice(
+          urlbarContainerPosition - 1,
+          0,
+          "vertical-spacer"
+        );
       }
     }
   },
@@ -2489,7 +2504,14 @@ var CustomizableUIInternal = {
       ) {
         return;
       }
+
       target = target.parentNode;
+
+      // If we reached the shadow boundry, let's cross it while we head up
+      // the tree.
+      if (ShadowRoot.isInstance(target)) {
+        target = target.host;
+      }
     }
 
     // If we get here, we can actually hide the popup:
@@ -2892,12 +2914,7 @@ var CustomizableUIInternal = {
     );
     // If there's no saved state, or it doesn't pass the sniff test, use
     // default placements instead
-    if (
-      !(
-        Array.isArray(savedPlacements) &&
-        savedPlacements.includes("tabbrowser-tabs")
-      )
-    ) {
+    if (!savedPlacements.includes("tabbrowser-tabs")) {
       savedPlacements = gAreas.get(tabstripAreaId).get("defaultPlacements");
       lazy.log.debug(`Using defaultPlacements for ${tabstripAreaId}`);
     }
@@ -4106,7 +4123,7 @@ var CustomizableUIInternal = {
         "initializeForTabsOrientation, savedPlacements",
         savedPlacements
       );
-      if (savedPlacements) {
+      if (savedPlacements.length) {
         // We're startup up with horizontal tabs, but there are saved placements for the
         // horizontal tab strip, so its possible the verticalTabs pref was updated outside
         // of normal use. Make sure to restore those tabstrip widget placements

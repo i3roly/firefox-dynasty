@@ -72,6 +72,7 @@ add_task({ skip_if: () => runningInParent }, async function run_child_stuff() {
   Telemetry.canRecordBase = true; // Ensure we're able to record things.
 
   Glean.testOnlyIpc.aCounter.add(COUNT);
+  Glean.testOnlyIpc.aCounterForHgram.add(COUNT);
   Glean.testOnlyIpc.aStringList.add(CHEESY_STRING);
   Glean.testOnlyIpc.aStringList.add(CHEESIER_STRING);
 
@@ -103,6 +104,10 @@ add_task({ skip_if: () => runningInParent }, async function run_child_stuff() {
   // Has to be different from aLabeledCounter so the error we record doesn't
   // get in the way.
   Glean.testOnlyIpc.anotherLabeledCounter["1".repeat(72)].add(INVALID_COUNTERS);
+
+  Glean.testOnlyIpc.aLabeledCounterForHgram.true.add(1);
+  Glean.testOnlyIpc.aLabeledCounterForHgram.false.add(1);
+  Glean.testOnlyIpc.aLabeledCounterForHgram.false.add(1);
 
   Glean.testOnlyIpc.irate.addToNumerator(IRATE_NUMERATOR);
   Glean.testOnlyIpc.irate.addToDenominator(IRATE_DENOMINATOR);
@@ -172,6 +177,15 @@ add_task(
       "content-process Scalar has expected count"
     );
 
+    Assert.equal(Glean.testOnlyIpc.aCounterForHgram.testGetValue(), COUNT);
+    const histSnapshot = Telemetry.getSnapshotForHistograms(
+      "main",
+      false,
+      false
+    );
+    const countData = histSnapshot.content.TELEMETRY_TEST_COUNT;
+    Assert.equal(COUNT, countData.sum, "Sum in histogram's correct.");
+
     // custom_distribution
     const customSampleSum = CUSTOM_SAMPLES.reduce((acc, a) => acc + a, 0);
     const customData = Glean.testOnlyIpc.aCustomDist.testGetValue("store1");
@@ -182,11 +196,6 @@ add_task(
         `Only two buckets have a sample ${bucket} ${count}`
       );
     }
-    const histSnapshot = Telemetry.getSnapshotForHistograms(
-      "main",
-      false,
-      false
-    );
     const histData = histSnapshot.content.TELEMETRY_TEST_MIRROR_FOR_CUSTOM;
     Assert.equal(customSampleSum, histData.sum, "Sum in histogram's correct");
     Assert.equal(2, histData.values["1"], "Two samples in the first bucket");
@@ -262,6 +271,20 @@ add_task(
         ["1".repeat(72)]: INVALID_COUNTERS,
       },
       value
+    );
+
+    const boolHgramCounters = Glean.testOnlyIpc.aLabeledCounterForHgram;
+    Assert.equal(boolHgramCounters.true.testGetValue(), 1);
+    Assert.equal(boolHgramCounters.false.testGetValue(), 2);
+    Assert.deepEqual(
+      {
+        bucket_count: 3,
+        histogram_type: 2,
+        sum: 1,
+        range: [1, 2],
+        values: { 0: 2, 1: 1, 2: 0 },
+      },
+      histSnapshot.content.TELEMETRY_TEST_BOOLEAN
     );
 
     // labeled_string

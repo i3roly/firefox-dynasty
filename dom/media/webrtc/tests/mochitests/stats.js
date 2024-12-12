@@ -9,6 +9,7 @@ const statsExpectedByType = {
     expected: [
       "trackIdentifier",
       "id",
+      "mid",
       "timestamp",
       "type",
       "ssrc",
@@ -75,6 +76,7 @@ const statsExpectedByType = {
   "outbound-rtp": {
     expected: [
       "id",
+      "mid",
       "timestamp",
       "type",
       "ssrc",
@@ -88,7 +90,7 @@ const statsExpectedByType = {
       "retransmittedPacketsSent",
       "retransmittedBytesSent",
     ],
-    optional: ["nackCount", "qpSum"],
+    optional: ["nackCount", "qpSum", "rid"],
     localAudioOnly: [],
     localVideoOnly: [
       "framesEncoded",
@@ -517,6 +519,25 @@ function pedanticChecks(report) {
       is(typeof stat.trackIdentifier, "string");
       isnot(stat.trackIdentifier, "");
 
+      // mid
+      ok(
+        parseInt(stat.mid) >= 0,
+        `${stat.type}.mid is a positive integer. value=${stat.mid}`
+      );
+      let inboundRtpMids = [];
+      report.forEach(r => {
+        if (r.type == "inbound-rtp") {
+          inboundRtpMids.push(r.mid);
+        }
+      });
+      is(
+        inboundRtpMids.filter(mid => mid == stat.mid).length,
+        1,
+        `${stat.type}.mid is distinct. value=${
+          stat.mid
+        }, others=${JSON.stringify(inboundRtpMids)}`
+      );
+
       // packetsReceived
       ok(
         stat.packetsReceived >= 0 && stat.packetsReceived < 10 ** 5,
@@ -852,6 +873,12 @@ function pedanticChecks(report) {
       // Required fields
       //
 
+      // mid
+      ok(
+        parseInt(stat.mid) >= 0,
+        `${stat.type}.mid a positive integer. value=${stat.mid}`
+      );
+
       // packetsSent
       ok(
         stat.packetsSent > 0 && stat.packetsSent < 10000,
@@ -898,6 +925,38 @@ function pedanticChecks(report) {
       //
       // Optional fields
       //
+
+      // rid
+      if (stat.kind == "audio") {
+        ok(
+          stat.rid === undefined,
+          `${stat.type}.rid" MUST NOT exist for audio. value=${stat.rid}`
+        );
+      } else {
+        let numSendVideoStreamsForMid = 0;
+        report.forEach(r => {
+          if (
+            r.type == "outbound-rtp" &&
+            r.kind == "video" &&
+            r.mid == stat.mid
+          ) {
+            numSendVideoStreamsForMid += 1;
+          }
+        });
+        if (numSendVideoStreamsForMid == 1) {
+          is(
+            stat.rid,
+            undefined,
+            `${stat.type}.rid" does not exist for singlecast video. value=${stat.rid}`
+          );
+        } else {
+          isnot(
+            stat.rid,
+            undefined,
+            `${stat.type}.rid" does exist for simulcast video. value=${stat.rid}`
+          );
+        }
+      }
 
       // qpSum
       // This is supported for all of our vpx codecs and AV1 (on the encode
@@ -1618,6 +1677,18 @@ function checkSenderStats(senderStats, streamCount) {
       1,
       "Simulcast send track SSRCs are distinct"
     );
+    is(
+      outboundRtpReports.filter(r => r.mid == outboundRtpReport.mid).length,
+      streamCount,
+      "Simulcast send track MIDs are identical"
+    );
+    if (outboundRtpReport.kind == "video" && streamCount > 1) {
+      is(
+        outboundRtpReports.filter(r => r.rid == outboundRtpReport.rid).length,
+        1,
+        "Simulcast send track RIDs are distinct"
+      );
+    }
     const remoteReports = remoteInboundRtpReports.filter(
       r => r.id == outboundRtpReport.remoteId
     );

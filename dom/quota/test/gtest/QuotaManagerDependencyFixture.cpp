@@ -22,6 +22,7 @@
 #include "nsIQuotaRequests.h"
 #include "nsIVariant.h"
 #include "nsScriptSecurityManager.h"
+#include "QuotaManagerTestHelpers.h"
 
 namespace mozilla::dom::quota::test {
 
@@ -79,6 +80,9 @@ void QuotaManagerDependencyFixture::InitializeFixture() {
   ASSERT_TRUE(observer);
 
   nsresult rv = observer->Observe(nullptr, "profile-do-change", nullptr);
+  ASSERT_NS_SUCCEEDED(rv);
+
+  rv = observer->Observe(nullptr, "sessionstore-windows-restored", nullptr);
   ASSERT_NS_SUCCEEDED(rv);
 
   // Force creation of the quota manager.
@@ -348,9 +352,7 @@ void QuotaManagerDependencyFixture::InitializeTemporaryClient(
 
 // static
 PrincipalMetadata QuotaManagerDependencyFixture::GetTestPrincipalMetadata() {
-  return {""_ns, "example.com"_ns, "http://example.com"_ns,
-          "http://example.com"_ns,
-          /* aIsPrivate */ false};
+  return GetPrincipalMetadata("example.com"_ns, "http://example.com"_ns);
 }
 
 // static
@@ -372,9 +374,8 @@ ClientMetadata QuotaManagerDependencyFixture::GetTestClientMetadata() {
 // static
 PrincipalMetadata
 QuotaManagerDependencyFixture::GetOtherTestPrincipalMetadata() {
-  return {""_ns, "other-example.com"_ns, "http://other-example.com"_ns,
-          "http://other-example.com"_ns,
-          /* aIsPrivate */ false};
+  return GetPrincipalMetadata("other-example.com"_ns,
+                              "http://other-example.com"_ns);
 }
 
 // static

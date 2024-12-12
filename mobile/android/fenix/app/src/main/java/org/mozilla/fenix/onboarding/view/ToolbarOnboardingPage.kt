@@ -36,10 +36,10 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import mozilla.components.compose.base.annotation.FlexibleWindowLightDarkPreview
 import mozilla.components.lib.state.ext.observeAsState
 import mozilla.components.ui.colors.PhotonColors
 import org.mozilla.fenix.R
-import org.mozilla.fenix.compose.annotation.FlexibleWindowLightDarkPreview
 import org.mozilla.fenix.compose.button.PrimaryButton
 import org.mozilla.fenix.compose.button.SecondaryButton
 import org.mozilla.fenix.onboarding.store.OnboardingStore
@@ -62,7 +62,7 @@ fun ToolbarOnboardingPage(
     Column(
         modifier = Modifier
             .background(FirefoxTheme.colors.layer1)
-            .padding(horizontal = 16.dp, vertical = 32.dp)
+            .padding(horizontal = 16.dp, vertical = 24.dp)
             .fillMaxSize()
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.SpaceBetween,
@@ -75,7 +75,9 @@ fun ToolbarOnboardingPage(
 
                 Image(
                     painter = painterResource(id = imageRes),
-                    contentDescription = null,
+                    contentDescription = stringResource(
+                        R.string.onboarding_customize_toolbar_main_image_content_description,
+                    ),
                     modifier = Modifier.width(323.dp),
                 )
 
@@ -102,11 +104,13 @@ fun ToolbarOnboardingPage(
                 val state by onboardingStore.observeAsState(initialValue = onboardingStore.state) { state -> state }
 
                 Row(Modifier.width(176.dp), horizontalArrangement = Arrangement.Center) {
-                    ToolbarOptions(
-                        options = toolbarOptions!!,
-                        selectedOption = state.toolbarOptionSelected,
-                        onClick = onToolbarSelectionClicked,
-                    )
+                    toolbarOptions?.let {
+                        ToolbarOptions(
+                            options = it,
+                            selectedOption = state.toolbarOptionSelected,
+                            onClick = onToolbarSelectionClicked,
+                        )
+                    }
                 }
             }
 
@@ -147,19 +151,22 @@ private fun ToolbarOptions(
     selectedOption: ToolbarOptionType,
     onClick: (ToolbarOptionType) -> Unit,
 ) {
-    SelectableImageItem(
-        toolbarOption = options[0],
-        selectedOption = selectedOption,
-        onClick = onClick,
-    )
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.Center,
+    ) {
+        options.forEach {
+            SelectableImageItem(
+                toolbarOption = it,
+                selectedOption = selectedOption,
+                onClick = onClick,
+            )
 
-    Spacer(Modifier.width(40.dp))
-
-    SelectableImageItem(
-        toolbarOption = options[1],
-        selectedOption = selectedOption,
-        onClick = onClick,
-    )
+            if (it != options.last()) {
+                Spacer(Modifier.width(26.dp))
+            }
+        }
+    }
 }
 
 @Composable
@@ -183,7 +190,10 @@ private fun SelectableImageItem(
     ) {
         Image(
             painter = painterResource(id = toolbarOption.imageRes),
-            contentDescription = "",
+            contentDescription = stringResource(
+                R.string.onboarding_customize_toolbar_placement_content_description,
+                toolbarOption.label,
+            ),
             modifier = if (isSelectedOption) {
                 Modifier.border(2.dp, FirefoxTheme.colors.actionPrimary, RoundedCornerShape(10.dp))
             } else {
@@ -210,10 +220,18 @@ private fun SelectableImageItem(
             ) {
                 Icon(
                     painter = painterResource(id = R.drawable.mozac_ic_checkmark_24),
-                    contentDescription = null,
+                    contentDescription = null, // decorative only.
                     modifier = Modifier.size(12.dp),
                     tint = PhotonColors.White,
                 )
+            }
+        } else {
+            Box(
+                modifier = Modifier
+                    .size(24.dp)
+                    .border(2.dp, FirefoxTheme.colors.actionSecondary, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
             }
         }
     }

@@ -119,6 +119,7 @@ const PREF_CONTEXTUAL_CONTENT_FAKESPOT_CTA_URL =
   "discoverystream.contextualContent.fakespot.ctaUrl";
 
 const PREF_SECTIONS_ENABLED = "discoverystream.sections.enabled";
+const PREF_SECTIONS_FOLLOWING = "discoverystream.sections.following";
 
 let getHardcodedLayout;
 
@@ -1147,7 +1148,6 @@ export class DiscoveryStreamFeed {
         if (unifiedAdsEnabled) {
           const endpointBaseUrl = state.Prefs.values[PREF_UNIFIED_ADS_ENDPOINT];
           endpoint = `${endpointBaseUrl}v1/ads`;
-
           const placementsArray = state.Prefs.values[
             PREF_SPOC_PLACEMENTS
           ]?.split(`,`)
@@ -1815,12 +1815,32 @@ export class DiscoveryStreamFeed {
         PREF_MERINO_FEED_EXPERIMENT
       );
 
+      // Raw string of followed topics, ex: "entertainment, news"
+      const followedSectionsString = prefs[PREF_SECTIONS_FOLLOWING];
+
+      // Format followed sections into desired JSON shape for merino:
+      // {
+      //   "sectionId": "business",
+      //   "isFollowed": true,
+      //   "isBlocked": false
+      // }
+      const followedSections = followedSectionsString
+        ? followedSectionsString.split(",").map(s => s.trim())
+        : [];
+
+      const sections = followedSections.map(section => ({
+        sectionId: section,
+        isFollowed: true,
+        isBlocked: false,
+      }));
+
       headers.append("content-type", "application/json");
       let body = {
         ...(prefMerinoFeedExperiment ? this.getExperimentInfo() : {}),
         locale: this.locale,
         region: this.region,
         topics,
+        sections,
       };
 
       const sectionsEnabled = prefs[PREF_SECTIONS_ENABLED];
