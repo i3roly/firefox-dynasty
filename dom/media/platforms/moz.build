@@ -89,6 +89,7 @@ if CONFIG["MOZ_APPLEMEDIA"]:
         "apple/AppleATDecoder.cpp",
         "apple/AppleDecoderModule.cpp",
         "apple/AppleEncoderModule.cpp",
+        'apple/AppleVDADecoder.cpp',
         "apple/AppleVTDecoder.cpp",
         "apple/AppleVTEncoder.cpp",
     ]
@@ -99,6 +100,7 @@ if CONFIG["MOZ_APPLEMEDIA"]:
         "-framework AudioToolbox",
         "-framework CoreMedia",
         "-framework VideoToolbox",
+        "-framework VideoDecodeAcceleration",
         # For some unknown reason, the documented method of using weak_import
         # attribute doesn't work with VideoToolbox's functions.
         # We want to lazily load _VTRegisterSupplementalVideoDecoderIfAvailable

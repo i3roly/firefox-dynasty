@@ -43,7 +43,6 @@ class AppleDecoderModule : public PlatformDecoderModule {
 
   static constexpr int kCMVideoCodecType_H264{'avc1'};
   static constexpr int kCMVideoCodecType_VP9{'vp09'};
-
  private:
   AppleDecoderModule() = default;
   virtual ~AppleDecoderModule() = default;
