@@ -10,6 +10,8 @@
 
 #include "AppleATDecoder.h"
 #include "AppleVTDecoder.h"
+#include "AppleVDADecoder.h"
+
 #include "MP4Decoder.h"
 #include "VideoUtils.h"
 #include "VPXDecoder.h"
@@ -42,7 +44,6 @@ void AppleDecoderModule::Init() {
   if (sInitialized) {
     return;
   }
-
   sInitialized = true;
   if (RegisterSupplementalVP9Decoder()) {
     sCanUseVP9Decoder = CanCreateHWDecoder(MediaCodec::VP9);
@@ -63,11 +64,19 @@ already_AddRefed<MediaDataDecoder> AppleDecoderModule::CreateVideoDecoder(
           .isEmpty()) {
     return nullptr;
   }
+
   RefPtr<MediaDataDecoder> decoder;
-  if (IsVideoSupported(aParams.VideoConfig(), aParams.mOptions)) {
-    decoder = new AppleVTDecoder(aParams.VideoConfig(), aParams.mImageContainer,
-                                 aParams.mOptions, aParams.mKnowsCompositor,
-                                 aParams.mTrackingId);
+
+  if(__builtin_available(macOS 10.8, *)) {
+    if (IsVideoSupported(aParams.VideoConfig(), aParams.mOptions)) {
+      decoder = new AppleVTDecoder(aParams.VideoConfig(), aParams.mImageContainer,
+          aParams.mOptions, aParams.mKnowsCompositor,
+          aParams.mTrackingId);
+    }
+  } else {
+      decoder = new AppleVDADecoder(aParams.VideoConfig(), aParams.mImageContainer,
+          aParams.mOptions, aParams.mKnowsCompositor,
+          aParams.mTrackingId);
   }
   return decoder.forget();
 }
@@ -250,10 +259,10 @@ bool AppleDecoderModule::CanCreateHWDecoder(MediaCodec aCodec) {
           vtReportsSupport = false;
           break;
       }
-  } else if (__builtin_available(macOS 10.7, *)) { //VTDecoder is only 10.7 and up.
+  } else if (__builtin_available(macOS 10.6.3, *)) { //HW decoder is 10.6.3 and up
     if (aCodec == media::MediaCodec::H264) {
       // VTIsHardwareDecodeSupported function is only available on 10.13+.
-      // For earlier versions, we must check H264 support by always
+      // For earlier versions (10.6.3+), we must check H264 support by always
       // attempting to create a decoder.
       info.mMimeType = "video/avc";
       vtReportsSupport = true;
@@ -261,14 +270,33 @@ bool AppleDecoderModule::CanCreateHWDecoder(MediaCodec aCodec) {
   }
     // VT reports HW decode is supported -- verify by creating an actual decoder
   if (vtReportsSupport) {
-    RefPtr<AppleVTDecoder> decoder =
-        new AppleVTDecoder(info, nullptr, {}, nullptr, Nothing());
-    MediaResult rv = decoder->InitializeSession();
-    if (!NS_SUCCEEDED(rv)) {
-      MOZ_LOG(
-          sPDMLog, LogLevel::Debug,
-          ("Apple HW decode failure while initializing VT decoder session"));
-      return false;
+    RefPtr<MediaDataDecoder> decoder;
+    MediaResult rv;
+    char *type;
+    if(__builtin_available(macOS 10.8, *)) {
+      RefPtr<AppleVTDecoder> decoder =
+          new AppleVTDecoder(info, nullptr, {}, nullptr, Nothing());
+      rv = decoder->InitializeSession();
+      type = strdup("VT");
+      if (!NS_SUCCEEDED(rv)) {
+        MOZ_LOG(
+            sPDMLog, LogLevel::Debug,
+            ("Apple HW decode failure while initializing %s decoder session", type));
+        free(type);
+        return false;
+      }
+    } else {
+      RefPtr<AppleVDADecoder> decoder =
+          new AppleVDADecoder(info, nullptr, {}, nullptr, Nothing());
+      rv = decoder->InitializeSession();
+      type = strdup("VDA");
+      if (!NS_SUCCEEDED(rv)) {
+        MOZ_LOG(
+            sPDMLog, LogLevel::Debug,
+            ("Apple HW decode failure while initializing %s decoder session", type));
+        free(type);
+        return false;
+      }
     }
     nsAutoCString failureReason;
     // IsHardwareAccelerated appears to return invalid results for H.264 so
@@ -278,8 +306,9 @@ bool AppleDecoderModule::CanCreateHWDecoder(MediaCodec aCodec) {
                      aCodec == MediaCodec::H264;
     if (!hwSupport) {
       MOZ_LOG(sPDMLog, LogLevel::Debug,
-              ("Apple HW decode failure: '%s'", failureReason.BeginReading()));
+              ("Apple %s HW decode failure: '%s'", type, failureReason.BeginReading()));
     }
+    free(type);
     decoder->Shutdown();
     return hwSupport;
   }
