@@ -5570,8 +5570,18 @@ pub struct SurfaceConfiguration<V> {
     /// `Bgra8Unorm` and `Bgra8UnormSrgb`
     pub format: TextureFormat,
     /// Width of the swap chain. Must be the same size as the surface, and nonzero.
+    ///
+    /// If this is not the same size as the underlying surface (e.g. if it is
+    /// set once, and the window is later resized), the behaviour is defined
+    /// but platform-specific, and may change in the future (currently macOS
+    /// scales the surface, other platforms may do something else).
     pub width: u32,
     /// Height of the swap chain. Must be the same size as the surface, and nonzero.
+    ///
+    /// If this is not the same size as the underlying surface (e.g. if it is
+    /// set once, and the window is later resized), the behaviour is defined
+    /// but platform-specific, and may change in the future (currently macOS
+    /// scales the surface, other platforms may do something else).
     pub height: u32,
     /// Presentation mode of the swap chain. Fifo is the only mode guaranteed to be supported.
     /// FifoRelaxed, Immediate, and Mailbox will crash if unsupported, while AutoVsync and
@@ -7370,8 +7380,15 @@ impl ShaderBoundChecks {
     /// Creates a new configuration where the shader isn't bound checked.
     ///
     /// # Safety
-    /// The caller MUST ensure that all shaders built with this configuration don't perform any
-    /// out of bounds reads or writes.
+    ///
+    /// The caller MUST ensure that all shaders built with this configuration
+    /// don't perform any out of bounds reads or writes.
+    ///
+    /// Note that `wgpu_core`, in particular, initializes only those portions of
+    /// buffers that it expects might be read, and it does not expect contents
+    /// outside the ranges bound in bindgroups to be accessible, so using this
+    /// configuration with ill-behaved shaders could expose uninitialized GPU
+    /// memory contents to the application.
     #[must_use]
     pub unsafe fn unchecked() -> Self {
         ShaderBoundChecks {
@@ -7394,10 +7411,6 @@ impl Default for ShaderBoundChecks {
 
 /// Selects which DX12 shader compiler to use.
 ///
-/// If the `wgpu-hal/dx12-shader-compiler` feature isn't enabled then this will fall back
-/// to the Fxc compiler at runtime and log an error.
-/// This feature is always enabled when using `wgpu`.
-///
 /// If the `Dxc` option is selected, but `dxcompiler.dll` and `dxil.dll` files aren't found,
 /// then this will fall back to the Fxc compiler at runtime and log an error.
 ///
@@ -7414,12 +7427,17 @@ pub enum Dx12Compiler {
     ///
     /// However, it requires both `dxcompiler.dll` and `dxil.dll` to be shipped with the application.
     /// These files can be downloaded from <https://github.com/microsoft/DirectXShaderCompiler/releases>.
-    Dxc {
-        /// Path to the `dxil.dll` file, or path to the directory containing `dxil.dll` file. Passing `None` will use standard platform specific dll loading rules.
-        dxil_path: Option<PathBuf>,
-        /// Path to the `dxcompiler.dll` file, or path to the directory containing `dxcompiler.dll` file. Passing `None` will use standard platform specific dll loading rules.
-        dxc_path: Option<PathBuf>,
+    ///
+    /// Minimum supported version: [v1.5.2010](https://github.com/microsoft/DirectXShaderCompiler/releases/tag/v1.5.2010)
+    ///
+    /// It also requires WDDM 2.1 (Windows 10 version 1607).
+    DynamicDxc {
+        /// Path to `dxcompiler.dll`.
+        dxc_path: PathBuf,
+        /// Path to `dxil.dll`.
+        dxil_path: PathBuf,
     },
+
     /// The statically-linked variant of Dxc.
     /// The `static-dxc` feature is required to use this.
     StaticDxc,
@@ -7695,24 +7713,4 @@ pub enum DeviceLostReason {
     Unknown = 0,
     /// After Device::destroy
     Destroyed = 1,
-    /// After Device::drop
-    ///
-    /// WebGPU does not invoke the device lost callback when the device is
-    /// dropped to prevent garbage collection from being observable. In wgpu,
-    /// we invoke the callback on drop to help with managing memory owned by
-    /// the callback.
-    Dropped = 2,
-    /// After replacing the device_lost_callback
-    ///
-    /// WebGPU does not have a concept of a device lost callback, but wgpu
-    /// does. wgpu guarantees that any supplied callback will be invoked
-    /// exactly once before it is dropped, which helps with managing the
-    /// memory owned by the callback.
-    ReplacedCallback = 3,
-    /// When setting the callback, but the device is already invalid
-    ///
-    /// As above, when the callback is provided, wgpu guarantees that it
-    /// will eventually be called. If the device is already invalid, wgpu
-    /// will call the callback immediately, with this reason.
-    DeviceInvalid = 4,
 }

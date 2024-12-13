@@ -67,6 +67,7 @@
 #include "mozilla/ExtensionPolicyService.h"
 #include "mozilla/ResultExtensions.h"
 #include "mozilla/StaticPtr.h"
+#include "mozilla/dom/TrustedTypeUtils.h"
 #include "mozilla/dom/WorkerCommon.h"
 #include "mozilla/dom/WorkerPrivate.h"
 #include "nsContentUtils.h"
@@ -473,6 +474,21 @@ bool nsScriptSecurityManager::ContentSecurityPolicyPermitsJSAction(
   MOZ_ASSERT(cx == nsContentUtils::GetCurrentJSContext());
 
   nsCOMPtr<nsIPrincipal> subjectPrincipal = nsContentUtils::SubjectPrincipal();
+
+  if (aKind == JS::RuntimeCode::JS) {
+    ErrorResult error;
+    bool areArgumentsTrusted = TrustedTypeUtils::
+        AreArgumentsTrustedForEnsureCSPDoesNotBlockStringCompilation(
+            cx, aCodeString, aCompilationType, aParameterStrings, aBodyString,
+            aParameterArgs, aBodyArg, error);
+    if (error.MaybeSetPendingException(cx)) {
+      return false;
+    }
+    if (!areArgumentsTrusted) {
+      *aOutCanCompileStrings = false;
+      return true;
+    }
+  }
 
   // Check if Eval is allowed per firefox hardening policy
   bool contextForbidsEval =
@@ -1564,7 +1580,7 @@ void nsScriptSecurityManager::InitJSCallbacks(JSContext* aCx) {
 
   static const JSSecurityCallbacks securityCallbacks = {
       ContentSecurityPolicyPermitsJSAction,
-      nullptr,  // codeForEvalGets
+      TrustedTypeUtils::HostGetCodeForEval,
       JSPrincipalsSubsume,
   };
 

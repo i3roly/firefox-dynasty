@@ -50,6 +50,7 @@
 #include "mozilla/dom/WorkerBinding.h"
 #include "mozilla/dom/ScriptSettings.h"
 #include "mozilla/dom/ShadowRealmGlobalScope.h"
+#include "mozilla/dom/TrustedTypeUtils.h"
 #include "mozilla/dom/IndexedDatabaseManager.h"
 #include "mozilla/DebugOnly.h"
 #include "mozilla/Preferences.h"
@@ -501,7 +502,7 @@ class LogViolationDetailsRunnable final : public WorkerMainThreadRunnable {
   ~LogViolationDetailsRunnable() = default;
 };
 
-bool ContentSecurityPolicyAllows(
+MOZ_CAN_RUN_SCRIPT_FOR_DEFINITION bool ContentSecurityPolicyAllows(
     JSContext* aCx, JS::RuntimeCode aKind, JS::Handle<JSString*> aCodeString,
     JS::CompilationType aCompilationType,
     JS::Handle<JS::StackGCVector<JSString*>> aParameterStrings,
@@ -516,6 +517,19 @@ bool ContentSecurityPolicyAllows(
   uint16_t violationType;
   nsAutoJSString scriptSample;
   if (aKind == JS::RuntimeCode::JS) {
+    ErrorResult error;
+    bool areArgumentsTrusted = TrustedTypeUtils::
+        AreArgumentsTrustedForEnsureCSPDoesNotBlockStringCompilation(
+            aCx, aCodeString, aCompilationType, aParameterStrings, aBodyString,
+            aParameterArgs, aBodyArg, error);
+    if (error.MaybeSetPendingException(aCx)) {
+      return false;
+    }
+    if (!areArgumentsTrusted) {
+      *aOutCanCompileStrings = false;
+      return true;
+    }
+
     if (NS_WARN_IF(!scriptSample.init(aCx, aCodeString))) {
       return false;
     }
@@ -696,7 +710,7 @@ bool InitJSContextForWorker(WorkerPrivate* aWorkerPrivate,
 
   // Security policy:
   static const JSSecurityCallbacks securityCallbacks = {
-      ContentSecurityPolicyAllows};
+      ContentSecurityPolicyAllows, TrustedTypeUtils::HostGetCodeForEval};
   JS_SetSecurityCallbacks(aWorkerCx, &securityCallbacks);
 
   // A WorkerPrivate lives strictly longer than its JSRuntime so we can safely

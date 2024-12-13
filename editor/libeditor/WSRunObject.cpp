@@ -49,6 +49,10 @@ template WSScanResult WSRunScanner::ScanPreviousVisibleNodeOrBlockBoundaryFrom(
     const EditorDOMPoint& aPoint) const;
 template WSScanResult WSRunScanner::ScanPreviousVisibleNodeOrBlockBoundaryFrom(
     const EditorRawDOMPoint& aPoint) const;
+template WSScanResult WSRunScanner::ScanPreviousVisibleNodeOrBlockBoundaryFrom(
+    const EditorDOMPointInText& aPoint) const;
+template WSScanResult WSRunScanner::ScanPreviousVisibleNodeOrBlockBoundaryFrom(
+    const EditorRawDOMPointInText& aPoint) const;
 template WSScanResult
 WSRunScanner::ScanInclusiveNextVisibleNodeOrBlockBoundaryFrom(
     const EditorDOMPoint& aPoint) const;
@@ -71,9 +75,11 @@ template EditorRawDOMPoint WSRunScanner::GetFirstVisiblePoint(
     Text& aTextNode, const Element* aAncestorLimiter);
 
 template nsresult WhiteSpaceVisibilityKeeper::NormalizeVisibleWhiteSpacesAt(
-    HTMLEditor& aHTMLEditor, const EditorDOMPoint& aScanStartPoint);
+    HTMLEditor& aHTMLEditor, const EditorDOMPoint& aScanStartPoint,
+    const Element& aEditingHost);
 template nsresult WhiteSpaceVisibilityKeeper::NormalizeVisibleWhiteSpacesAt(
-    HTMLEditor& aHTMLEditor, const EditorDOMPointInText& aScanStartPoint);
+    HTMLEditor& aHTMLEditor, const EditorDOMPointInText& aScanStartPoint,
+    const Element& aEditingHost);
 
 template WSRunScanner::TextFragmentData::TextFragmentData(
     const EditorDOMPoint& aPoint, const Element* aEditingHost,
@@ -3513,12 +3519,12 @@ char16_t WSRunScanner::GetCharAt(Text* aTextNode, uint32_t aOffset) const {
 // static
 template <typename EditorDOMPointType>
 nsresult WhiteSpaceVisibilityKeeper::NormalizeVisibleWhiteSpacesAt(
-    HTMLEditor& aHTMLEditor, const EditorDOMPointType& aPoint) {
+    HTMLEditor& aHTMLEditor, const EditorDOMPointType& aPoint,
+    const Element& aEditingHost) {
   MOZ_ASSERT(aPoint.IsInContentNode());
   MOZ_ASSERT(EditorUtils::IsEditableContent(
       *aPoint.template ContainerAs<nsIContent>(), EditorType::HTML));
-  Element* editingHost = aHTMLEditor.ComputeEditingHost();
-  TextFragmentData textFragmentData(aPoint, editingHost,
+  TextFragmentData textFragmentData(aPoint, &aEditingHost,
                                     BlockInlineCheck::UseComputedDisplayStyle);
   if (NS_WARN_IF(!textFragmentData.IsInitialized())) {
     return NS_ERROR_FAILURE;
@@ -3832,7 +3838,7 @@ nsresult WhiteSpaceVisibilityKeeper::NormalizeVisibleWhiteSpacesAt(
       aHTMLEditor.DeleteTextAndNormalizeSurroundingWhiteSpaces(
           startToDelete, endToDelete,
           HTMLEditor::TreatEmptyTextNodes::KeepIfContainerOfRangeBoundaries,
-          HTMLEditor::DeleteDirection::Forward);
+          HTMLEditor::DeleteDirection::Forward, aEditingHost);
   if (MOZ_UNLIKELY(caretPointOrError.isErr())) {
     NS_WARNING(
         "HTMLEditor::DeleteTextAndNormalizeSurroundingWhiteSpace() failed");

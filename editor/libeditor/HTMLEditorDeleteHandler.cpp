@@ -37,6 +37,7 @@
 #include "mozilla/Unused.h"
 #include "mozilla/dom/AncestorIterator.h"
 #include "mozilla/dom/Element.h"
+#include "mozilla/dom/ElementInlines.h"  // for Element::IsContentEditablePlainTextOnly
 #include "mozilla/dom/HTMLBRElement.h"
 #include "mozilla/dom/Selection.h"
 #include "mozilla/mozalloc.h"
@@ -388,7 +389,8 @@ class MOZ_STACK_CLASS HTMLEditor::AutoDeleteRangesHandler final {
    * Note that aRange is tracked with AutoTrackDOMRange.
    */
   [[nodiscard]] MOZ_CAN_RUN_SCRIPT nsresult
-  DeleteUnnecessaryNodes(HTMLEditor& aHTMLEditor, EditorDOMRange& aRange);
+  DeleteUnnecessaryNodes(HTMLEditor& aHTMLEditor, EditorDOMRange& aRange,
+                         const Element& aEditingHost);
 
   /**
    * DeleteUnnecessaryNodesAndCollapseSelection() calls DeleteUnnecessaryNodes()
@@ -404,12 +406,13 @@ class MOZ_STACK_CLASS HTMLEditor::AutoDeleteRangesHandler final {
    *                                    computing the deleting range.
    * @param aSelectionEndPoint          First selection range end after
    *                                    computing the deleting range.
+   * @param aEditingHost                The editing host.
    */
   [[nodiscard]] MOZ_CAN_RUN_SCRIPT nsresult
   DeleteUnnecessaryNodesAndCollapseSelection(
       HTMLEditor& aHTMLEditor, nsIEditor::EDirection aDirectionAndAmount,
       const EditorDOMPoint& aSelectionStartPoint,
-      const EditorDOMPoint& aSelectionEndPoint);
+      const EditorDOMPoint& aSelectionEndPoint, const Element& aEditingHost);
 
   /**
    * If aContent is a text node that contains only collapsed white-space or
@@ -461,14 +464,14 @@ class MOZ_STACK_CLASS HTMLEditor::AutoDeleteRangesHandler final {
                                                 mOriginalStripWrappers,
                                                 aRangesToDelete);
     NS_WARNING_ASSERTION(caretPointOrError.isOk(),
-                         "EditorBase::DeleteRangesWithTransaction() failed");
+                         "HTMLEditor::DeleteRangesWithTransaction() failed");
     return caretPointOrError;
   }
 
   /**
    * Compute target range(s) which will be called by
    * `EditorBase::DeleteRangeWithTransaction()` or
-   * `EditorBase::DeleteRangesWithTransaction()`.
+   * `HTMLEditor::DeleteRangesWithTransaction()`.
    * TODO: We should not use it for consistency with each deletion handler
    *       in this and nested classes.
    */
@@ -747,7 +750,8 @@ class MOZ_STACK_CLASS HTMLEditor::AutoDeleteRangesHandler final {
         }
         case Mode::DeleteContentInRange: {
           Result<EditActionResult, nsresult> result = DeleteContentInRange(
-              aHTMLEditor, aDirectionAndAmount, aStripWrappers, aRangeToDelete);
+              aHTMLEditor, aDirectionAndAmount, aStripWrappers, aRangeToDelete,
+              aEditingHost);
           NS_WARNING_ASSERTION(
               result.isOk(),
               "AutoBlockElementsJoiner::DeleteContentInRange() failed");
@@ -877,7 +881,7 @@ class MOZ_STACK_CLASS HTMLEditor::AutoDeleteRangesHandler final {
     DeleteContentInRange(HTMLEditor& aHTMLEditor,
                          nsIEditor::EDirection aDirectionAndAmount,
                          nsIEditor::EStripWrappers aStripWrappers,
-                         nsRange& aRangeToDelete);
+                         nsRange& aRangeToDelete, const Element& aEditingHost);
     nsresult ComputeRangeToDeleteContentInRange(
         const HTMLEditor& aHTMLEditor,
         nsIEditor::EDirection aDirectionAndAmount, nsRange& aRange,
@@ -1159,9 +1163,11 @@ class MOZ_STACK_CLASS HTMLEditor::AutoDeleteRangesHandler final {
      *                              end of previous editable node.
      *                            - Otherwise, eNone is allowed but does
      *                              nothing.
+     * @param aEditingHost        The editing host.
      */
     [[nodiscard]] MOZ_CAN_RUN_SCRIPT Result<EditActionResult, nsresult> Run(
-        HTMLEditor& aHTMLEditor, nsIEditor::EDirection aDirectionAndAmount);
+        HTMLEditor& aHTMLEditor, nsIEditor::EDirection aDirectionAndAmount,
+        const Element& aEditingHost);
 
    private:
     /**
@@ -1303,25 +1309,99 @@ Result<EditActionResult, nsresult> HTMLEditor::HandleDeleteSelection(
                          "AutoDeleteRangesHandler::Run() failed");
     return result;
   }
+  return EditActionResult::HandledResult();
+}
 
-  // XXX At here, selection may have no range because of mutation event
-  //     listeners can do anything so that we should just return NS_OK instead
-  //     of returning error.
-  const auto atNewStartOfSelection =
-      GetFirstSelectionStartPoint<EditorDOMPoint>();
-  if (NS_WARN_IF(!atNewStartOfSelection.IsSet())) {
-    return Err(NS_ERROR_FAILURE);
+Result<CaretPoint, nsresult> HTMLEditor::DeleteRangesWithTransaction(
+    nsIEditor::EDirection aDirectionAndAmount,
+    nsIEditor::EStripWrappers aStripWrappers,
+    const AutoRangeArray& aRangesToDelete) {
+  const RefPtr<Element> editingHost =
+      ComputeEditingHost(LimitInBodyElement::No);
+  if (NS_WARN_IF(!editingHost)) {
+    return Err(NS_ERROR_UNEXPECTED);
   }
-  if (atNewStartOfSelection.IsInContentNode()) {
-    nsresult rv = DeleteMostAncestorMailCiteElementIfEmpty(
-        MOZ_KnownLive(*atNewStartOfSelection.ContainerAs<nsIContent>()));
-    if (NS_FAILED(rv)) {
-      NS_WARNING(
-          "HTMLEditor::DeleteMostAncestorMailCiteElementIfEmpty() failed");
-      return Err(rv);
+
+  Result<CaretPoint, nsresult> result = EditorBase::DeleteRangesWithTransaction(
+      aDirectionAndAmount, aStripWrappers, aRangesToDelete);
+  if (MOZ_UNLIKELY(result.isErr())) {
+    return result;
+  }
+
+  const bool isDeleteSelection =
+      GetTopLevelEditSubAction() == EditSubAction::eDeleteSelectedContent;
+  EditorDOMPoint pointToPutCaret = result.unwrap().UnwrapCaretPoint();
+  {
+    AutoTrackDOMPoint trackCaretPoint(RangeUpdaterRef(), &pointToPutCaret);
+    for (const auto& range : aRangesToDelete.Ranges()) {
+      // Refer the start boundary of the range because it should be end of the
+      // preceding content, but the end boundary may be in an ancestor when an
+      // ancestor element of end boundary has already been deleted.
+      if (MOZ_UNLIKELY(!range->IsPositioned() ||
+                       !range->GetStartContainer()->IsContent())) {
+        continue;
+      }
+      EditorDOMPoint pointToInsertLineBreak(range->StartRef());
+      // Don't remove empty inline elements in the plaintext-only mode because
+      // nobody can restore the style again.
+      if (aStripWrappers == nsIEditor::eStrip &&
+          !editingHost->IsContentEditablePlainTextOnly()) {
+        const OwningNonNull<nsIContent> maybeEmptyContent =
+            *pointToInsertLineBreak.ContainerAs<nsIContent>();
+        Result<CaretPoint, nsresult> caretPointOrError =
+            DeleteEmptyInclusiveAncestorInlineElements(maybeEmptyContent,
+                                                       *editingHost);
+        if (MOZ_UNLIKELY(caretPointOrError.isErr())) {
+          NS_WARNING(
+              "HTMLEditor::DeleteEmptyInclusiveAncestorInlineElements() "
+              "failed");
+          return caretPointOrError.propagateErr();
+        }
+        if (NS_WARN_IF(!range->IsPositioned() ||
+                       !range->GetStartContainer()->IsContent())) {
+          continue;
+        }
+        caretPointOrError.unwrap().MoveCaretPointTo(
+            pointToInsertLineBreak, {SuggestCaret::OnlyIfHasSuggestion});
+        if (NS_WARN_IF(!pointToInsertLineBreak.IsSetAndValidInComposedDoc())) {
+          continue;
+        }
+      }
+
+      if ((IsMailEditor() || IsPlaintextMailComposer()) &&
+          MOZ_LIKELY(pointToInsertLineBreak.IsInContentNode())) {
+        AutoTrackDOMPoint trackPointToInsertLineBreak(RangeUpdaterRef(),
+                                                      &pointToInsertLineBreak);
+        nsresult rv = DeleteMostAncestorMailCiteElementIfEmpty(
+            MOZ_KnownLive(*pointToInsertLineBreak.ContainerAs<nsIContent>()));
+        if (NS_FAILED(rv)) {
+          NS_WARNING(
+              "HTMLEditor::DeleteMostAncestorMailCiteElementIfEmpty() failed");
+          return Err(rv);
+        }
+        trackPointToInsertLineBreak.FlushAndStopTracking();
+        if (NS_WARN_IF(!pointToInsertLineBreak.IsSetAndValidInComposedDoc())) {
+          continue;
+        }
+      }
+
+      if (isDeleteSelection) {
+        Result<CreateElementResult, nsresult> insertPaddingBRResult =
+            InsertPaddingBRElementIfNeeded(
+                pointToInsertLineBreak,
+                editingHost->IsContentEditablePlainTextOnly()
+                    ? nsIEditor::eNoStrip
+                    : nsIEditor::eStrip,
+                *editingHost);
+        if (MOZ_UNLIKELY(insertPaddingBRResult.isErr())) {
+          NS_WARNING("HTMLEditor::InsertPaddingBRElementIfNeeded() failed");
+          return insertPaddingBRResult.propagateErr();
+        }
+        insertPaddingBRResult.unwrap().IgnoreCaretPointSuggestion();
+      }
     }
   }
-  return EditActionResult::HandledResult();
+  return CaretPoint(std::move(pointToPutCaret));
 }
 
 nsresult HTMLEditor::AutoDeleteRangesHandler::ComputeRangesToDelete(
@@ -1614,7 +1694,7 @@ Result<EditActionResult, nsresult> HTMLEditor::AutoDeleteRangesHandler::Run(
       if (deleter.ScanEmptyBlockInclusiveAncestor(
               aHTMLEditor, *startPoint.ContainerAs<nsIContent>())) {
         Result<EditActionResult, nsresult> result =
-            deleter.Run(aHTMLEditor, aDirectionAndAmount);
+            deleter.Run(aHTMLEditor, aDirectionAndAmount, aEditingHost);
         if (MOZ_UNLIKELY(result.isErr()) || result.inspect().Handled()) {
           NS_WARNING_ASSERTION(result.isOk(),
                                "AutoEmptyBlockAncestorDeleter::Run() failed");
@@ -2201,6 +2281,9 @@ nsresult HTMLEditor::AutoDeleteRangesHandler::
     }
   }
 
+  // FIXME: If we'll delete unnecessary following <br>, we need to include it
+  // into aRangesToDelete.
+
   nsresult rv = aRangesToDelete.SetStartAndEnd(rangeToDelete.StartRef(),
                                                rangeToDelete.EndRef());
   NS_WARNING_ASSERTION(NS_SUCCEEDED(rv),
@@ -2242,7 +2325,8 @@ HTMLEditor::AutoDeleteRangesHandler::HandleDeleteTextAroundCollapsedRanges(
           rangeToDelete.EndRef().AsInText(),
           TreatEmptyTextNodes::RemoveAllEmptyInlineAncestors,
           aDirectionAndAmount == nsIEditor::eNext ? DeleteDirection::Forward
-                                                  : DeleteDirection::Backward);
+                                                  : DeleteDirection::Backward,
+          aEditingHost);
   aHTMLEditor.TopLevelEditSubActionDataRef().mDidNormalizeWhitespaces = true;
   NS_WARNING_ASSERTION(
       caretPointOrError.isOk(),
@@ -2285,23 +2369,89 @@ Result<CaretPoint, nsresult> HTMLEditor::AutoDeleteRangesHandler::
         {SuggestCaret::OnlyIfHasSuggestion,
          SuggestCaret::OnlyIfTransactionsAllowedToDoIt});
   }
-  const auto newCaretPosition =
+
+  if (MOZ_LIKELY(pointToPutCaret.IsInContentNode())) {
+    AutoTrackDOMPoint trackPointToPutCaret(aHTMLEditor.RangeUpdaterRef(),
+                                           &pointToPutCaret);
+    nsresult rv = aHTMLEditor.EnsureNoFollowingUnnecessaryLineBreak(
+        pointToPutCaret, aEditingHost);
+    if (NS_FAILED(rv)) {
+      NS_WARNING("HTMLEditor::EnsureNoFollowingUnnecessaryLineBreak() failed");
+      return Err(rv);
+    }
+    trackPointToPutCaret.FlushAndStopTracking();
+    if (NS_WARN_IF(!pointToPutCaret.IsSet())) {
+      return Err(NS_ERROR_EDITOR_UNEXPECTED_DOM_TREE);
+    }
+  }
+
+  auto newCaretPosition =
       aHTMLEditor.GetFirstSelectionStartPoint<EditorDOMPoint>();
   if (MOZ_UNLIKELY(!newCaretPosition.IsSet())) {
     NS_WARNING("There was no selection range");
     return Err(NS_ERROR_EDITOR_UNEXPECTED_DOM_TREE);
   }
-  Result<CaretPoint, nsresult> caretPointOrError =
-      aHTMLEditor.InsertBRElementIfHardLineIsEmptyAndEndsWithBlockBoundary(
-          newCaretPosition);
-  if (MOZ_UNLIKELY(caretPointOrError.isErr())) {
-    NS_WARNING(
-        "HTMLEditor::InsertBRElementIfHardLineIsEmptyAndEndsWithBlockBoundary()"
-        " failed");
-    return caretPointOrError;
+  const bool isDeleteSelection = aHTMLEditor.GetTopLevelEditSubAction() ==
+                                 EditSubAction::eDeleteSelectedContent;
+  AutoTrackDOMPoint trackCaretPoint(aHTMLEditor.RangeUpdaterRef(),
+                                    &pointToPutCaret);
+  if (isDeleteSelection) {
+    // Don't remove empty inline elements in the plaintext-only mode because
+    // nobody can restore the style again.
+    if (MOZ_LIKELY(newCaretPosition.IsInContentNode()) &&
+        !aEditingHost.IsContentEditablePlainTextOnly()) {
+      Result<CaretPoint, nsresult> caretPointOrError =
+          aHTMLEditor.DeleteEmptyInclusiveAncestorInlineElements(
+              MOZ_KnownLive(*newCaretPosition.ContainerAs<nsIContent>()),
+              aEditingHost);
+      if (MOZ_UNLIKELY(caretPointOrError.isErr())) {
+        NS_WARNING(
+            "HTMLEditor::DeleteEmptyInclusiveAncestorInlineElements() failed");
+        return caretPointOrError.propagateErr();
+      }
+      caretPointOrError.unwrap().MoveCaretPointTo(
+          newCaretPosition, {SuggestCaret::OnlyIfHasSuggestion});
+      if (NS_WARN_IF(!newCaretPosition.IsSetAndValidInComposedDoc())) {
+        return Err(NS_ERROR_EDITOR_UNEXPECTED_DOM_TREE);
+      }
+    }
   }
-  caretPointOrError.unwrap().MoveCaretPointTo(
-      pointToPutCaret, {SuggestCaret::OnlyIfHasSuggestion});
+  if ((aHTMLEditor.IsMailEditor() || aHTMLEditor.IsPlaintextMailComposer()) &&
+      MOZ_LIKELY(newCaretPosition.IsInContentNode())) {
+    AutoTrackDOMPoint trackNewCaretPosition(aHTMLEditor.RangeUpdaterRef(),
+                                            &newCaretPosition);
+    nsresult rv = aHTMLEditor.DeleteMostAncestorMailCiteElementIfEmpty(
+        MOZ_KnownLive(*newCaretPosition.ContainerAs<nsIContent>()));
+    if (NS_FAILED(rv)) {
+      NS_WARNING(
+          "HTMLEditor::DeleteMostAncestorMailCiteElementIfEmpty() failed");
+      return Err(rv);
+    }
+    trackNewCaretPosition.FlushAndStopTracking();
+    if (NS_WARN_IF(!newCaretPosition.IsSetAndValidInComposedDoc())) {
+      return Err(NS_ERROR_EDITOR_UNEXPECTED_DOM_TREE);
+    }
+  }
+  if (isDeleteSelection) {
+    Result<CreateElementResult, nsresult> insertPaddingBRResult =
+        aHTMLEditor.InsertPaddingBRElementIfNeeded(
+            newCaretPosition,
+            aEditingHost.IsContentEditablePlainTextOnly() ? nsIEditor::eNoStrip
+                                                          : nsIEditor::eStrip,
+            aEditingHost);
+    if (MOZ_UNLIKELY(insertPaddingBRResult.isErr())) {
+      NS_WARNING("HTMLEditor::InsertPaddingBRElementIfNeeded() failed");
+      return insertPaddingBRResult.propagateErr();
+    }
+    trackCaretPoint.FlushAndStopTracking();
+    if (!pointToPutCaret.IsInTextNode()) {
+      insertPaddingBRResult.unwrap().MoveCaretPointTo(
+          pointToPutCaret, {SuggestCaret::OnlyIfHasSuggestion});
+    } else {
+      insertPaddingBRResult.unwrap().IgnoreCaretPointSuggestion();
+    }
+  }
+  trackCaretPoint.FlushAndStopTracking();
   return CaretPoint(std::move(pointToPutCaret));
 }
 
@@ -2395,9 +2545,7 @@ Result<CaretPoint, nsresult> HTMLEditor::AutoDeleteRangesHandler::
     }
     trackPointToPutCaret.FlushAndStopTracking();
     caretPointOrError.unwrap().MoveCaretPointTo(
-        pointToPutCaret, aHTMLEditor,
-        {SuggestCaret::OnlyIfHasSuggestion,
-         SuggestCaret::OnlyIfTransactionsAllowedToDoIt});
+        pointToPutCaret, aHTMLEditor, {SuggestCaret::OnlyIfHasSuggestion});
   }
 
   // XXX When Backspace key is pressed, Chromium removes following empty
@@ -2430,24 +2578,89 @@ Result<CaretPoint, nsresult> HTMLEditor::AutoDeleteRangesHandler::
     return Err(NS_ERROR_EDITOR_UNEXPECTED_DOM_TREE);
   }
 
+  if (MOZ_LIKELY(pointToPutCaret.IsInContentNode())) {
+    AutoTrackDOMPoint trackPointToPutCaret(aHTMLEditor.RangeUpdaterRef(),
+                                           &pointToPutCaret);
+    nsresult rv = aHTMLEditor.EnsureNoFollowingUnnecessaryLineBreak(
+        pointToPutCaret, aEditingHost);
+    if (NS_FAILED(rv)) {
+      NS_WARNING("HTMLEditor::EnsureNoFollowingUnnecessaryLineBreak() failed");
+      return Err(rv);
+    }
+  }
+  if (NS_WARN_IF(!pointToPutCaret.IsSet())) {
+    return Err(NS_ERROR_EDITOR_UNEXPECTED_DOM_TREE);
+  }
+
   // XXX `Selection` may be modified by mutation event listeners so
   //     that we should use EditorDOMPoint::AtEndOf(visibleTextNode)
   //     instead.  (Perhaps, we don't and/or shouldn't need to do this
   //     if the text node is preformatted.)
-  AutoTrackDOMPoint trackPointToPutCaret(aHTMLEditor.RangeUpdaterRef(),
-                                         &pointToPutCaret);
-  Result<CaretPoint, nsresult> caretPointOrError =
-      aHTMLEditor.InsertBRElementIfHardLineIsEmptyAndEndsWithBlockBoundary(
-          pointToPutCaret);
-  if (MOZ_UNLIKELY(caretPointOrError.isErr())) {
-    NS_WARNING(
-        "HTMLEditor::InsertBRElementIfHardLineIsEmptyAndEndsWithBlockBoundary()"
-        " failed");
-    return caretPointOrError.propagateErr();
+  const bool isDeleteSelection = aHTMLEditor.GetTopLevelEditSubAction() ==
+                                 EditSubAction::eDeleteSelectedContent;
+  if (isDeleteSelection) {
+    // Don't remove empty inline elements in the plaintext-only mode because
+    // nobody can restore the style again.
+    if (MOZ_LIKELY(pointToPutCaret.IsInContentNode()) &&
+        !aEditingHost.IsContentEditablePlainTextOnly()) {
+      AutoTrackDOMPoint trackPointToPutCaret(aHTMLEditor.RangeUpdaterRef(),
+                                             &pointToPutCaret);
+      Result<CaretPoint, nsresult> caretPointOrError =
+          aHTMLEditor.DeleteEmptyInclusiveAncestorInlineElements(
+              MOZ_KnownLive(*pointToPutCaret.ContainerAs<nsIContent>()),
+              aEditingHost);
+      if (MOZ_UNLIKELY(caretPointOrError.isErr())) {
+        NS_WARNING(
+            "HTMLEditor::DeleteEmptyInclusiveAncestorInlineElements() failed");
+        return caretPointOrError;
+      }
+      trackPointToPutCaret.FlushAndStopTracking();
+      caretPointOrError.unwrap().MoveCaretPointTo(
+          pointToPutCaret, {SuggestCaret::OnlyIfHasSuggestion});
+      if (NS_WARN_IF(!pointToPutCaret.IsSetAndValidInComposedDoc())) {
+        return Err(NS_ERROR_EDITOR_UNEXPECTED_DOM_TREE);
+      }
+    }
   }
-  trackPointToPutCaret.FlushAndStopTracking();
-  caretPointOrError.unwrap().MoveCaretPointTo(
-      pointToPutCaret, {SuggestCaret::OnlyIfHasSuggestion});
+
+  if ((aHTMLEditor.IsMailEditor() || aHTMLEditor.IsPlaintextMailComposer()) &&
+      MOZ_LIKELY(pointToPutCaret.IsInContentNode())) {
+    AutoTrackDOMPoint trackPointToPutCaret(aHTMLEditor.RangeUpdaterRef(),
+                                           &pointToPutCaret);
+    nsresult rv = aHTMLEditor.DeleteMostAncestorMailCiteElementIfEmpty(
+        MOZ_KnownLive(*pointToPutCaret.ContainerAs<nsIContent>()));
+    if (NS_FAILED(rv)) {
+      NS_WARNING(
+          "HTMLEditor::DeleteMostAncestorMailCiteElementIfEmpty() failed");
+      return Err(rv);
+    }
+    trackPointToPutCaret.FlushAndStopTracking();
+    if (NS_WARN_IF(!pointToPutCaret.IsSetAndValidInComposedDoc())) {
+      return Err(NS_ERROR_EDITOR_UNEXPECTED_DOM_TREE);
+    }
+  }
+
+  if (isDeleteSelection) {
+    AutoTrackDOMPoint trackPointToPutCaret(aHTMLEditor.RangeUpdaterRef(),
+                                           &pointToPutCaret);
+    Result<CreateElementResult, nsresult> insertPaddingBRResult =
+        aHTMLEditor.InsertPaddingBRElementIfNeeded(
+            pointToPutCaret,
+            aEditingHost.IsContentEditablePlainTextOnly() ? nsIEditor::eNoStrip
+                                                          : nsIEditor::eStrip,
+            aEditingHost);
+    if (MOZ_UNLIKELY(insertPaddingBRResult.isErr())) {
+      NS_WARNING("HTMLEditor::InsertPaddingBRElementIfNeeded() failed");
+      return insertPaddingBRResult.propagateErr();
+    }
+    trackPointToPutCaret.FlushAndStopTracking();
+    if (!pointToPutCaret.IsInTextNode()) {
+      insertPaddingBRResult.unwrap().MoveCaretPointTo(
+          pointToPutCaret, {SuggestCaret::OnlyIfHasSuggestion});
+    } else {
+      insertPaddingBRResult.unwrap().IgnoreCaretPointSuggestion();
+    }
+  }
   // Remember that we did a ranged delete for the benefit of
   // AfterEditInner().
   aHTMLEditor.TopLevelEditSubActionDataRef().mDidDeleteNonCollapsedRange = true;
@@ -2497,6 +2710,10 @@ HTMLEditor::AutoDeleteRangesHandler::ComputeRangesToDeleteAtomicContent(
     NS_WARNING("WSRunScanner::GetRangeForDeleteAContentNode() failed");
     return NS_ERROR_FAILURE;
   }
+
+  // FIXME: If we'll delete unnecessary following <br>, we need to include it
+  // into aRangesToDelete.
+
   nsresult rv = aRangesToDelete.SetStartAndEnd(rangeToDelete.StartRef(),
                                                rangeToDelete.EndRef());
   NS_WARNING_ASSERTION(NS_SUCCEEDED(rv),
@@ -2536,24 +2753,63 @@ HTMLEditor::AutoDeleteRangesHandler::HandleDeleteAtomicContent(
     }
   }
 
-  {
+  if (MOZ_LIKELY(pointToPutCaret.IsInContentNode())) {
     AutoTrackDOMPoint trackPointToPutCaret(aHTMLEditor.RangeUpdaterRef(),
                                            &pointToPutCaret);
-    Result<CaretPoint, nsresult> caretPointOrError =
-        aHTMLEditor.InsertBRElementIfHardLineIsEmptyAndEndsWithBlockBoundary(
-            pointToPutCaret);
-    if (MOZ_UNLIKELY(caretPointOrError.isErr())) {
+    nsresult rv = aHTMLEditor.EnsureNoFollowingUnnecessaryLineBreak(
+        pointToPutCaret, aEditingHost);
+    if (NS_FAILED(rv)) {
+      NS_WARNING("HTMLEditor::EnsureNoFollowingUnnecessaryLineBreak() failed");
+      return Err(rv);
+    }
+  }
+  if (NS_WARN_IF(!pointToPutCaret.IsSet())) {
+    return Err(NS_ERROR_EDITOR_UNEXPECTED_DOM_TREE);
+  }
+
+  if ((aHTMLEditor.IsMailEditor() || aHTMLEditor.IsPlaintextMailComposer()) &&
+      MOZ_LIKELY(pointToPutCaret.IsInContentNode())) {
+    AutoTrackDOMPoint trackPointToPutCaret(aHTMLEditor.RangeUpdaterRef(),
+                                           &pointToPutCaret);
+    nsresult rv = aHTMLEditor.DeleteMostAncestorMailCiteElementIfEmpty(
+        MOZ_KnownLive(*pointToPutCaret.ContainerAs<nsIContent>()));
+    if (NS_FAILED(rv)) {
       NS_WARNING(
-          "HTMLEditor::"
-          "InsertBRElementIfHardLineIsEmptyAndEndsWithBlockBoundary()"
-          " failed");
-      return caretPointOrError;
+          "HTMLEditor::DeleteMostAncestorMailCiteElementIfEmpty() failed");
+      return Err(rv);
     }
     trackPointToPutCaret.FlushAndStopTracking();
-    caretPointOrError.unwrap().MoveCaretPointTo(
-        pointToPutCaret, aHTMLEditor, {SuggestCaret::OnlyIfHasSuggestion});
-    if (NS_WARN_IF(!pointToPutCaret.IsSet())) {
+    if (NS_WARN_IF(!pointToPutCaret.IsSetAndValidInComposedDoc())) {
       return Err(NS_ERROR_EDITOR_UNEXPECTED_DOM_TREE);
+    }
+  }
+
+  if (aHTMLEditor.GetTopLevelEditSubAction() ==
+      EditSubAction::eDeleteSelectedContent) {
+    AutoTrackDOMPoint trackPointToPutCaret(aHTMLEditor.RangeUpdaterRef(),
+                                           &pointToPutCaret);
+    Result<CreateElementResult, nsresult> insertPaddingBRResult =
+        aHTMLEditor.InsertPaddingBRElementIfNeeded(
+            pointToPutCaret,
+            aEditingHost.IsContentEditablePlainTextOnly() ? nsIEditor::eNoStrip
+                                                          : nsIEditor::eStrip,
+            aEditingHost);
+    if (MOZ_UNLIKELY(insertPaddingBRResult.isErr())) {
+      NS_WARNING("HTMLEditor::InsertPaddingBRElementIfNeeded() failed");
+      return insertPaddingBRResult.propagateErr();
+    }
+    trackPointToPutCaret.FlushAndStopTracking();
+    if (!pointToPutCaret.IsInTextNode()) {
+      insertPaddingBRResult.unwrap().MoveCaretPointTo(
+          pointToPutCaret, aHTMLEditor, {SuggestCaret::OnlyIfHasSuggestion});
+      if (NS_WARN_IF(!pointToPutCaret.IsSet())) {
+        return Err(NS_ERROR_EDITOR_UNEXPECTED_DOM_TREE);
+      }
+    } else {
+      insertPaddingBRResult.unwrap().IgnoreCaretPointSuggestion();
+      if (NS_WARN_IF(!pointToPutCaret.IsSet())) {
+        return Err(NS_ERROR_EDITOR_UNEXPECTED_DOM_TREE);
+      }
     }
   }
   return CaretPoint(std::move(pointToPutCaret));
@@ -3501,6 +3757,61 @@ Result<EditActionResult, nsresult> HTMLEditor::AutoDeleteRangesHandler::
           aHTMLEditor.GetEditAction())) {
     EditorDOMPoint pointToPutCaret =
         unwrappedMoveFirstLineResult.UnwrapCaretPoint();
+    // Don't remove empty inline elements in the plaintext-only mode because
+    // nobody can restore the style again.
+    if (pointToPutCaret.IsSetAndValidInComposedDoc() &&
+        pointToPutCaret.IsInContentNode() &&
+        !aEditingHost.IsContentEditablePlainTextOnly()) {
+      AutoTrackDOMPoint trackCaretPoint(aHTMLEditor.RangeUpdaterRef(),
+                                        &pointToPutCaret);
+      Result<CaretPoint, nsresult> caretPointOrError =
+          aHTMLEditor.DeleteEmptyInclusiveAncestorInlineElements(
+              MOZ_KnownLive(*pointToPutCaret.ContainerAs<nsIContent>()),
+              aEditingHost);
+      if (MOZ_UNLIKELY(caretPointOrError.isErr())) {
+        NS_WARNING(
+            "HTMLEditor::DeleteEmptyInclusiveAncestorInlineElements() failed");
+        return caretPointOrError.propagateErr();
+      }
+      trackCaretPoint.FlushAndStopTracking();
+      caretPointOrError.unwrap().MoveCaretPointTo(
+          pointToPutCaret, {SuggestCaret::OnlyIfHasSuggestion});
+    }
+    if ((aHTMLEditor.IsMailEditor() || aHTMLEditor.IsPlaintextMailComposer()) &&
+        MOZ_LIKELY(pointToPutCaret.IsInContentNode())) {
+      AutoTrackDOMPoint trackPointToPutCaret(aHTMLEditor.RangeUpdaterRef(),
+                                             &pointToPutCaret);
+      nsresult rv = aHTMLEditor.DeleteMostAncestorMailCiteElementIfEmpty(
+          MOZ_KnownLive(*pointToPutCaret.ContainerAs<nsIContent>()));
+      if (NS_FAILED(rv)) {
+        NS_WARNING(
+            "HTMLEditor::DeleteMostAncestorMailCiteElementIfEmpty() failed");
+        return Err(rv);
+      }
+      trackPointToPutCaret.FlushAndStopTracking();
+      if (NS_WARN_IF(!pointToPutCaret.IsSetAndValidInComposedDoc())) {
+        return Err(NS_ERROR_EDITOR_UNEXPECTED_DOM_TREE);
+      }
+    }
+    if (aHTMLEditor.GetTopLevelEditSubAction() ==
+            EditSubAction::eDeleteSelectedContent &&
+        pointToPutCaret.IsSetAndValidInComposedDoc()) {
+      AutoTrackDOMPoint trackCaretPoint(aHTMLEditor.RangeUpdaterRef(),
+                                        &pointToPutCaret);
+      Result<CreateElementResult, nsresult> insertPaddingBRResult =
+          aHTMLEditor.InsertPaddingBRElementIfNeeded(
+              pointToPutCaret,
+              aEditingHost.IsContentEditablePlainTextOnly()
+                  ? nsIEditor::eNoStrip
+                  : nsIEditor::eStrip,
+              aEditingHost);
+      if (MOZ_UNLIKELY(insertPaddingBRResult.isErr())) {
+        NS_WARNING("HTMLEditor::InsertPaddingBRElementIfNeeded() failed");
+        return insertPaddingBRResult.propagateErr();
+      }
+      insertPaddingBRResult.unwrap().MoveCaretPointTo(
+          pointToPutCaret, {SuggestCaret::OnlyIfHasSuggestion});
+    }
     nsresult rv = aHTMLEditor.CollapseSelectionTo(pointToPutCaret);
     if (NS_WARN_IF(rv == NS_ERROR_EDITOR_DESTROYED)) {
       return Err(NS_ERROR_EDITOR_DESTROYED);
@@ -3747,7 +4058,7 @@ HTMLEditor::AutoDeleteRangesHandler::HandleDeleteNonCollapsedRanges(
             aHTMLEditor.DeleteRangesWithTransaction(
                 aDirectionAndAmount, aStripWrappers, aRangesToDelete);
         if (MOZ_UNLIKELY(caretPointOrError.isErr())) {
-          NS_WARNING("EditorBase::DeleteRangesWithTransaction() failed");
+          NS_WARNING("HTMLEditor::DeleteRangesWithTransaction() failed");
           return caretPointOrError.propagateErr();
         }
         nsresult rv = caretPointOrError.inspect().SuggestCaretPointTo(
@@ -3769,7 +4080,7 @@ HTMLEditor::AutoDeleteRangesHandler::HandleDeleteNonCollapsedRanges(
                NS_EVENT_BITS_MUTATION_SUBTREEMODIFIED) &&
            NS_WARN_IF(!aRangesToDelete.IsFirstRangeEditable(aEditingHost)))) {
         NS_WARNING(
-            "EditorBase::DeleteRangesWithTransaction() made the first range "
+            "HTMLEditor::DeleteRangesWithTransaction() made the first range "
             "invalid");
         return Err(NS_ERROR_EDITOR_UNEXPECTED_DOM_TREE);
       }
@@ -3779,7 +4090,8 @@ HTMLEditor::AutoDeleteRangesHandler::HandleDeleteNonCollapsedRanges(
     nsresult rv = DeleteUnnecessaryNodesAndCollapseSelection(
         aHTMLEditor, aDirectionAndAmount,
         EditorDOMPoint(aRangesToDelete.FirstRangeRef()->StartRef()),
-        EditorDOMPoint(aRangesToDelete.FirstRangeRef()->EndRef()));
+        EditorDOMPoint(aRangesToDelete.FirstRangeRef()->EndRef()),
+        aEditingHost);
     if (NS_FAILED(rv)) {
       NS_WARNING(
           "AutoDeleteRangesHandler::DeleteUnnecessaryNodesAndCollapseSelection("
@@ -4039,7 +4351,8 @@ nsresult HTMLEditor::AutoDeleteRangesHandler::AutoBlockElementsJoiner::
 Result<EditActionResult, nsresult> HTMLEditor::AutoDeleteRangesHandler::
     AutoBlockElementsJoiner::DeleteContentInRange(
         HTMLEditor& aHTMLEditor, nsIEditor::EDirection aDirectionAndAmount,
-        nsIEditor::EStripWrappers aStripWrappers, nsRange& aRangeToDelete) {
+        nsIEditor::EStripWrappers aStripWrappers, nsRange& aRangeToDelete,
+        const Element& aEditingHost) {
   MOZ_ASSERT(aHTMLEditor.IsEditActionDataAvailable());
   MOZ_ASSERT(!aRangeToDelete.Collapsed());
   MOZ_ASSERT(mMode == Mode::DeleteContentInRange);
@@ -4075,7 +4388,7 @@ Result<EditActionResult, nsresult> HTMLEditor::AutoDeleteRangesHandler::
         return Err(NS_ERROR_EDITOR_DESTROYED);
       }
       NS_WARNING(
-          "EditorBase::DeleteRangesWithTransaction() failed, but ignored");
+          "HTMLEditor::DeleteRangesWithTransaction() failed, but ignored");
     } else {
       nsresult rv = caretPointOrError.inspect().SuggestCaretPointTo(
           aHTMLEditor, {SuggestCaret::OnlyIfHasSuggestion,
@@ -4099,7 +4412,7 @@ Result<EditActionResult, nsresult> HTMLEditor::AutoDeleteRangesHandler::
       mDeleteRangesHandler->DeleteUnnecessaryNodesAndCollapseSelection(
           aHTMLEditor, aDirectionAndAmount,
           EditorDOMPoint(aRangeToDelete.StartRef()),
-          EditorDOMPoint(aRangeToDelete.EndRef()));
+          EditorDOMPoint(aRangeToDelete.EndRef()), aEditingHost);
   if (NS_FAILED(rv)) {
     NS_WARNING(
         "AutoDeleteRangesHandler::DeleteUnnecessaryNodesAndCollapseSelection() "
@@ -4164,7 +4477,7 @@ Result<EditActionResult, nsresult> HTMLEditor::AutoDeleteRangesHandler::
       aHTMLEditor.DeleteRangesWithTransaction(aDirectionAndAmount,
                                               aStripWrappers, rangesToDelete);
   if (MOZ_UNLIKELY(caretPointOrError.isErr())) {
-    NS_WARNING("EditorBase::DeleteRangesWithTransaction() failed");
+    NS_WARNING("HTMLEditor::DeleteRangesWithTransaction() failed");
     return caretPointOrError.propagateErr();
   }
 
@@ -4777,6 +5090,10 @@ nsresult HTMLEditor::AutoDeleteRangesHandler::AutoBlockElementsJoiner::
       NS_SUCCEEDED(rv),
       "AutoInclusiveAncestorBlockElementsJoiner::ComputeRangeToDelete() "
       "failed");
+
+  // FIXME: If we'll delete unnecessary following <br>, we need to include it
+  // into aRangesToDelete.
+
   return rv;
 }
 
@@ -4824,6 +5141,12 @@ Result<EditActionResult, nsresult> HTMLEditor::AutoDeleteRangesHandler::
           aHTMLEditor, arrayOfTopChildren, aSelectionWasCollapsed);
   const bool joinInclusiveAncestorBlockElements =
       !isDeletingLineBreak && needsToJoinLater;
+  const bool maybeDeleteOnlyFollowingContentOfFollowingBlockBoundary =
+      !isDeletingLineBreak &&
+      mMode != Mode::DeletePrecedingLinesAndContentInRange &&
+      HTMLEditUtils::PointIsImmediatelyBeforeCurrentBlockBoundary(
+          EditorRawDOMPoint(aRangeToDelete.StartRef()),
+          HTMLEditUtils::IgnoreInvisibleLineBreak::Yes, aEditingHost);
   const PutCaretTo putCaretTo = [&]() {
     // When we delete only preceding lines of the right child block, we should
     // put caret into start of the right block.
@@ -4981,7 +5304,7 @@ Result<EditActionResult, nsresult> HTMLEditor::AutoDeleteRangesHandler::
   }
   DeleteRangeResult moveFirstLineResult = moveFirstLineResultOrError.unwrap();
 
-  auto pointToPutCaret = [&]() -> EditorDOMPoint {
+  auto pointToPutCaret = [&]() MOZ_NEVER_INLINE_DEBUG -> EditorDOMPoint {
     if (moveFirstLineResult.HasCaretPointSuggestion()) {
       MOZ_ASSERT(moveFirstLineResult.Handled());
       if (MayEditActionDeleteAroundCollapsedSelection(
@@ -5007,13 +5330,176 @@ Result<EditActionResult, nsresult> HTMLEditor::AutoDeleteRangesHandler::
     AutoTrackDOMPoint trackPointToPutCaret(aHTMLEditor.RangeUpdaterRef(),
                                            &pointToPutCaret);
     EditorDOMRange range(aRangeToDelete);
-    nsresult rv =
-        mDeleteRangesHandler->DeleteUnnecessaryNodes(aHTMLEditor, range);
+    nsresult rv = mDeleteRangesHandler->DeleteUnnecessaryNodes(
+        aHTMLEditor, range, aEditingHost);
     if (NS_FAILED(rv)) {
       NS_WARNING("AutoDeleteRangesHandler::DeleteUnnecessaryNodes() failed");
       return Err(rv);
     }
+    trackPointToPutCaret.FlushAndStopTracking();
+    if (NS_WARN_IF(!pointToPutCaret.IsSetAndValidInComposedDoc())) {
+      return Err(NS_ERROR_EDITOR_UNEXPECTED_DOM_TREE);
+    }
   }
+
+  if (aHTMLEditor.IsMailEditor() &&
+      MOZ_LIKELY(pointToPutCaret.IsInContentNode())) {
+    AutoTrackDOMPoint trackPointToPutCaret(aHTMLEditor.RangeUpdaterRef(),
+                                           &pointToPutCaret);
+    nsresult rv = aHTMLEditor.DeleteMostAncestorMailCiteElementIfEmpty(
+        MOZ_KnownLive(*pointToPutCaret.ContainerAs<nsIContent>()));
+    if (NS_FAILED(rv)) {
+      NS_WARNING(
+          "HTMLEditor::DeleteMostAncestorMailCiteElementIfEmpty() failed");
+      return Err(rv);
+    }
+    trackPointToPutCaret.FlushAndStopTracking();
+    if (NS_WARN_IF(!pointToPutCaret.IsSetAndValidInComposedDoc())) {
+      return Err(NS_ERROR_EDITOR_UNEXPECTED_DOM_TREE);
+    }
+  }
+
+  const auto EnsureNoFollowingUnnecessaryLineBreak =
+      [&](const EditorDOMPoint& aPoint)
+          MOZ_NEVER_INLINE_DEBUG MOZ_CAN_RUN_SCRIPT {
+            if (!aPoint.IsInContentNode()) {
+              return NS_OK;
+            }
+            AutoTrackDOMDeleteRangeResult trackDeleteContentResult(
+                aHTMLEditor.RangeUpdaterRef(), &deleteContentResult);
+            AutoTrackDOMDeleteRangeResult trackMoveFirstLineResult(
+                aHTMLEditor.RangeUpdaterRef(), &moveFirstLineResult);
+            AutoTrackDOMPoint trackPointToPutCaret(
+                aHTMLEditor.RangeUpdaterRef(), &pointToPutCaret);
+            nsresult rv = aHTMLEditor.EnsureNoFollowingUnnecessaryLineBreak(
+                aPoint, aEditingHost);
+            NS_WARNING_ASSERTION(
+                NS_SUCCEEDED(rv),
+                "HTMLEditor::EnsureNoFollowingUnnecessaryLineBreak() failed");
+            return rv;
+          };
+
+  const auto InsertPaddingBRElementIfNeeded =
+      [&](const EditorDOMPoint& aPoint)
+          MOZ_NEVER_INLINE_DEBUG MOZ_CAN_RUN_SCRIPT
+      -> Result<CaretPoint, nsresult> {
+    if (!aPoint.IsInContentNode()) {
+      return CaretPoint(EditorDOMPoint());
+    }
+    const bool insertingAtCaretPoint = aPoint == pointToPutCaret;
+    if (insertingAtCaretPoint && aHTMLEditor.GetTopLevelEditSubAction() !=
+                                     EditSubAction::eDeleteSelectedContent) {
+      return CaretPoint(EditorDOMPoint());
+    }
+    if (!insertingAtCaretPoint &&
+        mMode == Mode::DeletePrecedingLinesAndContentInRange) {
+      return CaretPoint(EditorDOMPoint());
+    }
+    AutoTrackDOMDeleteRangeResult trackDeleteContentResult(
+        aHTMLEditor.RangeUpdaterRef(), &deleteContentResult);
+    AutoTrackDOMDeleteRangeResult trackMoveFirstLineResult(
+        aHTMLEditor.RangeUpdaterRef(), &moveFirstLineResult);
+    AutoTrackDOMPoint trackPointToPutCaret(aHTMLEditor.RangeUpdaterRef(),
+                                           &pointToPutCaret);
+    Result<CreateElementResult, nsresult> insertLineBreakResult =
+        aHTMLEditor.InsertPaddingBRElementIfNeeded(
+            aPoint,
+            aEditingHost.IsContentEditablePlainTextOnly() ? nsIEditor::eNoStrip
+                                                          : nsIEditor::eStrip,
+            aEditingHost);
+    if (MOZ_UNLIKELY(insertLineBreakResult.isErr())) {
+      NS_WARNING("HTMLEditor::InsertPaddingBRElementIfNeeded() failed");
+      return insertLineBreakResult.propagateErr();
+    }
+    if (!insertLineBreakResult.inspect().Handled() || !insertingAtCaretPoint) {
+      insertLineBreakResult.unwrap().IgnoreCaretPointSuggestion();
+      return CaretPoint(EditorDOMPoint());
+    }
+    return CaretPoint(insertLineBreakResult.unwrap().UnwrapCaretPoint());
+  };
+
+  // If we moved content from the right element to the left element, we need to
+  // maintain padding line break at end of moved content.
+  if (moveFirstLineResult.Handled() &&
+      moveFirstLineResult.DeleteRangeRef().IsPositioned()) {
+    nsresult rv;
+    if (NS_WARN_IF(
+            NS_FAILED(rv = EnsureNoFollowingUnnecessaryLineBreak(
+                          moveFirstLineResult.DeleteRangeRef().EndRef())))) {
+      return Err(rv);
+    }
+    Result<CaretPoint, nsresult> caretPointOrError =
+        InsertPaddingBRElementIfNeeded(
+            moveFirstLineResult.DeleteRangeRef().EndRef());
+    if (NS_WARN_IF(caretPointOrError.isErr())) {
+      return caretPointOrError.propagateErr();
+    }
+    caretPointOrError.unwrap().MoveCaretPointTo(
+        pointToPutCaret, {SuggestCaret::OnlyIfHasSuggestion});
+  }
+  // If we only deleted content in the range, we need to maintain padding line
+  // breaks at both deleted range boundaries.
+  else if (deleteContentResult.DeleteRangeRef().IsPositioned()) {
+    if (!deleteContentResult.DeleteRangeRef().Collapsed()) {
+      nsresult rv;
+      if (NS_WARN_IF(
+              NS_FAILED(rv = EnsureNoFollowingUnnecessaryLineBreak(
+                            deleteContentResult.DeleteRangeRef().EndRef())))) {
+        return Err(rv);
+      }
+      // If we deleted blocks following current block, we should not insert
+      // padding line break after current block when we're handling Backspace.
+      const bool isFollowingBlockDeletedByBackspace =
+          [&]() MOZ_NEVER_INLINE_DEBUG {
+            if (putCaretTo == PutCaretTo::EndOfRange) {
+              return false;
+            }
+            if (!HTMLEditUtils::RangeIsAcrossStartBlockBoundary(
+                    deleteContentResult.DeleteRangeRef())) {
+              return false;
+            }
+            WSScanResult nextThing =
+                WSRunScanner::ScanInclusiveNextVisibleNodeOrBlockBoundary(
+                    &aEditingHost,
+                    deleteContentResult.DeleteRangeRef().EndRef(),
+                    BlockInlineCheck::UseComputedDisplayOutsideStyle);
+            return nextThing.ReachedBRElement() ||
+                   nextThing.ReachedPreformattedLineBreak() ||
+                   nextThing.ReachedHRElement() ||
+                   nextThing.ReachedBlockBoundary();
+          }();
+      if (!isFollowingBlockDeletedByBackspace) {
+        Result<CaretPoint, nsresult> caretPointOrError =
+            InsertPaddingBRElementIfNeeded(
+                deleteContentResult.DeleteRangeRef().EndRef());
+        if (NS_WARN_IF(caretPointOrError.isErr())) {
+          return caretPointOrError.propagateErr();
+        }
+        caretPointOrError.unwrap().MoveCaretPointTo(
+            pointToPutCaret, {SuggestCaret::OnlyIfHasSuggestion});
+      }
+    }
+    // If we deleted content only after current block, we don't need to
+    // maintain line breaks at start of the deleted range because nothing has
+    // been changed from the caret point of view.
+    if (!maybeDeleteOnlyFollowingContentOfFollowingBlockBoundary) {
+      nsresult rv;
+      if (NS_WARN_IF(NS_FAILED(
+              rv = EnsureNoFollowingUnnecessaryLineBreak(
+                  deleteContentResult.DeleteRangeRef().StartRef())))) {
+        return Err(rv);
+      }
+      Result<CaretPoint, nsresult> caretPointOrError =
+          InsertPaddingBRElementIfNeeded(
+              deleteContentResult.DeleteRangeRef().StartRef());
+      if (NS_WARN_IF(caretPointOrError.isErr())) {
+        return caretPointOrError.propagateErr();
+      }
+      caretPointOrError.unwrap().MoveCaretPointTo(
+          pointToPutCaret, {SuggestCaret::OnlyIfHasSuggestion});
+    }
+  }
+
   nsresult rv = aHTMLEditor.CollapseSelectionTo(pointToPutCaret);
   if (NS_FAILED(rv)) {
     NS_WARNING("EditorBase::CollapseSelectionTo() failed");
@@ -5038,7 +5524,8 @@ Result<EditActionResult, nsresult> HTMLEditor::AutoDeleteRangesHandler::
 }
 
 nsresult HTMLEditor::AutoDeleteRangesHandler::DeleteUnnecessaryNodes(
-    HTMLEditor& aHTMLEditor, EditorDOMRange& aRange) {
+    HTMLEditor& aHTMLEditor, EditorDOMRange& aRange,
+    const Element& aEditingHost) {
   MOZ_ASSERT(aHTMLEditor.IsTopLevelEditSubActionDataAvailable());
   MOZ_ASSERT(EditorUtils::IsEditableContent(
       *aRange.StartRef().ContainerAs<nsIContent>(), EditorType::HTML));
@@ -5082,36 +5569,55 @@ nsresult HTMLEditor::AutoDeleteRangesHandler::DeleteUnnecessaryNodes(
   }
 
   // We might have left only collapsed white-space in the start/end nodes
-  AutoTrackDOMRange trackRange(aHTMLEditor.RangeUpdaterRef(), &aRange);
+  {
+    AutoTrackDOMRange trackRange(aHTMLEditor.RangeUpdaterRef(), &aRange);
 
-  OwningNonNull<nsIContent> startContainer =
-      *aRange.StartRef().ContainerAs<nsIContent>();
-  OwningNonNull<nsIContent> endContainer =
-      *aRange.EndRef().ContainerAs<nsIContent>();
-  nsresult rv =
-      DeleteNodeIfInvisibleAndEditableTextNode(aHTMLEditor, startContainer);
-  if (NS_WARN_IF(rv == NS_ERROR_EDITOR_DESTROYED)) {
-    return NS_ERROR_EDITOR_DESTROYED;
+    OwningNonNull<nsIContent> startContainer =
+        *aRange.StartRef().ContainerAs<nsIContent>();
+    OwningNonNull<nsIContent> endContainer =
+        *aRange.EndRef().ContainerAs<nsIContent>();
+    nsresult rv =
+        DeleteNodeIfInvisibleAndEditableTextNode(aHTMLEditor, startContainer);
+    if (NS_WARN_IF(rv == NS_ERROR_EDITOR_DESTROYED)) {
+      return NS_ERROR_EDITOR_DESTROYED;
+    }
+    NS_WARNING_ASSERTION(
+        NS_SUCCEEDED(rv),
+        "AutoDeleteRangesHandler::DeleteNodeIfInvisibleAndEditableTextNode() "
+        "failed to remove start node, but ignored");
+    // If we've not handled the selection end container, and it's still
+    // editable, let's handle it.
+    if (!aRange.InSameContainer() &&
+        EditorUtils::IsEditableContent(
+            *aRange.EndRef().ContainerAs<nsIContent>(), EditorType::HTML)) {
+      rv = DeleteNodeIfInvisibleAndEditableTextNode(aHTMLEditor, endContainer);
+      if (NS_WARN_IF(rv == NS_ERROR_EDITOR_DESTROYED)) {
+        return NS_ERROR_EDITOR_DESTROYED;
+      }
+      NS_WARNING_ASSERTION(
+          NS_SUCCEEDED(rv),
+          "AutoDeleteRangesHandler::DeleteNodeIfInvisibleAndEditableTextNode() "
+          "failed to remove end node, but ignored");
+    }
   }
-  NS_WARNING_ASSERTION(
-      NS_SUCCEEDED(rv),
-      "AutoDeleteRangesHandler::DeleteNodeIfInvisibleAndEditableTextNode() "
-      "failed to remove start node, but ignored");
-  // If we've not handled the selection end container, and it's still
-  // editable, let's handle it.
-  if (aRange.InSameContainer() ||
-      !EditorUtils::IsEditableContent(
-          *aRange.EndRef().ContainerAs<nsIContent>(), EditorType::HTML)) {
-    return NS_OK;
+
+  if (NS_WARN_IF(!aRange.IsPositioned())) {
+    return Err(NS_ERROR_EDITOR_UNEXPECTED_DOM_TREE);
   }
-  rv = DeleteNodeIfInvisibleAndEditableTextNode(aHTMLEditor, endContainer);
-  if (NS_WARN_IF(rv == NS_ERROR_EDITOR_DESTROYED)) {
-    return NS_ERROR_EDITOR_DESTROYED;
+
+  if (MOZ_LIKELY(aRange.EndRef().IsInContentNode())) {
+    AutoTrackDOMRange trackRange(aHTMLEditor.RangeUpdaterRef(), &aRange);
+    nsresult rv = aHTMLEditor.EnsureNoFollowingUnnecessaryLineBreak(
+        aRange.EndRef(), aEditingHost);
+    if (NS_FAILED(rv)) {
+      NS_WARNING("HTMLEditor::EnsureNoFollowingUnnecessaryLineBreak() failed");
+      return Err(rv);
+    }
   }
-  NS_WARNING_ASSERTION(
-      NS_SUCCEEDED(rv),
-      "AutoDeleteRangesHandler::DeleteNodeIfInvisibleAndEditableTextNode() "
-      "failed to remove end node, but ignored");
+  if (NS_WARN_IF(!aRange.IsPositioned())) {
+    return Err(NS_ERROR_EDITOR_UNEXPECTED_DOM_TREE);
+  }
+
   return NS_OK;
 }
 
@@ -5119,9 +5625,9 @@ nsresult
 HTMLEditor::AutoDeleteRangesHandler::DeleteUnnecessaryNodesAndCollapseSelection(
     HTMLEditor& aHTMLEditor, nsIEditor::EDirection aDirectionAndAmount,
     const EditorDOMPoint& aSelectionStartPoint,
-    const EditorDOMPoint& aSelectionEndPoint) {
+    const EditorDOMPoint& aSelectionEndPoint, const Element& aEditingHost) {
   EditorDOMRange range(aSelectionStartPoint, aSelectionEndPoint);
-  nsresult rv = DeleteUnnecessaryNodes(aHTMLEditor, range);
+  nsresult rv = DeleteUnnecessaryNodes(aHTMLEditor, range, aEditingHost);
   if (NS_FAILED(rv)) {
     NS_WARNING("AutoDeleteRangesHandler::DeleteUnnecessaryNodes() failed");
     return rv;
@@ -7235,8 +7741,27 @@ Result<DeleteRangeResult, nsresult> HTMLEditor::AutoDeleteRangesHandler::
   if (NS_WARN_IF(!aContent.IsInComposedDoc())) {
     return Err(NS_ERROR_EDITOR_UNEXPECTED_DOM_TREE);
   }
-  return DeleteRangeResult(EditorDOMRange(EditorDOMPoint(&aContent, 0u),
-                                          EditorDOMPoint::AtEndOf(aContent)),
+
+  // Insert a <br> into new empty table cell or caption because we don't have a
+  // change to do it for the middle of the range.  Note that this does not
+  // handle first cell/caption and end cell/caption at the deleting range. They
+  // should be handled by upper level because we may need to delete unnecessary
+  // new empty inline ancestors in the cells/captions.
+  if (!HTMLEditUtils::IsTableCellOrCaption(aContent) ||
+      aContent.GetChildCount()) {
+    return DeleteRangeResult(EditorDOMRange(EditorDOMPoint(&aContent, 0u),
+                                            EditorDOMPoint::AtEndOf(aContent)),
+                             EditorDOMPoint());
+  }
+  Result<CreateElementResult, nsresult> insertLineBreakResult =
+      aHTMLEditor.InsertBRElement(WithTransaction::Yes,
+                                  EditorDOMPoint(&aContent, 0));
+  if (MOZ_UNLIKELY(insertLineBreakResult.isErr())) {
+    NS_WARNING("HTMLEditor::InsertBRElement() failed");
+    return insertLineBreakResult.propagateErr();
+  }
+  insertLineBreakResult.inspect().IgnoreCaretPointSuggestion();
+  return DeleteRangeResult(EditorDOMRange(EditorDOMPoint(&aContent, 0u)),
                            EditorDOMPoint());
 }
 
@@ -7552,7 +8077,8 @@ Result<CaretPoint, nsresult> HTMLEditor::AutoDeleteRangesHandler::
 
 Result<EditActionResult, nsresult>
 HTMLEditor::AutoDeleteRangesHandler::AutoEmptyBlockAncestorDeleter::Run(
-    HTMLEditor& aHTMLEditor, nsIEditor::EDirection aDirectionAndAmount) {
+    HTMLEditor& aHTMLEditor, nsIEditor::EDirection aDirectionAndAmount,
+    const Element& aEditingHost) {
   MOZ_ASSERT(mEmptyInclusiveAncestorBlockElement);
   MOZ_ASSERT(mEmptyInclusiveAncestorBlockElement->GetParentElement());
   MOZ_ASSERT(aHTMLEditor.IsEditActionDataAvailable());
@@ -7571,6 +8097,7 @@ HTMLEditor::AutoDeleteRangesHandler::AutoEmptyBlockAncestorDeleter::Run(
     }
   }
 
+  bool unwrapAncestorBlocks = false;
   if (HTMLEditUtils::IsListItem(mEmptyInclusiveAncestorBlockElement)) {
     Result<RefPtr<Element>, nsresult> result =
         MaybeInsertBRElementBeforeEmptyListItemElement(aHTMLEditor);
@@ -7603,12 +8130,55 @@ HTMLEditor::AutoDeleteRangesHandler::AutoEmptyBlockAncestorDeleter::Run(
       NS_WARNING("CaretPoint::SuggestCaretPointTo() failed");
       return Err(rv);
     }
+    unwrapAncestorBlocks = result.inspect().CaretPointRef().GetContainer() ==
+                           mEmptyInclusiveAncestorBlockElement->GetParentNode();
   }
+  nsCOMPtr<nsINode> parentNode =
+      mEmptyInclusiveAncestorBlockElement->GetParentNode();
+  nsCOMPtr<nsIContent> nextSibling =
+      mEmptyInclusiveAncestorBlockElement->GetNextSibling();
   nsresult rv = aHTMLEditor.DeleteNodeWithTransaction(
       MOZ_KnownLive(*mEmptyInclusiveAncestorBlockElement));
   if (NS_FAILED(rv)) {
     NS_WARNING("EditorBase::DeleteNodeWithTransaction() failed");
     return Err(rv);
+  }
+  if (NS_WARN_IF(!parentNode->IsInComposedDoc()) ||
+      NS_WARN_IF(nextSibling && nextSibling->GetParentNode() != parentNode)) {
+    return Err(NS_ERROR_EDITOR_UNEXPECTED_DOM_TREE);
+  }
+  auto pointToInsertLineBreak = nextSibling
+                                    ? EditorDOMPoint(nextSibling)
+                                    : EditorDOMPoint::AtEndOf(*parentNode);
+  if ((aHTMLEditor.IsMailEditor() || aHTMLEditor.IsPlaintextMailComposer()) &&
+      MOZ_LIKELY(pointToInsertLineBreak.IsInContentNode())) {
+    AutoTrackDOMPoint trackPointToInsertLineBreak(aHTMLEditor.RangeUpdaterRef(),
+                                                  &pointToInsertLineBreak);
+    nsresult rv = aHTMLEditor.DeleteMostAncestorMailCiteElementIfEmpty(
+        MOZ_KnownLive(*pointToInsertLineBreak.ContainerAs<nsIContent>()));
+    if (NS_FAILED(rv)) {
+      NS_WARNING(
+          "HTMLEditor::DeleteMostAncestorMailCiteElementIfEmpty() failed");
+      return Err(rv);
+    }
+    trackPointToInsertLineBreak.FlushAndStopTracking();
+    if (NS_WARN_IF(!pointToInsertLineBreak.IsSetAndValidInComposedDoc())) {
+      return Err(NS_ERROR_EDITOR_UNEXPECTED_DOM_TREE);
+    }
+  }
+  if (unwrapAncestorBlocks && aHTMLEditor.GetTopLevelEditSubAction() ==
+                                  EditSubAction::eDeleteSelectedContent) {
+    Result<CreateElementResult, nsresult> insertLineBreakResult =
+        aHTMLEditor.InsertPaddingBRElementIfNeeded(
+            pointToInsertLineBreak,
+            aEditingHost.IsContentEditablePlainTextOnly() ? nsIEditor::eNoStrip
+                                                          : nsIEditor::eStrip,
+            aEditingHost);
+    if (MOZ_UNLIKELY(insertLineBreakResult.isErr())) {
+      NS_WARNING("HTMLEditor::InsertPaddingBRElementIfNeeded() failed");
+      return insertLineBreakResult.propagateErr();
+    }
+    insertLineBreakResult.unwrap().IgnoreCaretPointSuggestion();
   }
   return EditActionResult::HandledResult();
 }
