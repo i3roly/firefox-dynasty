@@ -11,6 +11,8 @@
 #include "AppleUtils.h"
 #include "CallbackThreadRegistry.h"
 
+#include "AppleVDADecoder.h"
+#include "AppleVDALinker.h"
 #include "MediaInfo.h"
 #include "MP4Decoder.h"
 #include "MediaData.h"
@@ -60,7 +62,6 @@ AppleVDADecoder::AppleVDADecoder(const VideoInfo& aConfig,
       mTaskQueue(TaskQueue::Create(
           GetMediaThreadPool(MediaThreadType::PLATFORM_DECODER),
           "AppleVDADecoder")),
-      mDecoder(nullptr),
       mMaxRefFrames(
           mStreamType != StreamType::H264 ||
                   aOptions.contains(CreateDecoderParams::Option::LowLatency)
@@ -102,7 +103,6 @@ AppleVDADecoder::~AppleVDADecoder()
 RefPtr<MediaDataDecoder::InitPromise>
 AppleVDADecoder::Init()
 {
-  LOG("tryna call initsession\n");
   MediaResult rv = InitializeSession();
 
   if (NS_SUCCEEDED(rv)) {
@@ -531,12 +531,13 @@ AppleVDADecoder::InitializeSession()
                      this,
                      &mDecoder);
 
-  rv == 0 ? mIsHardwareAccelerated = 1 : mIsHardwareAccelerated = 0; //kVDADecoderNoErr = 0
+  mIsHardwareAccelerated = rv == 0 ? 1 : 0; //kVDADecoderNoErr = 0
   if (rv != noErr) {
     LOG("AppleVDADecoder: Couldn't create hardware VDA decoder, error %d", rv);
-    return NS_ERROR_FAILURE;
+      return MediaResult(NS_ERROR_DOM_MEDIA_FATAL_ERR,
+                       RESULT_DETAIL("Couldn't create format description!"));
   }
-
+ 
   LOG("AppleVDADecoder: %s hardware accelerated decoding",
       mIsHardwareAccelerated ? "using" : "not using");
 
@@ -546,6 +547,8 @@ AppleVDADecoder::InitializeSession()
 CFDictionaryRef
 AppleVDADecoder::CreateDecoderSpecification()
 {
+  const uint8_t* extradata = mExtraData->Elements();
+  int extrasize = mExtraData->Length();
 
   OSType format = 'avc1';
   AutoCFRelease<CFNumberRef> avc_width  =
@@ -560,16 +563,15 @@ AppleVDADecoder::CreateDecoderSpecification()
     CFNumberCreate(kCFAllocatorDefault,
                    kCFNumberSInt32Type,
                    &format);
-
   AutoCFRelease<CFDataRef> avc_data =
-      CFDataCreate(kCFAllocatorDefault,
-                  mExtraData->Elements(),
-                  AssertedCast<CFIndex>(mExtraData->Length()));
+    CFDataCreate(kCFAllocatorDefault,
+                 extradata,
+                 extrasize);
 
-  const void* decoderKeys[] = { kVDADecoderConfiguration_Width,
-                                kVDADecoderConfiguration_Height,
-                                kVDADecoderConfiguration_SourceFormat,
-                                kVDADecoderConfiguration_avcCData };
+  const void* decoderKeys[] = { AppleVDALinker::skPropWidth,
+                                AppleVDALinker::skPropHeight,
+                                AppleVDALinker::skPropSourceFormat,
+                                AppleVDALinker::skPropAVCCData };
   const void* decoderValue[] = { avc_width,
                                  avc_height,
                                  avc_format,

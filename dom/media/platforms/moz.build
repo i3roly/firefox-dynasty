@@ -87,11 +87,14 @@ if CONFIG["MOZ_APPLEMEDIA"]:
     ]
     UNIFIED_SOURCES += [
         "apple/AppleATDecoder.cpp",
+        "apple/AppleCMLinker.cpp",
         "apple/AppleDecoderModule.cpp",
         "apple/AppleEncoderModule.cpp",
         'apple/AppleVDADecoder.cpp',
+        'apple/AppleVDALinker.cpp',
         "apple/AppleVTDecoder.cpp",
         "apple/AppleVTEncoder.cpp",
+        "apple/AppleVTLinker.cpp",
     ]
     LOCAL_INCLUDES += [
         "/media/libyuv/libyuv/include",

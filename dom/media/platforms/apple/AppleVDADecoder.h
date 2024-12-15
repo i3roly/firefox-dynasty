@@ -9,7 +9,7 @@
 
 #include <CoreFoundation/CFDictionary.h>  // For CFDictionaryRef
 #include <CoreMedia/CoreMedia.h>          // For CMVideoFormatDescriptionRef
-#include <VideoDecodeAcceleration/VDADecoder.h>
+#include <VideoToolbox/VideoToolbox.h>    // For VTDecompressionSessionRef
 
 #include "AppleDecoderModule.h"
 #include "AppleVTDecoder.h"
@@ -22,6 +22,7 @@
 #include "mozilla/ProfilerUtils.h"
 #include "mozilla/gfx/Types.h"
 
+#include "VideoDecodeAcceleration/VDADecoder.h"
 
 namespace mozilla {
 
@@ -101,19 +102,6 @@ public:
 
   void SetSeekThreshold(const media::TimeUnit& aTime) override;
 
-
-  const RefPtr<MediaByteBuffer> mExtraData;
-  const uint32_t mPictureWidth;
-  const uint32_t mPictureHeight;
-  const uint32_t mDisplayWidth;
-  const uint32_t mDisplayHeight;
-  const gfx::YUVColorSpace mColorSpace;
-  const gfx::ColorSpace2 mColorPrimaries;
-  const gfx::TransferFunction mTransferFunction;
-  const gfx::ColorRange mColorRange;
-  const gfx::ColorDepth mColorDepth;
-
-
 private:
   friend class AppleDecoderModule;  // To access InitializeSession.
   virtual ~AppleVDADecoder();
@@ -131,13 +119,26 @@ private:
 
   AppleFrameRef* CreateAppleFrameRef(const MediaRawData* aSample);
   CFDictionaryRef CreateOutputConfiguration();
+
+  const RefPtr<MediaByteBuffer> mExtraData;
+  const uint32_t mPictureWidth;
+  const uint32_t mPictureHeight;
+  const uint32_t mDisplayWidth;
+  const uint32_t mDisplayHeight;
+  const gfx::YUVColorSpace mColorSpace;
+  const gfx::ColorSpace2 mColorPrimaries;
+  const gfx::TransferFunction mTransferFunction;
+  const gfx::ColorRange mColorRange;
+  const gfx::ColorDepth mColorDepth;
+
   // Method to set up the decompression session.
   MediaResult InitializeSession();
   nsresult WaitForAsynchronousFrames();
   CFDictionaryRef CreateDecoderSpecification();
+  CFDictionaryRef CreateDecoderExtensions();
 
   MOZ_DEFINE_ENUM_CLASS_WITH_TOSTRING_AT_CLASS_SCOPE(StreamType,
-                                                     (Unknown, H264));
+                                                     (Unknown, H264, VP9, AV1));
 
   const StreamType mStreamType;
   const RefPtr<TaskQueue> mTaskQueue;
