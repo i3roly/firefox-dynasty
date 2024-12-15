@@ -40,6 +40,9 @@ class AppleDecoderModule : public PlatformDecoderModule {
 
   static bool sCanUseVP9Decoder;
   static bool sCanUseAV1Decoder;
+  static bool sIsCoreMediaAvailable;
+  static bool sIsVDAAvailable;
+  static bool sIsVTAvailable;
 
   static constexpr int kCMVideoCodecType_H264{'avc1'};
   static constexpr int kCMVideoCodecType_VP9{'vp09'};
