@@ -2465,7 +2465,7 @@ void nsBlockFrame::ComputeOverflowAreas(OverflowAreas& aOverflowAreas,
   }
 
   // We rely here on our caller having called SetOverflowAreasToDesiredBounds().
-  nsRect frameBounds = aOverflowAreas.ScrollableOverflow();
+  const nsRect frameBounds = aOverflowAreas.ScrollableOverflow();
 
   const auto wm = GetWritingMode();
   const auto borderPadding =
@@ -2556,9 +2556,12 @@ enum class RestrictPaddingInflation {
 // HACK(dshin): Reaching out and querying the type like this isn't ideal.
 static RestrictPaddingInflation RestrictPaddingInflation(
     const nsIFrame* aFrame) {
-  MOZ_ASSERT(aFrame && aFrame->Style()->GetPseudoType() ==
-                           PseudoStyleType::scrolledContent,
-             "expecting a scrolled frame");
+  MOZ_ASSERT(aFrame);
+  if (aFrame->Style()->GetPseudoType() != PseudoStyleType::scrolledContent) {
+    // This can only happen when computing scrollable overflow for overflow:
+    // visible frames (for scroll{Width,Height}).
+    return RestrictPaddingInflation::No;
+  }
   // If we're `input` or `textarea`, our grandparent element must be the text
   // control element that we can query.
   const auto* parent = aFrame->GetParent();
@@ -2593,13 +2596,9 @@ static RestrictPaddingInflation RestrictPaddingInflation(
 
 nsRect nsBlockFrame::ComputePaddingInflatedScrollableOverflow(
     const nsRect& aInFlowChildBounds) const {
-  MOZ_ASSERT(Style()->GetPseudoType() == PseudoStyleType::scrolledContent,
-             "Expected scrolled frame");
   auto result = aInFlowChildBounds;
   const auto wm = GetWritingMode();
   auto padding = GetLogicalUsedPadding(wm);
-  MOZ_ASSERT(GetLogicalUsedBorderAndPadding(wm) == padding,
-             "A scrolled inner frame shouldn't have any border!");
   const auto restriction = RestrictPaddingInflation(this);
   switch (restriction) {
     case RestrictPaddingInflation::Block:
@@ -2616,7 +2615,8 @@ nsRect nsBlockFrame::ComputePaddingInflatedScrollableOverflow(
 }
 
 Maybe<nsRect> nsBlockFrame::GetLineFrameInFlowBounds(
-    const nsLineBox& aLine, const nsIFrame& aLineChildFrame) const {
+    const nsLineBox& aLine, const nsIFrame& aLineChildFrame,
+    bool aConsiderMargins) const {
   MOZ_ASSERT(aLineChildFrame.GetParent() == this,
              "Line's frame doesn't belong to this block frame?");
   // Line participants are considered in-flow for content within the line bounds, which
@@ -2626,26 +2626,28 @@ Maybe<nsRect> nsBlockFrame::GetLineFrameInFlowBounds(
     return Nothing{};
   }
   if (aLine.IsInline()) {
-    return Some(aLineChildFrame.GetMarginRectRelativeToSelf() +
-                aLineChildFrame.GetNormalPosition());
+    auto rect = aConsiderMargins ? aLineChildFrame.GetMarginRectRelativeToSelf()
+                                 : aLineChildFrame.GetRectRelativeToSelf();
+    return Some(rect + aLineChildFrame.GetNormalPosition());
   }
   const auto wm = GetWritingMode();
-  // Ensure we use the margin we actually carried out.
-  auto logicalMargin = aLineChildFrame.GetLogicalUsedMargin(wm);
-  logicalMargin.BEnd(wm) = aLine.GetCarriedOutBEndMargin().Get();
-
-  const auto linePoint = aLine.GetPhysicalBounds().TopLeft();
+  auto rect = aLineChildFrame.GetRectRelativeToSelf();
   // Special handling is required for boxes of zero block size, which carry
   // out margin collapsing with themselves. We end up "rewinding" the line
   // position after carrying out the block start margin. This is not reflected
   // in the zero-sized frame's own frame-position.
+  const auto linePoint = aLine.GetPhysicalBounds().TopLeft();
   const auto normalPosition = aLineChildFrame.GetLogicalSize(wm).BSize(wm) == 0
                                   ? linePoint
                                   : aLineChildFrame.GetNormalPosition();
-  const auto margin = logicalMargin.GetPhysicalMargin(wm).ApplySkipSides(
-      aLineChildFrame.GetSkipSides());
-  auto rect = aLineChildFrame.GetRectRelativeToSelf();
-  rect.Inflate(margin);
+  if (aConsiderMargins) {
+    // Ensure we use the margin we actually carried out.
+    auto logicalMargin = aLineChildFrame.GetLogicalUsedMargin(wm);
+    logicalMargin.BEnd(wm) = aLine.GetCarriedOutBEndMargin().Get();
+    const auto margin = logicalMargin.GetPhysicalMargin(wm).ApplySkipSides(
+        aLineChildFrame.GetSkipSides());
+    rect.Inflate(margin);
+  }
   return Some(rect + normalPosition);
 }
 
@@ -2656,23 +2658,32 @@ void nsBlockFrame::UnionChildOverflow(OverflowAreas& aOverflowAreas,
   // frame children, so calling UnionChildOverflow alone will end up
   // using the old cached values.
   const auto wm = GetWritingMode();
-  const auto borderPadding =
-      GetLogicalUsedBorderAndPadding(wm).GetPhysicalMargin(wm);
   // Overflow area computed here should agree with one computed in
-  // `ComputeOverflowAreas` (See bug 1800939 and bug 1800719). So the
+  // `ComputeOverflowAreas` (see bug 1800939 and bug 1800719). So the
   // documentation in that function applies here as well.
-  const bool isScrolled =
-      Style()->GetPseudoType() == PseudoStyleType::scrolledContent;
+  const bool isScrolled = aAsIfScrolled || Style()->GetPseudoType() ==
+                                               PseudoStyleType::scrolledContent;
+  // Note that we don't add line in-flow margins if we're not a BFC (which can
+  // happen only for overflow: visible), so that we don't incorrectly account
+  // for margins that otherwise collapse through, see bug 1936156. Note that
+  // ::-moz-scrolled-content is always a BFC (see `AnonymousBoxIsBFC`).
+  const bool considerMarginsForInFlowChildBounds =
+      isScrolled && HasAnyStateBits(NS_BLOCK_BFC);
 
-  // Relying on aOverflowAreas having been set to frame border rect.
+  // Relying on aOverflowAreas having been set to frame border rect (if
+  // aAsIfScrolled is false), or padding rect (if true).
   auto frameContentBounds = aOverflowAreas.ScrollableOverflow();
-  frameContentBounds.Deflate(borderPadding);
+  frameContentBounds.Deflate((aAsIfScrolled
+                                  ? GetLogicalUsedPadding(wm)
+                                  : GetLogicalUsedBorderAndPadding(wm))
+                                 .GetPhysicalMargin(wm));
   // We need to take in-flow children's margin rect into account, and inflate
   // it by the padding.
   auto inFlowChildBounds = frameContentBounds;
   auto inFlowScrollableOverflow = frameContentBounds;
 
-  const auto inkOverflowOnly = StyleDisplay()->IsContainLayout();
+  const auto inkOverflowOnly =
+      !aAsIfScrolled && StyleDisplay()->IsContainLayout();
 
   for (auto& line : Lines()) {
     nsRect bounds = line.GetPhysicalBounds();
@@ -2682,13 +2693,14 @@ void nsBlockFrame::UnionChildOverflow(OverflowAreas& aOverflowAreas,
     for (nsIFrame* lineFrame = line.mFirstChild; n > 0;
          lineFrame = lineFrame->GetNextSibling(), --n) {
       // Ensure this is called for each frame in the line
-      ConsiderChildOverflow(lineAreas, lineFrame);
+      ConsiderChildOverflow(lineAreas, lineFrame, aAsIfScrolled);
 
       if (inkOverflowOnly || !isScrolled) {
         continue;
       }
 
-      if (auto lineFrameBounds = GetLineFrameInFlowBounds(line, *lineFrame)) {
+      if (auto lineFrameBounds = GetLineFrameInFlowBounds(
+              line, *lineFrame, considerMarginsForInFlowChildBounds)) {
         inFlowChildBounds = inFlowChildBounds.UnionEdges(*lineFrameBounds);
       }
     }
@@ -2696,16 +2708,20 @@ void nsBlockFrame::UnionChildOverflow(OverflowAreas& aOverflowAreas,
     // Consider the overflow areas of the floats attached to the line as well
     if (line.HasFloats()) {
       for (nsIFrame* f : line.Floats()) {
-        ConsiderChildOverflow(lineAreas, f);
+        ConsiderChildOverflow(lineAreas, f, aAsIfScrolled);
         if (inkOverflowOnly || !isScrolled) {
           continue;
         }
-        inFlowChildBounds =
-            inFlowChildBounds.UnionEdges(GetNormalMarginRect(f));
+        auto rect = considerMarginsForInFlowChildBounds
+                        ? GetNormalMarginRect(f)
+                        : f->GetRectRelativeToSelf() + f->GetNormalPosition();
+        inFlowChildBounds = inFlowChildBounds.UnionEdges(rect);
       }
     }
 
-    line.SetOverflowAreas(lineAreas);
+    if (!aAsIfScrolled) {
+      line.SetOverflowAreas(lineAreas);
+    }
     aOverflowAreas.InkOverflow() =
         aOverflowAreas.InkOverflow().Union(lineAreas.InkOverflow());
     if (!inkOverflowOnly) {
@@ -7932,25 +7948,44 @@ void nsBlockFrame::BuildDisplayList(nsDisplayListBuilder* aBuilder,
     backplateColor.emplace(GetBackplateColor(this));
   }
 
-  // Don't use the line cursor if we might have a descendant placeholder ...
-  // it might skip lines that contain placeholders but don't themselves
-  // intersect with the dirty area.
-  // In particular, we really want to check ShouldDescendIntoFrame()
-  // on all our child frames, but that might be expensive.  So we
-  // approximate it by checking it on |this|; if it's true for any
-  // frame in our child list, it's also true for |this|.
-  // Also skip the cursor if we're creating text overflow markers,
-  // since we need to know what line number we're up to in order
-  // to generate unique display item keys.
-  // Lastly, the cursor should be skipped if we're drawing
-  // backplates behind text. When backplating we consider consecutive
-  // runs of text as a whole, which requires we iterate through all lines
-  // to find our backplate size.
-  nsLineBox* cursor =
-      (hasDescendantPlaceHolders || textOverflow.isSome() || backplateColor ||
-       HasLineClampEllipsis() || HasLineClampEllipsisDescendant())
-          ? nullptr
-          : GetFirstLineContaining(aBuilder->GetDirtyRect().y);
+  const bool canUseCursor = [&] {
+    if (hasDescendantPlaceHolders) {
+      // Don't use the line cursor if we might have a descendant placeholder. It
+      // might skip lines that contain placeholders but don't themselves
+      // intersect with the dirty area.
+      //
+      // In particular, we really want to check ShouldDescendIntoFrame()
+      // on all our child frames, but that might be expensive.  So we
+      // approximate it by checking it on |this|; if it's true for any
+      // frame in our child list, it's also true for |this|.
+      return false;
+    }
+    if (textOverflow.isSome()) {
+      // Also skip the cursor if we're creating text overflow markers, since we
+      // need to know what line number we're up to in order to generate unique
+      // display item keys.
+      return false;
+    }
+    if (backplateColor) {
+      // Cursors should be skipped if we're drawing backplates behind text. When
+      // backplating we consider consecutive runs of text as a whole, which
+      // requires we iterate through all lines to find our backplate size.
+      return false;
+    }
+    if ((HasLineClampEllipsis() || HasLineClampEllipsisDescendant()) &&
+        StaticPrefs::layout_css_webkit_line_clamp_skip_paint()) {
+      // We can't use the cursor if we're in a line-clamping situation, and
+      // we're configured to not paint its clamped content, as we need to know
+      // whether we've hit the clamp point which requires iterating over all
+      // lines.
+      return false;
+    }
+    return true;
+  }();
+
+  nsLineBox* cursor = canUseCursor
+                          ? GetFirstLineContaining(aBuilder->GetDirtyRect().y)
+                          : nullptr;
   LineIterator line_end = LinesEnd();
 
   TextOverflow* textOverflowPtr = textOverflow.ptrOr(nullptr);
@@ -7970,7 +8005,8 @@ void nsBlockFrame::BuildDisplayList(nsDisplayListBuilder* aBuilder,
         if (ShouldDescendIntoLine(lineArea)) {
           DisplayLine(aBuilder, line, line->IsInline(), aLists, this, nullptr,
                       0, depth, drawnLines, foundClamp);
-          MOZ_ASSERT(!foundClamp);
+          MOZ_ASSERT(!foundClamp ||
+                     !StaticPrefs::layout_css_webkit_line_clamp_skip_paint());
         }
       }
     }
@@ -8033,7 +8069,8 @@ void nsBlockFrame::BuildDisplayList(nsDisplayListBuilder* aBuilder,
         }
       }
       foundClamp = foundClamp || line->HasLineClampEllipsis();
-      if (foundClamp) {
+      if (foundClamp &&
+          StaticPrefs::layout_css_webkit_line_clamp_skip_paint()) {
         break;
       }
       lineCount++;
