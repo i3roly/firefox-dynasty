@@ -15,10 +15,8 @@ use crate::ipc::{need_ipc, with_ipc_payload};
 #[cfg(feature = "with_gecko")]
 use super::profiler_utils::{
     truncate_vector_for_marker, DistributionMetricMarker, DistributionValues,
+    TelemetryProfilerCategory,
 };
-
-#[cfg(feature = "with_gecko")]
-use gecko_profiler::{gecko_profiler_category, MarkerOptions};
 
 /// A memory distribution metric.
 ///
@@ -93,18 +91,11 @@ impl MemoryDistributionMetric {
             }
         };
         #[cfg(feature = "with_gecko")]
-        if gecko_profiler::can_accept_markers() {
-            gecko_profiler::add_marker(
-                "MemoryDistribution::accumulate",
-                gecko_profiler_category!(Telemetry),
-                MarkerOptions::default(),
-                DistributionMetricMarker::new(
-                    id,
-                    None,
-                    DistributionValues::Samples(marker_samples),
-                ),
-            );
-        }
+        gecko_profiler::lazy_add_marker!(
+            "MemoryDistribution::accumulate",
+            TelemetryProfilerCategory,
+            DistributionMetricMarker::new(id, None, DistributionValues::Samples(marker_samples))
+        );
     }
 
     pub fn start_buffer(&self) -> LocalMemoryDistribution<'_> {
@@ -180,14 +171,11 @@ impl MemoryDistribution for MemoryDistributionMetric {
             }
         };
         #[cfg(feature = "with_gecko")]
-        if gecko_profiler::can_accept_markers() {
-            gecko_profiler::add_marker(
-                "MemoryDistribution::accumulate",
-                gecko_profiler_category!(Telemetry),
-                MarkerOptions::default(),
-                DistributionMetricMarker::new(id, None, DistributionValues::Sample(sample)),
-            );
-        }
+        gecko_profiler::lazy_add_marker!(
+            "MemoryDistribution::accumulate",
+            TelemetryProfilerCategory,
+            DistributionMetricMarker::new(id, None, DistributionValues::Sample(sample))
+        );
     }
 
     /// **Test-only API.**
@@ -255,7 +243,7 @@ mod test {
             CommonMetricData {
                 name: "memory_distribution_metric".into(),
                 category: "telemetry".into(),
-                send_in_pings: vec!["store1".into()],
+                send_in_pings: vec!["test-ping".into()],
                 disabled: false,
                 ..Default::default()
             },
@@ -264,7 +252,7 @@ mod test {
 
         metric.accumulate(42);
 
-        let metric_data = metric.test_get_value("store1").unwrap();
+        let metric_data = metric.test_get_value("test-ping").unwrap();
         assert_eq!(1, metric_data.values[&42494]);
         assert_eq!(43008, metric_data.sum);
     }
@@ -284,7 +272,7 @@ mod test {
             child_metric.accumulate(13 * 9);
         }
 
-        let metric_data = parent_metric.test_get_value("store1").unwrap();
+        let metric_data = parent_metric.test_get_value("test-ping").unwrap();
         assert_eq!(1, metric_data.values[&42494]);
         assert_eq!(43008, metric_data.sum);
 

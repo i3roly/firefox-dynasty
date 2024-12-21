@@ -109,6 +109,7 @@ size_t js::jit::NumInputsForCacheKind(CacheKind kind) {
   switch (kind) {
     case CacheKind::NewArray:
     case CacheKind::NewObject:
+    case CacheKind::Lambda:
     case CacheKind::LazyConstant:
       return 0;
     case CacheKind::GetProp:
@@ -14480,13 +14481,20 @@ AttachDecision BinaryArithIRGenerator::tryAttachStringConcat() {
     return AttachDecision::NoAction;
   }
 
+  JitCode* code = cx_->zone()->jitZone()->ensureStubExists(
+      cx_, JitZone::StubKind::StringConcat);
+  if (!code) {
+    cx_->recoverFromOutOfMemory();
+    return AttachDecision::NoAction;
+  }
+
   ValOperandId lhsId(writer.setInputOperandId(0));
   ValOperandId rhsId(writer.setInputOperandId(1));
 
   StringOperandId lhsStrId = emitToStringGuard(lhsId, lhs_);
   StringOperandId rhsStrId = emitToStringGuard(rhsId, rhs_);
 
-  writer.callStringConcatResult(lhsStrId, rhsStrId);
+  writer.concatStringsResult(lhsStrId, rhsStrId, code);
 
   writer.returnFromIC();
   trackAttached("BinaryArith.StringConcat");
@@ -15236,6 +15244,61 @@ AttachDecision NewObjectIRGenerator::tryAttachStub() {
   AutoAssertNoPendingException aanpe(cx_);
 
   TRY_ATTACH(tryAttachPlainObject());
+
+  trackAttached(IRGenerator::NotAttached);
+  return AttachDecision::NoAction;
+}
+
+LambdaIRGenerator::LambdaIRGenerator(JSContext* cx, HandleScript script,
+                                     jsbytecode* pc, ICState state, JSOp op,
+                                     Handle<JSFunction*> canonicalFunction,
+                                     BaselineFrame* frame)
+    : IRGenerator(cx, script, pc, CacheKind::Lambda, state, frame),
+#ifdef JS_CACHEIR_SPEW
+      op_(op),
+#endif
+      canonicalFunction_(canonicalFunction) {
+  MOZ_ASSERT(canonicalFunction_);
+}
+
+void LambdaIRGenerator::trackAttached(const char* name) {
+  stubName_ = name ? name : "NotAttached";
+#ifdef JS_CACHEIR_SPEW
+  if (const CacheIRSpewer::Guard& sp = CacheIRSpewer::Guard(*this, name)) {
+    sp.opcodeProperty("op", op_);
+  }
+#endif
+}
+
+AttachDecision LambdaIRGenerator::tryAttachFunctionClone() {
+  // Don't optimize asm.js module functions.
+  if (canonicalFunction_->isNativeFun()) {
+    MOZ_ASSERT(IsAsmJSModule(canonicalFunction_));
+    return AttachDecision::NoAction;
+  }
+
+  // Stub doesn't support metadata builder.
+  if (cx_->realm()->hasAllocationMetadataBuilder()) {
+    return AttachDecision::NoAction;
+  }
+
+  writer.guardNoAllocationMetadataBuilder(
+      cx_->realm()->addressOfMetadataBuilder());
+
+  gc::AllocKind allocKind = canonicalFunction_->getAllocKind();
+  MOZ_ASSERT(allocKind == gc::AllocKind::FUNCTION ||
+             allocKind == gc::AllocKind::FUNCTION_EXTENDED);
+  writer.newFunctionCloneResult(canonicalFunction_, allocKind);
+  writer.returnFromIC();
+
+  trackAttached("Lambda.FunctionClone");
+  return AttachDecision::Attach;
+}
+
+AttachDecision LambdaIRGenerator::tryAttachStub() {
+  AutoAssertNoPendingException aanpe(cx_);
+
+  TRY_ATTACH(tryAttachFunctionClone());
 
   trackAttached(IRGenerator::NotAttached);
   return AttachDecision::NoAction;

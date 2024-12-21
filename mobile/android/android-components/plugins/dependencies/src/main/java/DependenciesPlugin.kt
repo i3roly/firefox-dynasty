@@ -19,7 +19,7 @@ object Versions {
     const val serialization = "1.6.3"
     const val python_envs_plugin = "0.0.31"
 
-    const val mozilla_glean = "62.0.0"
+    const val mozilla_glean = "63.0.0"
 
     const val maven_ant_tasks = "2.1.3"
     const val jacoco = "0.8.12"
@@ -58,7 +58,7 @@ object Versions {
         const val browser = "1.8.0"
         const val cardview = "1.0.0"
         const val collection = "1.4.5"
-        const val compose_bom = "2024.10.01"
+        const val compose_bom = "2024.12.01"
         const val concurrent = "1.2.0"
         const val constraintlayout = "2.2.0"
         const val constraintlayout_compose = "1.1.0"
@@ -71,8 +71,8 @@ object Versions {
         const val lifecycle = "2.8.7"
         const val localbroadcastmanager = "1.0.0"
         const val media = "1.7.0"
-        const val navigation = "2.8.4"
-        const val paging = "3.3.4"
+        const val navigation = "2.8.5"
+        const val paging = "3.3.5"
         const val palette = "1.0.0"
         const val preferences = "1.2.1"
         const val profileinstaller = "1.4.0"
@@ -88,7 +88,7 @@ object Versions {
     // Gradle can't deal with this being nested below.
     const val protobuf_plugin = "0.9.4"
     object Google {
-        const val accompanist = "0.36.0"
+        const val accompanist = "0.37.0"
         const val firebase_messaging = "24.1.0"
         const val material = "1.12.0"
         const val osslicenses_plugin = "0.10.6"
@@ -116,7 +116,7 @@ object Versions {
     }
 
     object ThirdParty {
-        const val sentry = "7.18.0"
+        const val sentry = "7.19.0"
     }
 }
 

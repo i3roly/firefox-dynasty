@@ -49,6 +49,7 @@
 #include "mozilla/ipc/PBackgroundChild.h"
 #include "mozilla/ipc/URIUtils.h"
 #include "mozilla/net/CookieJarSettings.h"
+#include "mozilla/net/CookieService.h"
 #include "nsContentUtils.h"
 #include "nsDebug.h"
 #include "nsError.h"
@@ -556,6 +557,7 @@ nsresult ServiceWorkerPrivate::Initialize() {
   Maybe<RFPTarget> overriddenFingerprintingSettings;
   nsCOMPtr<nsIURI> firstPartyURI;
   bool foreignByAncestorContext = false;
+  bool isOn3PCBExceptionList = false;
   if (!principal->OriginAttributesRef().mPartitionKey.IsEmpty()) {
     net::CookieJarSettings::Cast(cookieJarSettings)
         ->SetPartitionKey(principal->OriginAttributesRef().mPartitionKey);
@@ -583,6 +585,12 @@ nsresult ServiceWorkerPrivate::Initialize() {
           overriddenFingerprintingSettingsArg.emplace(
               uint64_t(overriddenFingerprintingSettings.ref()));
         }
+
+        RefPtr<net::CookieService> csSingleton =
+            net::CookieService::GetSingleton();
+        isOn3PCBExceptionList =
+            csSingleton->ThirdPartyCookieBlockingExceptionsRef()
+                .CheckExceptionForURIs(firstPartyURI, uri);
       }
     }
   } else if (!principal->OriginAttributesRef().mFirstPartyDomain.IsEmpty()) {
@@ -608,6 +616,13 @@ nsresult ServiceWorkerPrivate::Initialize() {
                     firstPartyURI, uri)
               : nsRFPService::GetOverriddenFingerprintingSettingsForURI(
                     uri, nullptr);
+
+      RefPtr<net::CookieService> csSingleton =
+          net::CookieService::GetSingleton();
+      isOn3PCBExceptionList =
+          isThirdParty ? csSingleton->ThirdPartyCookieBlockingExceptionsRef()
+                             .CheckExceptionForURIs(firstPartyURI, uri)
+                       : false;
 
       if (overriddenFingerprintingSettings.isSome()) {
         overriddenFingerprintingSettingsArg.emplace(
@@ -726,7 +741,7 @@ nsresult ServiceWorkerPrivate::Initialize() {
       /* referrerInfo */ nullptr,
 
       storageAccess, isThirdPartyContextToTopWindow, shouldResistFingerprinting,
-      overriddenFingerprintingSettingsArg,
+      overriddenFingerprintingSettingsArg, isOn3PCBExceptionList,
       // Origin trials are associated to a window, so it doesn't make sense on
       // service workers.
       OriginTrials(), std::move(serviceWorkerData), regInfo->AgentClusterId(),
@@ -960,7 +975,7 @@ nsresult ServiceWorkerPrivate::SendNotificationEvent(
     const nsAString& aEventName, const nsAString& aID, const nsAString& aTitle,
     const nsAString& aDir, const nsAString& aLang, const nsAString& aBody,
     const nsAString& aTag, const nsAString& aIcon, const nsAString& aData,
-    const nsAString& aBehavior, const nsAString& aScope) {
+    const nsAString& aScope) {
   MOZ_ASSERT(NS_IsMainThread());
 
   if (aEventName.EqualsLiteral(NOTIFICATION_CLICK_EVENT_NAME)) {
@@ -981,7 +996,6 @@ nsresult ServiceWorkerPrivate::SendNotificationEvent(
   args.tag() = nsString(aTag);
   args.icon() = nsString(aIcon);
   args.data() = nsString(aData);
-  args.behavior() = nsString(aBehavior);
   args.scope() = nsString(aScope);
   args.disableOpenClickDelay() = gDOMDisableOpenClickDelay;
 

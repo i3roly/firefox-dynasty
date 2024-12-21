@@ -2257,9 +2257,16 @@ JS_PUBLIC_API bool js::ShouldIgnorePropertyDefinition(JSContext* cx,
   // It's gently surprising that this is JSProto_Function, but the trick
   // to realize is that this is a -constructor function-, not a function
   // on the prototype; and the proto of the constructor is JSProto_Function.
-  if (key == JSProto_Function && !JS::Prefs::array_grouping() &&
-      (id == NameToId(cx->names().groupBy))) {
-    return true;
+  if (key == JSProto_Function) {
+    if (!JS::Prefs::array_grouping() && (id == NameToId(cx->names().groupBy))) {
+      return true;
+    }
+
+    if (!JS::Prefs::experimental_uint8array_base64() &&
+        (id == NameToId(cx->names().fromBase64) ||
+         id == NameToId(cx->names().fromHex))) {
+      return true;
+    }
   }
 
   if (key == JSProto_Set && !JS::Prefs::experimental_new_set_methods() &&
@@ -2308,68 +2315,56 @@ JS_PUBLIC_API bool js::ShouldIgnorePropertyDefinition(JSContext* cx,
   // It's gently surprising that this is JSProto_Function, but the trick
   // to realize is that this is a -constructor function-, not a function
   // on the prototype; and the proto of the constructor is JSProto_Function.
-  if (key == JSProto_Function && !JS::Prefs::experimental_uint8array_base64() &&
-      (id == NameToId(cx->names().fromBase64) ||
-       id == NameToId(cx->names().fromHex))) {
-    return true;
+  if (key == JSProto_Function) {
+    if (!JS::Prefs::experimental_uint8array_base64() &&
+        (id == NameToId(cx->names().fromBase64) ||
+         id == NameToId(cx->names().fromHex))) {
+      return true;
+    }
+    if (!JS::Prefs::experimental_promise_try() &&
+        id == NameToId(cx->names().try_)) {
+      return true;
+    }
+    if (!JS::Prefs::experimental_regexp_escape() &&
+        id == NameToId(cx->names().escape)) {
+      return true;
+    }
   }
 
-  // It's gently surprising that this is JSProto_Function, but the trick
-  // to realize is that this is a -constructor function-, not a function
-  // on the prototype; and the proto of the constructor is JSProto_Function.
-  if (key == JSProto_Function && !JS::Prefs::experimental_promise_try() &&
-      id == NameToId(cx->names().try_)) {
+#ifdef JS_HAS_TEMPORAL_API
+  if (key == JSProto_Date && !JS::Prefs::experimental_temporal() &&
+      id == NameToId(cx->names().toTemporalInstant)) {
     return true;
   }
-
-  // It's gently surprising that this is JSProto_Function, but the trick
-  // to realize is that this is a -constructor function-, not a function
-  // on the prototype; and the proto of the constructor is JSProto_Function.
-  if (key == JSProto_Function && !JS::Prefs::experimental_regexp_escape() &&
-      id == NameToId(cx->names().escape)) {
-    return true;
-  }
+#endif
 
 #ifdef NIGHTLY_BUILD
+  // It's gently surprising that this is JSProto_Function, but the trick
+  // to realize is that this is a -constructor function-, not a function
+  // on the prototype; and the proto of the constructor is JSProto_Function.
+  if (key == JSProto_Function) {
+    if (!JS::Prefs::experimental_error_iserror() &&
+        id == NameToId(cx->names().isError)) {
+      return true;
+    }
+    if (!JS::Prefs::experimental_iterator_range() &&
+        (id == NameToId(cx->names().range))) {
+      return true;
+    }
+    if (!JS::Prefs::experimental_joint_iteration() &&
+        (id == NameToId(cx->names().zip) ||
+         id == NameToId(cx->names().zipKeyed))) {
+      return true;
+    }
+    if (!JS::Prefs::experimental_iterator_sequencing() &&
+        id == NameToId(cx->names().concat)) {
+      return true;
+    }
+  }
   if (key == JSProto_Math && !JS::Prefs::experimental_math_sumprecise() &&
       id == NameToId(cx->names().sumPrecise)) {
     return true;
   }
-
-  // It's gently surprising that this is JSProto_Function, but the trick
-  // to realize is that this is a -constructor function-, not a function
-  // on the prototype; and the proto of the constructor is JSProto_Function.
-  if (key == JSProto_Function && !JS::Prefs::experimental_error_iserror() &&
-      id == NameToId(cx->names().isError)) {
-    return true;
-  }
-
-  // It's gently surprising that this is JSProto_Function, but the trick
-  // to realize is that this is a -constructor function-, not a function
-  // on the prototype; and the proto of the constructor is JSProto_Function.
-  if (key == JSProto_Function && !JS::Prefs::experimental_iterator_range() &&
-      (id == NameToId(cx->names().range))) {
-    return true;
-  }
-
-  // It's gently surprising that this is JSProto_Function, but the trick
-  // to realize is that this is a -constructor function-, not a function
-  // on the prototype; and the proto of the constructor is JSProto_Function.
-  if (key == JSProto_Function && !JS::Prefs::experimental_joint_iteration() &&
-      (id == NameToId(cx->names().zip) ||
-       id == NameToId(cx->names().zipKeyed))) {
-    return true;
-  }
-
-  // It's gently surprising that this is JSProto_Function, but the trick
-  // to realize is that this is a -constructor function-, not a function
-  // on the prototype; and the proto of the constructor is JSProto_Function.
-  if (key == JSProto_Function &&
-      !JS::Prefs::experimental_iterator_sequencing() &&
-      id == NameToId(cx->names().concat)) {
-    return true;
-  }
-
   if (key == JSProto_Atomics && !JS::Prefs::experimental_atomics_pause() &&
       id == NameToId(cx->names().pause)) {
     return true;
@@ -2848,8 +2843,9 @@ void GetObjectSlotNameFunctor::operator()(JS::TracingContext* tcx,
         if (false) {
           ;
         }
-#define TEST_SLOT_MATCHES_PROTOTYPE(name, clasp)       \
-  else if ((JSProto_##name) == slot){slotname = #name; \
+#define TEST_SLOT_MATCHES_PROTOTYPE(name, clasp) \
+  else if ((JSProto_##name) == slot) {           \
+    slotname = #name;                            \
   }
         JS_FOR_EACH_PROTOTYPE(TEST_SLOT_MATCHES_PROTOTYPE)
 #undef TEST_SLOT_MATCHES_PROTOTYPE

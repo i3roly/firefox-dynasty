@@ -521,13 +521,6 @@ interface nsILoadInfo : nsISupports
   const unsigned long HTTPS_ONLY_BYPASS_ORB = (1 << 8);
 
   /**
-   * This flag indicates that HTTPS_ONLY_EXEMPT should be
-   * set the next time HTTPS-Only exemptions are checked
-   * and HTTPS-First is enabled.
-   */
-  const unsigned long HTTPS_FIRST_EXEMPT_NEXT_LOAD = (1 << 9);
-
-  /**
    * Upgrade state of HTTPS-Only Mode. The flag HTTPS_ONLY_EXEMPT can get
    * set on requests that should be excempt from an upgrade.
    */
@@ -611,6 +604,14 @@ interface nsILoadInfo : nsISupports
    * to the channel in the content.
    */
   [infallible] attribute boolean isThirdPartyContextToTopWindow;
+
+  /**
+   * True if this request is on the third-party cookie blocking exception list.
+   *
+   * This value would be set during opening the channel in parent and propagate
+   * to the channel in the content.
+   */
+  [infallible] attribute boolean isOn3PCBExceptionList;
 
   /**
    * See the SEC_COOKIES_* flags above. This attribute will never return

@@ -1045,7 +1045,11 @@ pref("browser.tabs.tooltipsShowPidAndActiveness", false);
 pref("browser.tabs.hoverPreview.enabled", true);
 pref("browser.tabs.hoverPreview.showThumbnails", true);
 
+#ifdef NIGHTLY_BUILD
+pref("browser.tabs.groups.enabled", true);
+#else
 pref("browser.tabs.groups.enabled", false);
+#endif
 pref("browser.tabs.groups.dragOverThresholdPercent", 20);
 pref("browser.tabs.groups.dragOverDelayMS", 30);
 pref("browser.tabs.dragdrop.moveOverThresholdPercent", 70);
@@ -2752,6 +2756,7 @@ pref("identity.fxaccounts.toolbar.pxiToolbarEnabled.vpnEnabled", true);
 // Prefs to control Mozilla account panels that shows an updated flow
 // for users who don't have sync enabled
 pref("identity.fxaccounts.toolbar.syncSetup.enabled", false);
+pref("identity.fxaccounts.toolbar.syncSetup.panelAccessed", false);
 
 // Toolbox preferences
 pref("devtools.toolbox.footer.height", 250);
@@ -3311,6 +3316,8 @@ pref("browser.backup.template.fallback-download.esr", "https://www.mozilla.org/f
 // Pref to enable the new profiles
 pref("browser.profiles.enabled", false);
 pref("browser.profiles.profile-name.updated", false);
+// Whether to allow the user to merge profile data
+pref("browser.profiles.sync.allow-danger-merge", false);
 
 pref("startup.homepage_override_url_nimbus", "");
 // These prefs are referring to the Fx update version

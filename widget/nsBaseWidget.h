@@ -415,7 +415,7 @@ class nsBaseWidget : public nsIWidget, public nsSupportsWeakReference {
   void NotifyLiveResizeStopped();
 
 #if defined(MOZ_WIDGET_ANDROID)
-  void RecvToolbarAnimatorMessageFromCompositor(int32_t) override{};
+  void RecvToolbarAnimatorMessageFromCompositor(int32_t) override {};
   void UpdateRootFrameMetrics(const ScreenPoint& aScrollOffset,
                               const CSSToScreenScale& aZoom) override {};
   void RecvScreenPixels(mozilla::ipc::Shmem&& aMem, const ScreenIntSize& aSize,
@@ -603,7 +603,7 @@ class nsBaseWidget : public nsIWidget, public nsSupportsWeakReference {
   // Notify the compositor that a device reset has occurred.
   void OnRenderingDeviceReset();
 
-  bool UseAPZ();
+  bool UseAPZ() const;
 
   bool AllowWebRenderForThisWindow();
 
@@ -741,9 +741,6 @@ class nsBaseWidget : public nsIWidget, public nsSupportsWeakReference {
 
 #ifdef DEBUG
  protected:
-  static nsAutoString debug_GuiEventToString(
-      mozilla::WidgetGUIEvent* aGuiEvent);
-
   static void debug_DumpInvalidate(FILE* aFileOut, nsIWidget* aWidget,
                                    const LayoutDeviceIntRect* aRect,
                                    const char* aWidgetName, int32_t aWindowID);

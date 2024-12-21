@@ -1122,48 +1122,45 @@ ServiceWorkerManager::SendPushSubscriptionChangeEvent(
 
 nsresult ServiceWorkerManager::SendNotificationEvent(
     const nsAString& aEventName, const nsACString& aOriginSuffix,
-    const nsACString& aScope, const nsAString& aID, const nsAString& aTitle,
+    const nsAString& aScope, const nsAString& aID, const nsAString& aTitle,
     const nsAString& aDir, const nsAString& aLang, const nsAString& aBody,
-    const nsAString& aTag, const nsAString& aIcon, const nsAString& aData,
-    const nsAString& aBehavior) {
+    const nsAString& aTag, const nsAString& aIcon, const nsAString& aData) {
   OriginAttributes attrs;
   if (!attrs.PopulateFromSuffix(aOriginSuffix)) {
     return NS_ERROR_INVALID_ARG;
   }
 
-  ServiceWorkerInfo* info = GetActiveWorkerInfoForScope(attrs, aScope);
+  ServiceWorkerInfo* info =
+      GetActiveWorkerInfoForScope(attrs, NS_ConvertUTF16toUTF8(aScope));
   if (!info) {
     return NS_ERROR_FAILURE;
   }
 
   ServiceWorkerPrivate* workerPrivate = info->WorkerPrivate();
   return workerPrivate->SendNotificationEvent(
-      aEventName, aID, aTitle, aDir, aLang, aBody, aTag, aIcon, aData,
-      aBehavior, NS_ConvertUTF8toUTF16(aScope));
+      aEventName, aID, aTitle, aDir, aLang, aBody, aTag, aIcon, aData, aScope);
 }
 
 NS_IMETHODIMP
 ServiceWorkerManager::SendNotificationClickEvent(
-    const nsACString& aOriginSuffix, const nsACString& aScope,
+    const nsACString& aOriginSuffix, const nsAString& aScope,
     const nsAString& aID, const nsAString& aTitle, const nsAString& aDir,
     const nsAString& aLang, const nsAString& aBody, const nsAString& aTag,
-    const nsAString& aIcon, const nsAString& aData,
-    const nsAString& aBehavior) {
+    const nsAString& aIcon, const nsAString& aData) {
   return SendNotificationEvent(nsLiteralString(NOTIFICATION_CLICK_EVENT_NAME),
                                aOriginSuffix, aScope, aID, aTitle, aDir, aLang,
-                               aBody, aTag, aIcon, aData, aBehavior);
+                               aBody, aTag, aIcon, aData);
 }
 
 NS_IMETHODIMP
 ServiceWorkerManager::SendNotificationCloseEvent(
-    const nsACString& aOriginSuffix, const nsACString& aScope,
+    const nsACString& aOriginSuffix, const nsAString& aScope,
     const nsAString& aID, const nsAString& aTitle, const nsAString& aDir,
     const nsAString& aLang, const nsAString& aBody, const nsAString& aTag,
-    const nsAString& aIcon, const nsAString& aData,
-    const nsAString& aBehavior) {
+    const nsAString& aIcon, const nsAString& aData) {
   return SendNotificationEvent(nsLiteralString(NOTIFICATION_CLOSE_EVENT_NAME),
                                aOriginSuffix, aScope, aID, aTitle, aDir, aLang,
-                               aBody, aTag, aIcon, aData, aBehavior);
+                               aBody, aTag, aIcon, aData);
 }
 
 RefPtr<ServiceWorkerRegistrationPromise> ServiceWorkerManager::WhenReady(

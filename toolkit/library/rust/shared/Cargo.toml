@@ -79,6 +79,7 @@ dap_ffi = { path = "../../../components/telemetry/dap/ffi" }
 data-encoding-ffi = { path = "../../../../dom/fs/parent/rust/data-encoding-ffi" }
 binary_http = { path = "../../../../netwerk/protocol/http/binary_http" }
 oblivious_http = { path = "../../../../netwerk/protocol/http/oblivious_http" }
+mls_gk = { path = "../../../../security/mls/mls_gk" }
 mime-guess-ffi = { path = "../../../../dom/fs/parent/rust/mime-guess-ffi" }
 
 # Note: `modern_sqlite` means rusqlite's bindings file be for a sqlite with
@@ -98,7 +99,7 @@ processtools = { path = "../../../components/processtools" }
 qcms = { path = "../../../../gfx/qcms", features = ["c_bindings", "neon"], default-features = false }
 
 wpf-gpu-raster = { git = "https://github.com/FirefoxGraphics/wpf-gpu-raster", rev = "99979da091fd58fba8477e7fcdf5ec0727102916" }
-aa-stroke = { git = "https://github.com/FirefoxGraphics/aa-stroke", rev = "c985e1baf196b489a8151de29b8f8ee4a77246ab" }
+aa-stroke = { git = "https://github.com/FirefoxGraphics/aa-stroke", rev = "a821fa621c2def48e90c82774b4c6563b5a8ea4a" }
 etagere = { version = "0.2.13", features = ["ffi"] }
 
 url = "2.5.0"

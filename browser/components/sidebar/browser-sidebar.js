@@ -303,7 +303,9 @@ var SidebarController = {
     this.SidebarManager;
 
     // Initialize per-window state manager.
-    this._state = new this.SidebarState(this);
+    if (!this._state) {
+      this._state = new this.SidebarState(this);
+    }
 
     this._box = document.getElementById("sidebar-box");
     this._splitter = document.getElementById("sidebar-splitter");
@@ -346,6 +348,8 @@ var SidebarController = {
     this._mainResizeObserver = new ResizeObserver(([entry]) =>
       this._handleLauncherResize(entry)
     );
+
+    CustomizableUI.addListener(this);
 
     if (this.sidebarRevampEnabled) {
       if (!customElements.get("sidebar-main")) {
@@ -452,6 +456,8 @@ var SidebarController = {
     Services.obs.removeObserver(this, "intl:app-locales-changed");
     Services.obs.removeObserver(this, "tabstrip-orientation-change");
     delete this._tabstripOrientationObserverAdded;
+
+    CustomizableUI.removeListener(this);
 
     if (this._observer) {
       this._observer.disconnect();
@@ -968,12 +974,6 @@ var SidebarController = {
     };
     let fromRects = getRects();
 
-    if (this.sidebarRevampVisibility === "hide-sidebar") {
-      this._state.toggle("launcherVisible");
-    } else {
-      this._state.toggle("launcherExpanded");
-    }
-
     // We need to wait for rAF for lit to re-render, and us to get the final
     // width. This is a bit unfortunate but alas...
     let toRects = await new Promise(resolve => {
@@ -1078,11 +1078,8 @@ var SidebarController = {
   async handleToolbarButtonClick() {
     if (this._animationEnabled && !window.gReduceMotion) {
       this._animateSidebarMain();
-    } else if (this.sidebarRevampVisibility === "hide-sidebar") {
-      this._state.toggle("launcherVisible");
-    } else {
-      this._state.toggle("launcherExpanded");
     }
+    this._state.updateVisibility(!this._state.launcherVisible, true);
   },
 
   /**
@@ -1671,7 +1668,7 @@ var SidebarController = {
     for (let [id, { menuId, triggerButtonId }] of this.sidebars) {
       let menu = document.getElementById(menuId);
       if (!menu) {
-        return;
+        continue;
       }
       let triggerbutton =
         triggerButtonId && document.getElementById(triggerButtonId);
@@ -1688,6 +1685,13 @@ var SidebarController = {
           updateToggleControlLabel(triggerbutton);
         }
       }
+    }
+  },
+
+  onWidgetRemoved(aWidgetId) {
+    if (aWidgetId == "sidebar-button") {
+      Services.prefs.setStringPref("sidebar.visibility", "hide-sidebar");
+      this._state.updateVisibility(false, false, true);
     }
   },
 
@@ -1817,6 +1821,7 @@ XPCOMUtils.defineLazyPreferenceGetter(
       SidebarController.updateToolbarButton();
       SidebarController.recordVisibilitySetting(newValue);
       SidebarController._state.revampVisibility = newValue;
+      SidebarController._state.updateVisibility(newValue != "hide-sidebar");
     }
   }
 );

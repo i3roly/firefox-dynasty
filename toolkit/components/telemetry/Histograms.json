@@ -1,14 +1,4 @@
 {
-  "A11Y_INSTANTIATED_FLAG": {
-    "record_in_processes": ["main"],
-    "products": ["firefox", "fennec"],
-    "expires_in_version": "never",
-    "kind": "flag",
-    "releaseChannelCollection": "opt-out",
-    "bug_numbers": [1382820],
-    "description": "Flag indicating accessibility support has been instantiated.",
-    "alert_emails": ["accessibility@mozilla.com"]
-  },
   "A11Y_CONSUMERS": {
     "record_in_processes": ["main"],
     "products": ["firefox", "fennec"],
@@ -19,22 +9,6 @@
     "bug_numbers": [1382820, 1462238],
     "description": "A list of known accessibility clients that inject into Firefox process space (see https://searchfox.org/mozilla-central/source/accessible/windows/msaa/Compatibility.h).",
     "alert_emails": ["accessibility@mozilla.com", "jteh@mozilla.com"]
-  },
-  "A11Y_ISIMPLEDOM_USAGE_FLAG": {
-    "record_in_processes": ["main"],
-    "products": ["firefox", "fennec"],
-    "expires_in_version": "default",
-    "kind": "flag",
-    "description": "Flag indicating the ISimpleDOM* accessibility interfaces has been used.",
-    "alert_emails": ["accessibility@mozilla.com"]
-  },
-  "A11Y_IATABLE_USAGE_FLAG": {
-    "record_in_processes": ["main"],
-    "products": ["firefox", "fennec"],
-    "expires_in_version": "default",
-    "kind": "flag",
-    "description": "Flag indicating the IAccessibleTable accessibility interface has been used.",
-    "alert_emails": ["accessibility@mozilla.com"]
   },
   "A11Y_TREE_UPDATE_TIMING_MS": {
     "record_in_processes": ["main", "content"],
@@ -1336,14 +1310,6 @@
     "n_buckets": 50,
     "description": "Geolocation results' accuracy radius in meters. Smaller radius is more accurate.",
     "alert_emails": ["shong@mozilla.com"]
-  },
-  "GEOLOCATION_ERROR": {
-    "record_in_processes": ["main", "content"],
-    "products": ["firefox", "fennec"],
-    "expires_in_version": "145",
-    "kind": "flag",
-    "releaseChannelCollection": "opt-out",
-    "description": "Has seen location error"
   },
   "GEOLOCATION_WIN8_SOURCE_IS_MLS": {
     "record_in_processes": ["main", "content"],
@@ -8232,38 +8198,6 @@
     "kind": "count",
     "description": "Number of Telemetry ping files evicted due to server errors (4XX HTTP code received)"
   },
-  "TELEMETRY_SESSIONDATA_FAILED_LOAD": {
-    "record_in_processes": ["main"],
-    "products": ["firefox", "fennec", "thunderbird"],
-    "alert_emails": ["telemetry-client-dev@mozilla.com"],
-    "expires_in_version": "never",
-    "kind": "flag",
-    "description": "Set if Telemetry failed to load the session data from disk."
-  },
-  "TELEMETRY_SESSIONDATA_FAILED_PARSE": {
-    "record_in_processes": ["main"],
-    "products": ["firefox", "fennec", "thunderbird"],
-    "alert_emails": ["telemetry-client-dev@mozilla.com"],
-    "expires_in_version": "never",
-    "kind": "flag",
-    "description": "Set if Telemetry failed to parse the session data loaded from disk."
-  },
-  "TELEMETRY_SESSIONDATA_FAILED_VALIDATION": {
-    "record_in_processes": ["main"],
-    "products": ["firefox", "fennec", "thunderbird"],
-    "alert_emails": ["telemetry-client-dev@mozilla.com"],
-    "expires_in_version": "never",
-    "kind": "flag",
-    "description": "Set if Telemetry failed to validate the session data loaded from disk."
-  },
-  "TELEMETRY_SESSIONDATA_FAILED_SAVE": {
-    "record_in_processes": ["main"],
-    "products": ["firefox", "fennec", "thunderbird"],
-    "alert_emails": ["telemetry-client-dev@mozilla.com"],
-    "expires_in_version": "never",
-    "kind": "flag",
-    "description": "Set if Telemetry failed to save the session data to disk."
-  },
   "TELEMETRY_EVENT_PING_SENT": {
     "record_in_processes": ["main"],
     "products": ["firefox", "fennec", "thunderbird"],
@@ -8869,7 +8803,7 @@
   "STORAGE_ACCESS_API_UI": {
     "record_in_processes": ["main", "content"],
     "products": ["firefox", "fennec"],
-    "alert_emails": ["pbz@mozilla.com", "tihuang@mozilla.com"],
+    "alert_emails": ["emz@mozilla.com", "tihuang@mozilla.com"],
     "bug_numbers": [1513309, 1588844, 1643432, 1689262, 1730043, 1832670],
     "expires_in_version": "never",
     "kind": "categorical",
@@ -11402,7 +11336,7 @@
     "description": "A count of the query stripping. ('Navigation' = There was a top-level loading via navigation, 'Redirect' = There was a top-level loading via redirect, 'StripForNavigation' = There was a stripping happened for a top-level navigation, 'StripForRedirect' = There was a stripping happened for a top-level redirect.",
     "alert_emails": [
       "tihuang@mozilla.com",
-      "pbz@mozilla.com",
+      "emz@mozilla.com",
       "seceng-telemetry@mozilla.com"
     ],
     "bug_numbers": [1706616]
@@ -11419,7 +11353,7 @@
     "description": "If query params get stripped, how many per navigation/redirect.",
     "alert_emails": [
       "tihuang@mozilla.com",
-      "pbz@mozilla.com",
+      "emz@mozilla.com",
       "seceng-telemetry@mozilla.com"
     ],
     "bug_numbers": [1762374]
@@ -11457,7 +11391,7 @@
     "description": "Counts how often specific query parameters are stripped.",
     "alert_emails": [
       "tihuang@mozilla.com",
-      "pbz@mozilla.com",
+      "emz@mozilla.com",
       "seceng-telemetry@mozilla.com"
     ],
     "bug_numbers": [1762374, 1830058]
@@ -14392,7 +14326,7 @@
     "kind": "linear",
     "high": 100,
     "n_buckets": 50,
-    "alert_emails": ["amadan@mozilla.com", "pbz@mozilla.com"],
+    "alert_emails": ["amadan@mozilla.com", "emz@mozilla.com"],
     "bug_numbers": [1833105],
     "description": "The number of query parameters removed, if any, when strip on share is used"
   },
@@ -14404,7 +14338,7 @@
     "kind": "exponential",
     "high": 1000,
     "n_buckets": 100,
-    "alert_emails": ["amadan@mozilla.com", "pbz@mozilla.com"],
+    "alert_emails": ["amadan@mozilla.com", "emz@mozilla.com"],
     "bug_numbers": [1833105],
     "description": "The decrease in the length of the URL when strip on share is used, only if at least one parameter is stripped"
   },

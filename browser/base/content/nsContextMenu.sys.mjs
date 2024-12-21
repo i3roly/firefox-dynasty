@@ -46,13 +46,6 @@ XPCOMUtils.defineLazyPreferenceGetter(
 
 XPCOMUtils.defineLazyPreferenceGetter(
   lazy,
-  "REVEAL_PASSWORD_ENABLED",
-  "layout.forms.reveal-password-context-menu.enabled",
-  false
-);
-
-XPCOMUtils.defineLazyPreferenceGetter(
-  lazy,
   "TEXT_RECOGNITION_ENABLED",
   "dom.text-recognition.enabled",
   false
@@ -1040,7 +1033,7 @@ export class nsContextMenu {
     this.showItem(
       "context-stripOnShareLink",
       lazy.STRIP_ON_SHARE_ENABLED &&
-        this.onLink &&
+        (this.onLink || this.onPlainTextLink) &&
         !this.onMailtoLink &&
         !this.onTelLink &&
         !this.onMozExtLink &&
@@ -1377,7 +1370,7 @@ export class nsContextMenu {
   }
 
   initPasswordControlItems() {
-    let shouldShow = this.onPassword && lazy.REVEAL_PASSWORD_ENABLED;
+    let shouldShow = this.onPassword;
     if (shouldShow) {
       let revealPassword = this.document.getElementById(
         "context-reveal-password"
@@ -2584,12 +2577,11 @@ export class nsContextMenu {
       let displayName;
 
       try {
-        const displayNames = new Services.intl.DisplayNames(undefined, {
-          type: "language",
-        });
-        displayName = displayNames.of(toLanguage);
+        const languageDisplayNames =
+          lazy.TranslationsParent.createLanguageDisplayNames();
+        displayName = languageDisplayNames.of(toLanguage);
       } catch {
-        // Services.intl.DisplayNames.of threw, do nothing.
+        // languageDisplayNames.of threw, do nothing.
       }
 
       if (displayName) {

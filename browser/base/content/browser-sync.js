@@ -753,7 +753,11 @@ var gSync = {
       document,
       "PanelUI-fxa-menu-sync-prefs-button"
     );
-    syncPrefsButtonEl.hidden = !UIState.get().syncEnabled;
+    const syncEnabled = UIState.get().syncEnabled;
+    syncPrefsButtonEl.hidden = !syncEnabled;
+    if (!syncEnabled) {
+      this._disableSyncOffIndicator();
+    }
 
     // We should ensure that we do not show the sign out button
     // if the user is not signed in
@@ -817,6 +821,7 @@ var gSync = {
       case "PanelUI-fxa-menu-monitor-button":
         this.openMonitorLink(button);
         break;
+      case "PanelUI-services-menu-relay-button":
       case "PanelUI-fxa-menu-relay-button":
         this.openRelayLink(button);
         break;
@@ -862,6 +867,7 @@ var gSync = {
     this.updateSyncStatus(state);
     this.updateFxAPanel(state);
     this.ensureFxaDevices();
+    this.fetchListOfOAuthClients();
   },
 
   // Ensure we have *something* in `fxAccounts.device.recentDeviceList` as some
@@ -903,6 +909,24 @@ var gSync = {
       return true;
     } catch (e) {
       this.log.error("Refreshing device list failed.", e);
+      return false;
+    }
+  },
+
+  /**
+   * Potential network call. Fetch the list of OAuth clients attached to the current Mozilla account.
+   * @returns {Promise<boolean>} - Resolves to true if successful, false otherwise.
+   */
+  async fetchListOfOAuthClients() {
+    if (!this.isSignedIn) {
+      console.info("Skipping fetching other attached clients");
+      return false;
+    }
+    try {
+      this._attachedClients = await fxAccounts.listAttachedOAuthClients();
+      return true;
+    } catch (e) {
+      this.log.error("Could not fetch attached OAuth clients", e);
       return false;
     }
   },
@@ -1008,10 +1032,7 @@ var gSync = {
     }
   },
 
-  async toggleAccountPanel(
-    anchor = document.getElementById("fxa-toolbar-menu-button"),
-    aEvent
-  ) {
+  async toggleAccountPanel(anchor = null, aEvent) {
     // Don't show the panel if the window is in customization mode.
     if (document.documentElement.hasAttribute("customizing")) {
       return;
@@ -1026,10 +1047,15 @@ var gSync = {
       return;
     }
 
-    if (
-      anchor == document.getElementById("fxa-toolbar-menu-button") &&
-      anchor.getAttribute("open") != "true"
-    ) {
+    const fxaToolbarMenuBtn = document.getElementById(
+      "fxa-toolbar-menu-button"
+    );
+
+    if (anchor === null) {
+      anchor = fxaToolbarMenuBtn;
+    }
+
+    if (anchor == fxaToolbarMenuBtn && anchor.getAttribute("open") != "true") {
       if (ASRouter.initialized) {
         await ASRouter.sendTriggerMessage({
           browser: gBrowser.selectedBrowser,
@@ -1060,7 +1086,7 @@ var gSync = {
         this.updateFxAPanel(UIState.get());
         this.updateCTAPanel(anchor);
         PanelUI.showSubView("PanelUI-fxa", anchor, aEvent);
-      } else if (anchor == document.getElementById("fxa-toolbar-menu-button")) {
+      } else if (anchor == fxaToolbarMenuBtn) {
         // The fxa toolbar button doesn't have much context before the user
         // clicks it so instead of going straight to the login page,
         // we take them to a page that has more information
@@ -1097,9 +1123,34 @@ var gSync = {
     }
   },
 
+  _disableSyncOffIndicator() {
+    const newSyncSetupEnabled =
+      NimbusFeatures.syncSetupFlow.getVariable("enabled");
+    const SYNC_PANEL_ACCESSED_PREF =
+      "identity.fxaccounts.toolbar.syncSetup.panelAccessed";
+    // If the user was enrolled in the experiment and hasn't previously accessed
+    // the panel, we disable the sync off indicator
+    if (
+      newSyncSetupEnabled &&
+      !Services.prefs.getBoolPref(SYNC_PANEL_ACCESSED_PREF, false)
+    ) {
+      // Turn off the indicator so the user doesn't see it in subsequent openings
+      Services.prefs.setBoolPref(SYNC_PANEL_ACCESSED_PREF, true);
+    }
+  },
+
+  _shouldShowSyncOffIndicator() {
+    const newSyncSetupEnabled =
+      NimbusFeatures.syncSetupFlow.getVariable("enabled");
+    if (newSyncSetupEnabled) {
+      NimbusFeatures.syncSetupFlow.recordExposureEvent();
+    }
+    return newSyncSetupEnabled;
+  },
+
   updateFxAPanel(state = {}) {
     const isNewSyncSetupFlowEnabled =
-      NimbusFeatures.syncDecouplingUpdates.getVariable("syncSetup");
+      NimbusFeatures.syncSetupFlow.getVariable("enabled");
     const mainWindowEl = document.documentElement;
 
     const menuHeaderTitleEl = PanelMultiView.getViewNode(
@@ -1202,6 +1253,9 @@ var gSync = {
         if (state.syncEnabled) {
           syncNowButtonEl.removeAttribute("hidden");
           syncSetupEl.hidden = true;
+        } else if (this._shouldShowSyncOffIndicator()) {
+          let fxaButton = document.getElementById("fxa-toolbar-menu-button");
+          fxaButton?.setAttribute("badge-status", "sync-disabled");
         }
         break;
 
@@ -1268,6 +1322,7 @@ var gSync = {
       let extraOptions = {
         fxa_status: state.status,
         fxa_avatar: hasAvatar ? "true" : "false",
+        fxa_sync_on: state.syncEnabled,
       };
 
       let eventName = this._getEntryPointForElement(sourceElement);
@@ -2299,8 +2354,17 @@ var gSync = {
     }
   },
 
-  // This should only be shown if we have enabled the pxiPanel via
-  // an experiment or explicitly through prefs
+  /** Checks if the current list of attached clients to the Mozilla account
+   * has a service associated with the passed in Id
+   *  @param {string} clientId
+   *   A known static Id from FxA that identifies the service it's associated with
+   *  @returns {boolean}
+   *   Returns true/false whether the current account has the associated client
+   */
+  hasClientForId(clientId) {
+    return this._attachedClients?.some(c => !!c.id && c.id === clientId);
+  },
+
   updateCTAPanel(anchor) {
     const mainPanelEl = PanelMultiView.getViewNode(
       document,
@@ -2341,7 +2405,21 @@ var gSync = {
         "identity.fxaccounts.toolbar.pxiToolbarEnabled.relayEnabled",
         false
       );
-    relayPanelEl.hidden = !relayEnabled;
+    if (this.hasClientForId(FX_RELAY_OAUTH_CLIENT_ID)) {
+      let myServicesRelayPanelEl = PanelMultiView.getViewNode(
+        document,
+        "PanelUI-services-menu-relay-button"
+      );
+      let servicesContainerEl = PanelMultiView.getViewNode(
+        document,
+        "PanelUI-fxa-menu-services"
+      );
+      myServicesRelayPanelEl.hidden = false;
+      relayPanelEl.hidden = true;
+      servicesContainerEl.hidden = false;
+    } else {
+      relayPanelEl.hidden = !relayEnabled;
+    }
 
     // VPN checks
     let VpnPanelEl = PanelMultiView.getViewNode(
@@ -2407,12 +2485,7 @@ var gSync = {
       return;
     }
 
-    // Note: This is a network call
-    let attachedClients = await fxAccounts.listAttachedOAuthClients();
-    // If we have at least one client based on clientId passed in
-    let hasPXIClient = attachedClients.some(c => !!c.id && c.id === clientId);
-
-    const url = hasPXIClient ? signedInUrl : defaultUrl;
+    const url = this.hasClientForId(clientId) ? signedInUrl : defaultUrl;
     // Add base params + signed in
     url.search = searchParams.toString();
     url.searchParams.append("utm_content", "signedIn");

@@ -488,8 +488,8 @@ body {
   -moz-window-dragging: inherit;
 }
 
+#fxms-bmb-button-wrapper,
 toolbarpaletteitem > #personal-bookmarks > #PlacesToolbar,
-toolbarpaletteitem:has(> toolbarbutton.fxms-bmb-button),
 #personal-bookmarks:is([overflowedItem=true], [cui-areatype="panel"]) > #PlacesToolbar {
   display: none;
 }
@@ -1125,21 +1125,24 @@ popupnotificationcontent {
   align-items: center;
   font-size: 2em;
 
-  > div {
+  > div:nth-of-type(1) {
     width: 32px;
     height: 32px;
     background-image: url("chrome://browser/content/logos/relay.svg");
     background-repeat: no-repeat;
   }
 
-  > span:first-of-type {
-    font-weight: bold;
-    margin-inline-start: 8px;
-  }
+  > div:nth-of-type(2) {
+    direction: ltr;
+    margin-inline: 8px;
 
-  > span:last-of-type {
-    font-weight: normal;
-    white-space: pre;
+    > span:first-of-type {
+      font-weight: bold;
+    }
+
+    > span:last-of-type {
+      font-weight: normal;
+    }
   }
 }
 
@@ -1149,6 +1152,10 @@ popupnotificationcontent {
   font-weight: var(--font-weight-bold);
   font-size: 1.5em;
   margin: auto;
+
+  > p {
+    margin-block: auto;
+  }
 }
 
 .popup-notification-description[popupid="relay-integration-offer-notification"] > div:first-of-type {

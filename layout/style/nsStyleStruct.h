@@ -589,7 +589,7 @@ struct MOZ_NEEDS_MEMMOVABLE_MEMBERS nsStyleBorder {
     return mBorderTopColor;
   }
 
-  static mozilla::StyleColor nsStyleBorder::*BorderColorFieldFor(
+  static mozilla::StyleColor nsStyleBorder::* BorderColorFieldFor(
       mozilla::Side aSide) {
     switch (aSide) {
       case mozilla::eSideTop:
@@ -921,8 +921,10 @@ struct MOZ_NEEDS_MEMMOVABLE_MEMBERS nsStylePosition {
 
   template <typename SizeOrMaxSize>
   static bool BSizeCoordDependsOnContainer(const SizeOrMaxSize& aCoord) {
-    return aCoord.IsLengthPercentage() &&
-           aCoord.AsLengthPercentage().HasPercent();
+    if (aCoord.IsLengthPercentage()) {
+      return aCoord.AsLengthPercentage().HasPercent();
+    }
+    return aCoord.BehavesLikeStretchOnBlockAxis();
   }
 };
 

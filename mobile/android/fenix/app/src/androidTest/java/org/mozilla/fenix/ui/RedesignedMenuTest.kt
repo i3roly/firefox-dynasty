@@ -15,13 +15,18 @@ import org.mozilla.fenix.IntentReceiverActivity
 import org.mozilla.fenix.R
 import org.mozilla.fenix.customannotations.SmokeTest
 import org.mozilla.fenix.helpers.AppAndSystemHelper.assertAppWithPackageNameOpens
+import org.mozilla.fenix.helpers.AppAndSystemHelper.assertNativeAppOpens
 import org.mozilla.fenix.helpers.AppAndSystemHelper.assertYoutubeAppOpens
 import org.mozilla.fenix.helpers.AppAndSystemHelper.clickSystemHomeScreenShortcutAddButton
+import org.mozilla.fenix.helpers.AppAndSystemHelper.registerAndCleanupIdlingResources
+import org.mozilla.fenix.helpers.Constants.PackageName.PRINT_SPOOLER
 import org.mozilla.fenix.helpers.DataGenerationHelper.createCustomTabIntent
 import org.mozilla.fenix.helpers.DataGenerationHelper.getStringResource
 import org.mozilla.fenix.helpers.HomeActivityIntentTestRule
+import org.mozilla.fenix.helpers.RecyclerViewIdlingResource
 import org.mozilla.fenix.helpers.TestAssetHelper
 import org.mozilla.fenix.helpers.TestAssetHelper.waitingTime
+import org.mozilla.fenix.helpers.TestAssetHelper.waitingTimeLong
 import org.mozilla.fenix.helpers.TestHelper
 import org.mozilla.fenix.helpers.TestHelper.clickSnackbarButton
 import org.mozilla.fenix.helpers.TestHelper.mDevice
@@ -45,6 +50,7 @@ class RedesignedMenuTest : TestSetup() {
                 isSetAsDefaultBrowserPromptEnabled = false,
                 isMenuRedesignEnabled = true,
                 isMenuRedesignCFREnabled = false,
+                isPageLoadTranslationsPromptEnabled = false,
             ),
         ) { it.activity }
 
@@ -55,18 +61,18 @@ class RedesignedMenuTest : TestSetup() {
         false,
     )
 
-    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2763136
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2860735
     @SmokeTest
     @Test
     fun homepageRedesignedMenuItemsTest() {
         homeScreen {
         }.openThreeDotMenuFromRedesignedToolbar() {
             expandRedesignedMenu(composeTestRule)
-            verifyHomeRedesignedMainMenuItems(composeTestRule, false)
+            verifyHomeRedesignedMainMenuItems(composeTestRule)
         }
     }
 
-    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2769372
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2860835
     @SmokeTest
     @Test
     fun webpageRedesignedMenuItemsTest() {
@@ -76,11 +82,11 @@ class RedesignedMenuTest : TestSetup() {
         }.enterURLAndEnterToBrowser(testPage.url) {
         }.openThreeDotMenuFromRedesignedToolbar {
             expandRedesignedMenu(composeTestRule)
-            verifyPageMainMenuItems(composeTestRule, false)
+            verifyPageMainMenuItems(composeTestRule)
         }
     }
 
-    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2769377
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2860842
     @SmokeTest
     @Test
     fun verifyTheNewTabButtonTest() {
@@ -96,7 +102,7 @@ class RedesignedMenuTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2769378
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2860843
     @SmokeTest
     @Test
     fun verifyTheNewPrivateTabButtonTest() {
@@ -112,7 +118,7 @@ class RedesignedMenuTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2766734
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2860844
     @SmokeTest
     @Test
     fun verifySwitchToDesktopSiteIsDisabledOnPDFsTest() {
@@ -126,7 +132,7 @@ class RedesignedMenuTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2698232
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2860846
     @SmokeTest
     @Test
     fun findInPageTest() {
@@ -161,7 +167,7 @@ class RedesignedMenuTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2769380
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2860850
     @SmokeTest
     @Test
     fun verifyBookmarksMenuButtonTest() {
@@ -178,7 +184,7 @@ class RedesignedMenuTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2769381
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2860851
     @SmokeTest
     @Test
     fun verifyHistoryMenuButtonTest() {
@@ -195,7 +201,7 @@ class RedesignedMenuTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2769382
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2860852
     @SmokeTest
     @Test
     fun verifyDownloadsMenuButtonTest() {
@@ -214,7 +220,7 @@ class RedesignedMenuTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2769383
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2860853
     @SmokeTest
     @Test
     fun verifyPasswordsMenuButtonTest() {
@@ -235,7 +241,7 @@ class RedesignedMenuTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2763386
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2860757
     // Verifies the main menu of a custom tab with a custom menu item
     @SmokeTest
     @Test
@@ -257,7 +263,7 @@ class RedesignedMenuTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2769619
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2860761
     // The test opens a link in a custom tab then sends it to the browser
     @SmokeTest
     @Test
@@ -278,7 +284,7 @@ class RedesignedMenuTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2769620
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2860762
     @SmokeTest
     @Test
     fun shareCustomTabUsingMainMenuButtonTest() {
@@ -302,7 +308,7 @@ class RedesignedMenuTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2777426
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2860771
     @SmokeTest
     @Test
     fun verifyRecommendedExtensionsListTest() {
@@ -312,21 +318,21 @@ class RedesignedMenuTest : TestSetup() {
         }.enterURLAndEnterToBrowser(genericURL.url) {
         }.openThreeDotMenuFromRedesignedToolbar {
             expandRedesignedMenu(composeTestRule)
-        }.openNoExtensionsMenuFromRedesignedMainMenu(composeTestRule) {
+        }.openExtensionsMenuFromRedesignedMainMenu(composeTestRule) {
             verifyRecommendedAddonsViewFromRedesignedMainMenu(composeTestRule)
         }
     }
 
-    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2773811
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2860779
     @SmokeTest
     @Test
-    fun verifyRedesignedMenuAfterDisablingAnExtensionTest() {
+    fun verifyRedesignedMenuAfterRemovingAnExtensionTest() {
         val addonName = "uBlock Origin"
         val genericURL = TestAssetHelper.getGenericAsset(mockWebServer, 1)
 
         homeScreen {
         }.openThreeDotMenuFromRedesignedToolbar {
-        }.openNoExtensionsMenuFromRedesignedMainMenu(composeTestRule) {
+        }.openExtensionsMenuFromRedesignedMainMenu(composeTestRule) {
             waitForAddonsListProgressBarToBeGone()
             clickInstallAddon(addonName)
             verifyAddonPermissionPrompt(addonName)
@@ -341,7 +347,7 @@ class RedesignedMenuTest : TestSetup() {
         }.enterURLAndEnterToBrowser(genericURL.url) {
         }.openThreeDotMenuFromRedesignedToolbar {
             expandRedesignedMenu(composeTestRule)
-        }.openPageViewExtensionsMenuFromRedesignedMainMenu(composeTestRule, "$addonName (0)") {
+        }.openExtensionsMenuFromRedesignedMainMenu(composeTestRule) {
             clickManageExtensionsButtonFromRedesignedMainMenu(composeTestRule)
         }.openDetailedMenuForAddon(addonName) {
         }.removeAddon(composeTestRule.activityRule) {
@@ -354,7 +360,7 @@ class RedesignedMenuTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2776938
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2860784
     @SmokeTest
     @Test
     fun verifyTheManageExtensionsSubMenuTest() {
@@ -363,7 +369,7 @@ class RedesignedMenuTest : TestSetup() {
 
         homeScreen {
         }.openThreeDotMenuFromRedesignedToolbar {
-        }.openNoExtensionsMenuFromRedesignedMainMenu(composeTestRule) {
+        }.openExtensionsMenuFromRedesignedMainMenu(composeTestRule) {
             waitForAddonsListProgressBarToBeGone()
             clickInstallAddon(addonName)
             verifyAddonPermissionPrompt(addonName)
@@ -378,7 +384,7 @@ class RedesignedMenuTest : TestSetup() {
         }.enterURLAndEnterToBrowser(genericURL.url) {
         }.openThreeDotMenuFromRedesignedToolbar {
             expandRedesignedMenu(composeTestRule)
-        }.openPageViewExtensionsMenuFromRedesignedMainMenu(composeTestRule, "$addonName (0)") {
+        }.openExtensionsMenuFromRedesignedMainMenu(composeTestRule) {
             clickManageExtensionsButtonFromRedesignedMainMenu(composeTestRule)
         }.goBack {
         }
@@ -387,7 +393,7 @@ class RedesignedMenuTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2776966
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2860812
     @SmokeTest
     @Test
     fun verifyTheSaveSubMenuItemsTest() {
@@ -402,7 +408,7 @@ class RedesignedMenuTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2776967
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2860813
     @SmokeTest
     @Test
     fun verifyTheBookmarkThisPageSubMenuItemsTest() {
@@ -430,7 +436,7 @@ class RedesignedMenuTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2776968
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2860814
     @SmokeTest
     @Test
     fun verifyTheAddToShortcutsSubMenuOptionTest() {
@@ -456,7 +462,7 @@ class RedesignedMenuTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2776969
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2860815
     @SmokeTest
     @Test
     fun verifyTheAddToHomeScreenSubMenuOptionTest() {
@@ -482,7 +488,7 @@ class RedesignedMenuTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2776970
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2860816
     @SmokeTest
     @Test
     fun verifyTheSaveToCollectionSubMenuOptionTest() {
@@ -516,7 +522,7 @@ class RedesignedMenuTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2776971
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2860817
     @SmokeTest
     @Test
     fun verifyTheSaveAsPDFSubMenuOptionTest() {
@@ -537,7 +543,7 @@ class RedesignedMenuTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2776951
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2860796
     @SmokeTest
     @Test
     fun verifyTheDefaultToolsMenuItemsTest() {
@@ -554,7 +560,7 @@ class RedesignedMenuTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2776961
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2860798
     @SmokeTest
     @Test
     fun verifyTheReaderViewButtonTest() {
@@ -597,7 +603,7 @@ class RedesignedMenuTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2776953
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2860799
     @SmokeTest
     @Test
     fun verifyTheTranslatePageButtonsStatesTest() {
@@ -623,7 +629,7 @@ class RedesignedMenuTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2776955
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2860802
     @SmokeTest
     @Test
     fun verifyTheShareButtonTest() {
@@ -644,7 +650,7 @@ class RedesignedMenuTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2776956
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2860804
     @SmokeTest
     @Test
     fun verifyOpenInAppButtonIsEnabledTest() {
@@ -659,6 +665,103 @@ class RedesignedMenuTest : TestSetup() {
             verifyOpenInAppButtonIsEnabled(composeTestRule, appName = "YouTube", isEnabled = true)
             clickOpenInAppButton(composeTestRule, appName = "YouTube")
             assertYoutubeAppOpens()
+        }
+    }
+
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2860746
+    @SmokeTest
+    @Test
+    fun homeMainMenuExtensionsButtonOpensManageExtensionsTest() {
+        homeScreen {
+        }.openThreeDotMenuFromRedesignedToolbar {
+        }.openExtensionsMenuFromRedesignedMainMenu(composeTestRule) {
+            registerAndCleanupIdlingResources(
+                RecyclerViewIdlingResource(composeTestRule.activity.findViewById(R.id.add_ons_list), 1),
+            ) {
+                verifyAddonsItems()
+            }
+        }
+    }
+
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2860845
+    @SmokeTest
+    @Test
+    fun switchDesktopSiteModeOnOffTest() {
+        val defaultWebPage = TestAssetHelper.getGenericAsset(mockWebServer, 1)
+
+        navigationToolbar {
+        }.enterURLAndEnterToBrowser(defaultWebPage.url) {
+        }.openThreeDotMenuFromRedesignedToolbar {
+            expandRedesignedMenu(composeTestRule)
+            verifySwitchToDesktopSiteButton(composeTestRule)
+            clickSwitchToDesktopSiteButton(composeTestRule)
+        }
+        browserScreen {
+            waitForPageToLoad(pageLoadWaitingTime = waitingTimeLong)
+        }.openThreeDotMenuFromRedesignedToolbar {
+            expandRedesignedMenu(composeTestRule)
+            verifySwitchToMobileSiteButton(composeTestRule)
+            clickSwitchToMobileSiteButton(composeTestRule)
+        }
+        browserScreen {
+            waitForPageToLoad(pageLoadWaitingTime = waitingTimeLong)
+        }.openThreeDotMenuFromRedesignedToolbar {
+            expandRedesignedMenu(composeTestRule)
+            verifySwitchToDesktopSiteButton(composeTestRule)
+        }
+    }
+
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2860801
+    @SmokeTest
+    @Test
+    fun verifyPrintSubMenuOptionTest() {
+        val defaultWebPage = TestAssetHelper.getGenericAsset(mockWebServer, 1)
+
+        navigationToolbar {
+        }.enterURLAndEnterToBrowser(defaultWebPage.url) {
+            mDevice.waitForIdle()
+        }.openThreeDotMenuFromRedesignedToolbar {
+            expandRedesignedMenu(composeTestRule)
+            openToolsMenu(composeTestRule)
+            clickPrintContentButton(composeTestRule)
+            assertNativeAppOpens(PRINT_SPOOLER)
+        }
+    }
+
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2860778
+    @SmokeTest
+    @Test
+    fun verifyRedesignedMenuAfterDisablingAnExtensionTest() {
+        val addonName = "uBlock Origin"
+        val genericURL = TestAssetHelper.getGenericAsset(mockWebServer, 1)
+
+        homeScreen {
+        }.openThreeDotMenuFromRedesignedToolbar {
+        }.openExtensionsMenuFromRedesignedMainMenu(composeTestRule) {
+            waitForAddonsListProgressBarToBeGone()
+            clickInstallAddon(addonName)
+            verifyAddonPermissionPrompt(addonName)
+            acceptPermissionToInstallAddon()
+            verifyAddonInstallCompleted(addonName, composeTestRule.activityRule)
+            verifyAddonInstallCompletedPrompt(addonName)
+            closeAddonInstallCompletePrompt()
+        }.goBack {
+        }
+
+        navigationToolbar {
+        }.enterURLAndEnterToBrowser(genericURL.url) {
+        }.openThreeDotMenuFromRedesignedToolbar {
+            expandRedesignedMenu(composeTestRule)
+        }.openExtensionsMenuFromRedesignedMainMenu(composeTestRule) {
+            clickManageExtensionsButtonFromRedesignedMainMenu(composeTestRule)
+        }.openDetailedMenuForAddon(addonName) {
+            disableExtension()
+            verifySnackBarText("Successfully disabled $addonName")
+        }.goBack {
+        }.goBack {
+        }.openThreeDotMenuFromRedesignedToolbar {
+            expandRedesignedMenu(composeTestRule)
+            verifyNoExtensionsButton(composeTestRule)
         }
     }
 }

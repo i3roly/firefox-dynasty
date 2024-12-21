@@ -447,6 +447,9 @@ support-files = ["dummy_page.html"]
 
 ["browser_searchHistoryLimit.js"]
 
+["browser_searchModeSwitcher_appProvidedEngines.js"]
+tags = "persisted-search"
+
 ["browser_searchModeSwitcher_basic.js"]
 
 ["browser_searchModeSwitcher_dynamicUSB.js"]
@@ -455,6 +458,8 @@ support-files = ["has-a-link.html"]
 ["browser_searchModeSwitcher_keyNavigation.js"]
 
 ["browser_searchModeSwitcher_opensearchInstall.js"]
+
+["browser_searchModeSwitcher_telemetry.js"]
 
 ["browser_searchMode_alias_replacement.js"]
 support-files = [
@@ -698,6 +703,9 @@ tags = "search-telemetry"
 
 ["browser_urlbar_telemetry_persisted.js"]
 tags = "search-telemetry"
+skip-if = [
+  "os == 'linux' && os_version == '18.04' && processor == 'x86_64'",
+] # bug 1934362
 
 ["browser_urlbar_telemetry_places.js"]
 https_first_disabled = true

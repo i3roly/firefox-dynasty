@@ -48,7 +48,7 @@ async function test() {
   const scrollendPromise = promiseOneEvent(window, "scrollend");
 
   // Try to scroll down by a wheel event.
-  synthesizeNativeWheel(container, 50, 50, 0, -NativePanHandler.delta);
+  synthesizeNativeWheel(container, 50, 50, 0, -50);
 
   // Wait for the end of the smooth scrolling triggered by above wheel event.
   await scrollendPromise;

@@ -82,10 +82,9 @@ impl Numerator for NumeratorMetric {
 
         #[cfg(feature = "with_gecko")]
         if gecko_profiler::can_accept_markers() {
-            use gecko_profiler::gecko_profiler_category;
             gecko_profiler::add_marker(
                 "Rate::addToNumerator",
-                gecko_profiler_category!(Telemetry),
+                super::profiler_utils::TelemetryProfilerCategory,
                 Default::default(),
                 super::profiler_utils::IntLikeMetricMarker::new(id, None, amount),
             );
@@ -126,7 +125,7 @@ mod test {
         let metric = &metrics::test_only_ipc::rate_with_external_denominator;
         metric.add_to_numerator(1);
 
-        assert_eq!(1, metric.test_get_value("store1").unwrap().numerator);
+        assert_eq!(1, metric.test_get_value("test-ping").unwrap().numerator);
     }
 
     #[test]
@@ -159,7 +158,7 @@ mod test {
         assert!(ipc::replay_from_buf(&ipc::take_buf().unwrap()).is_ok());
 
         assert!(
-            45 == parent_metric.test_get_value("store1").unwrap().numerator,
+            45 == parent_metric.test_get_value("test-ping").unwrap().numerator,
             "Values from the 'processes' should be summed"
         );
     }

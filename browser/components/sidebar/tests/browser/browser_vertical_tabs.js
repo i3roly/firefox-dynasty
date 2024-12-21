@@ -15,7 +15,10 @@ const { NonPrivateTabs } = ChromeUtils.importESModule(
 
 add_setup(async () => {
   await SpecialPowers.pushPrefEnv({
-    set: [["sidebar.verticalTabs", false]],
+    set: [
+      ["sidebar.verticalTabs", false],
+      ["sidebar.visibility", "always-show"],
+    ],
   });
   Services.telemetry.clearScalars();
   SessionStoreTestUtils.init(this, window);
@@ -407,4 +410,35 @@ add_task(async function test_vertical_tabs_overflow() {
     "vertical-tabs-newtab-button",
     1
   );
+});
+
+add_task(async function test_vertical_tabs_expanded() {
+  await SpecialPowers.pushPrefEnv({
+    set: [
+      ["sidebar.revamp", true],
+      ["sidebar.verticalTabs", true],
+    ],
+  });
+  await SidebarController.setUIState({ expanded: true });
+
+  info("Disable revamped sidebar.");
+  Services.prefs.setBoolPref("sidebar.revamp", false);
+  await TestUtils.waitForCondition(
+    () => BrowserTestUtils.isHidden(document.getElementById("sidebar-main")),
+    "Sidebar launcher is hidden."
+  );
+
+  info("Enable revamped sidebar and vertical tabs.");
+  Services.prefs.setBoolPref("sidebar.revamp", true);
+  Services.prefs.setBoolPref("sidebar.verticalTabs", true);
+  await TestUtils.waitForCondition(
+    () => BrowserTestUtils.isVisible(document.getElementById("sidebar-main")),
+    "Sidebar launcher is shown."
+  );
+  ok(
+    gBrowser.tabContainer.hasAttribute("expanded"),
+    "Tab container is expanded."
+  );
+
+  await SpecialPowers.popPrefEnv();
 });

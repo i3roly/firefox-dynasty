@@ -75,6 +75,13 @@ export const LinkMenuOptions = {
         typedBonus: site.typedBonus,
         url: site.url,
         sponsored_tile_id: site.sponsored_tile_id,
+        ...(site.section
+          ? {
+              section: site.section,
+              section_position: site.section_position,
+              is_secton_followed: site.is_secton_followed,
+            }
+          : {}),
       },
     }),
     userEvent: "OPEN_NEW_WINDOW",
@@ -127,6 +134,7 @@ export const LinkMenuOptions = {
           ? {
               section: site.section,
               section_position: site.section_position,
+              is_secton_followed: site.is_secton_followed,
             }
           : {}),
       })),
@@ -176,6 +184,11 @@ export const LinkMenuOptions = {
               siteInfo
             )
           ),
+          // Also broadcast that this url has been deleted so that
+          // the confirmation dialog knows it needs to disappear now.
+          ac.AlsoToMain({
+            type: at.DIALOG_CLOSE,
+          }),
         ],
         eventSource,
         body_string_id: [
@@ -413,12 +426,68 @@ export const LinkMenuOptions = {
       type: at.OPEN_ABOUT_FAKESPOT,
     }),
   }),
-  SectionBlock: () => ({
+  SectionBlock: ({ blockedSections, sectionKey, sectionPosition }) => ({
     id: "newtab-menu-section-block",
-    // Note: action TBA. It will send a list of blocked sections back to the API.
-    action: null,
+    icon: "delete",
+    action: {
+      // Open the confirmation dialog to block a section.
+      type: at.DIALOG_OPEN,
+      data: {
+        onConfirm: [
+          // Once the user confirmed their intention to block this section,
+          // update their preferences.
+          ac.AlsoToMain({
+            type: at.SET_PREF,
+            data: {
+              name: "discoverystream.sections.blocked",
+              value: [...blockedSections, sectionKey].join(", "),
+            },
+          }),
+          // Telemetry
+          ac.OnlyToMain({
+            type: at.BLOCK_SECTION,
+            data: {
+              section: sectionKey,
+              section_position: sectionPosition,
+              event_source: "CONTEXT_MENU",
+            },
+          }),
+          // Also broadcast that this section has been blocked so that
+          // the confirmation dialog knows it needs to disappear now.
+          ac.AlsoToMain({
+            type: at.DIALOG_CLOSE,
+          }),
+        ],
+        // Pass Fluent strings to ConfirmDialog component for the copy
+        // of the prompt to block sections.
+        body_string_id: [
+          "newtab-section-confirm-block-section-p1",
+          "newtab-section-confirm-block-section-p2",
+        ],
+        confirm_button_string_id: "newtab-section-block-section-button",
+        cancel_button_string_id: "newtab-section-cancel-button",
+      },
+    },
+    userEvent: "DIALOG_OPEN",
+  }),
+  SectionUnfollow: ({ followedSections, sectionKey, sectionPosition }) => ({
+    id: "newtab-menu-section-unfollow",
+    action: ac.AlsoToMain({
+      type: at.SET_PREF,
+      data: {
+        name: "discoverystream.sections.following",
+        value: [...followedSections.filter(item => item !== sectionKey)].join(
+          ", "
+        ),
+      },
+    }),
     impression: ac.OnlyToMain({
-      type: at.BLOCK_SECTION,
+      type: at.UNFOLLOW_SECTION,
+      data: {
+        section: sectionKey,
+        section_position: sectionPosition,
+        event_source: "CONTEXT_MENU",
+      },
     }),
   }),
 };

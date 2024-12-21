@@ -518,6 +518,7 @@ pref("accessibility.typeaheadfind.startlinksonly", false);
 //              set to a zero or negative value to keep dialog open until it's manually closed
 pref("accessibility.typeaheadfind.timeout", 4000);
 pref("accessibility.typeaheadfind.soundURL", "beep");
+pref("accessibility.typeaheadfind.wrappedSoundURL", "");
 pref("accessibility.typeaheadfind.enablesound", true);
 #ifdef XP_MACOSX
   pref("accessibility.typeaheadfind.prefillwithselection", false);
@@ -1344,50 +1345,6 @@ pref("network.websocket.delay-failed-reconnects", true);
 
 // </ws>
 
-// This preference specifies a list of domains for which DNS lookups will be
-// IPv4 only. Works around broken DNS servers which can't handle IPv6 lookups
-// and/or allows the user to disable IPv6 on a per-domain basis. See bug 68796.
-pref("network.dns.ipv4OnlyDomains", "");
-
-// This is the number of dns cache entries allowed
-pref("network.dnsCacheEntries", 400);
-
-// In the absence of OS TTLs, the DNS cache TTL value
-pref("network.dnsCacheExpiration", 60);
-
-// Get TTL; not supported on all platforms; nop on the unsupported ones.
-pref("network.dns.get-ttl", true);
-
-// For testing purposes! Makes the native resolver resolve IPv4 "localhost"
-// instead of the actual given name.
-pref("network.dns.native-is-localhost", false);
-
-// The grace period allows the DNS cache to use expired entries, while kicking off
-// a revalidation in the background.
-pref("network.dnsCacheExpirationGracePeriod", 60);
-
-// This preference can be used to turn off DNS prefetch.
-pref("network.dns.disablePrefetch", false);
-
-// This preference controls whether .onion hostnames are
-// rejected before being given to DNS. RFC 7686
-pref("network.dns.blockDotOnion", true);
-
-// These domains are treated as localhost equivalent
-pref("network.dns.localDomains", "");
-
-// When non empty all non-localhost DNS queries (including IP addresses)
-// resolve to this value. The value can be a name or an IP address.
-// domains mapped to localhost with localDomains stay localhost.
-pref("network.dns.forceResolve", "");
-
-// Contols whether or not "localhost" should resolve when offline
-pref("network.dns.offline-localhost", true);
-
-// Defines how much longer resolver threads should stay idle before are shut down.
-// A negative value will keep the thread alive forever.
-pref("network.dns.resolver-thread-extra-idle-time-seconds", 60);
-
 // enables the prefetch service (i.e., prefetching of <link rel="next"> and
 // <link rel="prefetch"> URLs).
 pref("network.prefetch-next", true);
@@ -1466,15 +1423,10 @@ pref("network.auth.private-browsing-sso", false);
 // This feature is occasionally causing visible regressions (download too slow for
 // too long time, jitter in video/audio in background tabs...)
 pref("network.http.throttle.enable", false);
-pref("network.http.throttle.version", 1);
 
 // V1 prefs
 pref("network.http.throttle.suspend-for", 900);
 pref("network.http.throttle.resume-for", 100);
-
-// V2 prefs
-pref("network.http.throttle.read-limit-bytes", 8000);
-pref("network.http.throttle.read-interval-ms", 500);
 
 // Common prefs
 // Delay we resume throttled background responses after the last unthrottled
@@ -3047,15 +2999,15 @@ pref("font.size.monospace.x-math", 13);
 
   pref("font.name-list.serif.zh-CN", "Charis SIL Compact, Noto Serif CJK SC, Noto Serif, Droid Serif, Droid Sans Fallback");
   pref("font.name-list.sans-serif.zh-CN", "Roboto, Google Sans, Droid Sans, Noto Sans SC, Noto Sans CJK SC, SEC CJK SC, Droid Sans Fallback");
-  pref("font.name-list.monospace.zh-CN", "Droid Sans Mono, Noto Sans Mono CJK SC, SEC Mono CJK SC, Droid Sans Fallback");
+  pref("font.name-list.monospace.zh-CN", "Droid Sans Mono, Noto Sans Mono CJK SC, SEC Mono CJK SC, MiSans VF, Droid Sans Fallback");
 
   pref("font.name-list.serif.zh-HK", "Charis SIL Compact, Noto Serif CJK TC, Noto Serif, Droid Serif, Droid Sans Fallback");
   pref("font.name-list.sans-serif.zh-HK", "Roboto, Google Sans, Droid Sans, Noto Sans TC, Noto Sans SC, Noto Sans CJK TC, SEC CJK TC, Droid Sans Fallback");
-  pref("font.name-list.monospace.zh-HK", "Droid Sans Mono, Noto Sans Mono CJK TC, SEC Mono CJK TC, Droid Sans Fallback");
+  pref("font.name-list.monospace.zh-HK", "Droid Sans Mono, Noto Sans Mono CJK TC, SEC Mono CJK TC, MiSans TC VF, Droid Sans Fallback");
 
   pref("font.name-list.serif.zh-TW", "Charis SIL Compact, Noto Serif CJK TC, Noto Serif, Droid Serif, Droid Sans Fallback");
   pref("font.name-list.sans-serif.zh-TW", "Roboto, Google Sans, Droid Sans, Noto Sans TC, Noto Sans SC, Noto Sans CJK TC, SEC CJK TC, Droid Sans Fallback");
-  pref("font.name-list.monospace.zh-TW", "Droid Sans Mono, Noto Sans Mono CJK TC, SEC Mono CJK TC, Droid Sans Fallback");
+  pref("font.name-list.monospace.zh-TW", "Droid Sans Mono, Noto Sans Mono CJK TC, SEC Mono CJK TC, MiSans TC VF, Droid Sans Fallback");
 
   pref("font.name-list.serif.x-math", "Latin Modern Math, STIX Two Math, XITS Math, Cambria Math, Libertinus Math, DejaVu Math TeX Gyre, TeX Gyre Bonum Math, TeX Gyre Pagella Math, TeX Gyre Schola, TeX Gyre Termes Math, STIX Math, Asana Math, STIXGeneral, DejaVu Serif, DejaVu Sans, Charis SIL Compact");
   pref("font.name-list.sans-serif.x-math", "Roboto, Google Sans");
@@ -4185,3 +4137,6 @@ pref("privacy.query_stripping.strip_on_share.enableTestMode", false);
 
 // To disable the Strip on Share context menu option if nothing can be stripped
 pref("privacy.query_stripping.strip_on_share.canDisable", true);
+
+// Captcha Detection
+pref("captchadetection.loglevel", "Warn");

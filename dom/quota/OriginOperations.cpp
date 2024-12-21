@@ -62,6 +62,7 @@
 #include "nsTArray.h"
 #include "OriginInfo.h"
 #include "OriginOperationBase.h"
+#include "OriginParser.h"
 #include "QuotaRequestBase.h"
 #include "ResolvableNormalOriginOp.h"
 #include "prthread.h"
@@ -970,8 +971,10 @@ class EstimateOp final : public OpenStorageDirectoryHelper<QuotaRequestBase> {
   void CloseDirectory() override;
 };
 
-class ListOriginsOp final : public OpenStorageDirectoryHelper<QuotaRequestBase>,
-                            public TraverseRepositoryHelper {
+class ListOriginsOp final
+    : public OpenStorageDirectoryHelper<
+          ResolvableNormalOriginOp<CStringArray, /* IsExclusive */ true>>,
+      public TraverseRepositoryHelper {
   // XXX Bug 1521541 will make each origin has it's own state.
   nsTArray<nsCString> mOrigins;
 
@@ -991,7 +994,7 @@ class ListOriginsOp final : public OpenStorageDirectoryHelper<QuotaRequestBase>,
                          const bool aPersistent,
                          const PersistenceType aPersistenceType) override;
 
-  void GetResponse(RequestResponse& aResponse) override;
+  CStringArray UnwrapResolveValue() override;
 
   void CloseDirectory() override;
 };
@@ -1223,8 +1226,8 @@ RefPtr<QuotaRequestBase> CreateEstimateOp(
   return MakeRefPtr<EstimateOp>(std::move(aQuotaManager), aParams);
 }
 
-RefPtr<QuotaRequestBase> CreateListOriginsOp(
-    MovingNotNull<RefPtr<QuotaManager>> aQuotaManager) {
+RefPtr<ResolvableNormalOriginOp<CStringArray, /* IsExclusive */ true>>
+CreateListOriginsOp(MovingNotNull<RefPtr<QuotaManager>> aQuotaManager) {
   return MakeRefPtr<ListOriginsOp>(std::move(aQuotaManager));
 }
 
@@ -2883,6 +2886,7 @@ void ClearRequestBase::DeleteFilesInternal(
         }
 
         mIterations++;
+        aQuotaManager.IncreaseTotalDirectoryIterations();
 
         return Ok{};
       }),
@@ -3193,6 +3197,24 @@ nsresult ClearDataOp::DoDirectoryWork(QuotaManager& aQuotaManager) {
   AssertIsOnIOThread();
 
   AUTO_PROFILER_LABEL("ClearRequestBase::DoDirectoryWork", OTHER);
+
+  // Optimize clearing of thumbnail private identity temporary origins by
+  // skipping potentially expensive temporary repository traversals when there
+  // are no thumbnail private identity temporary origins (this is especially
+  // important during shutdown).
+  //
+  // XXX Can we do the skipping also when temporary storage is not initialized
+  // (no new thumbnail private identity temporary origins could be created yet)?
+  if (aQuotaManager.IsThumbnailPrivateIdentityIdKnown() &&
+      IsUserContextPattern(mPattern,
+                           aQuotaManager.GetThumbnailPrivateIdentityId()) &&
+      aQuotaManager.IsTemporaryStorageInitializedInternal() &&
+      aQuotaManager.ThumbnailPrivateIdentityTemporaryOriginCount() == 0) {
+    DeleteFiles(aQuotaManager, PERSISTENCE_TYPE_PERSISTENT,
+                OriginScope::FromPattern(mPattern));
+
+    return NS_OK;
+  }
 
   for (const PersistenceType type : kAllPersistenceTypes) {
     DeleteFiles(aQuotaManager, type, OriginScope::FromPattern(mPattern));
@@ -3740,16 +3762,11 @@ nsresult ListOriginsOp::ProcessOrigin(QuotaManager& aQuotaManager,
   return NS_OK;
 }
 
-void ListOriginsOp::GetResponse(RequestResponse& aResponse) {
+CStringArray ListOriginsOp::UnwrapResolveValue() {
   AssertIsOnOwningThread();
+  MOZ_ASSERT(!ResolveValueConsumed());
 
-  aResponse = ListOriginsResponse();
-  if (mOrigins.IsEmpty()) {
-    return;
-  }
-
-  nsTArray<nsCString>& origins = aResponse.get_ListOriginsResponse().origins();
-  mOrigins.SwapElements(origins);
+  return std::move(mOrigins);
 }
 
 void ListOriginsOp::CloseDirectory() {

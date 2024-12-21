@@ -20,10 +20,8 @@ use glean::traits::TimingDistribution;
 #[cfg(feature = "with_gecko")]
 use super::profiler_utils::{
     lookup_canonical_metric_name, truncate_vector_for_marker, LookupError,
+    TelemetryProfilerCategory,
 };
-
-#[cfg(feature = "with_gecko")]
-use gecko_profiler::{gecko_profiler_category, MarkerOptions, MarkerTiming};
 
 #[cfg(feature = "with_gecko")]
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
@@ -93,7 +91,7 @@ impl gecko_profiler::ProfilerMarker for TimingDistributionMetricMarker {
         schema.add_key_label_format_searchable(
             "label",
             "Label",
-            Format::String,
+            Format::UniqueString,
             Searchable::Searchable,
         );
         schema.add_key_label_format_searchable(
@@ -114,18 +112,14 @@ impl gecko_profiler::ProfilerMarker for TimingDistributionMetricMarker {
             lookup_canonical_metric_name(&self.id).unwrap_or_else(LookupError::as_str),
         );
 
-        match &self.label {
-            Some(s) => json_writer.string_property("label", s.as_str()),
-            _ => {}
+        if let Some(l) = &self.label {
+            json_writer.unique_string_property("label", l.as_str());
         };
 
-        match &self.timer_id {
-            Some(id) => {
-                // We don't care about exactly what the timer id is - so just
-                // perform a bitwise cast, as that provides a 1:1 mapping.
-                json_writer.int_property("timer_id", *id as i64);
-            }
-            _ => {}
+        if let Some(id) = &self.timer_id {
+            // We don't care about exactly what the timer id is - so just
+            // perform a bitwise cast, as that provides a 1:1 mapping.
+            json_writer.int_property("timer_id", *id as i64);
         };
 
         match &self.value {
@@ -389,14 +383,13 @@ impl TimingDistribution for TimingDistributionMetric {
             // - Glean, Bug 1931369,
             // While these bugs are being solved, we record instant markers so
             // that we still have *some* information.
-            if gecko_profiler::can_accept_markers() {
-                gecko_profiler::add_marker(
-                    "TimingDistribution::start",
-                    gecko_profiler_category!(Telemetry),
-                    MarkerOptions::default().with_timing(MarkerTiming::instant_now()),
-                    TimingDistributionMetricMarker::new(*metric_id, None, Some(timer_id.id), None),
-                );
-            }
+            gecko_profiler::lazy_add_marker!(
+                "TimingDistribution::start",
+                TelemetryProfilerCategory,
+                gecko_profiler::MarkerOptions::default()
+                    .with_timing(gecko_profiler::MarkerTiming::instant_now()),
+                TimingDistributionMetricMarker::new(*metric_id, None, Some(timer_id.id), None)
+            );
         }
         timer_id.into()
     }
@@ -428,14 +421,13 @@ impl TimingDistribution for TimingDistributionMetric {
                 GIFFT_TimingDistributionStopAndAccumulate(metric_id.0, id.id);
             }
             // See note on TimingDistribution::start
-            if gecko_profiler::can_accept_markers() {
-                gecko_profiler::add_marker(
-                    "TimingDistribution::stop",
-                    gecko_profiler_category!(Telemetry),
-                    MarkerOptions::default().with_timing(MarkerTiming::instant_now()),
-                    TimingDistributionMetricMarker::new(*metric_id, None, Some(id.id), None),
-                );
-            }
+            gecko_profiler::lazy_add_marker!(
+                "TimingDistribution::stop",
+                TelemetryProfilerCategory,
+                gecko_profiler::MarkerOptions::default()
+                    .with_timing(gecko_profiler::MarkerTiming::instant_now()),
+                TimingDistributionMetricMarker::new(*metric_id, None, Some(id.id), None)
+            );
         }
     }
 
@@ -464,14 +456,13 @@ impl TimingDistribution for TimingDistributionMetric {
                 GIFFT_TimingDistributionCancel(metric_id.0, id.id);
             }
             // See note on TimingDistribution::start
-            if gecko_profiler::can_accept_markers() {
-                gecko_profiler::add_marker(
-                    "TimingDistribution::cancel",
-                    gecko_profiler_category!(Telemetry),
-                    MarkerOptions::default().with_timing(MarkerTiming::instant_now()),
-                    TimingDistributionMetricMarker::new(*metric_id, None, Some(id.id), None),
-                );
-            }
+            gecko_profiler::lazy_add_marker!(
+                "TimingDistribution::cancel",
+                TelemetryProfilerCategory,
+                gecko_profiler::MarkerOptions::default()
+                    .with_timing(gecko_profiler::MarkerTiming::instant_now()),
+                TimingDistributionMetricMarker::new(*metric_id, None, Some(id.id), None)
+            );
         }
     }
 
@@ -501,19 +492,16 @@ impl TimingDistribution for TimingDistributionMetric {
             #[allow(unused)]
             TimingDistributionMetric::Parent { id, inner } => {
                 #[cfg(feature = "with_gecko")]
-                if gecko_profiler::can_accept_markers() {
-                    gecko_profiler::add_marker(
-                        "TimingDistribution::accumulate",
-                        gecko_profiler_category!(Telemetry),
-                        MarkerOptions::default(),
-                        TimingDistributionMetricMarker::new(
-                            *id,
-                            None,
-                            None,
-                            Some(TDMPayload::from_samples_signed(&samples)),
-                        ),
-                    );
-                }
+                gecko_profiler::lazy_add_marker!(
+                    "TimingDistribution::accumulate",
+                    TelemetryProfilerCategory,
+                    TimingDistributionMetricMarker::new(
+                        *id,
+                        None,
+                        None,
+                        Some(TDMPayload::from_samples_signed(&samples)),
+                    )
+                );
                 inner.accumulate_samples(samples)
             }
             TimingDistributionMetric::Child(_c) => {
@@ -538,19 +526,16 @@ impl TimingDistribution for TimingDistributionMetric {
             #[allow(unused)]
             TimingDistributionMetric::Parent { id, inner } => {
                 #[cfg(feature = "with_gecko")]
-                if gecko_profiler::can_accept_markers() {
-                    gecko_profiler::add_marker(
-                        "TimingDistribution::accumulate",
-                        gecko_profiler_category!(Telemetry),
-                        MarkerOptions::default(),
-                        TimingDistributionMetricMarker::new(
-                            *id,
-                            None,
-                            None,
-                            Some(TDMPayload::from_samples_unsigned(&samples)),
-                        ),
-                    );
-                }
+                gecko_profiler::lazy_add_marker!(
+                    "TimingDistribution::accumulate",
+                    TelemetryProfilerCategory,
+                    TimingDistributionMetricMarker::new(
+                        *id,
+                        None,
+                        None,
+                        Some(TDMPayload::from_samples_unsigned(&samples)),
+                    )
+                );
                 inner.accumulate_raw_samples_nanos(samples)
             }
             TimingDistributionMetric::Child(_c) => {
@@ -565,19 +550,16 @@ impl TimingDistribution for TimingDistributionMetric {
             #[allow(unused)]
             TimingDistributionMetric::Parent { id, inner } => {
                 #[cfg(feature = "with_gecko")]
-                if gecko_profiler::can_accept_markers() {
-                    gecko_profiler::add_marker(
-                        "TimingDistribution::accumulate",
-                        gecko_profiler_category!(Telemetry),
-                        MarkerOptions::default(),
-                        TimingDistributionMetricMarker::new(
-                            *id,
-                            None,
-                            None,
-                            Some(TDMPayload::Sample(sample.clone())),
-                        ),
-                    );
-                }
+                gecko_profiler::lazy_add_marker!(
+                    "TimingDistribution::accumulate",
+                    TelemetryProfilerCategory,
+                    TimingDistributionMetricMarker::new(
+                        *id,
+                        None,
+                        None,
+                        Some(TDMPayload::Sample(sample.clone())),
+                    )
+                );
                 inner.accumulate_single_sample(sample)
             }
             TimingDistributionMetric::Child(_c) => {
@@ -623,19 +605,16 @@ impl TimingDistribution for TimingDistributionMetric {
                 GIFFT_TimingDistributionAccumulateRawMillis(metric_id.0, sample_ms);
             }
 
-            if gecko_profiler::can_accept_markers() {
-                gecko_profiler::add_marker(
-                    "TimingDistribution::accumulate",
-                    gecko_profiler_category!(Telemetry),
-                    MarkerOptions::default(),
-                    TimingDistributionMetricMarker::new(
-                        *metric_id,
-                        None,
-                        None,
-                        Some(TDMPayload::Duration(duration.clone())),
-                    ),
-                );
-            }
+            gecko_profiler::lazy_add_marker!(
+                "TimingDistribution::accumulate",
+                TelemetryProfilerCategory,
+                TimingDistributionMetricMarker::new(
+                    *metric_id,
+                    None,
+                    None,
+                    Some(TDMPayload::Duration(duration.clone())),
+                )
+            );
         }
     }
 
@@ -705,7 +684,7 @@ mod test {
         metric.cancel(id);
 
         // We can't inspect the values yet.
-        assert!(metric.test_get_value("store1").is_none());
+        assert!(metric.test_get_value("test-ping").is_none());
     }
 
     #[test]
@@ -737,7 +716,7 @@ mod test {
         assert!(ipc::replay_from_buf(&buf).is_ok());
 
         let data = parent_metric
-            .test_get_value("store1")
+            .test_get_value("test-ping")
             .expect("should have some data");
 
         // No guarantees from timers means no guarantees on buckets.

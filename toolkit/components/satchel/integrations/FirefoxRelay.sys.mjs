@@ -210,6 +210,7 @@ async function showErrorAsync(browser, messageId, messageArgs) {
     {
       autofocus: true,
       removeOnDismissal: true,
+      hideClose: true,
       popupIconURL: "chrome://browser/content/logos/relay.svg",
       learnMoreURL: gConfig.learnMoreURL,
     }
@@ -396,6 +397,7 @@ async function showReusableMasksAsync(browser, origin, error) {
     {
       autofocus: true,
       removeOnDismissal: true,
+      hideClose: true,
       eventCallback: onNotificationEvent,
     }
   );
@@ -606,7 +608,7 @@ class RelayOffered {
       nimbusRelayAutocompleteFeature.getVariable("firstOfferVersion");
     const enableButtonId =
       treatment === "control"
-        ? "firefox-relay-and-fxa-opt-in-confirmation-enable-button"
+        ? "firefox-relay-and-fxa-opt-in-confirmation-enable-button-sign-up"
         : `firefox-relay-and-fxa-opt-in-confirmation-enable-button-${treatment}`;
     const [enableStrings, disableStrings, postponeStrings] =
       await formatMessages(
@@ -697,6 +699,12 @@ class RelayOffered {
             "relay_integration",
             {
               service: "relay",
+              entrypoint_experiment: "first_offer_version",
+              entrypoint_variation: treatment,
+              utm_source: "relay-integration",
+              utm_medium: "firefox-desktop",
+              utm_campaign: "first_offer_version",
+              utm_content: treatment,
             }
           );
         browser.ownerGlobal.openWebLinkIn(fxaUrl, "tab");
@@ -724,6 +732,7 @@ class RelayOffered {
       {
         autofocus: true,
         removeOnDismissal: true,
+        hideClose: true,
         learnMoreURL,
         eventCallback: event => {
           switch (event) {
@@ -739,12 +748,18 @@ class RelayOffered {
               document.querySelector(
                 '[data-l10n-name="firefox-fxa-and-relay-offer-domain"]'
               ).textContent = baseDomain;
-              document.getElementById(
-                "firefox-fxa-and-relay-offer-tos-url"
-              ).href = gConfig.termsOfServiceUrl;
-              document.getElementById(
-                "firefox-fxa-and-relay-offer-privacy-url"
-              ).href = gConfig.privacyPolicyUrl;
+              const tosLink = document.querySelector(
+                ".firefox-fxa-and-relay-offer-tos-url"
+              );
+              if (tosLink) {
+                tosLink.href = gConfig.termsOfServiceUrl;
+              }
+              const privacyPolicyLink = document.querySelector(
+                ".firefox-fxa-and-relay-offer-privacy-url"
+              );
+              if (privacyPolicyLink) {
+                privacyPolicyLink.href = gConfig.privacyPolicyUrl;
+              }
               Glean.relayIntegration.shownOptInPanel.record({ value: gFlowId });
               break;
             }
@@ -797,6 +812,7 @@ class RelayOffered {
       {
         autofocus: true,
         removeOnDismissal: true,
+        hideClose: true,
         learnMoreURL: gConfig.learnMoreURL,
         eventCallback: event => {
           switch (event) {

@@ -762,6 +762,7 @@ export class TelemetryFeed {
       },
     });
     const session = this.sessions.get(au.getPortIdOfSender(action));
+
     switch (action.data?.event) {
       case "CLICK": {
         const {
@@ -783,6 +784,7 @@ export class TelemetryFeed {
           format,
           section,
           section_position,
+          is_secton_followed,
         } = action.data.value ?? {};
         if (
           action.data.source === "POPULAR_TOPICS" ||
@@ -806,6 +808,7 @@ export class TelemetryFeed {
               ? {
                   section,
                   section_position,
+                  is_secton_followed,
                 }
               : {}),
             matches_selected_topic,
@@ -861,6 +864,9 @@ export class TelemetryFeed {
           thumbs_up,
           thumbs_down,
           topic,
+          section,
+          section_position,
+          is_secton_followed,
         } = action.data.value ?? {};
         Glean.pocket.thumbVotingInteraction.record({
           newtab_visit_id: session.session_id,
@@ -879,6 +885,13 @@ export class TelemetryFeed {
           thumbs_up,
           thumbs_down,
           topic,
+          ...(section
+            ? {
+                section,
+                section_position,
+                is_secton_followed,
+              }
+            : {}),
         });
         break;
       }
@@ -901,6 +914,7 @@ export class TelemetryFeed {
           format,
           section,
           section_position,
+          is_secton_followed,
         } = action.data.value ?? {};
         Glean.pocket.save.record({
           newtab_visit_id: session.session_id,
@@ -910,6 +924,7 @@ export class TelemetryFeed {
             ? {
                 section,
                 section_position,
+                is_secton_followed,
               }
             : {}),
           topic,
@@ -1174,16 +1189,14 @@ export class TelemetryFeed {
         }
         break;
       }
-      case at.CARD_SECTION_IMPRESSION: {
-        const session = this.sessions.get(au.getPortIdOfSender(action));
-        if (session) {
-          const { section, section_position } = action.data;
-          Glean.newtab.sectionsImpression.record({
-            newtab_visit_id: session.session_id,
-            section,
-            section_position,
-          });
-        }
+      case at.BLOCK_SECTION:
+      // Intentional fall-through
+      case at.CARD_SECTION_IMPRESSION:
+      // Intentional fall-through
+      case at.FOLLOW_SECTION:
+      // Intentional fall-through
+      case at.UNFOLLOW_SECTION: {
+        this.handleCardSectionUserEvent(action);
         break;
       }
 
@@ -1208,6 +1221,50 @@ export class TelemetryFeed {
       case msg.AS_ROUTER_TELEMETRY_USER_EVENT:
         this.handleASRouterUserEvent(action);
         break;
+    }
+  }
+
+  handleCardSectionUserEvent(action) {
+    const session = this.sessions.get(au.getPortIdOfSender(action));
+    if (session) {
+      const { section, section_position, event_source, is_secton_followed } =
+        action.data;
+      switch (action.type) {
+        case "BLOCK_SECTION":
+          Glean.newtab.sectionsBlockSection.record({
+            newtab_visit_id: session.session_id,
+            section,
+            section_position,
+            event_source,
+          });
+          break;
+        case "CARD_SECTION_IMPRESSION":
+          Glean.newtab.sectionsImpression.record({
+            newtab_visit_id: session.session_id,
+            section,
+            section_position,
+            is_secton_followed,
+          });
+          break;
+        case "FOLLOW_SECTION":
+          Glean.newtab.sectionsFollowSection.record({
+            newtab_visit_id: session.session_id,
+            section,
+            section_position,
+            event_source,
+          });
+          break;
+        case "UNFOLLOW_SECTION":
+          Glean.newtab.sectionsUnfollowSection.record({
+            newtab_visit_id: session.session_id,
+            section,
+            section_position,
+            event_source,
+          });
+          break;
+        default:
+          break;
+      }
     }
   }
 
@@ -1353,6 +1410,7 @@ export class TelemetryFeed {
             ? {
                 section: datum.section,
                 section_position: datum.section_position,
+                is_secton_followed: datum.is_secton_followed,
               }
             : {}),
           // We conditionally add in a few props.
@@ -1429,6 +1487,7 @@ export class TelemetryFeed {
             ? {
                 section: tile.section,
                 section_position: tile.section_position,
+                is_secton_followed: tile.is_secton_followed,
               }
             : {}),
           position: tile.pos,

@@ -437,10 +437,26 @@ export const PREFS_CONFIG = new Map([
     },
   ],
   [
+    "newtabAdSize.leaderboard.position",
+    {
+      title:
+        "position for leaderboard spoc - should corralate to a row in DS grid",
+      value: "3",
+    },
+  ],
+  [
     "newtabAdSize.billboard",
     {
       title: "Boolean flag to turn the billboard ad size on and off",
       value: false,
+    },
+  ],
+  [
+    "newtabAdSize.billboard.position",
+    {
+      title:
+        "position for billboard spoc - should corralate to a row in DS grid",
+      value: "3",
     },
   ],
   [

@@ -12,6 +12,7 @@
 #include "EditAction.h"
 #include "EditorBase.h"
 #include "EditorDOMPoint.h"
+#include "EditorLineBreak.h"
 #include "EditorUtils.h"
 #include "ErrorList.h"
 #include "HTMLEditorEventListener.h"
@@ -295,6 +296,7 @@ NS_IMPL_CYCLE_COLLECTION_UNLINK_BEGIN_INHERITED(HTMLEditor, EditorBase)
   NS_IMPL_CYCLE_COLLECTION_UNLINK(mComposerCommandsUpdater)
   NS_IMPL_CYCLE_COLLECTION_UNLINK(mChangedRangeForTopLevelEditSubAction)
   NS_IMPL_CYCLE_COLLECTION_UNLINK(mPaddingBRElementForEmptyEditor)
+  NS_IMPL_CYCLE_COLLECTION_UNLINK(mLastCollapsibleWhiteSpaceAppendedTextNode)
   tmp->HideAnonymousEditingUIs();
 NS_IMPL_CYCLE_COLLECTION_UNLINK_END
 
@@ -303,6 +305,7 @@ NS_IMPL_CYCLE_COLLECTION_TRAVERSE_BEGIN_INHERITED(HTMLEditor, EditorBase)
   NS_IMPL_CYCLE_COLLECTION_TRAVERSE(mComposerCommandsUpdater)
   NS_IMPL_CYCLE_COLLECTION_TRAVERSE(mChangedRangeForTopLevelEditSubAction)
   NS_IMPL_CYCLE_COLLECTION_TRAVERSE(mPaddingBRElementForEmptyEditor)
+  NS_IMPL_CYCLE_COLLECTION_TRAVERSE(mLastCollapsibleWhiteSpaceAppendedTextNode)
 
   NS_IMPL_CYCLE_COLLECTION_TRAVERSE(mTopLeftHandle)
   NS_IMPL_CYCLE_COLLECTION_TRAVERSE(mTopHandle)
@@ -4337,6 +4340,34 @@ Result<EditorDOMPoint, nsresult> HTMLEditor::PrepareToInsertBRElement(
   return atNextContent;
 }
 
+Maybe<HTMLEditor::LineBreakType> HTMLEditor::GetPreferredLineBreakType(
+    const nsINode& aNode, const Element& aEditingHost) const {
+  const Element* const container = aNode.GetAsElementOrParentElement();
+  if (MOZ_UNLIKELY(!container)) {
+    return Nothing();
+  }
+  // For backward compatibility, we should not insert a linefeed if
+  // paragraph separator is set to "br" which is Gecko-specific mode.
+  if (GetDefaultParagraphSeparator() == ParagraphSeparator::br) {
+    return Some(LineBreakType::BRElement);
+  }
+  // And also if we're the mail composer, the content needs to be serialized.
+  // Therefore, we should always use <br> for the serializer.
+  if (IsMailEditor() || IsPlaintextMailComposer()) {
+    return Some(LineBreakType::BRElement);
+  }
+  if (HTMLEditUtils::ShouldInsertLinefeedCharacter(EditorDOMPoint(container, 0),
+                                                   aEditingHost) &&
+      HTMLEditUtils::CanNodeContain(*container, *nsGkAtoms::textTagName)) {
+    return Some(LineBreakType::Linefeed);
+  }
+  if (MOZ_UNLIKELY(
+          !HTMLEditUtils::CanNodeContain(*container, *nsGkAtoms::br))) {
+    return Nothing();
+  }
+  return Some(LineBreakType::BRElement);
+}
+
 Result<CreateElementResult, nsresult> HTMLEditor::InsertBRElement(
     WithTransaction aWithTransaction, const EditorDOMPoint& aPointToInsert,
     EDirection aSelect /* = eNone */) {
@@ -4403,32 +4434,28 @@ nsresult HTMLEditor::EnsureNoFollowingUnnecessaryLineBreak(
       EditorUtils::IsNewLinePreformatted(
           *aNextOrAfterModifiedPoint.ContainerAs<nsIContent>());
 
-  const nsCOMPtr<nsIContent> unnecessaryLineBreakContent =
-      HTMLEditUtils::GetFollowingUnnecessaryLineBreakContent(
+  const Maybe<EditorLineBreak> unnecessaryLineBreak =
+      HTMLEditUtils::GetFollowingUnnecessaryLineBreak<EditorLineBreak>(
           aNextOrAfterModifiedPoint, aEditingHost);
-  if (MOZ_LIKELY(!unnecessaryLineBreakContent)) {
+  if (MOZ_LIKELY(unnecessaryLineBreak.isNothing())) {
     return NS_OK;
   }
-  if (unnecessaryLineBreakContent->IsHTMLElement(nsGkAtoms::br)) {
+  if (unnecessaryLineBreak->IsHTMLBRElement()) {
     // If the invisible break is a placeholder of ancestor inline elements, we
     // should not delete it to allow users to insert text with the format
     // specified by them.
     if (HTMLEditUtils::GetMostDistantAncestorEditableEmptyInlineElement(
-            *unnecessaryLineBreakContent,
+            unnecessaryLineBreak->BRElementRef(),
             BlockInlineCheck::UseComputedDisplayStyle)) {
       return NS_OK;
     }
-    nsresult rv = DeleteNodeWithTransaction(*unnecessaryLineBreakContent);
+    nsresult rv = DeleteNodeWithTransaction(
+        MOZ_KnownLive(unnecessaryLineBreak->BRElementRef()));
     NS_WARNING_ASSERTION(NS_SUCCEEDED(rv),
                          "EditorBase::DeleteNodeWithTransaction() failed "
                          "to delete unnecessary <br>");
     return rv;
   }
-  Text* const textNode = Text::FromNode(unnecessaryLineBreakContent);
-  MOZ_ASSERT(textNode);
-  MOZ_ASSERT(textNode->TextDataLength() > 0);
-  MOZ_ASSERT(EditorRawDOMPoint(textNode, textNode->TextDataLength() - 1)
-                 .IsCharPreformattedNewLine());
   MOZ_ASSERT(isNewLinePreformatted);
   const auto IsVisibleChar = [&](char16_t aChar) {
     switch (aChar) {
@@ -4442,7 +4469,8 @@ nsresult HTMLEditor::EnsureNoFollowingUnnecessaryLineBreak(
         return true;
     }
   };
-  const nsTextFragment& textFragment = textNode->TextFragment();
+  const nsTextFragment& textFragment =
+      unnecessaryLineBreak->TextRef().TextFragment();
   const uint32_t length = textFragment.GetLength();
   const DebugOnly<const char16_t> lastChar = textFragment.CharAt(length - 1);
   MOZ_ASSERT(lastChar == HTMLEditUtils::kNewLine);
@@ -4462,18 +4490,20 @@ nsresult HTMLEditor::EnsureNoFollowingUnnecessaryLineBreak(
     // should not delete it to allow users to insert text with the format
     // specified by them.
     if (HTMLEditUtils::GetMostDistantAncestorEditableEmptyInlineElement(
-            *unnecessaryLineBreakContent,
+            unnecessaryLineBreak->TextRef(),
             BlockInlineCheck::UseComputedDisplayStyle)) {
       return NS_OK;
     }
-    nsresult rv = DeleteNodeWithTransaction(*unnecessaryLineBreakContent);
+    nsresult rv = DeleteNodeWithTransaction(
+        MOZ_KnownLive(unnecessaryLineBreak->TextRef()));
     NS_WARNING_ASSERTION(NS_SUCCEEDED(rv),
                          "EditorBase::DeleteNodeWithTransaction() failed "
                          "to delete unnecessary Text node");
     return rv;
   }
   Result<CaretPoint, nsresult> result =
-      DeleteTextWithTransaction(MOZ_KnownLive(*textNode), length - 1, 1);
+      DeleteTextWithTransaction(MOZ_KnownLive(unnecessaryLineBreak->TextRef()),
+                                unnecessaryLineBreak->Offset(), 1);
   if (MOZ_UNLIKELY(result.isErr())) {
     NS_WARNING("HTMLEditor::DeleteTextWithTransaction() failed");
     return result.unwrapErr();
@@ -4888,6 +4918,10 @@ void HTMLEditor::DoContentInserted(nsIContent* aChild,
 
 MOZ_CAN_RUN_SCRIPT_BOUNDARY void HTMLEditor::ContentWillBeRemoved(
     nsIContent* aChild) {
+  if (mLastCollapsibleWhiteSpaceAppendedTextNode == aChild) {
+    mLastCollapsibleWhiteSpaceAppendedTextNode = nullptr;
+  }
+
   if (!IsInObservedSubtree(aChild)) {
     return;
   }
@@ -7605,6 +7639,46 @@ nsresult HTMLEditor::OnModifyDocumentInternal() {
   // EnsureNoPaddingBRElementForEmptyEditor() below may cause a flush, which
   // could destroy the editor
   nsAutoScriptBlockerSuppressNodeRemoved scriptBlocker;
+
+  // If user typed a white-space at end of a text node recently, we should try
+  // to make it keep visible even after mutations caused by the web apps because
+  // only we use U+0020 as trailing visible white-space with <br>.  Therefore,
+  // web apps may not take care of the white-space visibility.
+  // FIXME: Once we do this, the transaction should be merged to the last
+  // transaction for making an undoing deletes the inserted text too.
+  if (mLastCollapsibleWhiteSpaceAppendedTextNode &&
+      MOZ_LIKELY(
+          mLastCollapsibleWhiteSpaceAppendedTextNode->IsInComposedDoc() &&
+          mLastCollapsibleWhiteSpaceAppendedTextNode->IsEditable() &&
+          mLastCollapsibleWhiteSpaceAppendedTextNode->TextDataLength())) {
+    const auto atLastChar = EditorRawDOMPointInText::AtEndOf(
+        *mLastCollapsibleWhiteSpaceAppendedTextNode);
+    if (MOZ_LIKELY(atLastChar.IsPreviousCharCollapsibleASCIISpace())) {
+      if (const RefPtr<Element> editingHost = ComputeEditingHostInternal(
+              mLastCollapsibleWhiteSpaceAppendedTextNode,
+              LimitInBodyElement::No)) {
+        Result<CreateElementResult, nsresult> insertPaddingBRResultOrError =
+            InsertPaddingBRElementIfNeeded(atLastChar.To<EditorDOMPoint>(),
+                                           eNoStrip, *editingHost);
+        if (MOZ_UNLIKELY(insertPaddingBRResultOrError.isErr())) {
+          if (insertPaddingBRResultOrError.inspectErr() ==
+              NS_ERROR_EDITOR_DESTROYED) {
+            NS_WARNING(
+                "HTMLEditor::InsertPaddingBRElementIfNeeded(nsIEditor::"
+                "eNoStrip) destroyed the editor");
+            return insertPaddingBRResultOrError.unwrapErr();
+          }
+          NS_WARNING(
+              "HTMLEditor::InsertPaddingBRElementIfNeeded(nsIEditor::eNoStrip) "
+              "failed, but ignored");
+        } else {
+          // We should not update selection for the mutation to maintain the
+          // white-space visibility.
+          insertPaddingBRResultOrError.unwrap().IgnoreCaretPointSuggestion();
+        }
+      }
+    }
+  }
 
   // Delete our padding <br> element for empty editor, if we have one, since
   // the document might not be empty any more.

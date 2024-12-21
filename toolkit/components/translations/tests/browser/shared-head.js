@@ -12,6 +12,9 @@ const { EngineProcess } = ChromeUtils.importESModule(
 const { TranslationsPanelShared } = ChromeUtils.importESModule(
   "chrome://browser/content/translations/TranslationsPanelShared.sys.mjs"
 );
+const { TranslationsUtils } = ChromeUtils.importESModule(
+  "chrome://global/content/translations/TranslationsUtils.sys.mjs"
+);
 
 // Avoid about:blank's non-standard behavior.
 const BLANK_PAGE =
@@ -1372,7 +1375,7 @@ function createRecordsForLanguagePair(fromLang, toLang) {
       fromLang,
       toLang,
       fileType,
-      version: TranslationsParent.LANGUAGE_MODEL_MAJOR_VERSION + ".0",
+      version: TranslationsParent.LANGUAGE_MODEL_MAJOR_VERSION_MAX + ".0",
       last_modified: Date.now(),
       schema: Date.now(),
       attachment: JSON.parse(JSON.stringify(attachment)), // Making a deep copy.

@@ -30,6 +30,8 @@
 #include "mozilla/ClearOnShutdown.h"
 #include "mozilla/Components.h"
 #include "mozilla/Printf.h"
+#include "mozilla/RandomNum.h"
+#include "mozilla/SHA1.h"
 #include "mozilla/Sprintf.h"
 #include "mozilla/StaticPrefs_network.h"
 #include "mozilla/StaticPrefs_privacy.h"
@@ -75,6 +77,7 @@
 #include "mozilla/DynamicFpiRedirectHeuristic.h"
 #include "mozilla/BasePrincipal.h"
 #include "mozilla/LazyIdleThread.h"
+#include "mozilla/OriginAttributesHashKey.h"
 #include "mozilla/StaticPrefs_image.h"
 #include "mozilla/SyncRunnable.h"
 
@@ -260,6 +263,8 @@ nsHttpHandler::nsHttpHandler()
       mImageAcceptHeader(ImageAcceptHeader()),
       mDocumentAcceptHeader(DocumentAcceptHeader()),
       mLastUniqueID(NowInSeconds()),
+      mIdempotencyKeySeed(mozilla::RandomUint64OrDie()),
+      mPrivateBrowsingIdempotencyKeySeed(mozilla::RandomUint64OrDie()),
       mDebugObservations(false),
       mEnableAltSvc(false),
       mEnableAltSvcOE(false),
@@ -558,6 +563,31 @@ void nsHttpHandler::UpdateParentalControlsEnabled(bool waitForCompletion) {
   }
 }
 
+void nsHttpHandler::GenerateIdempotencyKeyForPost(const uint32_t aPostId,
+                                                  nsILoadInfo* aLoadInfo,
+                                                  nsACString& aOutKey) {
+  MOZ_ASSERT(aLoadInfo);
+  OriginAttributes attrs = aLoadInfo->GetOriginAttributes();
+
+  // Create a SHA1 string using the origin attributes, session seed and the post
+  // id.
+  nsAutoCString sha1Input;
+  attrs.CreateSuffix(sha1Input);
+  sha1Input.AppendInt(aPostId);
+  sha1Input.AppendInt(attrs.IsPrivateBrowsing()
+                          ? mPrivateBrowsingIdempotencyKeySeed
+                          : mIdempotencyKeySeed);
+  SHA1Sum sha1;
+  SHA1Sum::Hash hash;
+  sha1.update((sha1Input.get()), sha1Input.Length());
+  sha1.finish(hash);
+  uint64_t hashValue = BigEndian::readUint64(&hash);
+
+  aOutKey.Append("\"");
+  aOutKey.AppendInt(hashValue);
+  aOutKey.Append("\"");
+}
+
 const nsCString& nsHttpHandler::Http3QlogDir() {
   if (StaticPrefs::network_http_http3_enable_qlog()) {
     return mHttp3QlogDir;
@@ -613,12 +643,12 @@ nsresult nsHttpHandler::InitConnectionMgr() {
     mConnMgr = new nsHttpConnectionMgr();
   }
 
-  return mConnMgr->Init(
-      mMaxUrgentExcessiveConns, mMaxConnections,
-      mMaxPersistentConnectionsPerServer, mMaxPersistentConnectionsPerProxy,
-      mMaxRequestDelay, mThrottleEnabled, mThrottleVersion, mThrottleSuspendFor,
-      mThrottleResumeFor, mThrottleReadLimit, mThrottleReadInterval,
-      mThrottleHoldTime, mThrottleMaxTime, mBeConservativeForProxy);
+  return mConnMgr->Init(mMaxUrgentExcessiveConns, mMaxConnections,
+                        mMaxPersistentConnectionsPerServer,
+                        mMaxPersistentConnectionsPerProxy, mMaxRequestDelay,
+                        mThrottleEnabled, mThrottleSuspendFor,
+                        mThrottleResumeFor, mThrottleHoldTime, mThrottleMaxTime,
+                        mBeConservativeForProxy);
 }
 
 nsresult nsHttpHandler::AddStandardRequestHeaders(
@@ -1563,11 +1593,6 @@ void nsHttpHandler::PrefsChanged(const char* pref) {
     }
   }
 
-  if (PREF_CHANGED(HTTP_PREF("throttle.version"))) {
-    Unused << Preferences::GetInt(HTTP_PREF("throttle.version"), &val);
-    mThrottleVersion = (uint32_t)std::clamp(val, 1, 2);
-  }
-
   if (PREF_CHANGED(HTTP_PREF("throttle.suspend-for"))) {
     rv = Preferences::GetInt(HTTP_PREF("throttle.suspend-for"), &val);
     mThrottleSuspendFor = (uint32_t)std::clamp(val, 0, 120000);
@@ -1583,24 +1608,6 @@ void nsHttpHandler::PrefsChanged(const char* pref) {
     if (NS_SUCCEEDED(rv) && mConnMgr) {
       Unused << mConnMgr->UpdateParam(
           nsHttpConnectionMgr::THROTTLING_RESUME_FOR, mThrottleResumeFor);
-    }
-  }
-
-  if (PREF_CHANGED(HTTP_PREF("throttle.read-limit-bytes"))) {
-    rv = Preferences::GetInt(HTTP_PREF("throttle.read-limit-bytes"), &val);
-    mThrottleReadLimit = (uint32_t)std::clamp(val, 0, 500000);
-    if (NS_SUCCEEDED(rv) && mConnMgr) {
-      Unused << mConnMgr->UpdateParam(
-          nsHttpConnectionMgr::THROTTLING_READ_LIMIT, mThrottleReadLimit);
-    }
-  }
-
-  if (PREF_CHANGED(HTTP_PREF("throttle.read-interval-ms"))) {
-    rv = Preferences::GetInt(HTTP_PREF("throttle.read-interval-ms"), &val);
-    mThrottleReadInterval = (uint32_t)std::clamp(val, 0, 120000);
-    if (NS_SUCCEEDED(rv) && mConnMgr) {
-      Unused << mConnMgr->UpdateParam(
-          nsHttpConnectionMgr::THROTTLING_READ_INTERVAL, mThrottleReadInterval);
     }
   }
 

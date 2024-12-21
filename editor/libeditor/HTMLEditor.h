@@ -766,6 +766,25 @@ class HTMLEditor final : public EditorBase,
    * to make sure that AutoEditActionDataSetter is created.
    ****************************************************************************/
 
+  enum class LineBreakType : bool {
+    BRElement,  // <br>
+    Linefeed,   // Preformatted linefeed
+  };
+
+  /**
+   * Return preferred line break when you insert a line break in aNode (if
+   * aNode is a Text node, this assumes that line break will be inserted to
+   * its parent element).
+   *
+   * @param aNode           The node where you want to insert a line break.
+   *                        This should be a inclusive descendant of
+   *                        aEditingHost because if it's not connected, we can
+   *                        not refer the proper style information.
+   * @param aEditingHost    The editing host.
+   */
+  Maybe<LineBreakType> GetPreferredLineBreakType(
+      const nsINode& aNode, const Element& aEditingHost) const;
+
   /**
    * InsertBRElement() creates a <br> element and inserts it before
    * aPointToInsert.
@@ -980,6 +999,7 @@ class HTMLEditor final : public EditorBase,
    * @param aStyleToRemove   The style which you want to clear.
    * @param aSpecifiedStyle  Whether the class and style attributes should
    *                         be preserved or discarded.
+   * @param aEditingHost     The editing host.
    * @return            A candidate position to put caret.  If there is
    *                    AutoTransactionsConserveSelection instances, this stops
    *                    suggesting caret point only in some cases.
@@ -987,7 +1007,7 @@ class HTMLEditor final : public EditorBase,
   [[nodiscard]] MOZ_CAN_RUN_SCRIPT Result<EditorDOMPoint, nsresult>
   ClearStyleAt(const EditorDOMPoint& aPoint,
                const EditorInlineStyle& aStyleToRemove,
-               SpecifiedStyle aSpecifiedStyle);
+               SpecifiedStyle aSpecifiedStyle, const Element& aEditingHost);
 
   MOZ_CAN_RUN_SCRIPT nsresult SetPositionToAbsolute(Element& aElement);
   [[nodiscard]] MOZ_CAN_RUN_SCRIPT nsresult
@@ -1639,11 +1659,13 @@ class HTMLEditor final : public EditorBase,
    *                            is.  Otherwise, nullptr. If this is not nullptr,
    *                            the <br> element may be removed if it becomes
    *                            visible.
+   * @param aEditingHost        The editing host.
    */
   [[nodiscard]] MOZ_CAN_RUN_SCRIPT Result<SplitNodeResult, nsresult>
   SplitParagraphWithTransaction(Element& aParentDivOrP,
                                 const EditorDOMPoint& aStartOfRightNode,
-                                dom::HTMLBRElement* aMayBecomeVisibleBRElement);
+                                dom::HTMLBRElement* aMayBecomeVisibleBRElement,
+                                const Element& aEditingHost);
 
   /**
    * HandleInsertParagraphInParagraph() does the right thing for Enter key
@@ -1788,6 +1810,21 @@ class HTMLEditor final : public EditorBase,
       const EditorDOMPointType& aStartPoint,
       const EditorDOMPointType& aEndPoint,
       TreatEmptyTextNodes aTreatEmptyTextNodes);
+
+  /**
+   * Delete the line break with DeleteNodeTransaction or DeleteTextTransaction.
+   *
+   * @param aLineBreak          The line break to be deleted.
+   * @param aDeleteEmptyInlines If nsIEditor::eStrip, this deletes new empty
+   *                            inline element if and only if this deletes the
+   *                            line break node.
+   * @param aEditingHost        The editing host.
+   * @return                    The point where the line break was.
+   */
+  [[nodiscard]] MOZ_CAN_RUN_SCRIPT Result<EditorDOMPoint, nsresult>
+  DeleteLineBreakWithTransaction(const EditorLineBreak& aLineBreak,
+                                 nsIEditor::EStripWrappers aDeleteEmptyInlines,
+                                 const Element& aEditingHost);
 
   /**
    * JoinNodesWithTransaction() joins aLeftContent and aRightContent.  Content
@@ -4451,6 +4488,9 @@ class HTMLEditor final : public EditorBase,
   // mPaddingBRElementForEmptyEditor should be used for placing caret
   // at proper position when editor is empty.
   RefPtr<dom::HTMLBRElement> mPaddingBRElementForEmptyEditor;
+
+  // This is set only when HandleInsertText appended a collapsible white-space.
+  RefPtr<dom::Text> mLastCollapsibleWhiteSpaceAppendedTextNode;
 
   bool mCRInParagraphCreatesParagraph;
 

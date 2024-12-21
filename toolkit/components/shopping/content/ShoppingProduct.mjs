@@ -98,6 +98,33 @@ export class ShoppingProduct extends EventEmitter {
   }
 
   /**
+   * Gets an object of website names and urls supported by Review Checker.
+   * This function uses the ProductConfig for validation.
+   * The object made is a simplified version of ProductConfig and is meant to be used
+   * for content updates.
+   *
+   * @param {object} [productConfig=ProductConfig]
+   *  The ProductConfig to use to determine which sites we can use for reviews.
+   * @returns {object | null}
+   *  An object mapping website names to arrays of valid url strings, or null if an error occurs.
+   */
+  static getSupportedDomains(productConfig = ProductConfig) {
+    let supportedSites = {};
+    try {
+      Object.keys(productConfig).forEach(sitename => {
+        let tldsMap = productConfig[sitename].validTLDs.map(tld => {
+          return `https://${sitename}.${tld}`;
+        });
+        supportedSites[sitename] = tldsMap;
+      });
+      return supportedSites;
+    } catch {
+      console.error("Failed to get supported sites from config.");
+      return null;
+    }
+  }
+
+  /**
    * Gets a Product from a URL.
    *
    * @param {URL} url
@@ -172,6 +199,23 @@ export class ShoppingProduct extends EventEmitter {
       product &&
       product.valid &&
       product.id &&
+      product.host &&
+      product.sitename &&
+      product.tld
+    );
+  }
+
+  /**
+   * Check if an invalid Product is a supported site.
+   *
+   * @param {Product} product
+   *  Product to check.
+   * @returns {boolean}
+   */
+  static isSupportedSite(product) {
+    return !!(
+      product &&
+      !product.valid &&
       product.host &&
       product.sitename &&
       product.tld
@@ -783,4 +827,22 @@ export function isProductURL(url) {
   }
   let productInfo = ShoppingProduct.fromURL(url);
   return ShoppingProduct.isProduct(productInfo);
+}
+
+/**
+ * Check if a URL is a valid product site.
+ *
+ * @param {URL | nsIURI } url
+ *  URL to check.
+ * @returns {boolean}
+ */
+export function isSupportedSiteURL(url) {
+  if (url instanceof Ci.nsIURI) {
+    url = URL.fromURI(url);
+  }
+  if (!URL.isInstance(url)) {
+    return false;
+  }
+  let productInfo = ShoppingProduct.fromURL(url);
+  return ShoppingProduct.isSupportedSite(productInfo);
 }

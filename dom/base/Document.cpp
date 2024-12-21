@@ -6641,6 +6641,10 @@ void Document::GetCookie(nsAString& aCookie, ErrorResult& aRv) {
     return;
   }
 
+  nsCOMPtr<nsILoadInfo> loadInfo =
+      GetChannel() ? GetChannel()->LoadInfo() : nullptr;
+  bool on3pcbException = loadInfo && loadInfo->GetIsOn3PCBExceptionList();
+
   for (auto& principal : principals) {
     nsAutoCString baseDomain;
     nsresult rv = CookieCommons::GetBaseDomain(principal, baseDomain);
@@ -6685,9 +6689,10 @@ void Document::GetCookie(nsAString& aCookie, ErrorResult& aRv) {
         continue;
       }
 
-      if (thirdParty && !CookieCommons::ShouldIncludeCrossSiteCookie(
-                            cookie, CookieJarSettings()->GetPartitionForeign(),
-                            IsInPrivateBrowsing(), UsingStorageAccess())) {
+      if (thirdParty &&
+          !CookieCommons::ShouldIncludeCrossSiteCookie(
+              cookie, CookieJarSettings()->GetPartitionForeign(),
+              IsInPrivateBrowsing(), UsingStorageAccess(), on3pcbException)) {
         continue;
       }
 
@@ -6822,9 +6827,14 @@ void Document::SetCookie(const nsAString& aCookieString, ErrorResult& aRv) {
                                                  nullptr, &thirdParty);
   }
 
-  if (thirdParty && !CookieCommons::ShouldIncludeCrossSiteCookie(
-                        cookie, CookieJarSettings()->GetPartitionForeign(),
-                        IsInPrivateBrowsing(), UsingStorageAccess())) {
+  nsCOMPtr<nsILoadInfo> loadInfo =
+      GetChannel() ? GetChannel()->LoadInfo() : nullptr;
+  bool on3pcbException = loadInfo && loadInfo->GetIsOn3PCBExceptionList();
+
+  if (thirdParty &&
+      !CookieCommons::ShouldIncludeCrossSiteCookie(
+          cookie, CookieJarSettings()->GetPartitionForeign(),
+          IsInPrivateBrowsing(), UsingStorageAccess(), on3pcbException)) {
     return;
   }
 
@@ -9018,6 +9028,8 @@ void Document::ScheduleForPresAttrEvaluation(Element* aElement) {
     // attributes.
     nsLayoutUtils::PostRestyleEvent(aElement, RestyleHint::RESTYLE_SELF,
                                     nsChangeHint(0));
+  } else if (auto* presContext = GetPresContext()) {
+    presContext->RestyleManager()->IncrementUndisplayedRestyleGeneration();
   }
 }
 
@@ -19366,6 +19378,15 @@ bool Document::UsingStorageAccess() {
   return loadInfo->GetStoragePermission() != nsILoadInfo::NoStoragePermission;
 }
 
+bool Document::IsOn3PCBExceptionList() const {
+  if (!mChannel) {
+    return false;
+  }
+  nsCOMPtr<nsILoadInfo> loadInfo = mChannel->LoadInfo();
+
+  return loadInfo->GetIsOn3PCBExceptionList();
+}
+
 bool Document::HasStorageAccessPermissionGrantedByAllowList() {
   // We only care about if the document gets the storage permission via the
   // allow list here. So we don't check the storage access cache in the inner
@@ -19791,7 +19812,7 @@ already_AddRefed<Document> Document::ParseHTMLUnsafe(
 
   nsCOMPtr<nsIGlobalObject> global = do_QueryInterface(aGlobal.GetAsSupports());
 
-  constexpr nsLiteralString sink = u"Document parseHTMLUnsafe "_ns;
+  constexpr nsLiteralString sink = u"Document parseHTMLUnsafe"_ns;
   Maybe<nsAutoString> compliantStringHolder;
   const nsAString* compliantString =
       TrustedTypeUtils::GetTrustedTypesCompliantString(

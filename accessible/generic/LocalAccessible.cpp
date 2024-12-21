@@ -872,13 +872,15 @@ nsresult LocalAccessible::HandleAccEvent(AccEvent* aEvent) {
           break;
 
         case nsIAccessibleEvent::EVENT_HIDE:
-          ipcDoc->SendHideEvent(id, aEvent->IsFromUserInput());
+          ipcDoc->AppendMutationEventData(
+              HideEventData{id, aEvent->IsFromUserInput()});
           break;
 
         case nsIAccessibleEvent::EVENT_INNER_REORDER:
         case nsIAccessibleEvent::EVENT_REORDER:
           if (IsTable()) {
-            SendCache(CacheDomain::Table, CacheUpdateType::Update);
+            SendCache(CacheDomain::Table, CacheUpdateType::Update,
+                      /*aAppendEventData*/ true);
           }
 
 #if defined(XP_WIN)
@@ -897,7 +899,8 @@ nsresult LocalAccessible::HandleAccEvent(AccEvent* aEvent) {
           // reorder events on the application acc aren't necessary to tell the
           // parent about new top level documents.
           if (!aEvent->GetAccessible()->IsApplication()) {
-            ipcDoc->SendEvent(id, aEvent->GetEventType());
+            ipcDoc->AppendMutationEventData(
+                ReorderEventData{id, aEvent->GetEventType()});
           }
           break;
         case nsIAccessibleEvent::EVENT_STATE_CHANGE: {
@@ -917,10 +920,10 @@ nsresult LocalAccessible::HandleAccEvent(AccEvent* aEvent) {
         case nsIAccessibleEvent::EVENT_TEXT_INSERTED:
         case nsIAccessibleEvent::EVENT_TEXT_REMOVED: {
           AccTextChangeEvent* event = downcast_accEvent(aEvent);
-          const nsString& text = event->ModifiedText();
-          ipcDoc->SendTextChangeEvent(
-              id, text, event->GetStartOffset(), event->GetLength(),
-              event->IsTextInserted(), event->IsFromUserInput());
+          ipcDoc->AppendMutationEventData(TextChangeEventData{
+              id, event->ModifiedText(), event->GetStartOffset(),
+              event->GetLength(), event->IsTextInserted(),
+              event->IsFromUserInput()});
           break;
         }
         case nsIAccessibleEvent::EVENT_SELECTION:
@@ -1162,11 +1165,6 @@ already_AddRefed<AccAttributes> LocalAccessible::NativeAttributes() {
   if (Name(name) != eNameFromSubtree && !name.IsVoid()) {
     attributes->SetAttribute(nsGkAtoms::explicit_name, true);
   }
-
-  // Group attributes (level/setsize/posinset)
-  GroupPos groupPos = GroupPosition();
-  nsAccUtils::SetAccGroupAttrs(attributes, groupPos.level, groupPos.setSize,
-                               groupPos.posInSet);
 
   bool hierarchical = false;
   uint32_t itemCount = AccGroupInfo::TotalItemCount(this, &hierarchical);
@@ -3322,7 +3320,8 @@ AccGroupInfo* LocalAccessible::GetOrCreateGroupInfo() {
 }
 
 void LocalAccessible::SendCache(uint64_t aCacheDomain,
-                                CacheUpdateType aUpdateType) {
+                                CacheUpdateType aUpdateType,
+                                bool aAppendEventData) {
   if (!IPCAccessibilityActive() || !Document()) {
     return;
   }
@@ -3352,7 +3351,12 @@ void LocalAccessible::SendCache(uint64_t aCacheDomain,
   }
   nsTArray<CacheData> data;
   data.AppendElement(CacheData(ID(), fields));
-  ipcDoc->SendCache(aUpdateType, data);
+  if (aAppendEventData) {
+    ipcDoc->AppendMutationEventData(
+        CacheEventData{std::move(aUpdateType), std::move(data)});
+  } else {
+    ipcDoc->SendCache(aUpdateType, data);
+  }
 
   if (profiler_thread_is_being_profiled_for_markers()) {
     nsAutoCString updateTypeStr;
@@ -4189,21 +4193,37 @@ void LocalAccessible::MaybeQueueCacheUpdateForStyleChanges() {
   if (nsIFrame* frame = GetFrame()) {
     const ComputedStyle* newStyle = frame->Style();
 
-    nsAutoCString oldOverflow, newOverflow;
-    mOldComputedStyle->GetComputedPropertyValue(eCSSProperty_overflow,
-                                                oldOverflow);
-    newStyle->GetComputedPropertyValue(eCSSProperty_overflow, newOverflow);
+    const auto overflowProps =
+        nsCSSPropertyIDSet({eCSSProperty_overflow_x, eCSSProperty_overflow_y});
 
-    if (oldOverflow != newOverflow) {
-      if (oldOverflow.Equals("hidden"_ns) || newOverflow.Equals("hidden"_ns)) {
-        mDoc->QueueCacheUpdate(this, CacheDomain::Style);
-      }
-      if (oldOverflow.Equals("auto"_ns) || newOverflow.Equals("auto"_ns) ||
-          oldOverflow.Equals("scroll"_ns) || newOverflow.Equals("scroll"_ns)) {
-        // We cache a (0,0) scroll position for frames that have overflow
-        // styling which means they _could_ become scrollable, even if the
-        // content within them doesn't currently scroll.
-        mDoc->QueueCacheUpdate(this, CacheDomain::ScrollPosition);
+    for (nsCSSPropertyID overflowProp : overflowProps) {
+      nsAutoCString oldOverflow, newOverflow;
+      mOldComputedStyle->GetComputedPropertyValue(overflowProp, oldOverflow);
+      newStyle->GetComputedPropertyValue(overflowProp, newOverflow);
+
+      if (oldOverflow != newOverflow) {
+        if (oldOverflow.Equals("hidden"_ns) ||
+            newOverflow.Equals("hidden"_ns)) {
+          mDoc->QueueCacheUpdate(this, CacheDomain::Style);
+        }
+        if (oldOverflow.Equals("auto"_ns) || newOverflow.Equals("auto"_ns) ||
+            oldOverflow.Equals("scroll"_ns) ||
+            newOverflow.Equals("scroll"_ns)) {
+          // We cache a (0,0) scroll position for frames that have overflow
+          // styling which means they _could_ become scrollable, even if the
+          // content within them doesn't currently scroll.
+          mDoc->QueueCacheUpdate(this, CacheDomain::ScrollPosition);
+        }
+      } else {
+        ScrollContainerFrame* scrollContainerFrame = do_QueryFrame(frame);
+        if (!scrollContainerFrame && (newOverflow.Equals("auto"_ns) ||
+                                      newOverflow.Equals("scroll"_ns))) {
+          // A document's body element can lose its scroll frame if the root
+          // element (eg. <html>) is restyled to overflow scroll/auto. In that
+          // case we will not get any useful notifications for the body element
+          // except for a reframe to a non-scrolling frame.
+          mDoc->QueueCacheUpdate(this, CacheDomain::ScrollPosition);
+        }
       }
     }
 

@@ -355,11 +355,11 @@ clang-14:
         revision: 4bc1d0b51c8e488d78ab69c8b19cfbcd1f7db6a4
 
 clang-19:
-    description: clang 19.1.4 source code
+    description: clang 19.1.6 source code
     fetch:
         type: git
         repo: https://github.com/llvm/llvm-project
-        revision: aadaa00de76ed0c4987b97450dd638f63a385bed
+        revision: e21dc4bd5474d04b8e62d7331362edcc5648d7e5
 
 clang-trunk:
     description: clang main branch source code
@@ -466,6 +466,16 @@ fix-stacks:
         repo: https://github.com/mozilla/fix-stacks/
         revision: 1fb1bcc8cb4dd65fbe342853954651563a0a88e7
 
+7zz:
+    description: 7-zip 24.09 source code
+    fetch:
+        type: static-url
+        url: https://downloads.sourceforge.net/sevenzip/7-Zip/24.09/7z2409-src.tar.xz
+        sha256: 49c05169f49572c1128453579af1632a952409ced028259381dac30726b6133a
+        size: 1511288
+        artifact-name: 7z-src.tar.zst
+        add-prefix: 7zz/
+
 winchecksec:
     description: winchecksec source code
     fetch:
@@ -509,6 +519,17 @@ nodejs-12-linux64:
         url: https://nodejs.org/dist/v12.22.12/node-v12.22.12-linux-x64.tar.xz
         sha256: e6d052364bfa2c17da92cf31794100cfd709ba147415ddaeed2222eec9ca1469
         size: 14584388
+        artifact-name: nodejs.tar.zst
+        strip-components: 1
+        add-prefix: node/
+
+nodejs-18-linux64-arm64:
+    description: nodejs 18 for arm64 linux
+    fetch:
+        type: static-url
+        url: https://nodejs.org/dist/v18.19.0/node-v18.19.0-linux-arm64.tar.xz
+        sha256: cf94ab72e45b855257545fec1c017bdf30a9e23611561382eaf64576b999e72d
+        size: 23403368
         artifact-name: nodejs.tar.zst
         strip-components: 1
         add-prefix: node/
@@ -616,7 +637,7 @@ symbol-scrapers:
     fetch:
         type: git
         repo: https://github.com/mozilla/symbol-scrapers
-        revision: f7057cb45b30e9f11845e4a723a96bb3442853eb
+        revision: 692f4e1d9fc818d5f66abdc2ff593ae2dd364343
 
 xz-5.4.4:
     description: xz 5.4.4 source code
@@ -715,3 +736,10 @@ chromium-depot-tools:
         revision: 5304f2bbb31bad413e029a660097d1da1552e6f4
         artifact-name: chromium-depot-tools.tar.zst
         include-dot-git: true
+
+uv:
+    description: uv 0.5.9 source code
+    fetch:
+        type: git
+        repo: https://github.com/astral-sh/uv
+        revision: 0652800cb018eb086fbbf220a1f73af7e320be54

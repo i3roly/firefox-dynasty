@@ -545,7 +545,7 @@ class MemoryAccessDesc {
   uint32_t align_;
   Scalar::Type type_;
   jit::Synchronization sync_;
-  wasm::BytecodeOffset trapOffset_;
+  wasm::TrapSiteDesc trapDesc_;
   wasm::SimdOp widenOp_;
   enum { Plain, ZeroExtend, Splat, Widen } loadOp_;
   // Used for an assertion in MacroAssembler about offset length
@@ -554,14 +554,14 @@ class MemoryAccessDesc {
  public:
   explicit MemoryAccessDesc(
       uint32_t memoryIndex, Scalar::Type type, uint32_t align, uint64_t offset,
-      BytecodeOffset trapOffset, mozilla::DebugOnly<bool> hugeMemory,
+      wasm::TrapSiteDesc trapDesc, mozilla::DebugOnly<bool> hugeMemory,
       jit::Synchronization sync = jit::Synchronization::None())
       : memoryIndex_(memoryIndex),
         offset_(offset),
         align_(align),
         type_(type),
         sync_(sync),
-        trapOffset_(trapOffset),
+        trapDesc_(trapDesc),
         widenOp_(wasm::SimdOp::Limit),
         loadOp_(Plain),
         hugeMemory_(hugeMemory) {
@@ -596,7 +596,7 @@ class MemoryAccessDesc {
   Scalar::Type type() const { return type_; }
   unsigned byteSize() const { return Scalar::byteSize(type()); }
   jit::Synchronization sync() const { return sync_; }
-  BytecodeOffset trapOffset() const { return trapOffset_; }
+  const TrapSiteDesc& trapDesc() const { return trapDesc_; }
   wasm::SimdOp widenSimdOp() const {
     MOZ_ASSERT(isWidenSimd128Load());
     return widenOp_;
@@ -643,9 +643,9 @@ namespace jit {
 
 // The base class of all Assemblers for all archs.
 class AssemblerShared {
-  wasm::CallSiteVector callSites_;
+  wasm::CallSites callSites_;
   wasm::CallSiteTargetVector callSiteTargets_;
-  wasm::TrapSiteVectorArray trapSites_;
+  wasm::TrapSites trapSites_;
   wasm::SymbolicAccessVector symbolicAccesses_;
   wasm::TryNoteVector tryNotes_;
   wasm::CodeRangeUnwindInfoVector codeRangesUnwind_;
@@ -701,17 +701,17 @@ class AssemblerShared {
   template <typename... Args>
   void append(const wasm::CallSiteDesc& desc, CodeOffset retAddr,
               Args&&... args) {
-    enoughMemory_ &= callSites_.emplaceBack(desc, retAddr.offset());
+    enoughMemory_ &= callSites_.append(wasm::CallSite(desc, retAddr.offset()));
     enoughMemory_ &= callSiteTargets_.emplaceBack(std::forward<Args>(args)...);
   }
   void append(wasm::Trap trap, wasm::TrapSite site) {
-    enoughMemory_ &= trapSites_[trap].append(site);
+    enoughMemory_ &= trapSites_.append(trap, site);
   }
   void append(const wasm::MemoryAccessDesc& access, wasm::TrapMachineInsn insn,
               FaultingCodeOffset assemblerOffsetOfFaultingMachineInsn) {
     append(wasm::Trap::OutOfBounds,
            wasm::TrapSite(insn, assemblerOffsetOfFaultingMachineInsn,
-                          access.trapOffset()));
+                          access.trapDesc()));
   }
   void append(wasm::SymbolicAccess access) {
     enoughMemory_ &= symbolicAccesses_.append(access);
@@ -735,9 +735,9 @@ class AssemblerShared {
     enoughMemory_ &= callRefMetricsPatches_.append(patch);
   }
 
-  wasm::CallSiteVector& callSites() { return callSites_; }
+  wasm::CallSites& callSites() { return callSites_; }
   wasm::CallSiteTargetVector& callSiteTargets() { return callSiteTargets_; }
-  wasm::TrapSiteVectorArray& trapSites() { return trapSites_; }
+  wasm::TrapSites& trapSites() { return trapSites_; }
   wasm::SymbolicAccessVector& symbolicAccesses() { return symbolicAccesses_; }
   wasm::TryNoteVector& tryNotes() { return tryNotes_; }
   wasm::CodeRangeUnwindInfoVector& codeRangeUnwindInfos() {

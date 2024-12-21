@@ -141,7 +141,9 @@
 #include "nsIObserver.h"
 #include "nsIObserverService.h"
 #include "nsIOutputStream.h"
+#include "nsIQuotaManagerServiceInternal.h"
 #include "nsIQuotaRequests.h"
+#include "nsIQuotaUtilsService.h"
 #include "nsIPlatformInfo.h"
 #include "nsIPrincipal.h"
 #include "nsIRunnable.h"
@@ -283,8 +285,8 @@ constexpr auto kStorageName = u"storage"_ns;
 const int32_t kLocalStorageArchiveVersion = 4;
 
 const char kProfileDoChangeTopic[] = "profile-do-change";
-const char kSessionstoreWindowsRestoredTopic[] =
-    "sessionstore-windows-restored";
+const char kContextualIdentityServiceLoadFinishedTopic[] =
+    "contextual-identity-service-load-finished";
 const char kPrivateBrowsingObserverTopic[] = "last-pb-context-exited";
 
 const int32_t kCacheVersion = 2;
@@ -1496,9 +1498,10 @@ nsresult QuotaManager::Observer::Init() {
   Registrar profileDoChangeRegistrar(obs, this, kProfileDoChangeTopic);
   QM_TRY(MOZ_TO_RESULT(profileDoChangeRegistrar.Register()));
 
-  Registrar sessionstoreWindowsRestoredRegistrar(
-      obs, this, kSessionstoreWindowsRestoredTopic);
-  QM_TRY(MOZ_TO_RESULT(sessionstoreWindowsRestoredRegistrar.Register()));
+  Registrar contextualIdentityServiceLoadFinishedRegistrar(
+      obs, this, kContextualIdentityServiceLoadFinishedTopic);
+  QM_TRY(
+      MOZ_TO_RESULT(contextualIdentityServiceLoadFinishedRegistrar.Register()));
 
   Registrar profileBeforeChangeQmRegistrar(
       obs, this, PROFILE_BEFORE_CHANGE_QM_OBSERVER_ID);
@@ -1513,7 +1516,7 @@ nsresult QuotaManager::Observer::Init() {
 
   xpcomShutdownRegistrar.Commit();
   profileDoChangeRegistrar.Commit();
-  sessionstoreWindowsRestoredRegistrar.Commit();
+  contextualIdentityServiceLoadFinishedRegistrar.Commit();
   profileBeforeChangeQmRegistrar.Commit();
   wakeNotificationRegistrar.Commit();
   lastPbContextExitedRegistrar.Commit();
@@ -1534,7 +1537,7 @@ nsresult QuotaManager::Observer::Shutdown() {
   MOZ_ALWAYS_SUCCEEDS(
       obs->RemoveObserver(this, PROFILE_BEFORE_CHANGE_QM_OBSERVER_ID));
   MOZ_ALWAYS_SUCCEEDS(
-      obs->RemoveObserver(this, kSessionstoreWindowsRestoredTopic));
+      obs->RemoveObserver(this, kContextualIdentityServiceLoadFinishedTopic));
   MOZ_ALWAYS_SUCCEEDS(obs->RemoveObserver(this, kProfileDoChangeTopic));
   MOZ_ALWAYS_SUCCEEDS(obs->RemoveObserver(this, NS_XPCOM_SHUTDOWN_OBSERVER_ID));
 
@@ -1617,11 +1620,37 @@ QuotaManager::Observer::Observe(nsISupports* aSubject, const char* aTopic,
     return NS_OK;
   }
 
-  if (!strcmp(aTopic, kSessionstoreWindowsRestoredTopic)) {
+  if (!strcmp(aTopic, kContextualIdentityServiceLoadFinishedTopic)) {
     if (NS_WARN_IF(!gBasePath)) {
       NS_WARNING(
-          "profile-do-change must precede sessionstore-windows-restored!");
+          "profile-do-change must precede "
+          "contextual-identity-service-load-finished!");
       return NS_OK;
+    }
+
+    nsCOMPtr<nsIQuotaManagerServiceInternal> quotaManagerService =
+        QuotaManagerService::GetOrCreate();
+    if (NS_WARN_IF(!quotaManagerService)) {
+      return NS_ERROR_FAILURE;
+    }
+
+    nsCOMPtr<nsIQuotaUtilsService> quotaUtilsService =
+        do_GetService("@mozilla.org/dom/quota-utils-service;1");
+    if (NS_WARN_IF(!quotaUtilsService)) {
+      return NS_ERROR_FAILURE;
+    }
+
+    uint32_t thumbnailPrivateIdentityId;
+    nsresult rv = quotaUtilsService->GetPrivateIdentityId(
+        u"userContextIdInternal.thumbnail"_ns, &thumbnailPrivateIdentityId);
+    if (NS_WARN_IF(NS_FAILED(rv))) {
+      return rv;
+    }
+
+    rv = quotaManagerService->SetThumbnailPrivateIdentityId(
+        thumbnailPrivateIdentityId);
+    if (NS_WARN_IF(NS_FAILED(rv))) {
+      return rv;
     }
 
     return NS_OK;
@@ -6548,6 +6577,18 @@ RefPtr<UInt64Promise> QuotaManager::GetCachedOriginUsage(
   return getCachedOriginUsageOp->OnResults();
 }
 
+RefPtr<CStringArrayPromise> QuotaManager::ListOrigins() {
+  AssertIsOnOwningThread();
+
+  auto listOriginsOp = CreateListOriginsOp(WrapMovingNotNullUnchecked(this));
+
+  RegisterNormalOriginOp(*listOriginsOp);
+
+  listOriginsOp->RunImmediately();
+
+  return listOriginsOp->OnResults();
+}
+
 RefPtr<CStringArrayPromise> QuotaManager::ListCachedOrigins() {
   AssertIsOnOwningThread();
 
@@ -6879,6 +6920,42 @@ QuotaManager::AllClientTypes() {
   return *mAllClientTypesExceptLS;
 }
 
+bool QuotaManager::IsThumbnailPrivateIdentityIdKnown() const {
+  AssertIsOnIOThread();
+
+  return mIOThreadAccessible.Access()->mThumbnailPrivateIdentityId.isSome();
+}
+
+uint32_t QuotaManager::GetThumbnailPrivateIdentityId() const {
+  AssertIsOnIOThread();
+
+  return mIOThreadAccessible.Access()->mThumbnailPrivateIdentityId.ref();
+}
+
+void QuotaManager::SetThumbnailPrivateIdentityId(
+    uint32_t aThumbnailPrivateIdentityId) {
+  AssertIsOnIOThread();
+
+  auto ioThreadData = mIOThreadAccessible.Access();
+
+  ioThreadData->mThumbnailPrivateIdentityId = Some(aThumbnailPrivateIdentityId);
+  ioThreadData->mThumbnailPrivateIdentityTemporaryOriginCount = 0;
+
+  for (auto iter = ioThreadData->mAllTemporaryOrigins.Iter(); !iter.Done();
+       iter.Next()) {
+    auto& array = iter.Data();
+
+    for (const auto& originMetadata : array) {
+      if (IsUserContextSuffix(originMetadata.mSuffix,
+                              GetThumbnailPrivateIdentityId())) {
+        AssertNoOverflow(
+            ioThreadData->mThumbnailPrivateIdentityTemporaryOriginCount, 1);
+        ioThreadData->mThumbnailPrivateIdentityTemporaryOriginCount++;
+      }
+    }
+  }
+}
+
 uint64_t QuotaManager::GetGroupLimit() const {
   // To avoid one group evicting all the rest, limit the amount any one group
   // can use to 20% resp. a fifth. To prevent individual sites from using
@@ -6968,6 +7045,12 @@ Maybe<FullOriginMetadata> QuotaManager::GetFullOriginMetadata(
   }
 
   return Nothing();
+}
+
+uint64_t QuotaManager::TotalDirectoryIterations() const {
+  AssertIsOnIOThread();
+
+  return mIOThreadAccessible.Access()->mTotalDirectoryIterations;
 }
 
 // static
@@ -7533,9 +7616,10 @@ void QuotaManager::AddTemporaryOrigin(
   AssertIsOnIOThread();
   MOZ_ASSERT(IsBestEffortPersistenceType(aFullOriginMetadata.mPersistenceType));
 
-  auto& array =
-      mIOThreadAccessible.Access()->mAllTemporaryOrigins.LookupOrInsert(
-          aFullOriginMetadata.mGroup);
+  auto ioThreadData = mIOThreadAccessible.Access();
+
+  auto& array = ioThreadData->mAllTemporaryOrigins.LookupOrInsert(
+      aFullOriginMetadata.mGroup);
 
   DebugOnly<bool> containsOrigin = array.Contains(
       aFullOriginMetadata, [](const auto& aLeft, const auto& aRight) {
@@ -7547,6 +7631,14 @@ void QuotaManager::AddTemporaryOrigin(
   MOZ_ASSERT(!containsOrigin);
 
   array.AppendElement(aFullOriginMetadata);
+
+  if (IsThumbnailPrivateIdentityIdKnown() &&
+      IsUserContextSuffix(aFullOriginMetadata.mSuffix,
+                          GetThumbnailPrivateIdentityId())) {
+    AssertNoOverflow(
+        ioThreadData->mThumbnailPrivateIdentityTemporaryOriginCount, 1);
+    ioThreadData->mThumbnailPrivateIdentityTemporaryOriginCount++;
+  }
 }
 
 void QuotaManager::RemoveTemporaryOrigin(
@@ -7554,8 +7646,10 @@ void QuotaManager::RemoveTemporaryOrigin(
   AssertIsOnIOThread();
   MOZ_ASSERT(IsBestEffortPersistenceType(aOriginMetadata.mPersistenceType));
 
-  auto entry = mIOThreadAccessible.Access()->mAllTemporaryOrigins.Lookup(
-      aOriginMetadata.mGroup);
+  auto ioThreadData = mIOThreadAccessible.Access();
+
+  auto entry =
+      ioThreadData->mAllTemporaryOrigins.Lookup(aOriginMetadata.mGroup);
   if (!entry) {
     return;
   }
@@ -7573,6 +7667,14 @@ void QuotaManager::RemoveTemporaryOrigin(
   if (array.IsEmpty()) {
     entry.Remove();
   }
+
+  if (IsThumbnailPrivateIdentityIdKnown() &&
+      IsUserContextSuffix(aOriginMetadata.mSuffix,
+                          GetThumbnailPrivateIdentityId())) {
+    AssertNoUnderflow(
+        ioThreadData->mThumbnailPrivateIdentityTemporaryOriginCount, 1);
+    ioThreadData->mThumbnailPrivateIdentityTemporaryOriginCount--;
+  }
 }
 
 void QuotaManager::RemoveTemporaryOrigins(PersistenceType aPersistenceType) {
@@ -7585,20 +7687,45 @@ void QuotaManager::RemoveTemporaryOrigins(PersistenceType aPersistenceType) {
        iter.Next()) {
     auto& array = iter.Data();
 
-    array.RemoveElementsBy([aPersistenceType](const auto& originMetadata) {
-      return originMetadata.mPersistenceType == aPersistenceType;
+    uint32_t thumbnailPrivateIdentityTemporaryOriginCount = 0;
+
+    array.RemoveElementsBy([this, aPersistenceType,
+                            &thumbnailPrivateIdentityTemporaryOriginCount](
+                               const auto& originMetadata) {
+      const bool match = originMetadata.mPersistenceType == aPersistenceType;
+      if (!match) {
+        return false;
+      }
+
+      if (IsThumbnailPrivateIdentityIdKnown() &&
+          IsUserContextSuffix(originMetadata.mSuffix,
+                              GetThumbnailPrivateIdentityId())) {
+        AssertNoOverflow(thumbnailPrivateIdentityTemporaryOriginCount, 1);
+        thumbnailPrivateIdentityTemporaryOriginCount++;
+      }
+
+      return true;
     });
 
     if (array.IsEmpty()) {
       iter.Remove();
     }
+
+    AssertNoUnderflow(
+        ioThreadData->mThumbnailPrivateIdentityTemporaryOriginCount,
+        thumbnailPrivateIdentityTemporaryOriginCount);
+    ioThreadData->mThumbnailPrivateIdentityTemporaryOriginCount -=
+        thumbnailPrivateIdentityTemporaryOriginCount;
   }
 }
 
 void QuotaManager::RemoveTemporaryOrigins() {
   AssertIsOnIOThread();
 
-  mIOThreadAccessible.Access()->mAllTemporaryOrigins.Clear();
+  auto ioThreadData = mIOThreadAccessible.Access();
+
+  ioThreadData->mAllTemporaryOrigins.Clear();
+  ioThreadData->mThumbnailPrivateIdentityTemporaryOriginCount = 0;
 }
 
 PrincipalMetadataArray QuotaManager::GetAllTemporaryGroups() const {
@@ -7639,6 +7766,14 @@ OriginMetadataArray QuotaManager::GetAllTemporaryOrigins() const {
   }
 
   return originMetadataArray;
+}
+
+uint32_t QuotaManager::ThumbnailPrivateIdentityTemporaryOriginCount() const {
+  AssertIsOnIOThread();
+  MOZ_ASSERT(IsThumbnailPrivateIdentityIdKnown());
+
+  return mIOThreadAccessible.Access()
+      ->mThumbnailPrivateIdentityTemporaryOriginCount;
 }
 
 void QuotaManager::NoteInitializedOrigin(PersistenceType aPersistenceType,
@@ -7820,6 +7955,15 @@ auto QuotaManager::ExecuteOriginInitialization(
       mInitializationInfo.MutableOriginInitializationInfoRef(
           aOrigin, CreateIfNonExistent{}),
       aInitialization, aContext, std::forward<Func>(aFunc));
+}
+
+void QuotaManager::IncreaseTotalDirectoryIterations() {
+  AssertIsOnIOThread();
+
+  auto ioThreadData = mIOThreadAccessible.Access();
+
+  AssertNoOverflow(ioThreadData->mTotalDirectoryIterations, 1);
+  ioThreadData->mTotalDirectoryIterations++;
 }
 
 /*******************************************************************************

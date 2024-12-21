@@ -43,6 +43,8 @@
 #include "nscore.h"
 #include "prenv.h"
 
+#define GTEST_CLASS(testFixture, testName) testFixture##_##testName##_Test
+
 class mozIStorageConnection;
 class nsIEventTarget;
 class nsIFile;
@@ -66,6 +68,8 @@ class PrincipalInfo;
 namespace mozilla::dom::quota {
 
 class CanonicalQuotaObject;
+class ClearDataOp;
+class ClearRequestBase;
 class ClientUsageArray;
 class ClientDirectoryLock;
 class DirectoryLockImpl;
@@ -78,8 +82,15 @@ class OriginScope;
 class QuotaObject;
 class UniversalDirectoryLock;
 
+namespace test {
+class GTEST_CLASS(TestQuotaManagerAndShutdownFixture,
+                  ThumbnailPrivateIdentityTemporaryOriginCount);
+}
+
 class QuotaManager final : public BackgroundThreadObject {
   friend class CanonicalQuotaObject;
+  friend class ClearDataOp;
+  friend class ClearRequestBase;
   friend class ClearStorageOp;
   friend class DirectoryLockImpl;
   friend class FinalizeOriginEvictionOp;
@@ -94,6 +105,8 @@ class QuotaManager final : public BackgroundThreadObject {
   friend class OriginInfo;
   friend class PersistOp;
   friend class ShutdownStorageOp;
+  friend class test::GTEST_CLASS(TestQuotaManagerAndShutdownFixture,
+                                 ThumbnailPrivateIdentityTemporaryOriginCount);
   friend class UniversalDirectoryLock;
 
   friend Result<PrincipalMetadata, nsresult> GetInfoFromValidatedPrincipalInfo(
@@ -505,6 +518,8 @@ class QuotaManager final : public BackgroundThreadObject {
   RefPtr<UInt64Promise> GetCachedOriginUsage(
       const PrincipalInfo& aPrincipalInfo);
 
+  RefPtr<CStringArrayPromise> ListOrigins();
+
   RefPtr<CStringArrayPromise> ListCachedOrigins();
 
   RefPtr<BoolPromise> ClearStoragesForOrigin(
@@ -608,6 +623,12 @@ class QuotaManager final : public BackgroundThreadObject {
     return *mPrivateStoragePath;
   }
 
+  bool IsThumbnailPrivateIdentityIdKnown() const;
+
+  uint32_t GetThumbnailPrivateIdentityId() const;
+
+  void SetThumbnailPrivateIdentityId(uint32_t aThumbnailPrivateIdentityId);
+
   uint64_t GetGroupLimit() const;
 
   std::pair<uint64_t, uint64_t> GetUsageAndLimitForEstimate(
@@ -617,6 +638,14 @@ class QuotaManager final : public BackgroundThreadObject {
 
   Maybe<FullOriginMetadata> GetFullOriginMetadata(
       const OriginMetadata& aOriginMetadata);
+
+  /**
+   * Retrieves the total number of directory iterations performed.
+   *
+   * @return The total count of directory iterations, which is currently
+   *         incremented only during clearing operations.
+   */
+  uint64_t TotalDirectoryIterations() const;
 
   // Record a quota client shutdown step, if shutting down.
   // Assumes that the QuotaManager singleton is alive.
@@ -790,6 +819,21 @@ class QuotaManager final : public BackgroundThreadObject {
 
   void RemoveTemporaryOrigins();
 
+  /**
+   * Retrieves the count of thumbnail private identity temporary origins.
+   *
+   * This method returns the current count of temporary origins associated with
+   * thumbnail private identity contexts. It requires that the thumbnail
+   * private identity id is known.
+   *
+   * @return The count of thumbnail private identity temporary origins.
+   *
+   * @note The thumbnail private identity id must be known before calling this
+   *   method. If the id is not known, it will cause a debug assertion failure
+   *   due to the `MOZ_ASSERT`.
+   */
+  uint32_t ThumbnailPrivateIdentityTemporaryOriginCount() const;
+
   PrincipalMetadataArray GetAllTemporaryGroups() const;
 
   OriginMetadataArray GetAllTemporaryOrigins() const;
@@ -844,6 +888,14 @@ class QuotaManager final : public BackgroundThreadObject {
                                    const nsACString& aContext, Func&& aFunc)
       -> std::invoke_result_t<Func, const FirstInitializationAttempt<
                                         Initialization, StringGenerator>&>;
+
+  /**
+   * Increments the counter tracking the total number of directory iterations.
+   *
+   * @note This is currently called only during clearing operations to update
+   *       the mTotalDirectoryIterations member.
+   */
+  void IncreaseTotalDirectoryIterations();
 
   template <typename Iterator>
   static void MaybeInsertNonPersistedOriginInfos(
@@ -905,6 +957,12 @@ class QuotaManager final : public BackgroundThreadObject {
   struct IOThreadAccessible {
     nsTHashMap<nsCStringHashKey, nsTArray<FullOriginMetadata>>
         mAllTemporaryOrigins;
+    Maybe<uint32_t> mThumbnailPrivateIdentityId;
+    // Tracks the total number of directory iterations.
+    // Note: This is currently incremented only during clearing operations.
+    uint64_t mTotalDirectoryIterations = 0;
+    // Tracks the count of thumbnail private identity temporary origins.
+    uint32_t mThumbnailPrivateIdentityTemporaryOriginCount = 0;
   };
   ThreadBound<IOThreadAccessible> mIOThreadAccessible;
 

@@ -783,6 +783,11 @@
   value: true
   mirror: always
 
+- name: apz.popups_without_remote.enabled
+  type: RelaxedAtomicBool
+  value: false
+  mirror: always
+
 # Whether to print the APZC tree for debugging.
 - name: apz.printtree
   type: RelaxedAtomicBool
@@ -2565,7 +2570,7 @@
 # Whether the scheduler interface will be exposed
 - name: dom.enable_web_task_scheduling
   type: RelaxedAtomicBool
-  value: @IS_NIGHTLY_BUILD@
+  value: false
   mirror: always
 
 # If this is true, it's allowed to fire "cut", "copy" and "paste" events.
@@ -8321,6 +8326,15 @@
 
 #endif  // NIGHTLY_BUILD
 
+#ifdef JS_HAS_TEMPORAL_API
+  # Experimental support for Temporal in JavaScript.
+- name: javascript.options.experimental.temporal
+  type: bool
+  value: false
+  mirror: always
+  set_spidermonkey_pref: startup
+#endif  // JS_HAS_TEMPORAL_API
+
 #ifdef ENABLE_EXPLICIT_RESOURCE_MANAGEMENT
   # Experimental support for Explicit Resource Management in JavaScript.
 -   name: javascript.options.experimental.explicit_resource_management
@@ -8545,7 +8559,7 @@
 # Use wasm_lazy_tiering to enable it for any module.
 -   name: javascript.options.wasm_lazy_tiering_for_gc
     type: bool
-    value: false
+    value: true
     mirror: always
     set_spidermonkey_pref: always
 
@@ -9879,12 +9893,6 @@
   value: false
   mirror: always
 
-# Enables the Reveal Password context-menu entry.
-- name: layout.forms.reveal-password-context-menu.enabled
-  type: bool
-  value: true
-  mirror: always
-
 # If enabled, textareas won't include 'overflow:auto' scrollbars in their
 # block-axis size (usually height).
 - name: layout.forms.textarea-sizing-excludes-auto-scrollbar.enabled
@@ -10694,6 +10702,12 @@
 - name: media.gmp.use-native-event-processing
   type: RelaxedAtomicBool
   value: @IS_NOT_XP_MACOSX@
+  mirror: always
+
+# How long in milliseconds before timing out to destroy en/decoders gracefully
+- name: media.gmp.coder-shutdown-timeout-ms
+  type: RelaxedAtomicUint32
+  value: 1000
   mirror: always
 
 #if defined(XP_LINUX) && defined(MOZ_SANDBOX)
@@ -12659,6 +12673,12 @@
   value: 2
   mirror: always
 
+# Include an idempotency-key header for POST requests
+- name: network.http.idempotencyKey.enabled
+  type: RelaxedAtomicBool
+  value: @IS_NIGHTLY_BUILD@
+  mirror: always
+
 # Whether to respect the redirected-tainted origin flag
 # https://fetch.spec.whatwg.org/#concept-request-tainted-origin
 - name: network.http.origin.redirectTainted
@@ -13462,7 +13482,11 @@
 # every page reload.
 - name: network.dns.only_refresh_on_fresh_connection
   type: RelaxedAtomicBool
+#ifdef EARLY_BETA_OR_EARLIER
+  value: false
+#else
   value: true
+#endif
   mirror: always
 
 # When true, DNS resolutions will downgrade DNS
@@ -13471,6 +13495,86 @@
 - name: network.dns.skip_ipv6_when_no_addresses
   type: RelaxedAtomicBool
   value: false
+  mirror: always
+
+# This preference specifies a list of domains for which DNS lookups will be
+# IPv4 only. Works around broken DNS servers which can't handle IPv6 lookups
+# and/or allows the user to disable IPv6 on a per-domain basis. See bug 68796.
+- name: network.dns.ipv4OnlyDomains
+  type: String
+  value: ""
+  mirror: never
+
+# This is the number of dns cache entries allowed
+- name: network.dnsCacheEntries
+  type: RelaxedAtomicUint32
+  value: 400
+  mirror: always
+
+# In the absence of OS TTLs, the DNS cache TTL value
+- name: network.dnsCacheExpiration
+  type: RelaxedAtomicUint32
+  value: 60
+  mirror: always
+
+# Get TTL; not supported on all platforms; nop on the unsupported ones.
+- name: network.dns.get-ttl
+  type: RelaxedAtomicBool
+  value: true
+  mirror: always
+
+# For testing purposes! Makes the native resolver resolve IPv4 "localhost"
+# instead of the actual given name.
+- name: network.dns.native-is-localhost
+  type: RelaxedAtomicBool
+  value: false
+  mirror: always
+
+# The grace period allows the DNS cache to use expired entries, while kicking off
+# a revalidation in the background.
+- name: network.dnsCacheExpirationGracePeriod
+  type: RelaxedAtomicUint32
+  value: 60
+  mirror: always
+
+# This preference can be used to turn off DNS prefetch.
+- name: network.dns.disablePrefetch
+  type: RelaxedAtomicBool
+  value: false
+  mirror: always
+
+# This preference controls whether .onion hostnames are
+# rejected before being given to DNS. RFC 7686
+- name: network.dns.blockDotOnion
+  type: RelaxedAtomicBool
+  value: true
+  mirror: always
+
+# These domains are treated as localhost equivalent
+- name: network.dns.localDomains
+  type: String
+  value: ""
+  mirror: never
+
+# When non empty all non-localhost DNS queries (including IP addresses)
+# resolve to this value. The value can be a name or an IP address.
+# domains mapped to localhost with localDomains stay localhost.
+- name: network.dns.forceResolve
+  type: String
+  value: ""
+  mirror: never
+
+# Contols whether or not "localhost" should resolve when offline
+- name: network.dns.offline-localhost
+  type: RelaxedAtomicBool
+  value: true
+  mirror: always
+
+# Defines how much longer resolver threads should stay idle before are shut down.
+# A negative value will keep the thread alive forever.
+- name: network.dns.resolver-thread-extra-idle-time-seconds
+  type: RelaxedAtomicInt32
+  value: 60
   mirror: always
 
 # The proxy type. See nsIProtocolProxyService.idl
@@ -14400,13 +14504,6 @@
   value: ""
   mirror: never
 
-# This is only used for testing. When true, nsHttpChannel::mPeerAddr will be
-# overridden with the address provided by DNS prefetch.
-- name: network.dns.use_override_as_peer_address
-  type: RelaxedAtomicBool
-  value: false
-  mirror: always
-
 # Whether to add additional record IPs to the cache
 - name: network.trr.add_additional_records
   type: RelaxedAtomicBool
@@ -14620,6 +14717,13 @@
 
 # Cached state of parental controls (enabled/disabled)
 - name: network.parental_controls_cached_state
+  type: RelaxedAtomicBool
+  value: false
+  mirror: always
+
+# Used for testing purposes only. When true, it attaches an extra networking
+# layer to simulate different network scenarios.
+- name: network.socket.attach_mock_network_layer
   type: RelaxedAtomicBool
   value: false
   mirror: always
@@ -15138,7 +15242,7 @@
 
 - name: privacy.resistFingerprinting.target_video_res
   type: uint32_t
-  value: 480
+  value: 1080
   mirror: always
 
 # Enable resetting the fingerprinting randomization key daily for normal windwos.
@@ -16298,6 +16402,12 @@
 - name: security.tls13.aes_256_gcm_sha384
   type: RelaxedAtomicBool
   value: true
+  mirror: always
+
+# MLS
+- name: security.mls.enabled
+  type: RelaxedAtomicBool
+  value: false
   mirror: always
 
 #---------------------------------------------------------------------------

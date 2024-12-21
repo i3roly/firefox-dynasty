@@ -2198,10 +2198,9 @@ void nsCocoaWindow::SetMenuBar(RefPtr<nsMenuBarX>&& aMenuBar) {
   if (mMenuBar && ((!gSomeMenuBarPainted &&
                     nsMenuUtilsX::GetHiddenWindowMenuBar() == mMenuBar) ||
                    mWindow.isMainWindow)) {
-    // We dispatch this in order to prevent crashes when macOS is actively
+    // We do an async paint in order to prevent crashes when macOS is actively
     // enumerating the menu items in `NSApp.mainMenu`.
-    NS_DispatchToCurrentThread(NS_NewRunnableFunction(
-        "PaintMenuBar", [menuBar = mMenuBar] { menuBar->Paint(); }));
+    mMenuBar->PaintAsync();
   }
 }
 
@@ -2682,7 +2681,9 @@ already_AddRefed<nsIWidget> nsIWidget::CreateChildWindow() {
   NS_ASSERTION(geckoWidget, "Window delegate not returning a gecko widget!");
 
   if (nsMenuBarX* geckoMenuBar = geckoWidget->GetMenuBar()) {
-    geckoMenuBar->Paint();
+    // We do an async paint in order to prevent crashes when macOS is actively
+    // enumerating the menu items in `NSApp.mainMenu`.
+    geckoMenuBar->PaintAsync();
   } else {
     // sometimes we don't have a native application menu early in launching
     if (!sApplicationMenu) {
@@ -2900,9 +2901,9 @@ void nsCocoaWindow::CocoaWindowDidResize() {
   RefPtr<nsMenuBarX> hiddenWindowMenuBar =
       nsMenuUtilsX::GetHiddenWindowMenuBar();
   if (hiddenWindowMenuBar) {
-    // printf("painting hidden window menu bar due to window losing main
-    // status\n");
-    hiddenWindowMenuBar->Paint();
+    // We do an async paint in order to prevent crashes when macOS is actively
+    // enumerating the menu items in `NSApp.mainMenu`.
+    hiddenWindowMenuBar->PaintAsync();
   }
 
   NSWindow* window = [aNotification object];
@@ -3147,7 +3148,6 @@ static NSMutableSet* gSwizzledFrameViewClasses = nil;
 @end
 
 @interface BaseWindow (Private)
-- (void)removeTrackingArea;
 - (void)cursorUpdated:(NSEvent*)aEvent;
 - (void)reflowTitlebarElements;
 @end
@@ -3357,7 +3357,6 @@ static NSImage* GetMenuMaskImage() {
 
 - (void)dealloc {
   [mTouchBar release];
-  [self removeTrackingArea];
   ChildViewMouseTracker::OnDestroyWindow(self);
   [super dealloc];
 }

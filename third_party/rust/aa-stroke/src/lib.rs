@@ -2,6 +2,7 @@
 use std::default::Default;
 
 use bezierflattener::CBezierFlattener;
+use tri_rasterize::rasterize_to_mask;
 
 use crate::{bezierflattener::{CFlatteningSink, GpPointR, HRESULT, S_OK, CBezier}};
 
@@ -871,7 +872,14 @@ impl<'z> Stroker<'z> {
         impl<'a, 'b> CFlatteningSink for Target<'a, 'b> {
             fn FirstTangent(&mut self, tangent: Option<GpPointR>) {
                 let tangent = tangent.unwrap();
-                self.last_normal = flip(Vector::new(tangent.y, -tangent.x).normalize());
+                let last_normal = flip(Vector::new(tangent.y, -tangent.x).normalize());
+                let stroked_path = &mut self.stroker.stroked_path;
+                if self.stroker.start_point.is_some() {
+                    if let Some(cur_pt) = self.stroker.cur_pt {
+                        join_line(stroked_path, &self.stroker.style, cur_pt, self.stroker.last_normal, last_normal);
+                    }
+                }
+                self.last_normal = last_normal;
             }
             fn AcceptPointAndTangent(&mut self, pt: &GpPointR, tangent: &GpPointR, _last: bool) -> HRESULT {
                 let normal = flip(Vector::new(tangent.y, -tangent.x).normalize());
@@ -896,7 +904,6 @@ impl<'z> Stroker<'z> {
                 } else {
                     // we don't need to join the segments because the quads are sharing normals
                 }
-
                 if stroked_path.aa {
                     stroked_path.ramp(
                         pt.x + normal.x * (half_width - 0.5),
@@ -1254,4 +1261,22 @@ fn nearly_degenerate_bezier() {
     stroker.move_to(Point::new(0., 0.0005), false);
     stroker.curve_to(Point::new(0., 0.0005), Point::new(0., 0.), Point::new(0., 0.));
     stroker.finish();
+}
+
+
+#[test]
+fn joins_between_curves() {
+    let mut stroker = Stroker::new(&StrokeStyle{
+        cap: LineCap::Square,
+        join: LineJoin::Miter,
+        width: 40.0,
+        ..Default::default()});
+
+    stroker.move_to(Point::new(-80., 20.), false);
+    stroker.curve_to(Point::new(-80., 20.), Point::new(-5., 20.), Point::new(-5., 20.));
+    stroker.curve_to(Point::new(-5., 20.), Point::new(-5., 90.), Point::new(-5., 90.));
+    let vertices = stroker.finish();
+    let result = rasterize_to_mask(&vertices, 1, 1);
+    assert_eq!(result[0], 255);
+
 }

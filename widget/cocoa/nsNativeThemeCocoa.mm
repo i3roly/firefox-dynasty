@@ -2551,6 +2551,7 @@ Maybe<nsNativeThemeCocoa::WidgetInfo> nsNativeThemeCocoa::ComputeWidgetInfo(
     case StyleAppearance::Separator:
       return Some(WidgetInfo::Separator());
 
+    case StyleAppearance::MozSidebar:
     case StyleAppearance::MozWindowTitlebar: {
       NSWindow* win = NativeWindowForFrame(aFrame);
       bool isMain = [win isMainWindow];
@@ -3543,6 +3544,8 @@ bool nsNativeThemeCocoa::WidgetAppearanceDependsOnWindowFocus(
 nsITheme::ThemeGeometryType nsNativeThemeCocoa::ThemeGeometryTypeForWidget(
     nsIFrame* aFrame, StyleAppearance aAppearance) {
   switch (aAppearance) {
+    case StyleAppearance::MozSidebar:
+      return eThemeGeometryTypeSidebar;
     case StyleAppearance::MozWindowTitlebar:
       return eThemeGeometryTypeTitlebar;
     case StyleAppearance::MozWindowButtonBox:

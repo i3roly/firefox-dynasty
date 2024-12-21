@@ -6,6 +6,7 @@ const lazy = {};
 
 ChromeUtils.defineESModuleGetters(lazy, {
   PanelMultiView: "resource:///modules/PanelMultiView.sys.mjs",
+  PrivateBrowsingUtils: "resource://gre/modules/PrivateBrowsingUtils.sys.mjs",
   SearchUIUtils: "resource:///modules/SearchUIUtils.sys.mjs",
   UrlbarPrefs: "resource:///modules/UrlbarPrefs.sys.mjs",
   UrlbarSearchUtils: "resource:///modules/UrlbarSearchUtils.sys.mjs",
@@ -122,6 +123,8 @@ export class SearchModeSwitcher {
       position: "bottomleft topleft",
       triggerEvent: event,
     }).catch(console.error);
+
+    Glean.urlbarUnifiedsearchbutton.opened.add(1);
   }
 
   #openPreferences(event) {
@@ -139,6 +142,8 @@ export class SearchModeSwitcher {
 
     this.#input.window.openPreferences("paneSearch");
     this.#popup.hidePopup();
+
+    Glean.urlbarUnifiedsearchbutton.picked.settings.add(1);
   }
 
   /**
@@ -223,6 +228,10 @@ export class SearchModeSwitcher {
    *   The name of the pref relative to `browser.urlbar`.
    */
   onPrefChanged(pref) {
+    if (!this.#input.window || this.#input.window.closed) {
+      return;
+    }
+
     switch (pref) {
       case "scotchBonnet.enableOverride": {
         if (lazy.UrlbarPrefs.get("scotchBonnet.enableOverride")) {
@@ -242,6 +251,10 @@ export class SearchModeSwitcher {
   }
 
   async #updateSearchIcon() {
+    if (!this.#input.window || this.#input.window.closed) {
+      return;
+    }
+
     try {
       await lazy.UrlbarSearchUtils.init();
     } catch {
@@ -310,7 +323,9 @@ export class SearchModeSwitcher {
     if (!searchMode || searchMode.engineName) {
       let engine = searchMode
         ? lazy.UrlbarSearchUtils.getEngineByName(searchMode.engineName)
-        : lazy.UrlbarSearchUtils.getDefaultEngine();
+        : lazy.UrlbarSearchUtils.getDefaultEngine(
+            lazy.PrivateBrowsingUtils.isWindowPrivate(this.#input.window)
+          );
       let icon = (await engine.getIconURL()) ?? SearchModeSwitcher.DEFAULT_ICON;
       return { label: engine.name, icon };
     }
@@ -431,6 +446,18 @@ export class SearchModeSwitcher {
     }
 
     this.#popup.hidePopup();
+
+    if (engine) {
+      Glean.urlbarUnifiedsearchbutton.picked[
+        engine.isAppProvided ? "builtin_search" : "addon_search"
+      ].add(1);
+    } else if (restrict) {
+      Glean.urlbarUnifiedsearchbutton.picked.local_search.add(1);
+    } else {
+      console.warn(
+        `Unexpected search: ${JSON.stringify({ engine, restrict, openEngineHomePage })}`
+      );
+    }
   }
 
   #enableObservers() {
@@ -519,7 +546,10 @@ export class SearchModeSwitcher {
     let observer = engineObj => {
       Services.obs.removeObserver(observer, topic);
       let eng = Services.search.getEngineByName(engineObj.wrappedJSObject.name);
-      this.search({ engine: eng, openEngineHomePage: e.shiftKey });
+      this.search({
+        engine: eng,
+        openEngineHomePage: e.shiftKey,
+      });
     };
     Services.obs.addObserver(observer, topic);
 

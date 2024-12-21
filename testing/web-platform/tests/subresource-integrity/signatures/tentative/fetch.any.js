@@ -21,8 +21,8 @@ function resourceURL(data) {
 // Signature-Input: signature=("identity-digest";sf);alg="ed25519"; \
 //                  keyid="JrQLj5P/89iXES9+vFgrIy29clF9CC/oPPsw3c5D0bs="; \
 //                  tag="sri"
-// Signature: signature=:H7AqWWgo1DJ7VdyF9DKotG/4hvatKDfRTq2mpuY/hvJupSn+EYzus \
-//            5p24qPK7DtVQcxJFhzSYDj4RBq9grZTAQ==:
+// Signature: signature=:TUznBT2ikFq6VrtoZeC5znRtZugu1U8OHJWoBkOLDTJA2FglSR34Q \
+//                       Y9j+BwN79PT4H0p8aIosnv4rXSKfIZVDA==:
 //
 // {"hello": "world"}
 // ```
@@ -38,7 +38,7 @@ const kInvalidKey = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 const kRequestWithValidSignature = {
   body: `{"hello": "world"}`,
   digest: `sha-256=:X48E9qOokqqrvdts8nOJRJN3OWDUoyWxBf7kbu9DBPE=:`,
-  signature: `signature=:H7AqWWgo1DJ7VdyF9DKotG/4hvatKDfRTq2mpuY/hvJupSn+EYzus5p24qPK7DtVQcxJFhzSYDj4RBq9grZTAQ==:`,
+  signature: `signature=:TUznBT2ikFq6VrtoZeC5znRtZugu1U8OHJWoBkOLDTJA2FglSR34QY9j+BwN79PT4H0p8aIosnv4rXSKfIZVDA==:`,
   signatureInput: `signature=("identity-digest";sf);alg="ed25519";keyid="JrQLj5P/89iXES9+vFgrIy29clF9CC/oPPsw3c5D0bs=";tag="sri"`
 };
 
@@ -65,6 +65,19 @@ function generate_test(request_data, integrity, expectation, description) {
     if (expectation == EXPECT_LOADED) {
       return fetcher.then(r => {
         assert_equals(r.status, 200, "Response status is 200.");
+
+        // Verify `accept-signatures`: if the invalid key is present, both a valid and invalid
+        // key were set. If just the valid key is present, that's the only key we should see
+        // in the header.
+        if (integrity.includes(`ed25519-${kInvalidKey}`)) {
+          assert_equals(r.headers.get('accept-signatures'),
+                        `sig0=("identity-digest";sf);keyid="${kInvalidKey}";tag="sri", sig1=("identity-digest";sf);keyid="${kValidKey}";tag="sri"`,
+                        "`accept-signatures` was set.");
+        } else if (integrity.includes(`ed25519-${kValidKey}`)) {
+          assert_equals(r.headers.get('accept-signatures'),
+                        `sig0=("identity-digest";sf);keyid="${kValidKey}";tag="sri"`,
+                        "`accept-signatures` was set.");
+        }
       });
     } else {
       return promise_rejects_js(test, TypeError, fetcher);

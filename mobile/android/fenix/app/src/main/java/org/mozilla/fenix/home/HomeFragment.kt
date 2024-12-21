@@ -131,7 +131,6 @@ import org.mozilla.fenix.databinding.FragmentHomeBinding
 import org.mozilla.fenix.ext.components
 import org.mozilla.fenix.ext.containsQueryParameters
 import org.mozilla.fenix.ext.hideToolbar
-import org.mozilla.fenix.ext.isLargeWindow
 import org.mozilla.fenix.ext.isToolbarAtBottom
 import org.mozilla.fenix.ext.nav
 import org.mozilla.fenix.ext.openSetDefaultBrowserOption
@@ -575,7 +574,7 @@ class HomeFragment : Fragment() {
 
         // If the navbar feature could be visible, we should update it's state.
         val shouldUpdateNavBarState =
-            requireContext().settings().navigationToolbarEnabled && !isLargeWindow()
+            requireContext().settings().navigationToolbarEnabled
         if (shouldUpdateNavBarState) {
             updateNavBarForConfigurationChange(
                 context = requireContext(),
@@ -615,6 +614,8 @@ class HomeFragment : Fragment() {
         activity: HomeActivity,
         isConfigChange: Boolean = false,
     ) {
+        NavigationBar.homeInitializeTimespan.start()
+
         val context = requireContext()
         val isToolbarAtBottom = context.isToolbarAtBottom()
 
@@ -779,6 +780,7 @@ class HomeFragment : Fragment() {
                                     isPrivateMode = activity.browsingModeManager.mode.isPrivate,
                                     showDivider = !isMicrosurveyShown && !isToolbarAtBottom,
                                     browserStore = context.components.core.store,
+                                    appStore = context.components.appStore,
                                     menuButton = menuButton,
                                     tabsCounterMenu = tabCounterMenu,
                                     onSearchButtonClick = {
@@ -825,6 +827,8 @@ class HomeFragment : Fragment() {
                 }
             },
         )
+
+        NavigationBar.homeInitializeTimespan.stop()
     }
 
     @VisibleForTesting
@@ -1214,6 +1218,7 @@ class HomeFragment : Fragment() {
                         state = HomepageState.build(
                             appState = appState,
                             settings = settings,
+                            browsingModeManager = browsingModeManager,
                         ),
                         interactor = sessionControlInteractor,
                         onTopSitesItemBound = {

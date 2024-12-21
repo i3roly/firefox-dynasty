@@ -482,6 +482,7 @@ export class SearchService {
     await this.#migrateLegacyEngines();
     await this.#checkWebExtensionEngines();
     await this.#addOpenSearchTelemetry();
+    await this.#removeAppProvidedExtensions();
   }
 
   /**
@@ -516,7 +517,7 @@ export class SearchService {
    *
    * @type {string}
    */
-  errorToThrowInTest = null;
+  errorToThrowInTest = { type: null, message: null };
 
   // Test-only function to reset just the engine selector so that it can
   // load a different configuration.
@@ -671,10 +672,9 @@ export class SearchService {
     }
 
     if (extension.isAppProvided) {
-      // TODO: Bug 1885953 - We should store the WebExtension references and
-      // remove them on idle.
+      this.#extensionsToRemove.add(extension.id);
       lazy.logConsole.debug(
-        "addEnginesFromExtension: Ignoring old app provided WebExtension",
+        "addEnginesFromExtension: Queuing old app provided WebExtension for uninstall",
         extension.id
       );
       return;
@@ -701,12 +701,7 @@ export class SearchService {
       let engineData = await lazy.loadAndParseOpenSearchEngine(
         Services.io.newURI(engineURL)
       );
-      engine = new lazy.OpenSearchEngine({ engineData });
-      engine
-        ._setIcon(iconURL, undefined, false)
-        .catch(e =>
-          lazy.logConsole.log("Error while setting search engine icon:", e)
-        );
+      engine = new lazy.OpenSearchEngine({ engineData, faviconURL: iconURL });
     } catch (ex) {
       throw Components.Exception(
         "addEngine: Error adding engine:\n" + ex,
@@ -1086,7 +1081,6 @@ export class SearchService {
   /**
    * An object containing the id of the AppProvidedSearchEngine for the default
    * engine, as suggested by the configuration.
-   * For the legacy configuration, this is the user visible name.
    *
    * This is prefixed with _ rather than # because it is
    * called in a test.
@@ -1098,7 +1092,6 @@ export class SearchService {
   /**
    * An object containing the id of the AppProvidedSearchEngine for the default
    * engine for private browsing mode, as suggested by the configuration.
-   * For the legacy configuration, this is the user visible name.
    *
    * @type {object}
    */
@@ -1112,6 +1105,15 @@ export class SearchService {
    * @type {Set<object>}
    */
   #startupExtensions = new Set();
+
+  /**
+   * A Set of installed app provided search Web Extensions to be uninstalled by
+   * the AddonManager on idle. We no longer have app provided engines as
+   * web extensions after search-config-v2 enabled in Firefox version 128.
+   *
+   * @type {Set<object>}
+   */
+  #extensionsToRemove = new Set();
 
   /**
    * A Set of removed search extensions reported by AddonManager
@@ -1179,7 +1181,10 @@ export class SearchService {
   }
 
   #getEnginesByExtensionID(extensionID) {
-    lazy.logConsole.debug("getEngines: getting all engines for", extensionID);
+    lazy.logConsole.debug(
+      "getEnginesByExtensionID: getting all engines for",
+      extensionID
+    );
     var engines = this.#sortedEngines.filter(function (engine) {
       return engine._extensionID == extensionID;
     });
@@ -1369,9 +1374,19 @@ export class SearchService {
 
       initSection = "LoadEngines";
       this.#maybeThrowErrorInTest(initSection);
+      this.#maybeThrowErrorInTest("LoadSettingsAddonManager");
       await this.#loadEngines(settings, refinedConfig);
     } catch (ex) {
-      Glean.searchService.initializationStatus[`failed${initSection}`].add();
+      if (ex.message.startsWith("Addon manager")) {
+        if (
+          !Services.startup.shuttingDown &&
+          ex.message != "Addon manager shutting down"
+        ) {
+          Glean.searchService.initializationStatus.failedLoadSettingsAddonManager.add();
+        }
+      } else {
+        Glean.searchService.initializationStatus[`failed${initSection}`].add();
+      }
       Glean.searchService.startupTime.cancel(timerId);
 
       lazy.logConsole.error("#init: failure initializing search:", ex);
@@ -1587,7 +1602,12 @@ export class SearchService {
       let activePolicies = Services.policies.getActivePolicies();
       if (activePolicies.SearchEngines) {
         if (activePolicies.SearchEngines.Default) {
-          return this.#getEngineByName(activePolicies.SearchEngines.Default);
+          let policyEngine = this.#getEngineByName(
+            activePolicies.SearchEngines.Default
+          );
+          if (policyEngine) {
+            return policyEngine;
+          }
         }
         if (activePolicies.SearchEngines.Remove?.includes(defaultEngine.name)) {
           defaultEngine = null;
@@ -2727,6 +2747,28 @@ export class SearchService {
   }
 
   /**
+   * Removes application-provided extensions with a specific identifier.
+   *
+   * After search-config-v2 (enabled in Firefox version 128), app-provided
+   * engines are no longer web extensions. This method iterates over the IDs
+   * in `#extensionsToRemove` and uninstalls extensions ending with
+   * `@search.mozilla.org`. Although the list should contain only app-provided
+   * engines (as per addEnginesFromExtension), the `@search.mozilla.org` is an
+   * additional safety check to ensure only the expected add-ons are removed.
+   */
+  async #removeAppProvidedExtensions() {
+    for (let id of this.#extensionsToRemove.values()) {
+      if (id.endsWith("@search.mozilla.org")) {
+        let addOn = await lazy.AddonManager.getAddonByID(id);
+        if (addOn) {
+          await addOn.uninstall();
+        }
+      }
+    }
+    this.#extensionsToRemove.clear();
+  }
+
+  /**
    * Creates and adds a WebExtension based engine. It is expected that this
    * function is only called after initialisation has completed, or at a stage
    * where we are ready to load the engines we've been told about during startup.
@@ -3306,10 +3348,11 @@ export class SearchService {
   #maybeThrowErrorInTest(errorType) {
     if (
       Services.env.exists("XPCSHELL_TEST_PROFILE_DIR") &&
-      this.errorToThrowInTest === errorType
+      this.errorToThrowInTest.type === errorType
     ) {
       throw new Error(
-        `Fake ${errorType} error during search service initialization.`
+        this.errorToThrowInTest.message ??
+          `Fake ${errorType} error during search service initialization.`
       );
     }
   }

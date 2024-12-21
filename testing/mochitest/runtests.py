@@ -2054,7 +2054,7 @@ toolbar#nav-bar {
             # opening in profiler.firefox.com.
             self.profiler_tempdir = tempfile.mkdtemp()
             browserEnv["MOZ_PROFILER_SHUTDOWN"] = os.path.join(
-                self.profiler_tempdir, "mochitest-profile.json"
+                self.profiler_tempdir, "profile_mochitest.json"
             )
             browserEnv["MOZ_PROFILER_STARTUP"] = "1"
 
@@ -2064,7 +2064,7 @@ toolbar#nav-bar {
             browserEnv["MOZ_PROFILER_STARTUP"] = "1"
             if "MOZ_UPLOAD_DIR" in browserEnv:
                 browserEnv["MOZ_PROFILER_SHUTDOWN"] = os.path.join(
-                    browserEnv["MOZ_UPLOAD_DIR"], "mochitest-profile.json"
+                    browserEnv["MOZ_UPLOAD_DIR"], "profile_mochitest.json"
                 )
             else:
                 self.log.error(
@@ -2968,6 +2968,14 @@ toolbar#nav-bar {
                         "test": self.lastTestSeen,
                         "message": msg,
                     }
+
+                    # for looping scenarios (like --restartAfterFailure), document the test
+                    key = message["test"].split(" ")[0].split("/")[-1].strip()
+                    if key not in self.expectedError:
+                        self.expectedError[key] = message.get(
+                            "message", message["message"]
+                        ).strip()
+
                     # need to send a test_end in order to have mozharness process messages properly
                     # this requires a custom message vs log.error/log.warning/etc.
                     self.message_logger.process_message(message)
@@ -3026,6 +3034,14 @@ toolbar#nav-bar {
                     "test": self.lastTestSeen,
                     "message": "application terminated with exit code %s" % status,
                 }
+
+                # for looping scenarios (like --restartAfterFailure), document the test
+                key = message["test"].split(" ")[0].split("/")[-1].strip()
+                if key not in self.expectedError:
+                    self.expectedError[key] = message.get(
+                        "message", message["message"]
+                    ).strip()
+
                 # need to send a test_end in order to have mozharness process messages properly
                 # this requires a custom message vs log.error/log.warning/etc.
                 self.message_logger.process_message(message)
@@ -3497,6 +3513,7 @@ toolbar#nav-bar {
                 "swgl": self.extraPrefs.get("gfx.webrender.software", False),
                 "verify": options.verify,
                 "verify_fission": options.verify_fission,
+                "vertical_tab": self.extraPrefs.get("sidebar.verticalTabs", False),
                 "webgl_ipc": self.extraPrefs.get("webgl.out-of-process", False),
                 "wmfme": (
                     self.extraPrefs.get("media.wmf.media-engine.enabled", 0)
@@ -3970,6 +3987,12 @@ toolbar#nav-bar {
             "message": "application timed out after %d seconds with no output"
             % int(timeout),
         }
+
+        # for looping scenarios (like --restartAfterFailure), document the test
+        key = message["test"].split(" ")[0].split("/")[-1].strip()
+        if key not in self.expectedError:
+            self.expectedError[key] = message.get("message", message["message"]).strip()
+
         # need to send a test_end in order to have mozharness process messages properly
         # this requires a custom message vs log.error/log.warning/etc.
         self.message_logger.process_message(message)

@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -8,7 +7,13 @@ import { SafeAnchor } from "../SafeAnchor/SafeAnchor";
 import { ImpressionStats } from "../../DiscoveryStreamImpressionStats/ImpressionStats";
 import { actionCreators as ac, actionTypes as at } from "common/Actions.mjs";
 
-export const AdBanner = ({ spoc, dispatch, firstVisibleTimestamp }) => {
+export const AdBanner = ({
+  spoc,
+  dispatch,
+  firstVisibleTimestamp,
+  row,
+  type,
+}) => {
   const getDimensions = format => {
     switch (format) {
       case "leaderboard":
@@ -42,8 +47,9 @@ export const AdBanner = ({ spoc, dispatch, firstVisibleTimestamp }) => {
             flight_id: spoc.flight_id,
             format: spoc.format,
             id: spoc.id,
-            is_pocket_card: spoc.is_pocket_card,
-            position: spoc.pos,
+            card_type: "spoc",
+            is_pocket_card: true,
+            position: row,
             sponsor: spoc.sponsor,
             title: spoc.title,
             url: spoc.url || spoc.shim.url,
@@ -57,46 +63,77 @@ export const AdBanner = ({ spoc, dispatch, firstVisibleTimestamp }) => {
     );
   };
 
+  const onLinkCLick = () => {
+    dispatch(
+      ac.DiscoveryStreamUserEvent({
+        event: "CLICK",
+        source: type.toUpperCase(),
+        // Banner ads dont have a position, but a row number
+        action_position: row,
+        value: {
+          card_type: "spoc",
+          tile_id: spoc.id,
+          ...(spoc.shim?.click ? { shim: spoc.shim.click } : {}),
+          fetchTimestamp: spoc.fetchTimestamp,
+          firstVisibleTimestamp,
+          format: spoc.format,
+        },
+      })
+    );
+  };
+
+  // in the default card grid 1 would come before the 1st row of cards and 9 comes after the last row
+  // using clamp to make sure its between valid values (1-9)
+  const clampedRow = Math.max(1, Math.min(9, row));
+
   return (
-    <aside className={`ad-banner-wrapper ${spoc.format}`}>
-      <div className="ad-banner-dismiss">
-        <button
-          className="icon icon-dismiss"
-          onClick={handleDismissClick}
-          data-l10n-id="newtab-toast-dismiss-button"
-        ></button>
-      </div>
-      <SafeAnchor className="ad-banner-link" url={spoc.url} title={spoc.title}>
-        <ImpressionStats
-          flightId={spoc.flight_id}
-          rows={[
-            {
-              id: spoc.id,
-              pos: spoc.pos,
-              corpus_item_id: spoc.corpus_item_id,
-              scheduled_corpus_item_id: spoc.scheduled_corpus_item_id,
-              recommended_at: spoc.recommended_at,
-              received_rank: spoc.received_rank,
-            },
-          ]}
+    <aside className={`ad-banner-wrapper`} style={{ gridRow: clampedRow }}>
+      <div className={`ad-banner-inner ${spoc.format}`}>
+        <div className="ad-banner-dismiss">
+          <button
+            className="icon icon-dismiss"
+            onClick={handleDismissClick}
+            data-l10n-id="newtab-toast-dismiss-button"
+          ></button>
+        </div>
+        <SafeAnchor
+          className="ad-banner-link"
+          url={spoc.url}
+          title={spoc.title}
+          onLinkClick={onLinkCLick}
           dispatch={dispatch}
-          firstVisibleTimestamp={firstVisibleTimestamp}
-        />
-        <div className="ad-banner-content">
-          <img
-            src={spoc.raw_image_src}
-            alt={spoc.alt_text}
-            loading="lazy"
-            width={imgWidth}
-            height={imgHeight}
+        >
+          <ImpressionStats
+            flightId={spoc.flight_id}
+            rows={[
+              {
+                id: spoc.id,
+                card_type: "spoc",
+                pos: row,
+                recommended_at: spoc.recommended_at,
+                received_rank: spoc.received_rank,
+                format: spoc.format,
+              },
+            ]}
+            dispatch={dispatch}
+            firstVisibleTimestamp={firstVisibleTimestamp}
+          />
+          <div className="ad-banner-content">
+            <img
+              src={spoc.raw_image_src}
+              alt={spoc.alt_text}
+              loading="eager"
+              width={imgWidth}
+              height={imgHeight}
+            />
+          </div>
+        </SafeAnchor>
+        <div className="ad-banner-sponsored">
+          <span
+            className="ad-banner-sponsored-label"
+            data-l10n-id="newtab-topsite-sponsored"
           />
         </div>
-      </SafeAnchor>
-      <div className="ad-banner-sponsored">
-        <span
-          className="ad-banner-sponsored-label"
-          data-l10n-id="newtab-topsite-sponsored"
-        />
       </div>
     </aside>
   );
