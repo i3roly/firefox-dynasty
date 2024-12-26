@@ -643,7 +643,7 @@ VideoLowPowerType NativeLayerRootCA::CheckVideoLowPower(
     return VideoLowPowerType::FailBacking;
   }
 
-  CALayer* topContentCALayer = topCALayer.sublayers[0];
+  CALayer* topContentCALayer = [topCALayer.sublayers objectAtIndex:0];
   if (![topContentCALayer isKindOfClass:[AVSampleBufferDisplayLayer class]]) {
     // We didn't create a AVSampleBufferDisplayLayer for the top video layer.
     // Try to figure out why by following some of the logic in

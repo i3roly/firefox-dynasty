@@ -108,23 +108,22 @@ void LaunchChildMac(int aArgc, char** aArgv, pid_t* aPid) {
     for (int i = 1; i < aArgc; i++) {
       [arguments addObject:[NSString stringWithUTF8String:aArgv[i]]];
     }
+
+    NSTask* task = [[NSTask alloc] init];
+    NSError* error = nil;
+    [task setArguments:arguments];
     if(@available(macOS 10.13, *)) {
-      NSTask* task = [[NSTask alloc] init];
       [task setExecutableURL:[NSURL fileURLWithPath:launchPath]];
-      [task setArguments:arguments];
-      NSError* error = nil;
       [task launchAndReturnError:&error];
-      if (!error && aPid) {
-        *aPid = [task processIdentifier];
-        [task waitUntilExit];
-      }
-      [task release];
     } else {
-      if (!arguments) {
-        arguments = (NSMutableArray*) @[];
-      } 
-      [NSTask launchedTaskWithLaunchPath:launchPath arguments:arguments];
+      [task setLaunchPath:launchPath];
+      [task launch];
     }
+    if (!error && aPid) {
+      *aPid = [task processIdentifier];
+      [task waitUntilExit];
+    }
+    [task release];
   } @catch (NSException* e) {
     NSLog(@"%@: %@", e.name, e.reason);
   }

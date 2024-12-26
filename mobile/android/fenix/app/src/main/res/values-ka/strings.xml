@@ -62,7 +62,9 @@
     <!-- Explanation for private browsing displayed to users on home view when they first enable private mode
         The first parameter is the name of the app defined in app_name (for example: Fenix) -->
     <string name="private_browsing_placeholder_description_2">%1$s გაასუფთავებს თქვენი ძიებისა და ნახვების ისტორიას ყველა პირადი ჩანართის დახურვისას ან პროგრამიდან გამოსვლისას. მართალია, ეს არ დაფარავს თქვენს ვინაობას საიტებისა და ინტერნეტის მომწოდებლისგან, მაგრამ დაგეხმარებათ დაიცვათ პირადი მონაცემები ამ მოწყობილობის სხვა მომხმარებლებისგან.</string>
-    <string name="private_browsing_common_myths">არასწორი წარმოდგენები პირადი თვალიერების რეჟიმზე</string>
+    <string name="private_browsing_common_myths">
+       ცრუ წარმოდგენები პირადი თვალიერების შესახებ
+    </string>
 
     <!-- True Private Browsing Mode -->
     <!-- Title for info card on private homescreen in True Private Browsing Mode. -->
@@ -359,6 +361,8 @@
     <string name="browser_menu_turn_on_reader_view">საკითხავი ხედის ჩართვა</string>
     <!-- Browser menu label for turning OFF reader view of the current visited page -->
     <string name="browser_menu_turn_off_reader_view">საკითხავი ხედის გამორთვა</string>
+    <!-- Browser menu button that reopens a private tab as a regular tab -->
+    <string name="browser_menu_open_in_normal_tab">გადასვლა ჩვეულებრივ ჩანართზე</string>dsa
     <!-- Browser menu label for navigating to the translation feature, which provides language translation options the current visited page -->
     <string name="browser_menu_translate_page">გვერდის თარგმნა…</string>
 
@@ -599,14 +603,38 @@
     <string name="onboarding_customize_toolbar_title" tools:ignore="UnusedResources">ხელსაწყოთა ზოლის განთავსება</string>
     <!-- Onboarding sub header for toolbar selection card, used by Nimbus experiments. -->
     <string name="onboarding_customize_toolbar_description" tools:ignore="UnusedResources">ხელთ იქონიეთ საძიებო.</string>
-    <!-- Onboarding toolbar selection card label for 'save and continue' button, used by Nimbus experiments. -->
-    <string name="onboarding_customize_toolbar_save_and_continue_button">შეინახეთ და განაგრძეთ</string>
+    <!-- Onboarding label for 'Save and continue' button, used by Nimbus experiments. -->
+    <string name="onboarding_save_and_continue_button">შეინახეთ და განაგრძეთ</string>
     <!-- Onboarding toolbar selection card label for 'skip' button, used by Nimbus experiments. -->
     <string name="onboarding_customize_toolbar_skip_button">გამოტოვება</string>
     <!-- Onboarding toolbar selection card label for 'top' option, used by Nimbus experiments. -->
     <string name="onboarding_customize_toolbar_top_option">ზემოთ</string>
     <!-- Onboarding toolbar selection card label for 'bottom' option, used by Nimbus experiments. -->
     <string name="onboarding_customize_toolbar_bottom_option">ქვემოთ</string>
+
+    <!-- Onboarding toolbar selection card content description for the main image. -->
+    <string name="onboarding_customize_toolbar_main_image_content_description">თავსართად დიდი სურათი ხელსაწყოთა ზოლის ასარჩევად, რომელზეც გამოსახულია ხელსაწყოთა ზოლი.</string>
+    <!-- Onboarding toolbar selection card content description for the toolbar placement image. %1$s is placeholder for either 'top' or 'bottom'. -->
+    <string name="onboarding_customize_toolbar_placement_content_description">%1$s ხელსაწყოთა ზოლის გამოსახულება</string>
+
+    <!-- Onboarding header for the theme selection card, used by Nimbus experiments. -->
+    <string name="onboarding_customize_theme_title" tools:ignore="UnusedResources">გაფორმების შერჩევა</string>
+    <!-- Onboarding sub header for theme selection card, used by Nimbus experiments. -->
+    <string name="onboarding_customize_theme_description" tools:ignore="UnusedResources">იხილეთ გვერდები ხელსაყრელი განათებით.</string>
+    <!-- Onboarding label for 'Save and start browsing' button, used by Nimbus experiments. -->
+    <string name="onboarding_save_and_start_button">შენახვა და გვერდების თვალიერება</string>
+    <!-- Onboarding theme selection card label for 'skip' button, used by Nimbus experiments. -->
+    <string name="onboarding_customize_theme_skip_button">აცილება</string>
+    <!-- Onboarding theme selection card label for 'dark' option, used by Nimbus experiments. -->
+    <string name="onboarding_customize_theme_dark_option">მუქი</string>
+    <!-- Onboarding theme selection card label for 'light' option, used by Nimbus experiments. -->
+    <string name="onboarding_customize_theme_light_option">ნათელი</string>
+    <!-- Onboarding theme selection card label for 'System auto' option, used by Nimbus experiments. -->
+    <string name="onboarding_customize_theme_system_option">თვითშერჩევით</string>
+    <!-- Onboarding theme selection card content description for the main image. -->
+    <string name="onboarding_customize_theme_main_image_content_description">თავსართად დიდი სურათი გაფორმების ასარჩევად, რომელზეც გამოსახულია ხელოვანი და ხელსაწყოები.</string>
+    <!-- Onboarding theme selection card content description for the theme selection image. %1$s is placeholder for either 'system', 'light' or 'dark'. -->
+    <string name="onboarding_customize_theme_content_description">%1$s გაფორმების გამოსახულება</string>
 
     <!-- Search Widget -->
     <!-- Content description for searching with a widget. The first parameter is the name of the application.-->
@@ -690,7 +718,7 @@
     <!-- Text for request support button indicating that cookie banner reduction is not supported for the current site, this is shown as part of the cookie banner details view. -->
     <string name="cookie_banner_handling_details_site_is_not_supported_request_support_button_2">მოთხოვნის გაგზავნა</string>
     <!-- Text for title indicating that cookie banner reduction is not supported for the current site, this is shown as part of the cookie banner details view. -->
-    <string name="cookie_banner_handling_details_site_is_not_supported_title_2">გსურთ, ამ საიტის მხარდაჭერილებში დამატება?</string>
+    <string name="cookie_banner_handling_details_site_is_not_supported_title_2">გსურთ ამ საიტის მხარდაჭერილებში დამატება?</string>
     <!-- Label for the snackBar, after the user reports with success a website where cookie banner reducer did not work -->
     <string name="cookie_banner_handling_report_site_snack_bar_text_2">მოთხოვნა გაგზავნილია</string>
     <!-- Text for indicating cookie banner handling is on this site, this is shown as part of the protections panel with the tracking protection toggle -->
@@ -1187,13 +1215,13 @@
     <!-- Learn more link for studies, links to an article for more information about studies. -->
     <string name="studies_learn_more">ვრცლად</string>
     <!-- Dialog message shown after removing a study -->
-    <string name="studies_restart_app">პროგრამა დაიხურება ცვლილებების ასახვისთვის</string>
+    <string name="studies_restart_app" moz:removedIn="135">პროგრამა დაიხურება ცვლილებების ასახვისთვის</string>
     <!-- Dialog button to confirm the removing a study. -->
-    <string name="studies_restart_dialog_ok">კარგი</string>
+    <string name="studies_restart_dialog_ok" moz:removedIn="135">კარგი</string>
     <!-- Dialog button text for canceling removing a study. -->
-    <string name="studies_restart_dialog_cancel">გაუქმება</string>
+    <string name="studies_restart_dialog_cancel" moz:removedIn="135">გაუქმება</string>
     <!-- Toast shown after turning on/off studies preferences -->
-    <string name="studies_toast_quit_application" tools:ignore="UnusedResources">პროგრამა იხურება ცვლილებების ასახვისთვის…</string>
+    <string name="studies_toast_quit_application" moz:removedIn="135" tools:ignore="UnusedResources">პროგრამა იხურება ცვლილებების ასახვისთვის…</string>
 
     <!-- Sessions -->
     <!-- Title for the list of tabs -->
@@ -1347,7 +1375,7 @@
     <!-- Title text displayed on the tab crash page. This first parameter is the name of the application (For example: Fenix) -->
     <string name="tab_crash_title_2">ვწუხვართ. %1$s ვერ ტვირთავს ამ გვერდს.</string>
     <!-- Send crash report checkbox text on the tab crash page -->
-    <string name="tab_crash_send_report">გათიშვის მოხსენების გადაგზავნა Mozilla-სთვის</string>
+    <string name="tab_crash_send_report">გათიშვის მოხსენება გაეგზავნოს Mozilla-ს</string>
     <!-- Close tab button text on the tab crash page -->
     <string name="tab_crash_close">ჩანართის დახურვა</string>
     <!-- Restore tab button text on the tab crash page -->
@@ -1374,7 +1402,7 @@
     <!-- Screen title for adding a bookmarks folder -->
     <string name="bookmark_add_folder">საქაღალდის დამატება</string>
     <!-- Snackbar title that confirms a bookmark was saved into a folder. Parameter will be replaced by the name of the folder the bookmark was saved into. -->
-    <string name="bookmark_saved_in_folder_snackbar">ინახავს „%s“</string>
+    <string name="bookmark_saved_in_folder_snackbar">შეინახავს „%s“</string>
     <!-- Snackbar edit button shown after a bookmark has been created. -->
     <string name="edit_bookmark_snackbar_action">ჩასწორება</string>
     <!-- Bookmark menu move button -->
@@ -2314,7 +2342,7 @@
     <!-- label shown when there are not site exceptions to show in the site exception settings -->
     <string name="no_site_exceptions">გამონაკლისები არ არის</string>
     <!-- Bookmark deletion confirmation -->
-    <string name="bookmark_deletion_confirmation">ნამდვილად გსურთ, ამ სანიშნის წაშლა?</string>
+    <string name="bookmark_deletion_confirmation">ნამდვილად გსურთ ამ სანიშნის წაშლა?</string>
     <!-- Browser menu button that adds a shortcut to the home fragment -->
     <string name="browser_menu_add_to_shortcuts">მალსახმობებში დამატება</string>
     <!-- Browser menu button that removes a shortcut from the home fragment -->
@@ -2602,7 +2630,7 @@
     <!-- Title for card displayed to the user for products whose reviews were not analyzed yet. -->
     <string name="review_quality_check_no_analysis_title">ამ მიმოხილვების შესახებ მონაცემები ჯერ არაა</string>
     <!-- Text for the body of card displayed to the user for products whose reviews were not analyzed yet. -->
-    <string name="review_quality_check_no_analysis_body">იმის გასაგებად, სანდოა თუ არა ამ ნაწარმის მიმოხილვები, გადაამოწმეთ მიმოხილვის ხარისხი. მიახლოებით 60 წამს გასტანს მხოლოდ.</string>
+    <string name="review_quality_check_no_analysis_body">იმის გასაგებად, სანდოა თუ არა ამ ნაწარმის მიმოხილვები, გაუშვით ხარისხის შემოწმება. მიახლოებით 60 წამს შეიძლება გასტანოს მხოლოდ.</string>
     <!-- Text for button from body of card displayed to the user for products whose reviews were not analyzed yet. Clicking this should trigger a product analysis. -->
     <string name="review_quality_check_no_analysis_link">მიმოხილვის ხარისხის შემოწმება</string>
     <!-- Headline for review quality check contextual onboarding card. -->
@@ -2953,7 +2981,7 @@
     <!-- Microsurvey -->
     <!-- Prompt view -->
     <!-- The microsurvey prompt title. Note: The word "Firefox" should NOT be translated -->
-    <string name="micro_survey_prompt_title" tools:ignore="BrandUsage,UnusedResources">დაგვეხმარეთ, რომ გავაუმჯობესოთ Firefox. მხოლოდ ერთ წუთს გასტანს.</string>
+    <string name="micro_survey_prompt_title" tools:ignore="BrandUsage,UnusedResources">დაგვეხმარეთ, რომ გავაუმჯობესოთ Firefox. მხოლოდ ერთ წუთს წაგართმევთ.</string>
     <!-- The continue button label -->
     <string name="micro_survey_continue_button_label" tools:ignore="UnusedResources">განაგრძეთ</string>
     <!-- Survey view -->
@@ -2984,10 +3012,10 @@
     <!-- Option for likert scale -->
     <string name="likert_scale_option_8" tools:ignore="UnusedResources">სინქრონიზაციას არ ვიყენებ</string>
     <!-- Text shown in prompt for printing microsurvey. "sec" It's an abbreviation for "second". Note: The word "Firefox" should NOT be translated. -->
-    <string name="microsurvey_prompt_printing_title" tools:ignore="BrandUsage,UnusedResources">დაგვეხმარეთ, რომ ამობეჭდვით გავაუმჯობესოთ Firefox. მხოლოდ ერთ წუთს გასტანს</string>
+    <string name="microsurvey_prompt_printing_title" tools:ignore="BrandUsage,UnusedResources">დაგვეხმარეთ, რომ ამობეჭდვის შესაძლებლობით გავაუმჯობესოთ Firefox. მხოლოდ რამდენიმე წამს წაგართმევთ</string>
 
     <!-- Text shown in prompt for search microsurvey. Note: The word "Firefox" should NOT be translated. -->
-    <string name="microsurvey_prompt_search_title" tools:ignore="BrandUsage,UnusedResources">დაგვეხმარეთ, რომ გავაუმჯობესოთ Firefox. მხოლოდ ერთ წუთს გასტანს</string>
+    <string name="microsurvey_prompt_search_title" tools:ignore="BrandUsage,UnusedResources">დაგვეხმარეთ, რომ გავაუმჯობესოთ Firefox. მხოლოდ ერთ წუთს წაგართმევთ</string>
     <!-- Text shown in prompt for sync microsurvey. Note: The word "Firefox" should NOT be translated. -->
     <string name="microsurvey_prompt_sync_title" tools:ignore="BrandUsage,UnusedResources">დაგვეხმარეთ, რომ სინქრონიზაციის კუთხით გავაუმჯობესოთ Firefox. მხოლოდ ერთ წუთს გასტანს</string>
     <!-- Text shown in the survey title for printing microsurvey. Note: The word "Firefox" should NOT be translated. -->

@@ -10,9 +10,9 @@
     <!-- Content description (not visible, for screen readers etc.): "Three dot" menu button. -->
     <string name="content_description_menu">കൂടുതൽ ഐച്ഛികങ്ങൾ</string>
     <!-- Content description (not visible, for screen readers etc.): "Private Browsing" menu button. -->
-    <string name="content_description_private_browsing_button">സ്വകാര്യ ബ്രൗസിംഗ് സജ്ജമാക്കുക</string>
+    <string name="content_description_private_browsing_button">സ്വകാര്യ തിരയൽ സജ്ജമാക്കുക</string>
     <!-- Content description (not visible, for screen readers etc.): "Private Browsing" menu button. -->
-    <string name="content_description_disable_private_browsing_button">സ്വകാര്യ ബ്രൗസിംഗ് നിർജ്ജീവമാക്കുക</string>
+    <string name="content_description_disable_private_browsing_button">സ്വകാര്യ തിരയൽ നിർജ്ജീവമാക്കുക</string>
     <!-- Content description (not visible, for screen readers etc.): "Private Browsing" menu button. -->
     <string name="content_description_private_browsing">സ്വകാര്യ തിരയൽ</string>
     <!-- Placeholder text shown in the search bar before a user enters text for the default engine -->
@@ -52,7 +52,7 @@
     <!-- Title for the home screen section with bookmarks. -->
     <string name="home_bookmarks_title">അടയാളക്കുറിപ്പുകള്‍</string>
     <!-- Content description for the button which navigates the user to show all of their bookmarks. -->
-    <string name="home_bookmarks_show_all_content_description">എല്ല അടയാളകുറിപ്പുകൾ കാണിക്കുക</string>
+    <string name="home_bookmarks_show_all_content_description">എല്ലാ അടയാളകുറിപ്പുകൾ കാണിക്കുക</string>
     <!-- Text for the menu button to remove a recently saved bookmark from the user's home screen -->
     <string name="home_bookmarks_menu_item_remove">മാറ്റുക</string>
 
@@ -63,7 +63,7 @@
     <!-- Explanation for private browsing displayed to users on home view when they first enable private mode
         The first parameter is the name of the app defined in app_name (for example: Fenix) -->
     <string name="private_browsing_placeholder_description_2">%1$s നിങ്ങളുടെ തിരയലും ബ്രൗസിംഗ് ചരിത്രവും സ്വകാര്യ ടാബുകൾ അടയ്ക്കുമ്പോൾ അല്ലെങ്കിൽ അപ്ലിക്കേഷനിൽ നിന്ന് പുറത്തുകടക്കുമ്പോൾ അവ മായ്‌ക്കുന്നു. ഇത് നിങ്ങളെ വെബ്‌സൈറ്റുകളിലേക്കോ ഇൻറർനെറ്റ് സേവന ദാതാവിലേക്കോ അജ്ഞാതനാക്കില്ലെങ്കിലും, ഈ ഉപകരണം ഉപയോഗിക്കുന്ന മറ്റെതൊരാളിൽ നിന്നും നിങ്ങൾ ഓൺലൈനിൽ ചെയ്യുന്നത് സ്വകാര്യമായി സൂക്ഷിക്കുന്നത് എളുപ്പമാക്കുന്നു.</string>
-    <string name="private_browsing_common_myths">സ്വകാര്യ ബ്രൗസിങ്ങിനെക്കുറിച്ചുള്ള പൊതുവായ മിഥ്യാധാരണകൾ</string>
+    <string name="private_browsing_common_myths">സ്വകാര്യ തിരച്ചിലിനെക്കുറിച്ചുള്ള പൊതുവായ തെറ്റിദ്ധാരണങ്ങൾ</string>
 
     <!-- True Private Browsing Mode -->
     <!-- Title for info card on private homescreen in True Private Browsing Mode. -->
@@ -351,6 +351,8 @@
     <string name="browser_menu_turn_on_reader_view">വായനാകാഴ്ച തുടങ്ങുക</string>
     <!-- Browser menu label for turning OFF reader view of the current visited page -->
     <string name="browser_menu_turn_off_reader_view">വായനാകാഴ്ച അണക്കുക</string>dsa
+    <!-- Browser menu button that reopens a private tab as a regular tab -->
+    <string name="browser_menu_open_in_normal_tab">സ്വകാര്യമല്ലാത്ത ടാബിലേക്കു് നീക്കുക</string>dsa
     <!-- Browser menu label for navigating to the translation feature, which provides language translation options the current visited page -->
     <string name="browser_menu_translate_page">ഈ താളിന്റെ വിവർത്തനം ചെയ്യുക…</string>
     <!-- Browser menu label for navigating to the Web Compat Reporter feature, which provides users the ability to send bug reports for broken sites. -->
@@ -436,12 +438,16 @@
     <string name="onboarding_home_welcome_description">ഇനിയും നിറങ്ങൾ. മെച്ചപ്പെട്ട സ്വകാര്യത. ലാഭത്തേക്കാൾ ജനങ്ങളോടുള്ള അതേ പ്രതിബദ്ധത.</string>
     <!-- Home onboarding dialog sign into sync screen title text. -->
     <string name="onboarding_home_sync_title_3">ദൃശ്യപ്രതലങ്ങൾ മാറുകാൻ വളരെ എളുപ്പമാണു്</string>
+    <!-- Home onboarding dialog sign into sync screen description text. -->
+    <string name="onboarding_home_sync_description">താങ്ങളുടെ ആമുഖതാളിലെ മറ്റ് ഉപകരണങ്ങളിൽ നിന്നുള്ള ടാബുകൾ ഉപയോഗിച്ച് താങ്ങൾ നിർത്തിയിടത്ത് നിന്ന് ആരംഭിക്കുക.</string>
     <!-- Text for the button to continue the onboarding on the home onboarding dialog. -->
     <string name="onboarding_home_get_started_button">ഉപയോഗിക്കാൻ തുടങ്ങുക</string>
     <!-- Text for the button to navigate to the sync sign in screen on the home onboarding dialog. -->
     <string name="onboarding_home_sign_in_button">പ്രവേശിക്കുക</string>
     <!-- Text for the button to skip the onboarding on the home onboarding dialog. -->
     <string name="onboarding_home_skip_button">ഒഴിവാക്കുക</string>
+    <!-- Onboarding home screen sync popup dialog message, shown on top of Recent Synced Tabs in the Jump back in section. -->
+    <string name="sync_cfr_message">താങ്ങളുടെ ടാബുകൾ സമന്വയിപ്പിക്കുന്നു! താങ്ങളുടെ മറ്റു് ഉപകരണത്തിൽ നിർത്തിയിടത്തു് നിന്നു് വീണ്ടും തുടങ്ങുക. </string>
     <!-- Content description (not visible, for screen readers etc.): Close button for the home onboarding dialog -->
     <string name="onboarding_home_content_description_close_button">അടയ്ക്കുക</string>
 
@@ -453,14 +459,25 @@
     <!-- Title for set firefox as default browser screen used by Nimbus experiments.
         Note: The word "Firefox" should NOT be translated -->
     <string name="juno_onboarding_default_browser_title_nimbus_3" tools:ignore="BrandUsage,UnusedResources">ദശലക്ഷക്കണക്കിന് ആൾക്കാർ ഫയർഫോക്സിനെ സ്നേഹിക്കുന്നെന്തിന എന്നു് കണ്ടുപ്പിടിക്കുക</string>
+    <!-- Title for set firefox as default browser screen used by Nimbus experiments. -->
+    <string name="juno_onboarding_default_browser_title_nimbus_4" tools:ignore="UnusedResources">കൂടുതൽ തെരഞ്ഞെടുപ്പുകൾതോടു് സുരക്ഷിതമായി തിരയുക</string>
+    <!-- Description for set firefox as default browser screen used by Nimbus experiments. -->
+    <string name="juno_onboarding_default_browser_description_nimbus_3">ഞങ്ങളുടെ ലാഭേച്ഛയില്ലാത്ത അന്വേഷിയന്ത്രം താങ്ങളെ വെബിലുടനീളം രഹസ്യമായി പിന്തുടരുന്നതിൽ നിന്ന് കമ്പനികളെ തടയാൻ സഹായിക്കുന്നു.</string>
+    <!-- Description for set firefox as default browser screen used by Nimbus experiments. -->
+    <string name="juno_onboarding_default_browser_description_nimbus_4" tools:ignore="UnusedResources">ലാഭേച്ഛയില്ലാത്ത ഒരു അന്വേഷിയന്ത്രം തിരഞ്ഞെടുത്ത് 100 ദശലക്ഷത്തിലധികം ആൾക്കാർ അവരുടെ സ്വകാര്യത സംരക്ഷിക്കുന്നു.</string>
     <!-- Text for the button to set firefox as default browser on the device -->
     <string name="juno_onboarding_default_browser_positive_button" tools:ignore="UnusedResources">തനതു അന്വേഷിയായി വയ്ക്കുക</string>
     <!-- Text for the button dismiss the screen and move on with the flow -->
     <string name="juno_onboarding_default_browser_negative_button" tools:ignore="UnusedResources">ഇപ്പോഴല്ല</string>
+    <!-- Title for sign in to sync screen. -->
+    <string name="juno_onboarding_sign_in_title_2">താങ്ങൾ ഉപകരണങ്ങൾക്കിടയിൽ ചാടുമ്പോഴു്  രൂപമാറ്റം വരുത്തിയിരിക്കുക</string>
     <!-- Text for the button to sign in to sync on the device -->
     <string name="juno_onboarding_sign_in_positive_button" tools:ignore="UnusedResources">പ്രവേശിക്കുക</string>
     <!-- Text for the button dismiss the screen and move on with the flow -->
     <string name="juno_onboarding_sign_in_negative_button" tools:ignore="UnusedResources">ഇപ്പോഴല്ല</string>
+    <!-- Description for enable notification permission screen used by Nimbus experiments. Nimbus experiments do not support string placeholders.
+       Note: The word "Firefox" should NOT be translated -->
+    <string name="juno_onboarding_enable_notifications_description_nimbus_2" tools:ignore="BrandUsage">നിങ്ങളുടെ ഉപകരണങ്ങൾക്കിടയിൽ സുരക്ഷിതമായി ടാബുകൾ അയയ്ക്കുകയും Firefox-ൽ മറ്റ് സ്വകാര്യത സവിശേഷതകൾ കണ്ടെത്തുകയും ചെയ്യുക.</string>
     <!-- Text for the button to request notification permission on the device -->
     <string name="juno_onboarding_enable_notifications_positive_button" tools:ignore="UnusedResources">അറിയിപ്പുകൾ ഓൺ ചെയ്യുക</string>
     <!-- Text for the button dismiss the screen and move on with the flow -->
@@ -487,6 +504,8 @@
     <!-- Search by Image name for the onboarding add-ons card, used by Nimbus experiments. Note: The word "Search by Image" is a brand name should NOT be translated -->
     <string name="onboarding_add_on_search_by_image_name" tools:ignore="UnusedResources">ചിത്രം കൊണ്ടു് തിരയുക</string>
 
+    <!-- Search by Image description for the onboarding add-ons card, used by Nimbus experiments. -->
+    <string name="onboarding_add_on_search_by_image_description" tools:ignore="UnusedResources">ഒരു രസകരമായ ചിത്രം കണ്ടിട്ടു് അതുനെപറ്റി കൂടുകൽ അറിയുക.</string>
     <!-- Dark Reader name for the onboarding add-ons card, used by Nimbus experiments. Note: The word "Dark Reader" is a brand name should NOT be translated -->
     <string name="onboarding_add_on_dark_reader_name" tools:ignore="UnusedResources">ഡാർക്കു് റീടർ</string>
     <!-- Privacy Badger description for the onboarding add-ons card, used by Nimbus experiments. -->
@@ -525,6 +544,8 @@
     <string name="onboarding_term_of_service_line_one_link_text" tools:ignore="UnusedResources,BrandUsage">സേവന നിബന്ധനകള്‍</string>
     <!-- Used as text for the link in onboarding_term_of_service_line_two. -->
     <string name="onboarding_term_of_service_line_two_link_text" tools:ignore="UnusedResources,BrandUsage">സ്വകാര്യതാ അറിയിപ്പ്</string>
+    <!-- Line three of the terms of service onboarding page. 'Firefox' and 'Mozilla' are intentionally hardcoded. %1$S is replaced by an active link, using onboarding_term_of_service_line_three_link_text as text (Manage”). -->
+    <string name="onboarding_term_of_service_line_three" tools:ignore="UnusedResources,BrandUsage">അന്വേഷിയന്ത്രത്തിനെ മെച്ചപ്പെുടത്താൻ ഫയർഫോക്സു് മോസില്ലക്കു് നിദാനനിർണയനീയും ഇടപാടുനീയ ദത്ത അയയ്ക്കാരുണ്ടു്. %1$s</string>
     <!-- Used as text for the link in onboarding_term_of_service_line_three. -->
     <string name="onboarding_term_of_service_line_three_link_text" tools:ignore="UnusedResources,BrandUsage">കൈകാര്യം ചെയ്യുക</string>
     <!-- Onboarding sub header for toolbar selection card, used by Nimbus experiments. -->
@@ -538,11 +559,17 @@
     <!-- Onboarding toolbar selection card label for 'bottom' option, used by Nimbus experiments. -->
     <string name="onboarding_customize_toolbar_bottom_option">കീഴ്ഭാഗം</string>
 
+    <!-- Onboarding toolbar selection card content description for the main image. -->
+    <string name="onboarding_customize_toolbar_main_image_content_description">ഒരു ചിത്രീകരിച്ച കരുപ്പട്ട കാണിക്കുന്ന കരുപ്പട്ട തിരഞ്ഞെടുക്കൽ കാഴ്ചയുടെ വലിയ തലക്കെട്ട് ചിത്രം.</string>
     <!-- Onboarding toolbar selection card content description for the toolbar placement image. %1$s is placeholder for either 'top' or 'bottom'. -->
     <string name="onboarding_customize_toolbar_placement_content_description">%1$s കരുപ്പട്ടയിന്റെ ചിത്രം</string>
 
     <!-- Onboarding header for the theme selection card, used by Nimbus experiments. -->
     <string name="onboarding_customize_theme_title" tools:ignore="UnusedResources">ഒരു അലങ്കാരം തിരഞ്ഞെടുക്കുക</string>
+    <!-- Onboarding sub header for theme selection card, used by Nimbus experiments. -->
+    <string name="onboarding_customize_theme_description" tools:ignore="UnusedResources">മികച്ച വെളിച്ചത്തിൽ വെബ് കാണുക.</string>
+    <!-- Onboarding label for 'Save and start browsing' button, used by Nimbus experiments. -->
+    <string name="onboarding_save_and_start_button">കരുതിവച്ചിട്ടു് തിരയാൻ തുടങ്ങുക</string>
     <!-- Onboarding theme selection card label for 'skip' button, used by Nimbus experiments. -->
     <string name="onboarding_customize_theme_skip_button">ഒഴിവാക്കുക</string>
     <!-- Onboarding theme selection card label for 'dark' option, used by Nimbus experiments. -->
@@ -656,6 +683,10 @@
     <string name="reduce_cookie_banner_details_panel_title_off_for_site_1">%1$s-നു് കുക്കീസു് പൊന്തുവരൽ തടയൽയന്ത്രം അണക്കണോ?</string>
     <!-- Title text for a detail explanation indicating cookie banner reducer didn't work for the current site, this is shown as part of the cookie banner panel in the toolbar. The first parameter is the application name-->
     <string name="reduce_cookie_banner_details_panel_title_unsupported_site_request_2">%1$s-ൾക്കു് കുക്കീ അഭ്യാർത്ഥങ്ങളെ തന്നെതാനെ നിരസിക്കാൻ ഒക്കത്തില്ല. ഭാവിയിൽ ഈ സൈറ്റിനെ പിന്തുണയ്ക്കാൻ താങ്ങൾക്കൊരു അഭ്യാർത്ഥനം അയയ്ക്കാം.</string>
+    <!-- Long text for a detail explanation indicating what will happen if cookie banner handling is off for a site, this is shown as part of the cookie banner panel in the toolbar. The first parameter is the application name -->
+    <string name="reduce_cookie_banner_details_panel_description_off_for_site_1">%1$s-നു് അണച്ചാൽ കുക്കീകളും മായച്ചിട്ടു് വെബ്സ്ഥാനം വീണ്ടും ലഭ്യമാക്കും. ഇതിന്റെ കാരണം താങ്ങളെ ചിലപ്പോൾ സൈറ്റുകൾ നിന്നു് പുറത്തു് കടപ്പിക്കും അല്ലെങ്കിൽ  ഷോപ്പിംഗു് കാർട്ടുകൾ ഒഴിക്കപ്പെടാം.</string>
+    <!-- Long text for a detail explanation indicating what will happen if cookie banner handling is on for a site, this is shown as part of the cookie banner panel in the toolbar. The first parameter is the application name -->
+    <string name="reduce_cookie_banner_details_panel_description_on_for_site_3">താങ്ങൾ %1$s-നെ തുടങ്ങിയാൽ ഈ സൈറ്റിലെ എല്ലാ കുക്കി പൊന്തുവരലുകൾ തന്നെതാനെ നിരസിക്കാൻ ശ്രമിക്കും.</string>
     <!--Title for the cookie banner re-engagement CFR, the placeholder is replaced with app name -->
     <string name="cookie_banner_cfr_title">%1$s താങ്ങൾക്കായി കുക്കികൾ നിരസിച്ചു</string>
 
@@ -806,6 +837,8 @@
     <!-- Text displayed that links to website containing documentation about the "Limited Edition" wallpapers. -->
     <string name="wallpaper_learn_more">കൂടുതലറിയുക</string>
 
+    <!-- Wallpaper onboarding dialog header text. -->
+    <string name="wallpapers_onboarding_dialog_title_text">നിറത്തിന്റെ നീർത്തെറിപ്പ് ഉരച്ചുനോക്കുക</string>
     <!-- Wallpaper onboarding dialog learn more button text. The button navigates to the wallpaper settings screen. -->
     <string name="wallpapers_onboarding_dialog_explore_more_button_text">ഇനിയും ചുവർകടലാസുകൾ ആരായുക</string>
 
@@ -817,6 +850,9 @@
 
     <!-- Button text on the extension crash dialog to prompt the user to try restarting the extensions but the dialog will reappear if it is unsuccessful again -->
     <string name="extension_process_crash_dialog_retry_button_text" tools:ignore="UnusedResources">വിപുലീകരണങ്ങൾ വീണ്ടും തുടങ്ങി ശ്രമിക്കുക</string>
+
+    <!-- Button text on the extension crash dialog to prompt the user to continue with all extensions disabled. -->
+    <string name="extension_process_crash_dialog_disable_extensions_button_text">വിപുലീകരണങ്ങൾ പ്രവർത്തനരഹിതമാക്കി തുടരുക</string>
 
     <!-- Account Preferences -->
     <!-- Preference for managing your account via accounts.firefox.com -->
@@ -960,7 +996,7 @@
 
     <!-- Library -->
     <!-- Option in Library to open Downloads page -->
-    <string name="library_downloads">ഡൗണ്‍ലോഡുകള്‍</string>
+    <string name="library_downloads">ഇറക്കിവയ്ക്കലുകൾ</string>
     <!-- Option in library to open Bookmarks page -->
     <string name="library_bookmarks">അടയാളക്കുറിപ്പുകള്‍</string>
     <!-- Option in library to open Desktop Bookmarks root page -->
@@ -1213,6 +1249,9 @@
     <string name="webcompat_reporter_send">അയയ്ക്കുക</string>
 
 
+    <!-- These reason strings are dropdown options on a WebCompat reporter form, indicating what is broken on the site. -->
+    <!-- Broken site reason text for site slow or not working -->
+    <string name="webcompat_reporter_reason_slow">വെബ്സ്ഥാനം തൂങ്ങുന്നു അല്ലെങ്കിൽ കോഡായിപ്പോയി</string>
     <!-- Broken site reason text for images or videos -->
     <string name="webcompat_reporter_reason_media">ചിത്രങ്ങൾ അല്ലെങ്കിൽ വീഡിയോകൾ</string>
     <!-- Broken site reason text for buttons, links, and other content -->
@@ -2301,14 +2340,22 @@
     <string name="review_quality_check_ad_title" tools:ignore="UnusedResources">പരിഗണിക്കാൻ കൂടുതൽ</string>
     <!-- Caption for recommended product section indicating this is an ad by Fakespot. First parameter is the Fakespot product name. -->
     <string name="review_quality_check_ad_caption" tools:ignore="UnusedResources">%s-ന്റെ പരസ്യം</string>
+    <!-- Clickable text that links to Fakespot.com. First parameter is the Fakespot product name. In the phrase "Fakespot by Mozilla", "by" can be localized. Does not need to stay by. -->
+    <string name="review_quality_check_powered_by_link" tools:ignore="UnusedResources">മോസില്ല അവതരിപ്പിച്ചതു്: %s</string>
+    <!-- Text for title of warning card informing the user that the current analysis is outdated. -->
+    <string name="review_quality_check_outdated_analysis_warning_title" tools:ignore="UnusedResources">നോക്കാൻ പുതിയ വിവരങ്ങൾ</string>
     <!-- Text for button from warning card informing the user that the current analysis is outdated. Clicking this should trigger the product's re-analysis. -->
     <string name="review_quality_check_outdated_analysis_warning_action" tools:ignore="UnusedResources">ഇപ്പോൾ പരിശോധിക്കുക</string>
     <!-- Title for warning card informing the user that the current product is currently not available. -->
     <string name="review_quality_check_product_availability_warning_title">ഉൽപ്പണം ലഭ്യമല്ല</string>
+    <!-- Text for body of warning card informing the user that the current product's analysis is still processing. -->
+    <string name="review_quality_check_analysis_in_progress_warning_body">ഇതു് ചിലപ്പോൾ 60 സെക്കണ്ടുകൾ എടുക്കും.</string>
     <!-- Title for info card displayed after the user reports a product is back in stock. -->
     <string name="review_quality_check_analysis_requested_info_title">വിവരം അറിയിക്കുന്നതിനു് നന്ദി!</string>
     <!-- Text for the action button from info card displayed to the user when analysis finished updating. -->
     <string name="review_quality_check_analysis_updated_confirmation_action" tools:ignore="UnusedResources">മനസ്സിലായി</string>
+    <!-- Title for error card displayed to the user when an error occurred. -->
+    <string name="review_quality_check_generic_error_title">ഇപ്പോൾ വിവരങ്ങളൊന്നും ലഭ്യമല്ല</string>
     <!-- Title for error card displayed to the user when the device is disconnected from the network. -->
     <string name="review_quality_check_no_connection_title">ഗോളാന്തരവല സമ്പർക്കമില്ല</string>
     <!-- Clickable text from the contextual onboarding card that links to review quality check support article. -->
@@ -2460,6 +2507,8 @@
     <!-- Automatic translation options preference screen -->
     <!-- Preference option for offering to translate. Radio button title text.-->
     <string name="automatic_translation_option_offer_to_translate_title_preference">വിവർത്തനം ചെയ്യാൻ വാഗ്ദാനം നല്കുക (എപ്പോഴും)</string>
+    <!-- Preference option for offering to translate. Radio button summary text. The first parameter is the name of the app defined in app_name (for example: Fenix)-->
+    <string name="automatic_translation_option_offer_to_translate_summary_preference">ഈ ഭാഷായിൽ എഴുതിയ വെബ്സ്ഥാനങ്ങളിൽ വിവർത്തനം ചെയ്യാൻ %1$s  ചോദിക്കും.</string>
     <!-- Preference option for always translate. Radio button title text. -->
     <string name="automatic_translation_option_always_translate_title_preference">എപ്പോഴും വിവർത്തനം ചെയ്യുക</string>
     <!-- Preference option for always translate. Radio button summary text. The first parameter is the name of the app defined in app_name (for example: Fenix)-->
@@ -2612,10 +2661,15 @@
     <string name="micro_survey_prompt_title" tools:ignore="BrandUsage,UnusedResources">ഫയർഫോക്സിനു് മെച്ചപെടുത്താൻ സഹായിക്കുക. ഇതു് ചെയ്യാൻ വെറും ഒരു നിമിഷം എടുക്കും </string>
     <!-- The continue button label -->
     <string name="micro_survey_continue_button_label" tools:ignore="UnusedResources">തുടരുക</string>
+    <!-- Survey view -->
+    <!-- The survey header -->
+    <string name="micro_survey_survey_header_2">ദയവായി സൎവ്വേ പൂർത്തിയാക്കുക</string>
     <!-- The privacy notice link -->
     <string name="micro_survey_privacy_notice_2">സ്വകാര്യതാ അറിയിപ്പ്</string>
     <!-- The submit button label text -->
     <string name="micro_survey_submit_button_label">സമർപ്പിക്കുക</string>
+    <!-- The survey completion header -->
+    <string name="micro_survey_survey_header_confirmation" tools:ignore="UnusedResources">കണക്കെടുപ്പു് അവസാനിച്ചു</string>
     <!-- The survey completion confirmation text -->
     <string name="micro_survey_feedback_confirmation">താങ്കളുടെ പ്രതികരണത്തിനു് നന്ദി</string>
     <!-- Option for likert scale -->
@@ -2651,6 +2705,10 @@
     <!-- Accessibility -->
     <!-- Content description for the survey application icon. Note: The word "Firefox" should NOT be translated.  -->
     <string name="microsurvey_app_icon_content_description" tools:ignore="BrandUsage">ഫയർഫോക്സു് അടയാളം</string>
+    <!-- Content description for the survey feature icon. -->
+    <string name="microsurvey_feature_icon_content_description">കണക്കെടുപ്പു് സവിശേഷത അടയാളം</string>
+    <!-- Content description (not visible, for screen readers etc.) for closing microsurvey bottom sheet. -->
+    <string name="microsurvey_close_handle_content_description">കണക്കെടുപ്പു് അടയ്ക്കുക</string>
     <!-- Content description for "X" button that is closing microsurvey. -->
     <string name="microsurvey_close_button_content_description">അടയ്ക്കുക</string>
 
@@ -2695,6 +2753,8 @@
     <string name="certificate_warning_homepage_card_hca1_title" tools:ignore="BrandUsage,UnusedResources">താങ്ങളുടെ ഫയർഫോക്സു് അന്വേഷിയേ പുതുക്കുക</string>
     <!-- Homepage card title about old Firefox version. "Update" is a verb. -->
     <string name="certificate_warning_homepage_card_hcr1_title" tools:ignore="UnusedResources">മാർച്ച് 14-ന് മുമ്പ് പുതുക്കുക</string>
+    <!-- Homepage card title about old Firefox version -->
+    <string name="certificate_warning_homepage_card_hcw2_title" tools:ignore="UnusedResources">പുതുക്കാൻ ഇനി 7 ദിവസങ്ങൾ പോലും ഇല്ല</string>
     <!-- Homepage card title about old Firefox version. Note: The word "Firefox" should NOT be translated. -->
     <string name="certificate_warning_homepage_card_hcw3_title" tools:ignore="BrandUsage,UnusedResources">താങ്ങളുടെ ഫയർഫോക്സു് നിലനിർത്താനുള്ള അവസാന അവസരം</string>
     <!-- Push notification title about old Firefox version. "Update" is a noun. -->

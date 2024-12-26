@@ -110,13 +110,13 @@
     <string name="navbar_cfr_message_2">В сайт лента се прибира, при плъзване надолу за повече място.</string>
 
     <!-- Text for the message displayed for the popup promoting the long press of navigation in the navigation bar. -->
-    <string name="navbar_navigation_buttons_cfr_message">Докоснете и задръжте стрелките, за да прескачате между страниците от историята на този раздел.</string>
+    <string name="navbar_navigation_buttons_cfr_message">Задръжте върху стрелките, за да прескачате между страниците от историята на раздела.</string>
 
     <!-- Address bar swipe "contextual feature recommendation" (CFR) -->
     <!-- Text for the title displayed in the contextual feature recommendation popup promoting swipe of address bar. -->
-    <string name="address_bar_swipe_cfr_title">Плъзнете лентата с инструменти, за да превключите разделите</string>
+    <string name="address_bar_swipe_cfr_title">Плъзнете адресната лента, за да смените разделите</string>
     <!-- Text for the message displayed in the contextual feature recommendation popup promoting swipe of address bar. -->
-    <string name="address_bar_swipe_cfr_message">Плъзнете наляво или надясно, за да превключите. Плъзнете наляво в последния раздел, за да отворите нов.</string>
+    <string name="address_bar_swipe_cfr_message">Плъзнете наляво или надясно, за да сменяте. Плъзнете наляво в последния раздел, за да отворите нов.</string>
 
     <!-- Text for the info dialog when camera permissions have been denied but user tries to access a camera feature. -->
     <string name="camera_permissions_needed_message">Необходим е достъп до камерата. Отворете настройките на Android, докоснете разрешения и изберете разрешаване.</string>
@@ -206,7 +206,7 @@
     <string name="browser_menu_disabled_extensions_banner_onboarding_header">Има инсталирани разширения, които не са включени</string>
     <!-- Browser menu banner body text for extensions onboarding.
         The first parameter is the name of the app defined in app_name (for example: Fenix). -->
-    <string name="browser_menu_extensions_banner_onboarding_body">Разширенията повишават нивото на вашето сърфиране, от променящи външния вид и производителността на %s до повишаване на поверителността и безопасността.</string>
+    <string name="browser_menu_extensions_banner_onboarding_body">Разширенията подобряват разглеждането в интернет, от променящи външния вид и производителността на %s до подобряване на поверителността и безопасността.</string>
     <!-- Browser menu banner body text for extensions onboarding when all installed extensions have been disabled.
      The first parameter is the name of the button that opens extension manager (for example "Manage extensions"). -->
     <string name="browser_menu_disabled_extensions_banner_onboarding_body">За да използвате разширения, ги включите в настройките или като изберете „%s“ по-долу.</string>
@@ -222,9 +222,9 @@
     <!-- Browser menu button that opens AMO in a tab -->
     <string name="browser_menu_discover_more_extensions">Открийте още разширения</string>
     <!-- Browser menu description that is shown when one or more extensions are disabled due to extension errors -->
-    <string name="browser_menu_extensions_disabled_description">Временно забранено</string>
+    <string name="browser_menu_extensions_disabled_description">Временно забранени</string>
     <!-- The description of the browser menu appears when the user hasn't installed any extensions. -->
-    <string name="browser_menu_no_extensions_installed_description">Няма активирани разширения</string>
+    <string name="browser_menu_no_extensions_installed_description">Няма включени разширения</string>
     <!-- Browser menu button that opens account settings -->
     <string name="browser_menu_account_settings">Информация за профила</string>
     <!-- Browser menu button that sends a user to help articles -->
@@ -242,11 +242,11 @@
     <!-- Browser menu toggle that adds a shortcut to the site on the device home screen. -->
     <string name="browser_menu_add_to_homescreen">Добавяне към екрана</string>
     <!-- Browser menu toggle that adds a PWA of the site on the device home screen. -->
-    <string name="browser_menu_add_app_to_homescreen">Добавяне на приложение към началния екран</string>
+    <string name="browser_menu_add_app_to_homescreen">Добавяне към началния екран</string>
     <!-- Browser menu toggle that adds a shortcut to the site on the device home screen. -->
     <string name="browser_menu_add_to_homescreen_2">Добавяне към началния екран…</string>
     <!-- Browser menu toggle that adds a PWA of the site on the device home screen. -->
-    <string name="browser_menu_add_app_to_homescreen_2">Добавяне на приложение към началния екран…</string>
+    <string name="browser_menu_add_app_to_homescreen_2">Добавяне към началния екран…</string>
     <!-- Text for notifying users that Xiaomi devices require additional permissions to add to home screen -->
     <string name="browser_menu_add_to_homescreen_xiaomi">Устройствата на Xiaomi може да се нуждаят от допълнителни права, за да добавят преки пътища към началния екран. Моля, проверете настройките си.</string>
     <!-- Content description (not visible, for screen readers etc.) for the Resync tabs button -->
@@ -298,7 +298,7 @@
     <!-- Browser menu label to sign in to sync on the device using Mozilla accounts -->
     <string name="browser_menu_sign_in">Вход</string>
     <!-- Browser menu caption label for the "Sign in" browser menu item described in `browser_menu_sign_in` -->
-    <string name="browser_menu_sign_in_caption">Синхронизирайте пароли, раздели и др</string>
+    <string name="browser_menu_sign_in_caption">Синхронизиране на пароли, раздели и други</string>
 
     <!-- Browser menu label to sign back in to sync on the device when the user's account needs to be reauthenticated -->
     <string name="browser_menu_sign_back_in_to_sync">Влезте отново за синхронизиране</string>
@@ -322,7 +322,7 @@
     <!-- Content description (not visible, for screen readers etc.): Back button for all menu redesign sub-menu -->
     <string name="browser_menu_back_button_content_description">Обратно към главното меню</string>
     <!-- Content description (not visible, for screen readers etc.) for bottom sheet handlebar main menu. -->
-    <string name="browser_main_menu_handlebar_content_description">Затваряне на листа на главното меню</string>
+    <string name="browser_main_menu_handlebar_content_description">Затваряне на главното меню</string>
     <!-- Content description (not visible, for screen readers etc.) for main menu help button. -->
     <string name="browser_main_menu_content_description_help_button">Помощ</string>
     <!-- Content description (not visible, for screen readers etc.) for main menu settings button. -->
@@ -334,7 +334,7 @@
     <!-- Content description (not visible, for screen readers etc.) for bottom sheet handlebar tools menu. -->
     <string name="browser_tools_menu_handlebar_content_description">Затваряне на менюто с инструменти</string>
     <!-- Content description (not visible, for screen readers etc.) for bottom sheet handlebar custom tab menu. -->
-    <string name="browser_custom_tab_menu_handlebar_content_description">Затваряне на менюто с персонализиран раздел</string>
+    <string name="browser_custom_tab_menu_handlebar_content_description">Затваряне на менюто с раздел по избор</string>
     <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
     <string name="browser_menu_tools_description_with_translate" moz:removedIn="134" tools:ignore="UnusedResources">Изглед за четене, превод, отпечатване, споделяне, отваряне на приложение</string>
     <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
@@ -343,14 +343,14 @@
          The first parameter is the label of the report site issue (for example: Report Site issue) -->
     <string name="browser_menu_tools_description_with_translate_with_report_site" moz:removedIn="135" tools:ignore="UnusedResources">Изглед за четене, Превод, %s, Отпечатване, Споделяне, Отваряне на приложение</string>
     <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu when the "Report broken site" feature is available-->
-    <string name="browser_menu_tools_description_with_translate_with_report_site_2">Изглед за четене, Превод, Докладване на повреден сайт, Отпечатване, Споделяне, Отваряне на приложение</string>
+    <string name="browser_menu_tools_description_with_translate_with_report_site_2">Изглед за четене, превод, доклад за повредена страница, отпечатване, споделяне, отваряне на приложение</string>
     <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
     <string name="browser_menu_tools_description_with_translate_without_report_site">Изглед за четене, превод, отпечатване, споделяне, отваряне на приложение</string>
     <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu
          The first parameter is the label of the report site issue (for example: Report Site issue) -->
     <string name="browser_menu_tools_description_with_report_site" moz:removedIn="135" tools:ignore="UnusedResources">Изглед за четене, %s, Отпечатване, Споделяне, Отваряне на приложение</string>
     <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu when the "Report broken site" feature is available-->
-    <string name="browser_menu_tools_description_with_report_site_2">Изглед за четене, Докладване на повреден сайт, Печат, Споделяне, Отваряне на приложение</string>
+    <string name="browser_menu_tools_description_with_report_site_2">Изглед за четене, доклад за повредена страница, отпечатване, споделяне, отваряне на приложение</string>
     <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
     <string name="browser_menu_tools_description_without_report_site">Изглед за четене, отпечатване, споделяне, отваряне на приложение</string>
     <!-- Browser menu label that navigates to the save sub-menu, which contains various save related menu items such as
@@ -374,7 +374,7 @@
     <!-- Browser menu label for navigating to the translation feature, which provides language translation options the current visited page -->
     <string name="browser_menu_translate_page">Превеждане на страницата…</string>
     <!-- Browser menu label for navigating to the Web Compat Reporter feature, which provides users the ability to send bug reports for broken sites. -->
-    <string name="browser_menu_webcompat_reporter">Докладване на неработещ сайт…</string>
+    <string name="browser_menu_webcompat_reporter">Доклад за повредена страница…</string>
     <!-- Browser menu label that is displayed when the current page has been translated by the translation feature.
          The first parameter is the name of the language that page was translated to (e.g. English). -->
     <string name="browser_menu_translated_to">Преведено на %1$s</string>
@@ -387,9 +387,9 @@
 
     <!-- Menu "contextual feature recommendation" (CFR) -->
     <!-- Text for the title in the contextual feature recommendation popup promoting the menu feature. -->
-    <string name="menu_cfr_title">Ново: опростено меню</string>
+    <string name="menu_cfr_title">Ново: обновено меню</string>
     <!-- Text for the message in the contextual feature recommendation popup promoting the menu feature. -->
-    <string name="menu_cfr_body">Намирайте по-бързо необходимото – от поверително сърфиране до действия за запазване.</string>
+    <string name="menu_cfr_body">Стигайте по-бързо необходимото – от поверително разглеждане до действия по запазване.</string>
 
     <!-- Extensions management fragment -->
     <!-- Text displayed when there are no extensions to be shown -->
@@ -439,7 +439,7 @@
     <string name="search_suggestions_onboarding_text">%s ще споделя със стандартната търсачката, въвежданото в адресната лента.</string>
 
     <!-- Search engine suggestion title text. The first parameter is the name of the suggested engine-->
-    <string name="search_engine_suggestions_title">Търсене с %s</string>
+    <string name="search_engine_suggestions_title">Търсене чрез %s</string>
     <!-- Search engine suggestion description text -->
     <string name="search_engine_suggestions_description">Търсете директно от адресната лента</string>
 
@@ -590,11 +590,11 @@
     <string name="onboarding_preferences_dialog_negative_button" tools:ignore="UnusedResources">Отказ</string>
 
     <!-- Terms of service onboarding title card label. 'Firefox' intentionally hardcoded here-->
-    <string name="onboarding_welcome_to_firefox" tools:ignore="UnusedResources,BrandUsage">Добре дошли във Firefox</string>
+    <string name="onboarding_welcome_to_firefox" tools:ignore="UnusedResources,BrandUsage">Добре дошли при Firefox</string>
     <!-- Terms of service onboarding page continue button label. -->
-    <string name="onboarding_term_of_service_agree_and_continue_button_label" tools:ignore="UnusedResources">Съгласете се и продължете</string>
+    <string name="onboarding_term_of_service_agree_and_continue_button_label" tools:ignore="UnusedResources">Приемане и продължаване</string>
     <!-- Line one of the terms of service onboarding page. 'Firefox' is intentionally hardcoded. %1$s is replaced by an active link, using onboarding_term_of_service_line_one_link_text as text (“Terms of Service”). -->
-    <string name="onboarding_term_of_service_line_one" tools:ignore="UnusedResources,BrandUsage">Продължавайки, вие се съгласявате с Firefox %1$s.</string>
+    <string name="onboarding_term_of_service_line_one" tools:ignore="UnusedResources,BrandUsage">Продължавайки, вие се съгласявате с %1$s на Firefox.</string>
     <!-- Used as text for the link in onboarding_term_of_service_line_one. -->
     <string name="onboarding_term_of_service_line_one_link_text" tools:ignore="UnusedResources,BrandUsage">Условия на услугата</string>
     <!-- Line two of the terms of service onboarding page. 'Firefox' is intentionally hardcoded. %1$s is replaced by an active link, using onboarding_term_of_service_line_two_link_text as text (Privacy Notice”). -->
@@ -602,11 +602,11 @@
     <!-- Used as text for the link in onboarding_term_of_service_line_two. -->
     <string name="onboarding_term_of_service_line_two_link_text" tools:ignore="UnusedResources,BrandUsage">Политика на поверителност</string>
     <!-- Line three of the terms of service onboarding page. 'Firefox' and 'Mozilla' are intentionally hardcoded. %1$S is replaced by an active link, using onboarding_term_of_service_line_three_link_text as text (Manage”). -->
-    <string name="onboarding_term_of_service_line_three" tools:ignore="UnusedResources,BrandUsage">За да помогне за подобряването на браузъра, Firefox изпраща данни за диагностика и взаимодействие към Mozilla. %1$s</string>
+    <string name="onboarding_term_of_service_line_three" tools:ignore="UnusedResources,BrandUsage">С цел подобряване на четеца, Firefox изпраща диагностични данни и данни за взаимодействието с потребителя към Mozilla. %1$s</string>
     <!-- Used as text for the link in onboarding_term_of_service_line_three. -->
     <string name="onboarding_term_of_service_line_three_link_text" tools:ignore="UnusedResources,BrandUsage">Управление</string>
     <!-- Onboarding header for the toolbar selection card, used by Nimbus experiments. -->
-    <string name="onboarding_customize_toolbar_title" tools:ignore="UnusedResources">Изберете разположение на лентата с инструменти</string>
+    <string name="onboarding_customize_toolbar_title" tools:ignore="UnusedResources">Изберете място на лентата с инструменти</string>
     <!-- Onboarding sub header for toolbar selection card, used by Nimbus experiments. -->
     <string name="onboarding_customize_toolbar_description" tools:ignore="UnusedResources">Дръжте търсенията под ръка.</string>
     <!-- Onboarding label for 'Save and continue' button, used by Nimbus experiments. -->
@@ -628,7 +628,7 @@
     <!-- Onboarding sub header for theme selection card, used by Nimbus experiments. -->
     <string name="onboarding_customize_theme_description" tools:ignore="UnusedResources">Вижте Мрежата в най-добра светлина.</string>
     <!-- Onboarding label for 'Save and start browsing' button, used by Nimbus experiments. -->
-    <string name="onboarding_save_and_start_button">Запазете и започнете да сърфирате</string>
+    <string name="onboarding_save_and_start_button">Запазване и начало на разглеждане</string>
     <!-- Onboarding theme selection card label for 'skip' button, used by Nimbus experiments. -->
     <string name="onboarding_customize_theme_skip_button">Пропускане</string>
     <!-- Onboarding theme selection card label for 'dark' option, used by Nimbus experiments. -->
@@ -636,7 +636,7 @@
     <!-- Onboarding theme selection card label for 'light' option, used by Nimbus experiments. -->
     <string name="onboarding_customize_theme_light_option">Светла</string>
     <!-- Onboarding theme selection card label for 'System auto' option, used by Nimbus experiments. -->
-    <string name="onboarding_customize_theme_system_option">Автоматична система</string>
+    <string name="onboarding_customize_theme_system_option">Според системата</string>
     <!-- Onboarding theme selection card content description for the main image. -->
     <string name="onboarding_customize_theme_main_image_content_description">Голямо заглавно изображение на изгледа за избор на теми, показващо илюстрирани инструменти за художник и разработчик.</string>
     <!-- Onboarding theme selection card content description for the theme selection image. %1$s is placeholder for either 'system', 'light' or 'dark'. -->
@@ -767,7 +767,7 @@
     <!-- Message shown in the error page for when trying to access a http website while https only mode is enabled. The message has two paragraphs. This is the first. -->
     <string name="errorpage_httpsonly_message_title">Най-вероятно страницата не се поддържа под HTTPS.</string>
     <!-- Message shown in the error page for when trying to access a http website while https only mode is enabled. The message has two paragraphs. This is the second. -->
-    <string name="errorpage_httpsonly_message_summary">Въпреки това е възможно също да е замесен нападател. Ако продължите към уебсайта, не трябва да въвеждате чувствителна информация. Ако продължите, режимът само HTTPS ще бъде изключен временно за сайта.</string>
+    <string name="errorpage_httpsonly_message_summary">Въпреки това е възможно също да е замесен нападател. Ако продължите към страницата, не трябва да въвеждате чувствителна информация. Ако продължите, режимът само HTTPS ще бъде изключен временно.</string>
     <!-- Preference for accessibility -->
     <string name="preferences_accessibility">Достъпност</string>
     <!-- Preference to override the Mozilla account server -->
@@ -960,7 +960,7 @@
     <string name="extension_process_crash_dialog_retry_button_text" tools:ignore="UnusedResources">Опитайте да рестартирате разширенията</string>
 
     <!-- Button text on the extension crash dialog to prompt the user to continue with all extensions disabled. -->
-    <string name="extension_process_crash_dialog_disable_extensions_button_text">Продължете с изключени разширения</string>
+    <string name="extension_process_crash_dialog_disable_extensions_button_text">Продължаване с изключени добавки</string>
 
     <!-- Account Preferences -->
     <!-- Preference for managing your account via accounts.firefox.com -->
@@ -1341,7 +1341,7 @@
 
     <!-- WebCompat Reporter -->
     <!-- The title of the Web Compat Reporter feature. This is displayed in the top app bar. -->
-    <string name="webcompat_reporter_screen_title">Съобщаване за неработеща страница</string>
+    <string name="webcompat_reporter_screen_title">Доклад за повредена страница</string>
     <!-- The description of the Web Compat Reporter feature. This first parameter is the name of the application (For example: Fenix) -->
     <string name="webcompat_reporter_description">Помогнете да направим %1$s по-добър за всички. Служителите на Mozilla използват информацията, която изпращате, за да решават проблеми в уебсайта.</string>
     <!-- The text field label of the URL text field. This is displayed above the user-inputted URL. -->
@@ -1471,7 +1471,7 @@
     <string name="bookmark_undo_deletion">ОТМЕНЯНЕ</string>
 
     <!-- Bookmark snackbar message for deleting a single item. Parameter is the title of the item being deleted -->
-    <string name="bookmark_delete_single_item">%s е изтрита</string>
+    <string name="bookmark_delete_single_item">Отметката %s е премахната</string>
     <!-- Bookmark snackbar message for deleting multiple items. Parameter is the number of items being deleted -->
     <string name="bookmark_delete_multiple_items">Изтрити елементи: %s</string>
     <!-- Text for the button to search all bookmarks -->
@@ -1499,7 +1499,7 @@
     <!-- Description for the bookmark list empty state when you're signed into sync. -->
     <string name="bookmark_empty_list_authenticated_description">Запазване на сайтове, докато разглеждате. Също така ще вземем отметки от други синхронизирани устройства.</string>
     <!-- Description for the bookmark list empty state when you're in an empty folder. -->
-    <string name="bookmark_empty_list_folder_description">Добавете отметки, докато сърфирате, за да можете по-късно да намирате любимите си сайтове.</string>
+    <string name="bookmark_empty_list_folder_description">Добавете отметки, докато разглеждате, за да можете по-късно да намирате любимите си страници.</string>
 
     <!-- Description for the add new folder button when selecting a folder. -->
     <string name="bookmark_select_folder_new_folder_button_title">Нова папка</string>
@@ -2314,7 +2314,7 @@
     <!-- Placeholder text shown in the Search Suggestion String TextField before a user enters text -->
     <string name="search_add_custom_engine_suggest_string_hint">Адрес на ППИ за предложения при търсене</string>
     <!-- Description text for the Search Suggestion String TextField. The %s is part of the string -->
-    <string name="search_add_custom_engine_suggest_string_example_2" formatted="false">Заменете заявката за търсене с „%s“. Пример:\nhttps://suggestqueries.google.com/complete/search?client=firefox&amp;q=%s</string>
+    <string name="search_add_custom_engine_suggest_string_example_2" formatted="false">Заменете заявката за търсене чрез „%s“. Пример:\nhttps://suggestqueries.google.com/complete/search?client=firefox&amp;q=%s</string>
     <!-- The text for the "Save" button for saving a custom search engine -->
     <string name="search_custom_engine_save_button">Запазване</string>
 
@@ -2471,7 +2471,7 @@
     <!-- Button caption to confirm the edit of the top site. -->
     <string name="top_sites_edit_dialog_save">Запазване</string>
     <!-- Error message when the user entered an invalid URL -->
-    <string name="top_sites_edit_dialog_url_error">Въведете валиден URL</string>
+    <string name="top_sites_edit_dialog_url_error">Въведете валиден адрес</string>
     <!-- Label for the URL edit field in the edit top site dialog. -->
     <string name="top_sites_edit_dialog_url_title">URL</string>
 
@@ -2502,7 +2502,7 @@
     <!-- Title for search suggestions when Google is the default search suggestion engine. -->
     <string name="google_search_engine_suggestion_header">Търсене в Гугъл</string>
     <!-- Title for search suggestions when the default search suggestion engine is anything other than Google. The first parameter is default search engine name. -->
-    <string name="other_default_search_engine_suggestion_header">Търсене с %s</string>
+    <string name="other_default_search_engine_suggestion_header">Търсене чрез %s</string>
 
     <!-- Default browser experiment -->
     <!-- Default browser card title -->
@@ -2546,7 +2546,7 @@
 
     <!-- Review quality check feature-->
     <!-- Name for the review quality check feature used as title for the panel. -->
-    <string name="review_quality_check_feature_name_2">Проверка за преглед</string>
+    <string name="review_quality_check_feature_name_2">Проверка на отзиви</string>
     <!-- Summary for grades A and B for review quality check adjusted grading. -->
     <string name="review_quality_check_grade_a_b_description">Надеждни отзиви</string>
     <!-- Summary for grade C for review quality check adjusted grading. -->
@@ -2584,19 +2584,19 @@
     <!-- Text for title of settings section. -->
     <string name="review_quality_check_settings_title">Настройки</string>
     <!-- Text for label for switch preference to show recommended products from review quality check settings section. -->
-    <string name="review_quality_check_settings_recommended_products">Показване на рекламите в програмата за прегледи</string>
+    <string name="review_quality_check_settings_recommended_products">Показване на реклами при проверка на отзиви</string>
     <!-- Description for switch preference to show recommended products from review quality check settings section. First parameter is for clickable text defined in review_quality_check_settings_recommended_products_learn_more.-->
     <string name="review_quality_check_settings_recommended_products_description_2" tools:ignore="UnusedResources">От време на време ще виждате реклами на подходящи продукти. Ние рекламираме само продукти с надеждни отзиви. %s</string>
     <!-- Clickable text that links to review quality check recommended products support article. -->
     <string name="review_quality_check_settings_recommended_products_learn_more" tools:ignore="UnusedResources">Научете повече</string>
     <!-- Text for turning sidebar off button from review quality check settings section. -->
-    <string name="review_quality_check_settings_turn_off">Изключване на проверката за рецензии</string>
+    <string name="review_quality_check_settings_turn_off">Изключване на Проверка на отзиви</string>
     <!-- Text for title of recommended product section. This is displayed above a product image, suggested as an alternative to the product reviewed. -->
     <string name="review_quality_check_ad_title" tools:ignore="UnusedResources">Повече за разглеждане</string>
     <!-- Caption for recommended product section indicating this is an ad by Fakespot. First parameter is the Fakespot product name. -->
     <string name="review_quality_check_ad_caption" tools:ignore="UnusedResources">Реклама от %s</string>
     <!-- Caption for review quality check panel. First parameter is for clickable text defined in review_quality_check_powered_by_link. -->
-    <string name="review_quality_check_powered_by_2">Проверката на отзиви се поддържа от %s</string>
+    <string name="review_quality_check_powered_by_2">Проверка на отзиви се осигурява от %s</string>
     <!-- Clickable text that links to Fakespot.com. First parameter is the Fakespot product name. In the phrase "Fakespot by Mozilla", "by" can be localized. Does not need to stay by. -->
     <string name="review_quality_check_powered_by_link" tools:ignore="UnusedResources">%s от Mozilla</string>
     <!-- Text for title of warning card informing the user that the current analysis is outdated. -->
@@ -2651,9 +2651,9 @@
     <!-- Headline for review quality check contextual onboarding card. -->
     <string name="review_quality_check_contextual_onboarding_title">Опитайте нашето надеждно ръководство за отзиви за продукти</string>
     <!-- Description for review quality check contextual onboarding card. The first and last two parameters are for retailer names (e.g. Amazon, Walmart). The second parameter is for the name of the application (e.g. Firefox). -->
-    <string name="review_quality_check_contextual_onboarding_description">Вижте колко надеждни са отзивите за продукта в %1$s, преди да купите. Проверка на рецензиите, експериментална функция от %2$s, е вградена директно в браузъра. Работи и на %3$s и %4$s.</string>
+    <string name="review_quality_check_contextual_onboarding_description">Вижте колко надеждни са отзивите за продукта в %1$s, преди да купите. Проверка на отзиви, експериментално от %2$s, е възможност вградена директно в четеца. Освен това работи на %3$s, а също и на %4$s.</string>
     <!-- Description for review quality check contextual onboarding card. The first parameters is for retailer name (e.g. Amazon). The second parameter is for the name of the application (e.g. Firefox). -->
-    <string name="review_quality_check_contextual_onboarding_description_one_vendor">Вижте колко надеждни са отзивите за продукта в %1$s, преди да купите. Проверка за преглед, експериментална функция от %2$s, е вградена директно в браузъра.</string>
+    <string name="review_quality_check_contextual_onboarding_description_one_vendor">Вижте колко надеждни са отзивите за продукта в %1$s, преди да купите. Проверка на отзиви, експериментално от %2$s, е възможност вградена директно в четеца.</string>
     <!-- Paragraph presenting review quality check feature. First parameter is the Fakespot product name. Second parameter is for clickable text defined in review_quality_check_contextual_onboarding_learn_more_link. In the phrase "Fakespot by Mozilla", "by" can be localized. Does not need to stay by. -->
     <string name="review_quality_check_contextual_onboarding_learn_more">Използвайки мощта на %1$s от Mozilla, ние ви помагаме да избегнете необективни и недостоверни рецензии. Нашият AI модел винаги се подобрява, за да ви защитава, докато пазарувате. %2$s</string>
     <!-- Clickable text from the contextual onboarding card that links to review quality check support article. -->
@@ -2669,9 +2669,9 @@
     <!-- Text for opt-out button from the review quality check contextual onboarding card. -->
     <string name="review_quality_check_contextual_onboarding_secondary_button_text">Не сега</string>
     <!-- Content description (not visible, for screen readers etc.) for opening browser menu button to open review quality check bottom sheet. -->
-    <string name="review_quality_check_open_handle_content_description">Отваряне на проверка за отзиви</string>
+    <string name="review_quality_check_open_handle_content_description">Отваряне на Проверка на отзиви</string>
     <!-- Content description (not visible, for screen readers etc.) for closing browser menu button to open review quality check bottom sheet. -->
-    <string name="review_quality_check_close_handle_content_description">Затваряне на програмата за преглед</string>
+    <string name="review_quality_check_close_handle_content_description">Затваряне на Проверка на отзиви</string>
     <!-- Content description (not visible, for screen readers etc.) for review quality check star rating. First parameter is the number of stars (1-5) representing the rating. -->
     <string name="review_quality_check_star_rating_content_description">%1$s от 5 звезди</string>
     <!-- Text for minimize button from highlights card. When clicked the highlights card should reduce its size. -->
@@ -2834,13 +2834,13 @@
     <!-- Preference option for never translate. Radio button title text.-->
     <string name="automatic_translation_option_never_translate_title_preference">Никога да не се превежда</string>
     <!-- Preference option for never translate. Radio button summary text. The first parameter is the name of the app defined in app_name (for example: Fenix)-->
-    <string name="automatic_translation_option_never_translate_summary_preference">%1$s никога няма да предложи превод на сайтове на този език.</string>
+    <string name="automatic_translation_option_never_translate_summary_preference">%1$s никога няма да предложи превод на страниците на този език.</string>
 
     <!-- Never translate site preference screen -->
     <!-- Title of the never translate site preference screen that will appear on the toolbar.-->
     <string name="never_translate_site_toolbar_title_preference">Тези сайтове никога да не бъдат превеждани</string>
     <!-- Screen header presenting the never translate site preference feature. It will appear under the toolbar. -->
-    <string name="never_translate_site_header_preference">За да добавите нов сайт: Посетете го и изберете „Never translate this site“ от менюто за превод.</string>
+    <string name="never_translate_site_header_preference">За да добавите страница: я посетете и изберете „Без превод на този сайт“ от менюто за превод.</string>
     <!-- Content description (not visible, for screen readers etc.): For a never-translated site list item that is selected.
              The first parameter is web site url (for example:"wikipedia.com") -->
     <string name="never_translate_site_item_list_content_description_preference">Премахване на %1$s</string>
@@ -3112,13 +3112,13 @@
     <!-- Homepage card message about old Firefox version. Note: The word "Firefox" should NOT be translated. -->
     <string name="certificate_warning_homepage_card_hcw3_message" tools:ignore="BrandUsage,UnusedResources">Версията ви на Firefox ще спре да работи правилно на 14 март, защото кореновия сертификат изтича.</string>
     <!-- Push notification title about old Firefox version. "Update" is a noun. -->
-    <string name="certificate_warning_push_notification_update_recommended_title" tools:ignore="UnusedResources">Препоръчва се актуализация</string>
+    <string name="certificate_warning_push_notification_update_recommended_title" tools:ignore="UnusedResources">Препоръчва се обновяване</string>
     <!-- Push notification message about old Firefox version -->
     <string name="certificate_warning_push_notification_pnr1_message" tools:ignore="UnusedResources">Добавките и някои функции ще спрат да работят на 14 март.</string>
     <!-- Push notification title about old Firefox version. Note: The word "Firefox" should NOT be translated. -->
-    <string name="certificate_warning_push_notification_pnw2_title" tools:ignore="BrandUsage,UnusedResources">Използвате по-стара версия на Firefox</string>
+    <string name="certificate_warning_push_notification_pnw2_title" tools:ignore="BrandUsage,UnusedResources">Използвате по-ранно издание на Firefox</string>
     <!-- Push notification message about old Firefox version. "Update" is a verb. -->
-    <string name="certificate_warning_push_notification_pnw2_message" tools:ignore="UnusedResources">Актуализирайте преди 14 март, за да продължите да използвате добавки и други функции.</string>
+    <string name="certificate_warning_push_notification_pnw2_message" tools:ignore="UnusedResources">Обновете преди 14 март, за да продължите да използвате добавки и други възможности.</string>
     <!-- Push notification message about old Firefox version -->
-    <string name="certificate_warning_push_notification_pnw3_message" tools:ignore="UnusedResources">Някои функции ще спрат да работят утре.</string>
+    <string name="certificate_warning_push_notification_pnw3_message" tools:ignore="UnusedResources">Някои възможности ще спрат да работят утре.</string>
 </resources>
