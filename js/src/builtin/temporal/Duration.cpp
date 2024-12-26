@@ -9,7 +9,6 @@
 #include "mozilla/Assertions.h"
 #include "mozilla/Casting.h"
 #include "mozilla/CheckedInt.h"
-#include "mozilla/EnumSet.h"
 #include "mozilla/FloatingPoint.h"
 #include "mozilla/Maybe.h"
 
@@ -49,8 +48,6 @@
 #include "js/Conversions.h"
 #include "js/ErrorReport.h"
 #include "js/friend/ErrorMessages.h"
-#include "js/GCVector.h"
-#include "js/Id.h"
 #include "js/Printer.h"
 #include "js/PropertyDescriptor.h"
 #include "js/PropertySpec.h"
@@ -62,7 +59,6 @@
 #include "vm/JSAtomState.h"
 #include "vm/JSContext.h"
 #include "vm/JSObject.h"
-#include "vm/ObjectOperations.h"
 #include "vm/PlainObject.h"
 #include "vm/StringType.h"
 
@@ -446,9 +442,6 @@ DateDuration js::temporal::ToDateDurationRecordWithoutTime(
       internalDuration.date.weeks,
       days,
   };
-
-  // TODO: This is fallible per spec, but is it really fallible?
-  // https://github.com/tc39/proposal-temporal/issues/3028
   MOZ_ASSERT(IsValidDuration(result));
 
   return result;
@@ -2535,6 +2528,7 @@ static DurationNudge NudgeToDayOrTime(const InternalDuration& duration,
       duration.date.weeks,
       days,
   };
+  MOZ_ASSERT(IsValidDuration(dateDuration));
 
   // Step 15.
   MOZ_ASSERT(DateDurationSign(dateDuration) * TimeDurationSign(remainder) >= 0);
@@ -3643,8 +3637,7 @@ static bool Duration_round(JSContext* cx, const CallArgs& args) {
     // Step 27.g.
     auto targetDateTime = ISODateTime{targetDate, targetTime.time};
 
-    // FIXME: spec bug - date-time can be out-of-range.
-    // https://github.com/tc39/proposal-temporal/issues/3015
+    // DifferencePlainDateTimeWithRounding, step 2.
     if (!ISODateTimeWithinLimits(isoDateTime) ||
         !ISODateTimeWithinLimits(targetDateTime)) {
       JS_ReportErrorNumberASCII(cx, GetErrorMessage, nullptr,
@@ -3860,8 +3853,7 @@ static bool Duration_total(JSContext* cx, const CallArgs& args) {
     // Step 12.g.
     auto targetDateTime = ISODateTime{targetDate, targetTime.time};
 
-    // FIXME: spec bug - date-time can be out-of-range.
-    // https://github.com/tc39/proposal-temporal/issues/3015
+    // DifferencePlainDateTimeWithTotal, step 2.
     if (!ISODateTimeWithinLimits(isoDateTime) ||
         !ISODateTimeWithinLimits(targetDateTime)) {
       JS_ReportErrorNumberASCII(cx, GetErrorMessage, nullptr,

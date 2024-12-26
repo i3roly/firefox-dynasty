@@ -770,6 +770,17 @@ class HTMLEditor final : public EditorBase,
     BRElement,  // <br>
     Linefeed,   // Preformatted linefeed
   };
+  friend std::ostream& operator<<(std::ostream& aStream,
+                                  const LineBreakType aLineBreakType) {
+    switch (aLineBreakType) {
+      case LineBreakType::BRElement:
+        return aStream << "LineBreakType::BRElement";
+      case LineBreakType::Linefeed:
+        return aStream << "LineBreakType::BRElement";
+    }
+    MOZ_ASSERT_UNREACHABLE("Invalid LineBreakType");
+    return aStream;
+  }
 
   /**
    * Return preferred line break when you insert a line break in aNode (if
@@ -786,27 +797,29 @@ class HTMLEditor final : public EditorBase,
       const nsINode& aNode, const Element& aEditingHost) const;
 
   /**
-   * InsertBRElement() creates a <br> element and inserts it before
-   * aPointToInsert.
+   * InsertLineBreak() creates a <br> element or a Text node which has only
+   * preformatted linefeed and inserts it at aPointToInsert.
    *
    * @param aWithTransaction    Whether the inserting is new element is undoable
    *                            or not.  WithTransaction::No is useful only when
    *                            the new element is inserted into a new element
    *                            which has not been connected yet.
-   * @param aPointToInsert      The DOM point where should be <br> node inserted
-   *                            before.
+   * @param aLineBreakType      Whether a <br> element or a linefeed should be
+   *                            used.
+   * @param aPointToInsert      The DOM point where a <br> element or a Text
+   *                            node should be inserted.
    * @param aSelect             If eNone, returns a point to put caret which is
    *                            suggested by InsertNodeTransaction.
    *                            If eNext, returns a point after the new <br>
    *                            element.
    *                            If ePrevious, returns a point at the new <br>
    *                            element.
-   * @return                    The new <br> node and suggesting point to put
-   *                            caret which respects aSelect.
+   * @return                    The new <br> or Text node and suggesting point
+   *                            to put caret with respecting aSelect.
    */
-  MOZ_CAN_RUN_SCRIPT Result<CreateElementResult, nsresult> InsertBRElement(
-      WithTransaction aWithTransaction, const EditorDOMPoint& aPointToInsert,
-      EDirection aSelect = eNone);
+  MOZ_CAN_RUN_SCRIPT Result<CreateLineBreakResult, nsresult> InsertLineBreak(
+      WithTransaction aWithTransaction, LineBreakType aLineBreakType,
+      const EditorDOMPoint& aPointToInsert, EDirection aSelect = eNone);
 
   /**
    * Delete text in the range in aTextNode.  If aTextNode is not editable, this
@@ -922,9 +935,11 @@ class HTMLEditor final : public EditorBase,
   AddZIndexWithTransaction(nsStyledElement& aStyledElement, int32_t aChange);
 
   /**
-   * Join together any adjacent editable text nodes in the range.
+   * Join together adjacent editable text nodes in the range except preformatted
+   * linefeed only nodes.
    */
-  MOZ_CAN_RUN_SCRIPT nsresult CollapseAdjacentTextNodes(nsRange& aRange);
+  [[nodiscard]] MOZ_CAN_RUN_SCRIPT nsresult
+  CollapseAdjacentTextNodes(nsRange& aRange);
 
   static dom::Element* GetLinkElement(nsINode* aNode);
 
@@ -1178,7 +1193,7 @@ class HTMLEditor final : public EditorBase,
    * @return                    Candidate caret position where is at inserted
    *                            <br> element into the split point.
    */
-  [[nodiscard]] MOZ_CAN_RUN_SCRIPT Result<EditorDOMPoint, nsresult>
+  [[nodiscard]] MOZ_CAN_RUN_SCRIPT Result<CaretPoint, nsresult>
   HandleInsertParagraphInMailCiteElement(Element& aMailCiteElement,
                                          const EditorDOMPoint& aPointToSplit,
                                          const Element& aEditingHost);
@@ -1199,15 +1214,15 @@ class HTMLEditor final : public EditorBase,
                         const Element& aEditingHost);
 
   /**
-   * HandleInsertLinefeed() inserts a linefeed character into aInsertToBreak.
+   * HandleInsertLinefeed() inserts a linefeed character into aPointToBreak.
    *
-   * @param aInsertToBreak      The point where new linefeed character will be
+   * @param aPointToBreak       The point where new linefeed character will be
    *                            inserted before.
    * @param aEditingHost        Current active editing host.
    * @return                    A suggest point to put caret.
    */
   [[nodiscard]] MOZ_CAN_RUN_SCRIPT Result<EditorDOMPoint, nsresult>
-  HandleInsertLinefeed(const EditorDOMPoint& aInsertToBreak,
+  HandleInsertLinefeed(const EditorDOMPoint& aPointToBreak,
                        const Element& aEditingHost);
 
   /**
@@ -1603,20 +1618,36 @@ class HTMLEditor final : public EditorBase,
                                       const Element& aEditingHost);
 
   /**
-   * Determine if aPointToInsert is start of a hard line and end of the line
-   * (i.e, in an empty line) and the line ends with block boundary, inserts a
-   * `<br>` element.
+   * Retrun true if the specified line break can be inserted around aContent.
+   * If aContent is an Element, this checks whether the element can have the
+   * line break.
+   * If aContent is a Text, this check whether its container element can have
+   * the line break.
    */
-  [[nodiscard]] MOZ_CAN_RUN_SCRIPT Result<CaretPoint, nsresult>
-  InsertBRElementIfHardLineIsEmptyAndEndsWithBlockBoundary(
-      const EditorDOMPoint& aPointToInsert);
+  [[nodiscard]] static bool CanInsertLineBreak(LineBreakType aLineBreakType,
+                                               const nsIContent& aContent);
 
   /**
-   * Insert padding `<br>` element for empty last line into aElement if
-   * aElement is a block element and empty.
+   * If aPointToInsert is between line breaks or block boundaries, this
+   * puts a <br> element to make an empty line between them.
    */
-  [[nodiscard]] MOZ_CAN_RUN_SCRIPT nsresult
-  InsertPaddingBRElementForEmptyLastLineIfNeeded(Element& aElement);
+  [[nodiscard]] MOZ_CAN_RUN_SCRIPT Result<CreateLineBreakResult, nsresult>
+  InsertPaddingBRElementToMakeEmptyLineVisibleIfNeeded(
+      const EditorDOMPoint& aPointToInsert, const Element& aEditingHost);
+
+  /**
+   * Insert a padding <br> if aPoint is in an empty block.
+   *
+   * @param aPoint              The place where you want to put a padding line
+   *                            break.
+   * @param aDeleteEmptyInlines If nsIEditor::eStrip, this deletes empty inlines
+   *                            before inserting a line break from the inserting
+   *                            point.
+   */
+  [[nodiscard]] MOZ_CAN_RUN_SCRIPT Result<CreateLineBreakResult, nsresult>
+  InsertPaddingBRElementIfInEmptyBlock(
+      const EditorDOMPoint& aPoint,
+      nsIEditor::EStripWrappers aDeleteEmptyInlines);
 
   /**
    * Insert a padding <br> element for making preceding collapsible white-spaces
@@ -1628,7 +1659,7 @@ class HTMLEditor final : public EditorBase,
    *                            before inserting <br> from the inserting point.
    * @param aEditingHost        The editing host.
    */
-  [[nodiscard]] MOZ_CAN_RUN_SCRIPT Result<CreateElementResult, nsresult>
+  [[nodiscard]] MOZ_CAN_RUN_SCRIPT Result<CreateLineBreakResult, nsresult>
   InsertPaddingBRElementIfNeeded(const EditorDOMPoint& aPoint,
                                  nsIEditor::EStripWrappers aDeleteEmptyInlines,
                                  const Element& aEditingHost);
@@ -1637,13 +1668,6 @@ class HTMLEditor final : public EditorBase,
   DeleteRangesWithTransaction(nsIEditor::EDirection aDirectionAndAmount,
                               nsIEditor::EStripWrappers aStripWrappers,
                               const AutoRangeArray& aRangesToDelete) override;
-
-  /**
-   * This method inserts a padding `<br>` element for empty last line if
-   * selection is collapsed and container of the range needs it.
-   */
-  [[nodiscard]] MOZ_CAN_RUN_SCRIPT nsresult
-  MaybeInsertPaddingBRElementForEmptyLastLineAtSelection();
 
   /**
    * SplitParagraphWithTransaction() splits the parent block, aParentDivOrP, at
@@ -3325,16 +3349,18 @@ class HTMLEditor final : public EditorBase,
   MOZ_CAN_RUN_SCRIPT nsresult DeleteSelectionAndPrepareToCreateNode();
 
   /**
-   * PrepareToInsertBRElement() returns a point where new <br> element should
-   * be inserted.  If aPointToInsert points middle of a text node, this method
-   * splits the text node and returns the point before right node.
+   * PrepareToInsertLineBreak() returns a point where a new line break node
+   * should be inserted.  If aPointToInsert points middle of a text node, this
+   * method splits the text node and returns the point before right node.
    *
-   * @param aPointToInsert      Candidate point to insert new <br> element.
-   * @return                    Computed point to insert new <br> element.
+   * @param aLineBreakType      Whether you will insert <br> or a preformatted
+   *                            linefeed.
+   * @param aPointToInsert      Candidate point to insert new line break node.
+   * @return                    Computed point to insert new line break node.
    *                            If something failed, this return error.
    */
-  MOZ_CAN_RUN_SCRIPT Result<EditorDOMPoint, nsresult> PrepareToInsertBRElement(
-      const EditorDOMPoint& aPointToInsert);
+  MOZ_CAN_RUN_SCRIPT Result<EditorDOMPoint, nsresult> PrepareToInsertLineBreak(
+      LineBreakType aLineBreakType, const EditorDOMPoint& aPointToInsert);
 
   /**
    * If unnecessary line break is there immediately after aPoint, this deletes
@@ -4634,7 +4660,9 @@ class HTMLEditor final : public EditorBase,
                                    // ChangeListElementType,
                                    // DeleteNodeWithTransaction,
                                    // DeleteTextAndTextNodesWithTransaction,
+                                   // InsertLineBreak,
                                    // JoinNearestEditableNodesWithTransaction,
+                                   // LineBreakType,
                                    // MoveChildrenWithTransaction,
                                    // SplitAncestorStyledInlineElementsAt,
                                    // TreatEmptyTextNodes

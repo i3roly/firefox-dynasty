@@ -1189,7 +1189,7 @@ class MOZ_STACK_CLASS HTMLEditor::AutoDeleteRangesHandler final {
      * is first editable element in its parent, and its grand parent is not a
      * list element, inserts a `<br>` element before the empty list item.
      */
-    [[nodiscard]] MOZ_CAN_RUN_SCRIPT Result<RefPtr<Element>, nsresult>
+    [[nodiscard]] MOZ_CAN_RUN_SCRIPT Result<CreateLineBreakResult, nsresult>
     MaybeInsertBRElementBeforeEmptyListItemElement(HTMLEditor& aHTMLEditor);
 
     /**
@@ -1439,18 +1439,18 @@ Result<CaretPoint, nsresult> HTMLEditor::DeleteRangesWithTransaction(
       }
 
       if (isDeleteSelection) {
-        Result<CreateElementResult, nsresult> insertPaddingBRResult =
+        Result<CreateLineBreakResult, nsresult> insertPaddingBRElementOrError =
             InsertPaddingBRElementIfNeeded(
                 pointToInsertLineBreak,
                 editingHost->IsContentEditablePlainTextOnly()
                     ? nsIEditor::eNoStrip
                     : nsIEditor::eStrip,
                 *editingHost);
-        if (MOZ_UNLIKELY(insertPaddingBRResult.isErr())) {
+        if (MOZ_UNLIKELY(insertPaddingBRElementOrError.isErr())) {
           NS_WARNING("HTMLEditor::InsertPaddingBRElementIfNeeded() failed");
-          return insertPaddingBRResult.propagateErr();
+          return insertPaddingBRElementOrError.propagateErr();
         }
-        insertPaddingBRResult.unwrap().IgnoreCaretPointSuggestion();
+        insertPaddingBRElementOrError.unwrap().IgnoreCaretPointSuggestion();
       }
     }
   }
@@ -2486,22 +2486,22 @@ Result<CaretPoint, nsresult> HTMLEditor::AutoDeleteRangesHandler::
     }
   }
   if (isDeleteSelection) {
-    Result<CreateElementResult, nsresult> insertPaddingBRResult =
+    Result<CreateLineBreakResult, nsresult> insertPaddingBRElementOrError =
         aHTMLEditor.InsertPaddingBRElementIfNeeded(
             newCaretPosition,
             aEditingHost.IsContentEditablePlainTextOnly() ? nsIEditor::eNoStrip
                                                           : nsIEditor::eStrip,
             aEditingHost);
-    if (MOZ_UNLIKELY(insertPaddingBRResult.isErr())) {
+    if (MOZ_UNLIKELY(insertPaddingBRElementOrError.isErr())) {
       NS_WARNING("HTMLEditor::InsertPaddingBRElementIfNeeded() failed");
-      return insertPaddingBRResult.propagateErr();
+      return insertPaddingBRElementOrError.propagateErr();
     }
     trackCaretPoint.FlushAndStopTracking();
     if (!pointToPutCaret.IsInTextNode()) {
-      insertPaddingBRResult.unwrap().MoveCaretPointTo(
+      insertPaddingBRElementOrError.unwrap().MoveCaretPointTo(
           pointToPutCaret, {SuggestCaret::OnlyIfHasSuggestion});
     } else {
-      insertPaddingBRResult.unwrap().IgnoreCaretPointSuggestion();
+      insertPaddingBRElementOrError.unwrap().IgnoreCaretPointSuggestion();
     }
   }
   trackCaretPoint.FlushAndStopTracking();
@@ -2696,22 +2696,22 @@ Result<CaretPoint, nsresult> HTMLEditor::AutoDeleteRangesHandler::
   if (isDeleteSelection) {
     AutoTrackDOMPoint trackPointToPutCaret(aHTMLEditor.RangeUpdaterRef(),
                                            &pointToPutCaret);
-    Result<CreateElementResult, nsresult> insertPaddingBRResult =
+    Result<CreateLineBreakResult, nsresult> insertPaddingBRElementOrError =
         aHTMLEditor.InsertPaddingBRElementIfNeeded(
             pointToPutCaret,
             aEditingHost.IsContentEditablePlainTextOnly() ? nsIEditor::eNoStrip
                                                           : nsIEditor::eStrip,
             aEditingHost);
-    if (MOZ_UNLIKELY(insertPaddingBRResult.isErr())) {
+    if (MOZ_UNLIKELY(insertPaddingBRElementOrError.isErr())) {
       NS_WARNING("HTMLEditor::InsertPaddingBRElementIfNeeded() failed");
-      return insertPaddingBRResult.propagateErr();
+      return insertPaddingBRElementOrError.propagateErr();
     }
     trackPointToPutCaret.FlushAndStopTracking();
     if (!pointToPutCaret.IsInTextNode()) {
-      insertPaddingBRResult.unwrap().MoveCaretPointTo(
+      insertPaddingBRElementOrError.unwrap().MoveCaretPointTo(
           pointToPutCaret, {SuggestCaret::OnlyIfHasSuggestion});
     } else {
-      insertPaddingBRResult.unwrap().IgnoreCaretPointSuggestion();
+      insertPaddingBRElementOrError.unwrap().IgnoreCaretPointSuggestion();
     }
   }
   // Remember that we did a ranged delete for the benefit of
@@ -2841,25 +2841,25 @@ HTMLEditor::AutoDeleteRangesHandler::HandleDeleteAtomicContent(
       EditSubAction::eDeleteSelectedContent) {
     AutoTrackDOMPoint trackPointToPutCaret(aHTMLEditor.RangeUpdaterRef(),
                                            &pointToPutCaret);
-    Result<CreateElementResult, nsresult> insertPaddingBRResult =
+    Result<CreateLineBreakResult, nsresult> insertPaddingBRElementOrError =
         aHTMLEditor.InsertPaddingBRElementIfNeeded(
             pointToPutCaret,
             aEditingHost.IsContentEditablePlainTextOnly() ? nsIEditor::eNoStrip
                                                           : nsIEditor::eStrip,
             aEditingHost);
-    if (MOZ_UNLIKELY(insertPaddingBRResult.isErr())) {
+    if (MOZ_UNLIKELY(insertPaddingBRElementOrError.isErr())) {
       NS_WARNING("HTMLEditor::InsertPaddingBRElementIfNeeded() failed");
-      return insertPaddingBRResult.propagateErr();
+      return insertPaddingBRElementOrError.propagateErr();
     }
     trackPointToPutCaret.FlushAndStopTracking();
     if (!pointToPutCaret.IsInTextNode()) {
-      insertPaddingBRResult.unwrap().MoveCaretPointTo(
+      insertPaddingBRElementOrError.unwrap().MoveCaretPointTo(
           pointToPutCaret, aHTMLEditor, {SuggestCaret::OnlyIfHasSuggestion});
       if (NS_WARN_IF(!pointToPutCaret.IsSet())) {
         return Err(NS_ERROR_EDITOR_UNEXPECTED_DOM_TREE);
       }
     } else {
-      insertPaddingBRResult.unwrap().IgnoreCaretPointSuggestion();
+      insertPaddingBRElementOrError.unwrap().IgnoreCaretPointSuggestion();
       if (NS_WARN_IF(!pointToPutCaret.IsSet())) {
         return Err(NS_ERROR_EDITOR_UNEXPECTED_DOM_TREE);
       }
@@ -3851,18 +3851,18 @@ Result<EditActionResult, nsresult> HTMLEditor::AutoDeleteRangesHandler::
         pointToPutCaret.IsSetAndValidInComposedDoc()) {
       AutoTrackDOMPoint trackCaretPoint(aHTMLEditor.RangeUpdaterRef(),
                                         &pointToPutCaret);
-      Result<CreateElementResult, nsresult> insertPaddingBRResult =
+      Result<CreateLineBreakResult, nsresult> insertPaddingBRElementOrError =
           aHTMLEditor.InsertPaddingBRElementIfNeeded(
               pointToPutCaret,
               aEditingHost.IsContentEditablePlainTextOnly()
                   ? nsIEditor::eNoStrip
                   : nsIEditor::eStrip,
               aEditingHost);
-      if (MOZ_UNLIKELY(insertPaddingBRResult.isErr())) {
+      if (MOZ_UNLIKELY(insertPaddingBRElementOrError.isErr())) {
         NS_WARNING("HTMLEditor::InsertPaddingBRElementIfNeeded() failed");
-        return insertPaddingBRResult.propagateErr();
+        return insertPaddingBRElementOrError.propagateErr();
       }
-      insertPaddingBRResult.unwrap().MoveCaretPointTo(
+      insertPaddingBRElementOrError.unwrap().MoveCaretPointTo(
           pointToPutCaret, {SuggestCaret::OnlyIfHasSuggestion});
     }
     nsresult rv = aHTMLEditor.CollapseSelectionTo(pointToPutCaret);
@@ -5454,21 +5454,23 @@ Result<EditActionResult, nsresult> HTMLEditor::AutoDeleteRangesHandler::
         aHTMLEditor.RangeUpdaterRef(), &moveFirstLineResult);
     AutoTrackDOMPoint trackPointToPutCaret(aHTMLEditor.RangeUpdaterRef(),
                                            &pointToPutCaret);
-    Result<CreateElementResult, nsresult> insertLineBreakResult =
+    Result<CreateLineBreakResult, nsresult> insertPaddingBRElementOrError =
         aHTMLEditor.InsertPaddingBRElementIfNeeded(
             aPoint,
             aEditingHost.IsContentEditablePlainTextOnly() ? nsIEditor::eNoStrip
                                                           : nsIEditor::eStrip,
             aEditingHost);
-    if (MOZ_UNLIKELY(insertLineBreakResult.isErr())) {
+    if (MOZ_UNLIKELY(insertPaddingBRElementOrError.isErr())) {
       NS_WARNING("HTMLEditor::InsertPaddingBRElementIfNeeded() failed");
-      return insertLineBreakResult.propagateErr();
+      return insertPaddingBRElementOrError.propagateErr();
     }
-    if (!insertLineBreakResult.inspect().Handled() || !insertingAtCaretPoint) {
-      insertLineBreakResult.unwrap().IgnoreCaretPointSuggestion();
+    CreateLineBreakResult insertPaddingBRElement =
+        insertPaddingBRElementOrError.unwrap();
+    if (!insertPaddingBRElement.Handled() || !insertingAtCaretPoint) {
+      insertPaddingBRElement.IgnoreCaretPointSuggestion();
       return CaretPoint(EditorDOMPoint());
     }
-    return CaretPoint(insertLineBreakResult.unwrap().UnwrapCaretPoint());
+    return CaretPoint(insertPaddingBRElement.UnwrapCaretPoint());
   };
 
   // If we moved content from the right element to the left element, we need to
@@ -7780,14 +7782,19 @@ Result<DeleteRangeResult, nsresult> HTMLEditor::AutoDeleteRangesHandler::
                                             EditorDOMPoint::AtEndOf(aContent)),
                              EditorDOMPoint());
   }
-  Result<CreateElementResult, nsresult> insertLineBreakResult =
-      aHTMLEditor.InsertBRElement(WithTransaction::Yes,
+  Result<CreateLineBreakResult, nsresult> insertLineBreakResultOrError =
+      aHTMLEditor.InsertLineBreak(WithTransaction::Yes,
+                                  LineBreakType::BRElement,
                                   EditorDOMPoint(&aContent, 0));
-  if (MOZ_UNLIKELY(insertLineBreakResult.isErr())) {
-    NS_WARNING("HTMLEditor::InsertBRElement() failed");
-    return insertLineBreakResult.propagateErr();
+  if (MOZ_UNLIKELY(insertLineBreakResultOrError.isErr())) {
+    NS_WARNING(
+        "HTMLEditor::InsertLineBreak(WithTransaction::Yes, "
+        "LineBreakType::BRElement) failed");
+    return insertLineBreakResultOrError.propagateErr();
   }
-  insertLineBreakResult.inspect().IgnoreCaretPointSuggestion();
+  CreateLineBreakResult insertLineBreakResult =
+      insertLineBreakResultOrError.unwrap();
+  insertLineBreakResult.IgnoreCaretPointSuggestion();
   return DeleteRangeResult(EditorDOMRange(EditorDOMPoint(&aContent, 0u)),
                            EditorDOMPoint());
 }
@@ -7830,22 +7837,26 @@ nsresult HTMLEditor::DeleteMostAncestorMailCiteElementIfEmpty(
     return NS_OK;
   }
 
-  Result<CreateElementResult, nsresult> insertBRElementResult =
-      InsertBRElement(WithTransaction::Yes, atEmptyMailCiteElement);
-  if (MOZ_UNLIKELY(insertBRElementResult.isErr())) {
-    NS_WARNING("HTMLEditor::InsertBRElement(WithTransaction::Yes) failed");
-    return insertBRElementResult.unwrapErr();
+  Result<CreateLineBreakResult, nsresult> insertBRElementResultOrError =
+      InsertLineBreak(WithTransaction::Yes, LineBreakType::BRElement,
+                      atEmptyMailCiteElement);
+  if (MOZ_UNLIKELY(insertBRElementResultOrError.isErr())) {
+    NS_WARNING(
+        "HTMLEditor::InsertLineBreak(WithTransaction::Yes, "
+        "LineBreakType::BRElement) failed");
+    return insertBRElementResultOrError.unwrapErr();
   }
-  MOZ_ASSERT(insertBRElementResult.inspect().GetNewNode());
-  insertBRElementResult.inspect().IgnoreCaretPointSuggestion();
-  nsresult rv = CollapseSelectionTo(
-      EditorRawDOMPoint(insertBRElementResult.inspect().GetNewNode()));
-  if (NS_WARN_IF(rv == NS_ERROR_EDITOR_DESTROYED)) {
-    return NS_ERROR_EDITOR_DESTROYED;
+  CreateLineBreakResult insertBRElementResult =
+      insertBRElementResultOrError.unwrap();
+  MOZ_ASSERT(insertBRElementResult.Handled());
+  nsresult rv = insertBRElementResult.SuggestCaretPointTo(
+      *this, {SuggestCaret::AndIgnoreTrivialError});
+  if (NS_FAILED(rv)) {
+    NS_WARNING("CaretPoint::SuggestCaretPointTo() failed");
+    return rv;
   }
-  NS_WARNING_ASSERTION(
-      NS_SUCCEEDED(rv),
-      "EditorBase::::CollapseSelectionTo() failed, but ignored");
+  NS_WARNING_ASSERTION(rv == NS_SUCCESS_EDITOR_BUT_IGNORED_TRIVIAL_ERROR,
+                       "CaretPoint::SuggestCaretPointTo() failed, but ignored");
   return NS_OK;
 }
 
@@ -7978,7 +7989,7 @@ nsresult HTMLEditor::AutoDeleteRangesHandler::AutoEmptyBlockAncestorDeleter::
   return rv;
 }
 
-Result<RefPtr<Element>, nsresult>
+Result<CreateLineBreakResult, nsresult>
 HTMLEditor::AutoDeleteRangesHandler::AutoEmptyBlockAncestorDeleter::
     MaybeInsertBRElementBeforeEmptyListItemElement(HTMLEditor& aHTMLEditor) {
   MOZ_ASSERT(mEmptyInclusiveAncestorBlockElement);
@@ -7996,36 +8007,39 @@ HTMLEditor::AutoDeleteRangesHandler::AutoEmptyBlockAncestorDeleter::
   //     all list items.
   if (!HTMLEditUtils::IsFirstChild(*mEmptyInclusiveAncestorBlockElement,
                                    {WalkTreeOption::IgnoreNonEditableNode})) {
-    return RefPtr<Element>();
+    return CreateLineBreakResult::NotHandled();
   }
 
-  EditorDOMPoint atParentOfEmptyListItem(
+  const EditorDOMPoint atParentOfEmptyListItem(
       mEmptyInclusiveAncestorBlockElement->GetParentElement());
   if (NS_WARN_IF(!atParentOfEmptyListItem.IsSet())) {
     return Err(NS_ERROR_FAILURE);
   }
   if (HTMLEditUtils::IsAnyListElement(atParentOfEmptyListItem.GetContainer())) {
-    return RefPtr<Element>();
+    return CreateLineBreakResult::NotHandled();
   }
-  Result<CreateElementResult, nsresult> insertBRElementResult =
-      aHTMLEditor.InsertBRElement(WithTransaction::Yes,
+  Result<CreateLineBreakResult, nsresult> insertBRElementResultOrError =
+      aHTMLEditor.InsertLineBreak(WithTransaction::Yes,
+                                  LineBreakType::BRElement,
                                   atParentOfEmptyListItem);
-  if (MOZ_UNLIKELY(insertBRElementResult.isErr())) {
-    NS_WARNING("HTMLEditor::InsertBRElement(WithTransaction::Yes) failed");
-    return insertBRElementResult.propagateErr();
+  if (MOZ_UNLIKELY(insertBRElementResultOrError.isErr())) {
+    NS_WARNING(
+        "HTMLEditor::InsertLineBreak(WithTransaction::Yes, "
+        "LineBreakType::BRElement) failed");
+    return insertBRElementResultOrError.propagateErr();
   }
-  CreateElementResult unwrappedInsertBRElementResult =
-      insertBRElementResult.unwrap();
-  nsresult rv = unwrappedInsertBRElementResult.SuggestCaretPointTo(
+  CreateLineBreakResult insertBRElementResult =
+      insertBRElementResultOrError.unwrap();
+  nsresult rv = insertBRElementResult.SuggestCaretPointTo(
       aHTMLEditor, {SuggestCaret::OnlyIfHasSuggestion,
                     SuggestCaret::OnlyIfTransactionsAllowedToDoIt,
                     SuggestCaret::AndIgnoreTrivialError});
   if (NS_FAILED(rv)) {
-    NS_WARNING("CreateElementResult::SuggestCaretPointTo() failed");
+    NS_WARNING("CaretPoint::SuggestCaretPointTo() failed");
     return Err(rv);
   }
-  MOZ_ASSERT(unwrappedInsertBRElementResult.GetNewNode());
-  return unwrappedInsertBRElementResult.UnwrapNewNode();
+  MOZ_ASSERT(insertBRElementResult.Handled());
+  return std::move(insertBRElementResult);
 }
 
 Result<CaretPoint, nsresult> HTMLEditor::AutoDeleteRangesHandler::
@@ -8126,18 +8140,22 @@ HTMLEditor::AutoDeleteRangesHandler::AutoEmptyBlockAncestorDeleter::Run(
 
   bool unwrapAncestorBlocks = false;
   if (HTMLEditUtils::IsListItem(mEmptyInclusiveAncestorBlockElement)) {
-    Result<RefPtr<Element>, nsresult> result =
+    Result<CreateLineBreakResult, nsresult> insertBRElementResultOrError =
         MaybeInsertBRElementBeforeEmptyListItemElement(aHTMLEditor);
-    if (MOZ_UNLIKELY(result.isErr())) {
+    if (MOZ_UNLIKELY(insertBRElementResultOrError.isErr())) {
       NS_WARNING(
           "AutoEmptyBlockAncestorDeleter::"
           "MaybeInsertBRElementBeforeEmptyListItemElement() failed");
-      return result.propagateErr();
+      return insertBRElementResultOrError.propagateErr();
     }
+    CreateLineBreakResult insertBRElementResult =
+        insertBRElementResultOrError.unwrap();
     // If a `<br>` element is inserted, caret should be moved to after it.
-    if (RefPtr<Element> brElement = result.unwrap()) {
-      nsresult rv =
-          aHTMLEditor.CollapseSelectionTo(EditorRawDOMPoint(brElement));
+    if (insertBRElementResult.Handled()) {
+      MOZ_ASSERT(insertBRElementResult->IsHTMLBRElement());
+      nsresult rv = aHTMLEditor.CollapseSelectionTo(
+          // XXX Why not After<EditorRawDOMPoint>()?
+          insertBRElementResult.AtLineBreak<EditorRawDOMPoint>());
       if (NS_FAILED(rv)) {
         NS_WARNING_ASSERTION(NS_SUCCEEDED(rv),
                              "EditorBase::CollapseSelectionTo() failed");
@@ -8195,17 +8213,17 @@ HTMLEditor::AutoDeleteRangesHandler::AutoEmptyBlockAncestorDeleter::Run(
   }
   if (unwrapAncestorBlocks && aHTMLEditor.GetTopLevelEditSubAction() ==
                                   EditSubAction::eDeleteSelectedContent) {
-    Result<CreateElementResult, nsresult> insertLineBreakResult =
+    Result<CreateLineBreakResult, nsresult> insertPaddingBRElementOrError =
         aHTMLEditor.InsertPaddingBRElementIfNeeded(
             pointToInsertLineBreak,
             aEditingHost.IsContentEditablePlainTextOnly() ? nsIEditor::eNoStrip
                                                           : nsIEditor::eStrip,
             aEditingHost);
-    if (MOZ_UNLIKELY(insertLineBreakResult.isErr())) {
+    if (MOZ_UNLIKELY(insertPaddingBRElementOrError.isErr())) {
       NS_WARNING("HTMLEditor::InsertPaddingBRElementIfNeeded() failed");
-      return insertLineBreakResult.propagateErr();
+      return insertPaddingBRElementOrError.propagateErr();
     }
-    insertLineBreakResult.unwrap().IgnoreCaretPointSuggestion();
+    insertPaddingBRElementOrError.unwrap().IgnoreCaretPointSuggestion();
   }
   return EditActionResult::HandledResult();
 }

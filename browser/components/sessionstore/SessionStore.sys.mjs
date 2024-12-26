@@ -1291,6 +1291,8 @@ var SessionStoreInternal = {
         // windows and so they don't matter
         state?.windows?.forEach(win => delete win._maybeDontRestoreTabs);
         state?._closedWindows?.forEach(win => delete win._maybeDontRestoreTabs);
+
+        this._savedGroups = state?.savedGroups;
       } catch (ex) {
         this._log.error("The session file is invalid: ", ex);
       }
@@ -3109,6 +3111,11 @@ var SessionStoreInternal = {
   onMoveToNewWindow(aFromBrowser, aToBrowser) {
     lazy.TabStateFlusher.flush(aFromBrowser).then(() => {
       let tabState = lazy.TabStateCache.get(aFromBrowser.permanentKey);
+      if (!tabState) {
+        throw new Error(
+          "Unexpected undefined tabState for onMoveToNewWindow aFromBrowser"
+        );
+      }
       lazy.TabStateCache.update(aToBrowser.permanentKey, tabState);
     });
   },

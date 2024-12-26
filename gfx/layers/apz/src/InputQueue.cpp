@@ -298,6 +298,7 @@ APZEventResult InputQueue::ReceiveMouseInput(
 
     INPQ_LOG(
         "started new drag block %p id %" PRIu64
+        " "
         "for %sconfirmed target %p; on scrollbar: %d; on scrollthumb: %d\n",
         block.get(), block->GetBlockId(), aFlags.mTargetConfirmed ? "" : "un",
         aTarget.get(), aFlags.mHitScrollbar, aFlags.mHitScrollThumb);

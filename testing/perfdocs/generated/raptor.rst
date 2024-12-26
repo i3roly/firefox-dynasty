@@ -8,7 +8,7 @@ Raptor is a performance-testing framework for running browser pageload and brows
 - Source code: https://searchfox.org/mozilla-central/source/testing/raptor
 - Good first bugs: https://codetribute.mozilla.org/projects/automation?project%3DRaptor
 
-Raptor currently supports three test types: 1) page-load performance tests, 2) standard benchmark-performance tests, and 3) "scenario"-based tests, such as power, CPU, and memory-usage measurements on Android (and desktop?).
+Raptor currently supports three test types: 1) page-load performance tests, 2) standard benchmark-performance tests, and 3) "scenario"-based tests, such as power, CPU, and memory-usage measurements on Android and Desktop.
 
 Locally, Raptor can be invoked with the following command:
 
@@ -1558,12 +1558,14 @@ Standard benchmarks are third-party tests (i.e. Speedometer) that we have integr
    * **gecko profile interval**: 1
    * **gecko profile threads**: GeckoMain,Compositor,Renderer,SwComposite,RenderBackend,SceneBuilder,WrWorker,CanvasWorkers,TextureUpdate
    * **host from parent**: false
-   * **link searchfox**: `<https://searchfox.org/mozilla-central/source/testing/raptor/raptor/tests/benchmarks/motionmark-1-3-desktop.toml#12>`__
+   * **link searchfox**: `<https://searchfox.org/mozilla-central/source/testing/raptor/raptor/tests/benchmarks/motionmark-1-3-desktop.toml#13>`__
    * **lower is better**: false
    * **page cycles**: 1
    * **page timeout**: 600000
    * **repository**: https://github.com/webkit/motionmark
    * **repository revision**: be2a5fea89b6ef411b053ebeb95a6302b3dc0ecb
+   * **subtest lower is better**: false
+   * **subtest unit**: score
    * **suite name**: MotionMark
    * **support class**: motionmark-1-3.py
    * **test script**: motionmark-1-3.js
@@ -1935,12 +1937,14 @@ Standard benchmarks are third-party tests (i.e. Speedometer) that we have integr
    * **gecko profile interval**: 1
    * **gecko profile threads**: GeckoMain,Compositor,Renderer,SwComposite,RenderBackend,SceneBuilder,WrWorker,CanvasWorkers,TextureUpdate
    * **host from parent**: false
-   * **link searchfox**: `<https://searchfox.org/mozilla-central/source/testing/raptor/raptor/tests/benchmarks/motionmark-1-3-mobile.toml#11>`__
+   * **link searchfox**: `<https://searchfox.org/mozilla-central/source/testing/raptor/raptor/tests/benchmarks/motionmark-1-3-mobile.toml#12>`__
    * **lower is better**: false
    * **page cycles**: 1
    * **page timeout**: 600000
    * **repository**: https://github.com/webkit/motionmark
    * **repository revision**: be2a5fea89b6ef411b053ebeb95a6302b3dc0ecb
+   * **subtest lower is better**: false
+   * **subtest unit**: score
    * **suite name**: MotionMark
    * **support class**: motionmark-1-3.py
    * **test script**: motionmark-1-3.js
@@ -2323,12 +2327,14 @@ Standard benchmarks are third-party tests (i.e. Speedometer) that we have integr
    * **gecko profile interval**: 1
    * **gecko profile threads**: GeckoMain,Compositor,Renderer,SwComposite,RenderBackend,SceneBuilder,WrWorker,CanvasWorkers,TextureUpdate
    * **host from parent**: false
-   * **link searchfox**: `<https://searchfox.org/mozilla-central/source/testing/raptor/raptor/tests/benchmarks/motionmark-1-3-desktop.toml#27>`__
+   * **link searchfox**: `<https://searchfox.org/mozilla-central/source/testing/raptor/raptor/tests/benchmarks/motionmark-1-3-desktop.toml#29>`__
    * **lower is better**: false
    * **page cycles**: 1
    * **page timeout**: 600000
    * **repository**: https://github.com/webkit/motionmark
    * **repository revision**: be2a5fea89b6ef411b053ebeb95a6302b3dc0ecb
+   * **subtest lower is better**: false
+   * **subtest unit**: score
    * **suite name**: HTML suite
    * **support class**: motionmark-1-3.py
    * **test script**: motionmark-1-3.js
@@ -2700,12 +2706,14 @@ Standard benchmarks are third-party tests (i.e. Speedometer) that we have integr
    * **gecko profile interval**: 1
    * **gecko profile threads**: GeckoMain,Compositor,Renderer,SwComposite,RenderBackend,SceneBuilder,WrWorker,CanvasWorkers,TextureUpdate
    * **host from parent**: false
-   * **link searchfox**: `<https://searchfox.org/mozilla-central/source/testing/raptor/raptor/tests/benchmarks/motionmark-1-3-mobile.toml#26>`__
+   * **link searchfox**: `<https://searchfox.org/mozilla-central/source/testing/raptor/raptor/tests/benchmarks/motionmark-1-3-mobile.toml#28>`__
    * **lower is better**: false
    * **page cycles**: 1
    * **page timeout**: 600000
    * **repository**: https://github.com/webkit/motionmark
    * **repository revision**: be2a5fea89b6ef411b053ebeb95a6302b3dc0ecb
+   * **subtest lower is better**: false
+   * **subtest unit**: score
    * **suite name**: HTML suite
    * **support class**: motionmark-1-3.py
    * **test script**: motionmark-1-3.js
@@ -34564,7 +34572,7 @@ Tests for page-load performance. The links direct to the actual websites that ar
 
 Interactive
 -----------
-Browsertime tests that interact with the webpage. Includes responsiveness tests as they make use of this support for navigation. These form of tests allow the specification of browsertime commands through the test manifest.
+Browsertime tests that interact with the webpage. Includes responsiveness tests as they make use of this support for navigation. This type of test allows the specification of browsertime commands through the test manifest.
 
 .. dropdown:: cnn-nav
    :class-container: anchor-id-cnn-nav-i
@@ -44744,7 +44752,7 @@ Tests that perform a specific action (a scenario), i.e. idle application, idle a
 
 Unittests
 ---------
-These tests aren't used in standard testing, they are only used in the Raptor unit tests (they are similar to raptor-tp6 tests though).
+These tests aren't used in standard testing, they are only used in the Raptor unit tests (they are similar to raptor-tp6 tests).
 
 .. dropdown:: test-page-1
    :class-container: anchor-id-test-page-1-u

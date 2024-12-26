@@ -848,7 +848,7 @@ MacOSWebAuthnService::GetAssertion(uint64_t aTransactionId,
                 credentials) {
           nsTArray<RefPtr<nsIWebAuthnAutoFillEntry>> autoFillEntries;
           for (NSUInteger i = 0; i < credentials.count; i++) {
-            const auto& credential = credentials[i];
+            const auto& credential = [credentials objectAtIndex:i];
             nsAutoString userName;
             nsCocoaUtils::GetStringForNSString(credential.name, userName);
             nsAutoString rpId;

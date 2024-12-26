@@ -297,7 +297,7 @@ nsresult xpcAccessibleMacInterface::NSObjectToJsValue(
 
                           NSMutableDictionary* attrRun =
                               [attributes mutableCopy];
-                          attrRun[@"string"] = str;
+                          [attrRun setObject:str forKey:@"string"];
 
                           [attrRunArray addObject:attrRun];
                         }];
@@ -520,7 +520,7 @@ id xpcAccessibleMacInterface::JsValueToSpecifiedNSObject(
       JS_GetPropertyById(aCx, object, ids[i], &currentValue);
       id unwrappedValue = JsValueToNSObject(currentValue, aCx, &rv);
       NS_ENSURE_SUCCESS(rv, nil);
-      dict[unwrappedKey] = unwrappedValue;
+      [dict setObject:unwrappedValue forKey:unwrappedKey];
     }
 
     *aResult = NS_OK;

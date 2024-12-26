@@ -77,10 +77,7 @@ SMRegExpMacroAssembler::SMRegExpMacroAssembler(JSContext* cx,
 }
 
 int SMRegExpMacroAssembler::stack_limit_slack_slot_count() {
-  // We have to divide by 2 here because V8 stores 4-byte values
-  // on the backtrack stack, while we store 8-byte values.
-  // See bug 1931445.
-  return RegExpStack::kStackLimitSlackSlotCount / 2;
+  return RegExpStack::kStackLimitSlackSlotCount;
 }
 
 void SMRegExpMacroAssembler::AdvanceCurrentPosition(int by) {
@@ -118,8 +115,11 @@ void SMRegExpMacroAssembler::Backtrack() {
   masm_.jump(&exit_label_);
   masm_.bind(&noInterrupt);
 
-  // Pop code location from backtrack stack and jump to location.
+  // Pop code offset from backtrack stack, add to code base address, and jump to
+  // location.
   Pop(temp0_);
+  PushBacktrackCodeOffsetPatch(masm_.movWithPatch(ImmPtr(nullptr), temp1_));
+  masm_.addPtr(temp1_, temp0_);
   masm_.jump(temp0_);
 }
 
@@ -220,9 +220,9 @@ void SMRegExpMacroAssembler::CheckNotCharacterAfterMinusAnd(
 // stack, pops the backtrack stack and branches to the given label.
 void SMRegExpMacroAssembler::CheckGreedyLoop(Label* on_equal) {
   js::jit::Label fallthrough;
-  masm_.branchPtr(Assembler::NotEqual, Address(backtrack_stack_pointer_, 0),
-                  current_position_, &fallthrough);
-  masm_.addPtr(Imm32(sizeof(void*)), backtrack_stack_pointer_);  // Pop.
+  masm_.load32SignExtendToPtr(Address(backtrack_stack_pointer_, 0), temp0_);
+  masm_.branchPtr(Assembler::NotEqual, temp0_, current_position_, &fallthrough);
+  masm_.addPtr(Imm32(sizeof(int32_t)), backtrack_stack_pointer_);  // Pop.
   JumpOrBacktrack(on_equal);
   masm_.bind(&fallthrough);
 }
@@ -974,15 +974,15 @@ void SMRegExpMacroAssembler::ClearRegisters(int reg_from, int reg_to) {
 void SMRegExpMacroAssembler::Push(Register source) {
   MOZ_ASSERT(source != backtrack_stack_pointer_);
 
-  masm_.subPtr(Imm32(sizeof(void*)), backtrack_stack_pointer_);
-  masm_.storePtr(source, Address(backtrack_stack_pointer_, 0));
+  masm_.subPtr(Imm32(sizeof(int32_t)), backtrack_stack_pointer_);
+  masm_.store32(source, Address(backtrack_stack_pointer_, 0));
 }
 
 void SMRegExpMacroAssembler::Pop(Register target) {
   MOZ_ASSERT(target != backtrack_stack_pointer_);
 
-  masm_.loadPtr(Address(backtrack_stack_pointer_, 0), target);
-  masm_.addPtr(Imm32(sizeof(void*)), backtrack_stack_pointer_);
+  masm_.load32SignExtendToPtr(Address(backtrack_stack_pointer_, 0), target);
+  masm_.addPtr(Imm32(sizeof(int32_t)), backtrack_stack_pointer_);
 }
 
 void SMRegExpMacroAssembler::JumpOrBacktrack(Label* to) {
@@ -1044,8 +1044,13 @@ Handle<HeapObject> SMRegExpMacroAssembler::GetCode(Handle<String> source,
 
   for (LabelPatch& lp : labelPatches_) {
     Assembler::PatchDataWithValueCheck(CodeLocationLabel(code, lp.patchOffset_),
-                                       ImmPtr(code->raw() + lp.labelOffset_),
+                                       ImmPtr((void*)lp.labelOffset_),
                                        ImmPtr(nullptr));
+  }
+
+  for (js::jit::CodeOffset& offset : backtrackCodeOffsetPatches_) {
+    Assembler::PatchDataWithValueCheck(CodeLocationLabel(code, offset),
+                                       ImmPtr(code->raw()), ImmPtr(nullptr));
   }
 
   CollectPerfSpewerJitCodeProfile(code, "RegExp");
