@@ -77,7 +77,7 @@ class API_AVAILABLE(macos(13.3)) MicrosoftEntraSSOUtils final {
       NSDictionary* headers = authenticatedResponse.allHeaderFields;
       NSMutableString* headersString = [NSMutableString string];
       for (NSString* key in headers) {
-        [headersString appendFormat:@"%@: %@\n", key, headers[key]];
+        [headersString appendFormat:@"%@: %@\n", key, [headers objectForKey:key]];
       }
       MOZ_LOG(
           gMacOSWebAuthnServiceLog, mozilla::LogLevel::Debug,
@@ -91,7 +91,7 @@ class API_AVAILABLE(macos(13.3)) MicrosoftEntraSSOUtils final {
       // {"header":{"x-ms-DeviceCredential”:”…”},”tenant_id”:”…”}],
       // ”prt_headers":[{"header":{"x-ms-RefreshTokenCredential”:”…”},
       // ”home_account_id”:”….”}]}
-      NSString* ssoCookies = headers[@"sso_cookies"];
+      NSString* ssoCookies = [headers objectForKey:@"sso_cookies"];
       if (ssoCookies) {
         NSError* err = nil;
         NSDictionary* ssoCookiesDict = [NSJSONSerialization
@@ -104,15 +104,15 @@ class API_AVAILABLE(macos(13.3)) MicrosoftEntraSSOUtils final {
           NSMutableArray* allHeaders = [NSMutableArray array];
 
           if (ssoCookiesDict[@"device_headers"]) {
-            [allHeaders addObject:ssoCookiesDict[@"device_headers"]];
+            [allHeaders addObject:[ssoCookiesDict objectForKey:@"device_headers"]];
           } else {
             MOZ_LOG(gMacOSWebAuthnServiceLog, mozilla::LogLevel::Debug,
                     ("SSORequestDelegate::didCompleteWithAuthorization: "
                      "Missing device_headers"));
           }
 
-          if (ssoCookiesDict[@"prt_headers"]) {
-            [allHeaders addObject:ssoCookiesDict[@"prt_headers"]];
+          if ([ssoCookiesDict objectForKey:@"prt_headers"]) {
+            [allHeaders addObject:[ssoCookiesDict objectForKey:@"prt_headers"]];
           } else {
             MOZ_LOG(gMacOSWebAuthnServiceLog, mozilla::LogLevel::Debug,
                     ("SSORequestDelegate::didCompleteWithAuthorization: "
@@ -126,10 +126,10 @@ class API_AVAILABLE(macos(13.3)) MicrosoftEntraSSOUtils final {
             for (NSArray* headerArray in allHeaders) {
               if (headerArray) {
                 for (NSDictionary* headerDict in headerArray) {
-                  NSDictionary* headers = headerDict[@"header"];
+                  NSDictionary* headers = [headerDict objectForKey:@"header"];
                   if (headers) {
                     for (NSString* key in headers) {
-                      NSString* value = headers[key];
+                      NSString* value = [headers objectForKey:key];
                       if (value) {
                         nsAutoString nsKey;
                         nsAutoString nsValue;

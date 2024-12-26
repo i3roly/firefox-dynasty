@@ -261,31 +261,23 @@ static void ShowInstallFailedDialog() {
 
 #ifdef MOZ_UPDATER
 bool LaunchElevatedDmgInstall(NSString* aBundlePath, NSArray* aArguments) {
-  NSTask* task;
+  NSTask* task = [[NSTask alloc] init];
+  if (aArguments) {
+    [task setArguments:aArguments];
+  }
   if (@available(macOS 10.13, *)) {
-    task = [[NSTask alloc] init];
     [task setExecutableURL:[NSURL fileURLWithPath:aBundlePath]];
-    if (aArguments) {
-      [task setArguments:aArguments];
-    }
     [task launchAndReturnError:nil];
   } else {
-    NSArray* arguments = aArguments;
-    if (!arguments) {
-      arguments = @[];
-    }
-    task = [NSTask launchedTaskWithLaunchPath:aBundlePath arguments:arguments];
-
-}  
+    [task setLaunchPath:aBundlePath];
+    [task launch];
+  }
   bool didSucceed = InstallPrivilegedHelper();
   [task waitUntilExit];
-  if (@available(macOS 10.13, *)) {
-      [task release];
-  }
+  [task release];
   if (!didSucceed) {
       AbortElevatedUpdate();
   }
-
   return didSucceed;
 }
 #endif
