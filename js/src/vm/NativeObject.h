@@ -289,9 +289,6 @@ class ObjectElements {
   /* 'length' property of array objects, unused for other objects. */
   uint32_t length;
 
-  bool hasNonwritableArrayLength() const {
-    return flags & NONWRITABLE_ARRAY_LENGTH;
-  }
   void setNonwritableArrayLength() {
     // See ArrayObject::setNonWritableLength.
     MOZ_ASSERT(capacity == initializedLength);
@@ -335,13 +332,11 @@ class ObjectElements {
   void markNonPacked() { flags |= NON_PACKED; }
 
   void markMaybeInIteration() { flags |= MAYBE_IN_ITERATION; }
-  bool maybeInIteration() { return flags & MAYBE_IN_ITERATION; }
 
   void setNotExtensible() {
     MOZ_ASSERT(!isNotExtensible());
     flags |= NOT_EXTENSIBLE;
   }
-  bool isNotExtensible() { return flags & NOT_EXTENSIBLE; }
 
   void seal() {
     MOZ_ASSERT(isNotExtensible());
@@ -434,6 +429,14 @@ class ObjectElements {
   uint32_t numAllocatedElements() const {
     return VALUES_PER_HEADER + capacity + numShiftedElements();
   }
+
+  bool hasNonwritableArrayLength() const {
+    return flags & NONWRITABLE_ARRAY_LENGTH;
+  }
+
+  bool maybeInIteration() { return flags & MAYBE_IN_ITERATION; }
+
+  bool isNotExtensible() { return flags & NOT_EXTENSIBLE; }
 
   // This is enough slots to store an object of this class. See the static
   // assertion below.
@@ -1380,6 +1383,18 @@ class NativeObject : public JSObject {
     return v.isUndefined() ? nullptr : static_cast<T*>(v.toPrivate());
   }
 
+  // Returns the address of a reserved fixed slot that stores a T* as
+  // PrivateValue. Be very careful when using this because the object might be
+  // moved in memory!
+  template <typename T>
+  T** addressOfFixedSlotPrivatePtr(size_t slot) {
+    MOZ_ASSERT(slot < JSCLASS_RESERVED_SLOTS(getClass()));
+    MOZ_ASSERT(slotIsFixed(slot));
+    MOZ_ASSERT(getReservedSlot(slot).isDouble());
+    void* addr = &getFixedSlotRef(slot);
+    return reinterpret_cast<T**>(addr);
+  }
+
   /*
    * Calculate the number of dynamic slots to allocate to cover the properties
    * in an object with the given number of fixed slots and slot span.
@@ -1712,6 +1727,24 @@ class NativeObject : public JSObject {
       privatePreWriteBarrier(pslot);
       pslot->unbarrieredSet(UndefinedValue());
     }
+  }
+
+  // This is equivalent to |setReservedSlot(slot, PrivateValue(v))| but it
+  // avoids GC barriers. Use this only when storing a private value in a
+  // reserved slot that never holds a GC thing.
+  void setReservedSlotPrivateUnbarriered(uint32_t slot, void* v) {
+    MOZ_ASSERT(slot < JSCLASS_RESERVED_SLOTS(getClass()));
+    MOZ_ASSERT(getReservedSlot(slot).isUndefined() ||
+               getReservedSlot(slot).isDouble());
+    getReservedSlotRef(slot).unbarrieredSet(PrivateValue(v));
+  }
+
+  // Like setReservedSlotPrivateUnbarriered but for PrivateUint32Value.
+  void setReservedSlotPrivateUint32Unbarriered(uint32_t slot, uint32_t u) {
+    MOZ_ASSERT(slot < JSCLASS_RESERVED_SLOTS(getClass()));
+    MOZ_ASSERT(getReservedSlot(slot).isUndefined() ||
+               getReservedSlot(slot).isInt32());
+    getReservedSlotRef(slot).unbarrieredSet(PrivateUint32Value(u));
   }
 
   /* Return the allocKind we would use if we were to tenure this object. */

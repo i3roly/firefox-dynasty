@@ -221,6 +221,16 @@ add_task(async function check_canCreateSelectableProfiles() {
 
   is(
     await ASRouterTargeting.Environment.canCreateSelectableProfiles,
+    false,
+    "The new profiles feature doesn't support standalone profiles which are used in automation."
+  );
+
+  // We have to fake there being a real profile available and enable the profiles feature
+  await pushPrefs(["browser.profiles.enabled", "someValue"]);
+  await SelectableProfileService.resetProfileService({ currentProfile: {} });
+
+  is(
+    await ASRouterTargeting.Environment.canCreateSelectableProfiles,
     true,
     "should return true if the current profile is valid for use with SelectableProfileService"
   );
@@ -231,6 +241,8 @@ add_task(async function check_canCreateSelectableProfiles() {
     message,
     "should select correct item by canCreateSelectableProfiles"
   );
+
+  await SelectableProfileService.resetProfileService(null);
 });
 
 add_task(async function check_hasSelectableProfiles() {
@@ -1847,3 +1859,79 @@ add_task(
     );
   }
 );
+
+add_task(async function check_unhandledCampaignAction() {
+  is(
+    typeof ASRouterTargeting.Environment.unhandledCampaignAction,
+    "object",
+    "Should return an object" // is null unless an unhandled action is present
+  );
+
+  const DID_HANDLE_CAMAPAIGN_ACTION_PREF =
+    "trailhead.firstrun.didHandleCampaignAction";
+
+  const TEST_CASES = [
+    {
+      title: "unsupported open_url campaign action",
+      attributionData: {
+        campaign: "open_url",
+      },
+      expected: null,
+      after: () => {
+        QueryCache.queries.UnhandledCampaignAction.expire();
+      },
+    },
+    {
+      title: "supported and unhandled set default browser campaign action",
+      attributionData: {
+        campaign: "set_default_browser",
+      },
+      expected: "SET_DEFAULT_BROWSER",
+      after: () => {
+        QueryCache.queries.UnhandledCampaignAction.expire();
+      },
+    },
+    {
+      title: "supported and handled set default browser campaign action",
+      attributionData: {
+        campaign: "set_default_browser",
+      },
+      expected: null,
+      before: async () => {
+        await pushPrefs([DID_HANDLE_CAMAPAIGN_ACTION_PREF, true]);
+      },
+      after: () => {
+        Services.prefs.clearUserPref(DID_HANDLE_CAMAPAIGN_ACTION_PREF);
+        QueryCache.queries.UnhandledCampaignAction.expire();
+      },
+    },
+  ];
+
+  const sandbox = sinon.createSandbox();
+  registerCleanupFunction(async () => {
+    sandbox.restore();
+  });
+
+  const stub = sandbox.stub(AttributionCode, "getCachedAttributionData");
+
+  for (const {
+    title,
+    attributionData,
+    expected,
+    before,
+    after,
+  } of TEST_CASES) {
+    if (before) {
+      await before();
+    }
+    stub.returns(attributionData);
+    is(
+      ASRouterTargeting.Environment.unhandledCampaignAction,
+      expected,
+      `${title} - Expected unhandledCampaignAction to have the expected value`
+    );
+    if (after) {
+      after();
+    }
+  }
+});

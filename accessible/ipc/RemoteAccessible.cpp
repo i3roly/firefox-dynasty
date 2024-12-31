@@ -46,7 +46,7 @@ namespace a11y {
 // Domain sets we need commonly for functions in this file.
 static constexpr uint64_t kNecessaryBoundsDomains =
     CacheDomain::Bounds | CacheDomain::TransformMatrix | CacheDomain::Style |
-    CacheDomain::ScrollPosition;
+    CacheDomain::ScrollPosition | CacheDomain::APZ;
 static constexpr uint64_t kNecessaryStateDomains =
     CacheDomain::State | CacheDomain::Viewport;
 
@@ -784,6 +784,26 @@ bool RemoteAccessible::ApplyScrollOffset(nsRect& aBounds) const {
   return true;
 }
 
+void RemoteAccessible::ApplyVisualViewportOffset(nsRect& aBounds) const {
+  ASSERT_DOMAINS_ACTIVE(CacheDomain::APZ);
+  MOZ_ASSERT(IsDoc(), "Attempting to get visual viewport data from non-doc?");
+  Maybe<const nsTArray<int32_t>&> maybeViewportOffset =
+      mCachedFields->GetAttribute<nsTArray<int32_t>>(
+          CacheKey::VisualViewportOffset);
+
+  if (!maybeViewportOffset || maybeViewportOffset->Length() != 2) {
+    return;
+  }
+  // Our retrieved value is in app units, so we don't need to do any
+  // unit conversion here.
+  const nsTArray<int32_t>& viewportOffset = *maybeViewportOffset;
+
+  // Like scroll position, this offset is an inverse representation: the
+  // further the visual viewport moves, the further the page content
+  // moves up/closer to the origin
+  aBounds.MoveBy(-viewportOffset[0], -viewportOffset[1]);
+}
+
 nsRect RemoteAccessible::BoundsInAppUnits() const {
   if (RequestDomainsIfInactive(kNecessaryBoundsDomains)) {
     return {};
@@ -881,6 +901,10 @@ LayoutDeviceIntRect RemoteAccessible::BoundsWithOffset(
         // things. We can't reliably query this value in the parent process,
         // so we retrieve it from the document's cache.
         if (remoteAcc->IsDoc()) {
+          // Apply our visual viewport offset, which is non-zero when
+          // pinch zoom has been applied. Do this before we scale by
+          // resolution as this offset is unscaled.
+          remoteAcc->ApplyVisualViewportOffset(bounds);
           // Apply the document's resolution to the bounds we've gathered
           // thus far. We do this before applying the document's offset
           // because document accs should not have their bounds scaled by
@@ -1234,7 +1258,7 @@ nsTArray<bool> RemoteAccessible::PreProcessRelations(AccAttributes* aFields) {
   if (!DomainsAreActive(CacheDomain::Relations)) {
     return {};
   }
-  nsTArray<bool> updateTracker(ArrayLength(kRelationTypeAtoms));
+  nsTArray<bool> updateTracker(std::size(kRelationTypeAtoms));
   for (auto const& data : kRelationTypeAtoms) {
     if (data.mValidTag) {
       // The relation we're currently processing only applies to particular
@@ -1310,7 +1334,7 @@ void RemoteAccessible::PostProcessRelations(const nsTArray<bool>& aToUpdate) {
     return;
   }
   size_t updateCount = aToUpdate.Length();
-  MOZ_ASSERT(updateCount == ArrayLength(kRelationTypeAtoms),
+  MOZ_ASSERT(updateCount == std::size(kRelationTypeAtoms),
              "Did not note update status for every relation type!");
   for (size_t i = 0; i < updateCount; i++) {
     if (aToUpdate.ElementAt(i)) {

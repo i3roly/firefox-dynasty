@@ -96,12 +96,6 @@
     <!-- Text for the negative action button -->
     <string name="open_in_app_cfr_negative_button_text">Zachyśiś</string>
 
-    <!-- Total cookie protection "contextual feature recommendation" (CFR) -->
-    <!-- Text for the message displayed in the contextual feature recommendation popup promoting the total cookie protection feature. -->
-    <string name="tcp_cfr_message" moz:removedIn="132" tools:ignore="UnusedResources">Naša nejmóčnjejša funkcija priwatnosći sedła pśesegujuce pśeslědowaki izolěrujo.</string>
-    <!-- Text displayed that links to website containing documentation about the "Total cookie protection" feature. -->
-    <string name="tcp_cfr_learn_more" moz:removedIn="132" tools:ignore="UnusedResources">Zgóńśo wěcej wó dopołnem šćiśe pśed cookiejami</string>
-
 
     <!-- Private browsing erase action "contextual feature recommendation" (CFR) -->
     <!-- Text for the message displayed in the contextual feature recommendation popup promoting the erase private browsing feature. -->
@@ -118,11 +112,12 @@
     <!-- Text for the message displayed for the popup promoting the long press of navigation in the navigation bar. -->
     <string name="navbar_navigation_buttons_cfr_message">Pótusniśo a źaržćo šypki, aby mjazy bokami w historiji toś togo rejtarika tam a sam skócył.</string>
 
-    <!-- Tablet navigation bar "contextual feature recommendation" (CFR) -->
-    <!-- Text for the title displayed in the contextual feature recommendation popup promoting the tablet navigation bar. -->
-    <string name="tablet_nav_bar_cfr_title" moz:removedIn="132" tools:ignore="UnusedResources">Nowy: šypce slědk a doprědka z jadnym dotyknjenim</string>
-    <!-- Text for the message displayed in the contextual feature recommendation popup promoting the tablet navigation bar. -->
-    <string name="tablet_nav_bar_cfr_message" moz:removedIn="132" tools:ignore="UnusedResources">Wužywajśo malsnjejšu nawigaciju, kótaruž pśecej k ruce maśo.</string>
+    <!-- Address bar swipe "contextual feature recommendation" (CFR) -->
+    <!-- Text for the title displayed in the contextual feature recommendation popup promoting swipe of address bar. -->
+    <string name="address_bar_swipe_cfr_title">Šmarniśo pśez symbolowu rědku, aby rejtariki wuměnił</string>
+
+    <!-- Text for the message displayed in the contextual feature recommendation popup promoting swipe of address bar. -->
+    <string name="address_bar_swipe_cfr_message">Šmarniśo nalěwo abo napšawo, aby wuměnił. Šmarniśo nalěwo na waš slědny rejtarik, aby nowy rejtarik wócynił.</string>
 
     <!-- Text for the info dialog when camera permissions have been denied but user tries to access a camera feature. -->
     <string name="camera_permissions_needed_message">Pśistup ku kamerje trjebny. Wócyńśo nastajenja Android, pótusniśo zapisk Pšawa a pótusniśo zapisk Dowóliś.</string>
@@ -247,8 +242,12 @@
     <string name="browser_menu_open_in_regular_tab">W normalnem rejtariku wócyniś</string>
     <!-- Browser menu toggle that adds a shortcut to the site on the device home screen. -->
     <string name="browser_menu_add_to_homescreen">Startowej wobrazowce pśidaś</string>
+    <!-- Browser menu toggle that adds a PWA of the site on the device home screen. -->
+    <string name="browser_menu_add_app_to_homescreen">Nałoženje startowej wobrazowce pśidaś</string>
     <!-- Browser menu toggle that adds a shortcut to the site on the device home screen. -->
     <string name="browser_menu_add_to_homescreen_2">Startowej wobrazowce pśidaś…</string>
+    <!-- Browser menu toggle that adds a PWA of the site on the device home screen. -->
+    <string name="browser_menu_add_app_to_homescreen_2">Nałoženje startowej wobrazowce pśidaś…</string>
     <!-- Text for notifying users that Xiaomi devices require additional permissions to add to home screen -->
     <string name="browser_menu_add_to_homescreen_xiaomi">Rědy Xiaomi snaź wósebne pšawa trjebaju, aby startowej wobrazowce zwězanja pśidali. Pšosym pśeglědujśo swóje nastajenja.</string>
     <!-- Content description (not visible, for screen readers etc.) for the Resync tabs button -->
@@ -336,9 +335,23 @@
     <!-- Content description (not visible, for screen readers etc.) for bottom sheet handlebar custom tab menu. -->
     <string name="browser_custom_tab_menu_handlebar_content_description">Swójski meni rejtarikow zacyniś</string>
     <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
-    <string name="browser_menu_tools_description_with_translate">Cytański naglěd, pśełožyś, śišćaś, źěliś, nałoženje wócyniś</string>
+    <string name="browser_menu_tools_description_with_translate" moz:removedIn="134" tools:ignore="UnusedResources">Cytański naglěd, pśełožyś, śišćaś, źěliś, nałoženje wócyniś</string>
     <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
-    <string name="browser_menu_tools_description">Cytański naglěd, śišćaś, źěliś, nałoženje wócyniś</string>
+    <string name="browser_menu_tools_description" moz:removedIn="134" tools:ignore="UnusedResources">Cytański naglěd, śišćaś, źěliś, nałoženje wócyniś</string>
+    <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu
+         The first parameter is the label of the report site issue (for example: Report Site issue) -->
+    <string name="browser_menu_tools_description_with_translate_with_report_site" moz:removedIn="135" tools:ignore="UnusedResources">Cytański naglěd, pśełožyś, %s, śišćaś, źěliś, nałoženje wócyniś</string>
+    <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu when the "Report broken site" feature is available-->
+    <string name="browser_menu_tools_description_with_translate_with_report_site_2">Cytański naglěd, pśełožyś, wobškóźone sedło k wěsći daś, śišćaś, źěliś, nałoženje wócyniś</string>
+    <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
+    <string name="browser_menu_tools_description_with_translate_without_report_site">Cytański naglěd, pśełožyś, śišćaś, źěliś, nałoženje wócyniś</string>
+    <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu
+         The first parameter is the label of the report site issue (for example: Report Site issue) -->
+    <string name="browser_menu_tools_description_with_report_site" moz:removedIn="135" tools:ignore="UnusedResources">Cytański naglěd, %s, śišćaś, źěliś, nałoženje wócyniś</string>
+    <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu when the "Report broken site" feature is available-->
+    <string name="browser_menu_tools_description_with_report_site_2">Cytański naglěd, wobškóźone sedło k wěsći daś, śišćaś, źěliś, nałoženje wócyniś</string>
+    <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
+    <string name="browser_menu_tools_description_without_report_site">Cytański naglěd, śišćaś, źěliś, nałoženje wócyniś</string>
     <!-- Browser menu label that navigates to the save sub-menu, which contains various save related menu items such as
          bookmarking a page, saving to collection, shortcut or as a PDF, and adding to home screen -->
     <string name="browser_menu_save">Składowaś</string>
@@ -355,8 +368,12 @@
     <string name="browser_menu_turn_on_reader_view">Cytański naglěd zmóžniś</string>
     <!-- Browser menu label for turning OFF reader view of the current visited page -->
     <string name="browser_menu_turn_off_reader_view">Cytański naglěd znjemóžniś</string>
+    <!-- Browser menu button that reopens a private tab as a regular tab -->
+    <string name="browser_menu_open_in_normal_tab">Do njepriwatnego rejtarika pśesunuś</string>dsa
     <!-- Browser menu label for navigating to the translation feature, which provides language translation options the current visited page -->
     <string name="browser_menu_translate_page">Bok pśełožyś…</string>
+    <!-- Browser menu label for navigating to the Web Compat Reporter feature, which provides users the ability to send bug reports for broken sites. -->
+    <string name="browser_menu_webcompat_reporter">Wobškóźone sedło k wěsći daś…</string>
     <!-- Browser menu label that is displayed when the current page has been translated by the translation feature.
          The first parameter is the name of the language that page was translated to (e.g. English). -->
     <string name="browser_menu_translated_to">Pśełožony do rěcy %1$s</string>
@@ -437,8 +454,6 @@
     <string name="search_engine_icon_content_description_1">Pytnica: %s</string>
 
     <!-- Home onboarding -->
-    <!-- Onboarding home screen popup dialog, shown on top of the Jump back in section. -->
-    <string name="onboarding_home_screen_jump_back_contextual_hint_2" moz:removedIn="132">Póznajśo swój personalizěrowany bok. Nejnowše rejtariki, cytańske znamjenja a pytańske wuslědki se how zjawiju.</string>
     <!-- Home onboarding dialog welcome screen title text. -->
     <string name="onboarding_home_welcome_title_2">Witajśo k wěcej wósobinskemu internetoju</string>
     <!-- Home onboarding dialog welcome screen description text. -->
@@ -554,6 +569,83 @@
     <string name="onboarding_add_on_add_button_content_description">Dodankowy tłocašk pśidaś</string>
     <!-- Content description for the star rating group. -->
     <string name="onboarding_add_on_star_rating_content_description">Pógódnośenja: %1$s z 5</string>
+
+    <!-- Title for the privacy preferences dialog shown during onboarding. Note: The word "Firefox" should NOT be translated. -->
+    <string name="onboarding_preferences_dialog_title" tools:ignore="BrandUsage,UnusedResources">Pomagajśo nam, Firefox pólěpšyś</string>
+    <!-- Title for the crash reporting option in the privacy preferences dialog shown during onboarding. -->
+    <string name="onboarding_preferences_dialog_crash_reporting_title" tools:ignore="UnusedResources">Rozpšawy wowalenjow awtomatiski pósłaś</string>
+    <!-- Description for the crash reporting option in the privacy preferences dialog shown during onboarding. -->
+    <string name="onboarding_preferences_dialog_crash_reporting_description" tools:ignore="UnusedResources">Rozpšawy wowalenjow wam zmóžnjaju, problemy z wobglědowakom diagnosticěrowaś a rozwězaś. Rozpšawy mógu wósobinske abo sensibelne daty wopśimowaś.</string>
+    <!-- Learn more link for the crash reporting option in the privacy preferences dialog shown during onboarding. -->
+    <string name="onboarding_preferences_dialog_crash_reporting_learn_more" tools:ignore="UnusedResources">Dalšne informacije wó rozpšawach wowalenjow</string>
+    <!-- Title for the usage data option in the privacy preferences dialog shown during onboarding. Note: The word "Mozilla" should NOT be translated. -->
+    <string name="onboarding_preferences_dialog_usage_data_title" tools:ignore="UnusedResources">Techniske daty a daty interakcije na Mozilla pósłaś</string>
+    <!-- Description for the usage data option in the privacy preferences dialog shown during onboarding. Note: The word "Firefox" should NOT be translated. -->
+    <string name="onboarding_preferences_dialog_usage_data_description" tools:ignore="BrandUsage,UnusedResources">Daty wó wašom rěźe, wašej hardwarowej konfiguraciji a wó tom, kak Firefox wužywaśo, wšuźi pomagaju, funkcije, wugbaśe a stabilnosć za wužywarjow pólěpšyś.</string>
+    <!-- Learn more link for the usage data option in the privacy preferences dialog shown during onboarding. -->
+    <string name="onboarding_preferences_dialog_usage_data_learn_more" tools:ignore="UnusedResources">Zgóńśo wěcej wó wužywańskich datach</string>
+    <!-- Positive button label for the privacy preferences dialog shown during onboarding. -->
+    <string name="onboarding_preferences_dialog_positive_button" tools:ignore="UnusedResources">Dokóńcony</string>
+    <!-- Negative button label for the privacy preferences dialog shown during onboarding. -->
+    <string name="onboarding_preferences_dialog_negative_button" tools:ignore="UnusedResources">Pśetergnuś</string>
+
+    <!-- Terms of service onboarding title card label. 'Firefox' intentionally hardcoded here-->
+    <string name="onboarding_welcome_to_firefox" tools:ignore="UnusedResources,BrandUsage">Witajśo k Firefox</string>
+    <!-- Terms of service onboarding page continue button label. -->
+    <string name="onboarding_term_of_service_agree_and_continue_button_label" tools:ignore="UnusedResources">Pśizwóliś a pókšacowaś</string>
+    <!-- Line one of the terms of service onboarding page. 'Firefox' is intentionally hardcoded. %1$s is replaced by an active link, using onboarding_term_of_service_line_one_link_text as text (“Terms of Service”). -->
+    <string name="onboarding_term_of_service_line_one" tools:ignore="UnusedResources,BrandUsage">Gaž pókšacujośo, zwólijośo do wužywańskich wuměnjenjow Firefox: %1$s.</string>
+    <!-- Used as text for the link in onboarding_term_of_service_line_one. -->
+    <string name="onboarding_term_of_service_line_one_link_text" tools:ignore="UnusedResources,BrandUsage">Wužywańske wuměnjenja</string>
+    <!-- Line two of the terms of service onboarding page. 'Firefox' is intentionally hardcoded. %1$s is replaced by an active link, using onboarding_term_of_service_line_two_link_text as text (Privacy Notice”). -->
+    <string name="onboarding_term_of_service_line_two" tools:ignore="UnusedResources,BrandUsage">Firefox se wó wašu priwatnosć stara. Dalšne informacije w: %1$s.</string>
+    <!-- Used as text for the link in onboarding_term_of_service_line_two. -->
+    <string name="onboarding_term_of_service_line_two_link_text" tools:ignore="UnusedResources,BrandUsage">Powěźeńka priwatnosći</string>
+
+    <!-- Line three of the terms of service onboarding page. 'Firefox' and 'Mozilla' are intentionally hardcoded. %1$S is replaced by an active link, using onboarding_term_of_service_line_three_link_text as text (Manage”). -->
+    <string name="onboarding_term_of_service_line_three" tools:ignore="UnusedResources,BrandUsage">Aby pomagał, wobglědowak pólěpšyś, Firefox diagnostiske a daty interakcije na Mozilla sćelo. %1$s</string>
+    <!-- Used as text for the link in onboarding_term_of_service_line_three. -->
+    <string name="onboarding_term_of_service_line_three_link_text" tools:ignore="UnusedResources,BrandUsage">Zastojaś</string>
+    <!-- Onboarding header for the toolbar selection card, used by Nimbus experiments. -->
+    <string name="onboarding_customize_toolbar_title" tools:ignore="UnusedResources">Wubjeŕśo poziciju za symbolowu rědku</string>
+    <!-- Onboarding sub header for toolbar selection card, used by Nimbus experiments. -->
+    <string name="onboarding_customize_toolbar_description" tools:ignore="UnusedResources">Źaržćo pytanja k ruce.</string>
+    <!-- Onboarding label for 'Save and continue' button, used by Nimbus experiments. -->
+    <string name="onboarding_save_and_continue_button">Składowaś a pókšacowaś</string>
+    <!-- Onboarding toolbar selection card label for 'skip' button, used by Nimbus experiments. -->
+    <string name="onboarding_customize_toolbar_skip_button">Pśeskócyś</string>
+    <!-- Onboarding toolbar selection card label for 'top' option, used by Nimbus experiments. -->
+    <string name="onboarding_customize_toolbar_top_option">Górjejce</string>
+    <!-- Onboarding toolbar selection card label for 'bottom' option, used by Nimbus experiments. -->
+    <string name="onboarding_customize_toolbar_bottom_option">Dołojce</string>
+
+    <!-- Onboarding toolbar selection card content description for the main image. -->
+    <string name="onboarding_customize_toolbar_main_image_content_description">Wjeliki głowowy wobraz naglěda wuběrka symboloweje rědki, kótaryž ilustrěrowanu symbolowu rědku pokazujo.</string>
+    <!-- Onboarding toolbar selection card content description for the toolbar placement image. %1$s is placeholder for either 'top' or 'bottom'. -->
+    <string name="onboarding_customize_toolbar_placement_content_description" moz:removedIn="135" tools:ignore="UnusedResources">Wobraz symboloweje rědki %1$s</string>
+
+    <!-- Onboarding toolbar selection card content description for the toolbar placement image. -->
+    <string name="onboarding_customize_toolbar_placement_bottom_content_description">Wobraz górneje symboloweje rědki</string>
+    <string name="onboarding_customize_toolbar_placement_top_content_description">Wobraz dolneje symboloweje rědki</string>
+
+    <!-- Onboarding header for the theme selection card, used by Nimbus experiments. -->
+    <string name="onboarding_customize_theme_title" tools:ignore="UnusedResources">Wubjeŕśo drastwu</string>
+    <!-- Onboarding sub header for theme selection card, used by Nimbus experiments. -->
+    <string name="onboarding_customize_theme_description" tools:ignore="UnusedResources">Woglědajśo se web w nejlěpšem swětle.</string>
+    <!-- Onboarding label for 'Save and start browsing' button, used by Nimbus experiments. -->
+    <string name="onboarding_save_and_start_button">Składowaś a pśeglědowanje zachopiś</string>
+    <!-- Onboarding theme selection card label for 'skip' button, used by Nimbus experiments. -->
+    <string name="onboarding_customize_theme_skip_button">Pśeskócyś</string>
+    <!-- Onboarding theme selection card label for 'dark' option, used by Nimbus experiments. -->
+    <string name="onboarding_customize_theme_dark_option">Śamny</string>
+    <!-- Onboarding theme selection card label for 'light' option, used by Nimbus experiments. -->
+    <string name="onboarding_customize_theme_light_option">Swětły</string>
+    <!-- Onboarding theme selection card label for 'System auto' option, used by Nimbus experiments. -->
+    <string name="onboarding_customize_theme_system_option">Awtomatiski (system)</string>
+    <!-- Onboarding theme selection card content description for the main image. -->
+    <string name="onboarding_customize_theme_main_image_content_description">Wjeliki głowowy wobraz naglěda wuběrka drasty, kótaryž ilustrěrowane rědy wuměłca a wuwijarja pokazujo.</string>
+    <!-- Onboarding theme selection card content description for the theme selection image. %1$s is placeholder for either 'system', 'light' or 'dark'. -->
+    <string name="onboarding_customize_theme_content_description">Wobraz drastwy %1$s</string>
 
     <!-- Search Widget -->
     <!-- Content description for searching with a widget. The first parameter is the name of the application.-->
@@ -947,17 +1039,30 @@
     <string name="exceptions_empty_message_learn_more_link">Dalšne informacije</string>
 
     <!-- Preference switch for usage and technical data collection -->
-    <string name="preference_usage_data">Wužyśe a techniske daty</string>
+    <string name="preference_usage_data" moz:removedIn="134" tools:ignore="UnusedResources">Wužyśe a techniske daty</string>
+    <!-- Preference switch for usage and technical data collection -->
+    <string name="preference_usage_data_1">Techniske daty a daty interakcije</string>
+    <!-- Preference switch for usage and technical learn more link -->
+    <string name="preference_usage_data_learn_more" tools:ignore="UnusedResources">Dalšne informacije</string>
     <!-- Preference description for usage and technical data collection -->
     <string name="preferences_usage_data_description">Źěli wugbaśe, wužyśe, hardware a pśiměrjenja wašogo wobglědowaka z Mozilla, aby nam pomagała, %1$spólěpšyś</string>
     <!-- Preference switch for marketing data collection -->
     <string name="preferences_marketing_data">Marketingowe daty</string>
     <!-- Preference description for marketing data collection -->
-    <string name="preferences_marketing_data_description2">Źěli zakładne wužywańske daty z Adjust, našym mobilnym marketingowym póbitowarjom</string>
+    <string name="preferences_marketing_data_description2" moz:removedIn="134" tools:ignore="UnusedResources">Źěli zakładne wužywańske daty z Adjust, našym mobilnym marketingowym póbitowarjom</string>
+    <!-- Preference description for marketing data collection. Note: The words "Firefox" and "Mozilla" should NOT be translated -->
+    <string name="preferences_marketing_data_description_3" tools:ignore="BrandUsage">Dajśo informacije wó tom k wěsći, kak sćo zgónił wó Firefox  z marketingowymi partnarjami Mozilla. To nam pomaga, Firefox dalej wuwijaś a lěpšy internet twariś</string>
+    <!-- Learn more link for marketing data preference -->
+    <string name="preferences_marketing_data_learn_more">Dalšne informacije wó marketingowych datach</string>
+
     <!-- Preference switch title for automatically submitting crash reports -->
-    <string name="preferences_automatically_submit_crashes_title">Rozpšawy wowalenjow awtomatiski wótpósłaś</string>
+    <string name="preferences_automatically_send_crashes_title">Rozpšawy wowalenjow awtomatiski pósłaś</string>
+    <string name="preferences_automatically_submit_crashes_title" moz:removedIn="136" tools:ignore="UnusedResources">Rozpšawy wowalenjow awtomatiski wótpósłaś</string>
+
     <!-- Preference switch description for automatically submitting crash reports -->
-    <string name="preferences_automatically_submit_crashes_description">Źěli pśi starśe daty wó wowalenju awtomatiski z Mozilla, gaž wowalenja wustupuju</string>
+    <string name="preferences_automatically_send_crashes_description">To nam pomaga problemy z wobglědowakom diagnosticěrowaś a rozwězaś. Rozpšawy mógu wósobinske abo sensibelne daty wopśimowaś.</string>
+    <string name="preferences_automatically_submit_crashes_description" moz:removedIn="136" tools:ignore="UnusedResources">Źěli pśi starśe daty wó wowalenju awtomatiski z Mozilla, gaž wowalenja wustupuju</string>
+
     <!-- Title for studies preferences -->
     <string name="preference_experiments_2">Studije</string>
     <!-- Summary for studies preferences -->
@@ -1126,14 +1231,14 @@
     <string name="studies_learn_more">Dalšne informacije</string>
 
     <!-- Dialog message shown after removing a study -->
-    <string name="studies_restart_app">Nałoženje se skóńcyjo, aby se změny wustatkowali</string>
+    <string name="studies_restart_app" moz:removedIn="135">Nałoženje se skóńcyjo, aby se změny wustatkowali</string>
     <!-- Dialog button to confirm the removing a study. -->
-    <string name="studies_restart_dialog_ok">W pórěźe</string>
+    <string name="studies_restart_dialog_ok" moz:removedIn="135">W pórěźe</string>
     <!-- Dialog button text for canceling removing a study. -->
-    <string name="studies_restart_dialog_cancel">Pśetergnuś</string>
+    <string name="studies_restart_dialog_cancel" moz:removedIn="135">Pśetergnuś</string>
 
     <!-- Toast shown after turning on/off studies preferences -->
-    <string name="studies_toast_quit_application" tools:ignore="UnusedResources">Nałoženje se kóńcy, aby se změny wustatkowali …</string>
+    <string name="studies_toast_quit_application" moz:removedIn="135" tools:ignore="UnusedResources">Nałoženje se kóńcy, aby se změny wustatkowali …</string>
 
     <!-- Sessions -->
     <!-- Title for the list of tabs -->
@@ -1244,6 +1349,30 @@
 
     <!-- WebCompat Reporter -->
 
+
+    <!-- WebCompat Reporter -->
+    <!-- The title of the Web Compat Reporter feature. This is displayed in the top app bar. -->
+    <string name="webcompat_reporter_screen_title">Wobškóźone sedło k wěsći daś</string>
+    <!-- The description of the Web Compat Reporter feature. This first parameter is the name of the application (For example: Fenix) -->
+    <string name="webcompat_reporter_description">Pomagajśo %1$s za kuždego pólěpšowaś. Pśistajone Mozilla informacije wužywaju, kótarež sćelośo, aby problemy z websedłom rozwězali.</string>
+    <!-- The text field label of the URL text field. This is displayed above the user-inputted URL. -->
+    <string name="webcompat_reporter_label_url">URL</string>
+    <!-- The error message of the URL text field when an invalid URL has been entered. -->
+    <string name="webcompat_reporter_url_error_invalid">Pšosym zapódajśo płaśiwy URL</string>
+    <!-- The label/title of an optional field in the Web Compat Reporter feature for explaining a high-level reason why the site is broken. -->
+    <string name="webcompat_reporter_label_whats_broken">Co jo wobškóźone? (na žycenje)</string>
+    <!-- The placeholder text for the dropdown where a user can select a high-level reason why the site is broken. -->
+    <string name="webcompat_reporter_choose_reason">Wubjeŕśo pśicynu</string>
+    <!-- The label/title of an optional field in the Web Compat Reporter feature for adding additional information. -->
+    <string name="webcompat_reporter_label_description">Wopišćo problem (na žycenje)</string>
+    <!-- The button text for navigating away from the feature to provide more information on the broken site's bug report. -->
+    <string name="webcompat_reporter_send_more_info">Dalšne informacije pósłaś</string>
+    <!-- The button text for the cancel button to leave the Web Compat Reporter feature. -->
+    <string name="webcompat_reporter_cancel">Pśetergnuś</string>
+    <!-- The button text for the send button to submit the provided form data. -->
+    <string name="webcompat_reporter_send">Pósłaś</string>
+
+
     <!-- These reason strings are dropdown options on a WebCompat reporter form, indicating what is broken on the site. -->
     <!-- Broken site reason text for site slow or not working -->
     <string name="webcompat_reporter_reason_slow">Sedło pómałe abo njefunkcioněrujo</string>
@@ -1289,8 +1418,6 @@
     <string name="bookmark_delete_negative">Pśetergnuś</string>
     <!-- Screen title for adding a bookmarks folder -->
     <string name="bookmark_add_folder">Zarědnik pśidaś</string>
-    <!-- Snackbar title shown after a bookmark has been created. -->
-    <string name="bookmark_saved_snackbar" moz:removedIn="132" tools:ignore="UnusedResources">Cytańske znamje jo se składło!</string>
     <!-- Snackbar title that confirms a bookmark was saved into a folder. Parameter will be replaced by the name of the folder the bookmark was saved into. -->
     <string name="bookmark_saved_in_folder_snackbar">Do “%s” skłaźone</string>
     <!-- Snackbar edit button shown after a bookmark has been created. -->
@@ -1636,8 +1763,6 @@
     <string name="snackbar_tabs_closed">Rejtariki su se zacynili</string>
     <!-- Text shown in snackbar when user closes multiple inactive tabs. %1$s will be replaced with the number of tabs closed. -->
     <string name="snackbar_num_tabs_closed">Zacynjone rejtariki: %1$s</string>
-    <!-- Text shown in snackbar when user bookmarks a list of tabs -->
-    <string name="snackbar_message_bookmarks_saved" moz:removedIn="132" tools:ignore="UnusedResources">Cytańske znamjenja su se składli!</string>
     <!-- Text shown in snackbar when user bookmarks a list of tabs. Parameter will be replaced by the name of the folder the bookmark was saved into.-->
     <string name="snackbar_message_bookmarks_saved_in">Cytańske znamjenja su se składli  w “%s”!</string>
     <!-- Text shown in snackbar when user adds a site to shortcuts -->
@@ -2544,14 +2669,6 @@ To buźo jano pomagaś, kwalitu pógódnośenjow pósuźiś, nic kwalitu produkt
     <string name="review_quality_check_contextual_onboarding_primary_button_text">Jo, wopytaś</string>
     <!-- Text for opt-out button from the review quality check contextual onboarding card. -->
     <string name="review_quality_check_contextual_onboarding_secondary_button_text">Nic něnto</string>
-    <!-- Text for the first CFR presenting the review quality check feature. -->
-    <string name="review_quality_check_first_cfr_message" moz:removedIn="132" tools:ignore="UnusedResources">Wuslěźćo, lěc móžośo pógódnośenjam toś togo produkta dowěriś – nježli až jen kupujośo.</string>
-    <!-- Text displayed in the first CFR presenting the review quality check feature that opens the review checker when clicked. -->
-    <string name="review_quality_check_first_cfr_action" moz:removedIn="132" tools:ignore="UnusedResources">Kontrolu pógódnośenjow wopytaś</string>
-    <!-- Text for the second CFR presenting the review quality check feature. -->
-    <string name="review_quality_check_second_cfr_message" moz:removedIn="132" tools:ignore="UnusedResources">Su toś te pógódnośenja spušćobne? Kontrolěrujśo to něnto, aby pśiměrjone pógódnośowanje wiźeł.</string>
-    <!-- Text displayed in the second CFR presenting the review quality check feature that opens the review checker when clicked. -->
-    <string name="review_quality_check_second_cfr_action" moz:removedIn="132" tools:ignore="UnusedResources">Kontrolu pógódnośenjow wócyniś</string>
     <!-- Content description (not visible, for screen readers etc.) for opening browser menu button to open review quality check bottom sheet. -->
     <string name="review_quality_check_open_handle_content_description">Kontrolu pógódnośenjow wócyniś</string>
     <!-- Content description (not visible, for screen readers etc.) for closing browser menu button to open review quality check bottom sheet. -->
@@ -2815,6 +2932,28 @@ To buźo jano pomagaś, kwalitu pógódnośenjow pósuźiś, nic kwalitu produkt
     <!-- Button text on the data saving mode warning dialog used by the translations feature to allow users to cancel the action and not perform a download of the language file. -->
     <string name="download_language_file_dialog_negative_button_text">Pśetergnuś</string>
 
+    <!-- Unified Trust Panel -->
+    <!-- Title text for the protection panel banner when the site is not secure. -->
+    <string name="protection_panel_banner_not_secure_title">Buźćo wobglědniwy na toś tom sedle</string>
+    <!-- Description text for the protection panel banner when the site is not secure. -->
+    <string name="protection_panel_banner_not_secure_description">Waš zwisk njejo wěsty.</string>
+    <!-- Title text for the protection panel banner when tracking protection is disabled. -->
+    <string name="protection_panel_banner_not_protected_title">Sćo znjemóžnił šćity</string>
+    <!-- Description text for the protection panel banner when tracking protection is disabled.
+        The first parameter is the name of the app defined in app_name (for example: Fenix) -->
+    <string name="protection_panel_banner_not_protected_description">%s njeźěła. Naraźujomy šćity zasej zmóžniś.</string>
+    <!-- Title text for the protection panel banner when tracking protection is enabled.
+        The first parameter is the name of the app defined in app_name (for example: Fenix) -->
+    <string name="protection_panel_banner_protected_title">%s jo wobglědniwy</string>
+    <!-- Description text for the protection panel banner when tracking protection is enabled. -->
+    <string name="protection_panel_banner_protected_description">Sćo šćitany. Jolic něco namakajomy, dajomy wam to k wěsći.</string>
+    <!-- Label text for the Enhanced Tracking Protection toggle. -->
+    <string name="protection_panel_etp_toggle_label">Pólěpšony slědowański šćit</string>
+    <!-- Description text for the Enhanced Tracking Protection toggle when tracking protection is enabled. -->
+    <string name="protection_panel_etp_toggle_enabled_description">Jolic něco na toś tom sedle wobškóźone wuglěda, wopytajśo šćity znjemóžniś.</string>
+    <!-- Description text for the Enhanced Tracking Protection toggle when tracking protection is disabled. -->
+    <string name="protection_panel_etp_toggle_disabled_description">Šćity su znjemóžnjone. Naraźujomy je zasej zmóžniś.</string>
+
     <!-- Debug drawer -->
     <!-- The user-facing title of the Debug Drawer feature. -->
     <string name="debug_drawer_title">Rědy za rozwězanje problemow</string>
@@ -2928,6 +3067,12 @@ To buźo jano pomagaś, kwalitu pógódnośenjow pósuźiś, nic kwalitu produkt
     <!-- Content description for delete button where parameter will be the username of the login -->
     <string name="debug_drawer_logins_delete_login_button_content_description">Pśizjawjenje z wužywaŕskim mjenim %s wulašowaś</string>
 
+    <!-- Debug drawer addresses -->
+    <!-- The title of the Addresses feature in the Debug Drawer. -->
+    <string name="debug_drawer_addresses_title">Adrese</string>
+    <!-- The title of the section header for the list of debug locales that can be enabled and disabled. -->
+    <string name="debug_drawer_addresses_debug_locales_header">Pśeglědajśo narodne šemy, kótarež se maju zmóžniś, za zmólkami</string>
+
     <!-- Debug drawer "contextual feature recommendation" (CFR) tools -->
     <!-- The title of the CFR Tools feature in the Debug Drawer -->
     <string name="debug_drawer_cfr_tools_title">Rědy CFR</string>
@@ -2939,11 +3084,6 @@ To buźo jano pomagaś, kwalitu pógódnośenjow pósuźiś, nic kwalitu produkt
     <string name="glean_debug_tools_title">Rědy Glean za pytanje zmólkow</string>
 
     <!-- Messages explaining how to exit fullscreen mode -->
-    <!-- Message shown to explain how to exit fullscreen mode when gesture navigation is enabled -->
-    <string name="exit_fullscreen_with_gesture" moz:removedIn="132" tools:ignore="UnusedResources">Aby połnu wobrazowku spušćił, śěgniśo wót górjejka dołoj a wužywajśo gestu slědk</string>
-    <!-- Message shown to explain how to exit fullscreen mode when using back button navigation -->
-    <string name="exit_fullscreen_with_back_button" moz:removedIn="132" tools:ignore="UnusedResources">Aby połnu wobrazowku spušćił, śěgniśo wót górjejka dołoj a tłocćo Slědk</string>
-
     <!-- Message shown to explain how to exit fullscreen mode when gesture navigation is enabled. -->
     <!-- Localisation note: this text should be as short as possible, max 68 chars -->
     <string name="exit_fullscreen_with_gesture_short">Śěgniśo wót górjejce a wužywajśo gestu Slědk, aby skóńcył</string>
@@ -2954,4 +3094,35 @@ To buźo jano pomagaś, kwalitu pógódnośenjow pósuźiś, nic kwalitu produkt
     <!-- Beta Label Component !-->
     <!-- Text shown as a label or tag to indicate a feature or area is still undergoing active development. Note that here "Beta" should not be translated, as it is used as an icon styled element. -->
     <string name="beta_feature">BETA</string>
+
+    <!-- Root certificate expiration warnings -->
+    <!-- These strings for homepage cards and push notifications to be pushed to users running outdated versions of Firefox. We want to encourage these users to update to the latest version so their extensions and other features don't stop working when Firefox's old root certificate expires on 2025-03-14. For more information, see this SUMO article: https://support.mozilla.org/kb/root-certificate-expiration !-->
+    <!-- Homepage card button to open Google Play Store. "Update" is a verb. -->
+    <string name="certificate_warning_homepage_card_update_now_button" tools:ignore="UnusedResources">Něnto aktualizěrowaś</string>
+    <!-- Homepage card title about old Firefox version. "Update" is a verb. Note: The word "Firefox" should NOT be translated. -->
+    <string name="certificate_warning_homepage_card_hca1_title" tools:ignore="BrandUsage,UnusedResources">Aktualizěrujśo swój wobglědowak Firefox</string>
+    <!-- Homepage card message about old Firefox version -->
+    <string name="certificate_warning_homepage_card_hca1_message" tools:ignore="UnusedResources">Zdonkowy certifikat spadnjo, což k tomu wjeźo, až někotare funkcije 14. měrca wěcej njefunkcioněruju.</string>
+    <!-- Homepage card title about old Firefox version. "Update" is a verb. -->
+    <string name="certificate_warning_homepage_card_hcr1_title" tools:ignore="UnusedResources">Aktualizěrujśo do 14. měrca</string>
+    <!-- Homepage card message about old Firefox version. Note: The word "Firefox" should NOT be translated. -->
+    <string name="certificate_warning_homepage_card_hcr1_message" tools:ignore="BrandUsage,UnusedResources">Zdonkowy certifikat spadnjo, což k tomu wjeźo, až waša wersija Firefox wěcej njefunkcioněrujo.</string>
+    <!-- Homepage card title about old Firefox version -->
+    <string name="certificate_warning_homepage_card_hcw2_title" tools:ignore="UnusedResources">Mjenjej ako 7 dnjow až do aktualizacije</string>
+    <!-- Homepage card message about old Firefox version. Note: The word "Firefox" should NOT be translated. -->
+    <string name="certificate_warning_homepage_card_hcw2_message" tools:ignore="BrandUsage,UnusedResources">14. měrca dodanki a druge funkcije Firefox wěcej njebudu funkcioněrowaś, dokulaž zdonkowy certifikat spadnjo.</string>
+    <!-- Homepage card title about old Firefox version. Note: The word "Firefox" should NOT be translated. -->
+    <string name="certificate_warning_homepage_card_hcw3_title" tools:ignore="BrandUsage,UnusedResources">Slědna móžnosć waš Firefox wobchowaś</string>
+    <!-- Homepage card message about old Firefox version. Note: The word "Firefox" should NOT be translated. -->
+    <string name="certificate_warning_homepage_card_hcw3_message" tools:ignore="BrandUsage,UnusedResources">Waša wersija Firefox 14. měrca wěcej pórědnje njefunkcioněrujo, dokulaž zdonkowy certifikat spadnjo.</string>
+    <!-- Push notification title about old Firefox version. "Update" is a noun. -->
+    <string name="certificate_warning_push_notification_update_recommended_title" tools:ignore="UnusedResources">Aktualizacija dopórucona</string>
+    <!-- Push notification message about old Firefox version -->
+    <string name="certificate_warning_push_notification_pnr1_message" tools:ignore="UnusedResources">Dodanki a někotare funkcije 14. měrca wěcej njefunkcioněruju.</string>
+    <!-- Push notification title about old Firefox version. Note: The word "Firefox" should NOT be translated. -->
+    <string name="certificate_warning_push_notification_pnw2_title" tools:ignore="BrandUsage,UnusedResources">Wužywaśo staršu wersiju Firefox</string>
+    <!-- Push notification message about old Firefox version. "Update" is a verb. -->
+    <string name="certificate_warning_push_notification_pnw2_message" tools:ignore="UnusedResources">Aktualizěrujśo do 14. měrca, aby dodanki a druge funkcije dalej wužywał.</string>
+    <!-- Push notification message about old Firefox version -->
+    <string name="certificate_warning_push_notification_pnw3_message" tools:ignore="UnusedResources">Někotare funkcije witśe wěcej njebudu funkcioněrowaś.</string>
 </resources>

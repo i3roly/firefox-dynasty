@@ -2190,7 +2190,7 @@ Element* nsFocusManager::FlushAndCheckIfFocusable(Element* aElement,
       // called during reflow, calling GetBrowsingContext() could cause frame
       // loader initialization at a time when it isn't safe.
       if (BrowsingContext* bc = flo->GetExtantBrowsingContext()) {
-        // This call may create a contentViewer-created about:blank.
+        // This call may create a documentViewer-created about:blank.
         // That's intentional, so we can move focus there.
         Unused << bc->GetDocument();
       }
@@ -3242,8 +3242,6 @@ nsresult nsFocusManager::SetCaretVisible(PresShell* aPresShell, bool aVisible,
       // SetCaretDOMSelection
       aPresShell->SetCaretEnabled(false);
 
-      // Caret must blink on non-editable elements
-      caret->SetIgnoreUserModify(true);
       // Tell the caret which selection to use
       caret->SetSelection(domSelection);
 
@@ -5069,7 +5067,7 @@ void nsFocusManager::GetFocusInSelection(nsPIDOMWindowOuter* aWindow,
 
 static void MaybeUnlockPointer(BrowsingContext* aCurrentFocusedContext) {
   if (!PointerLockManager::IsInLockContext(aCurrentFocusedContext)) {
-    PointerLockManager::Unlock();
+    PointerLockManager::Unlock("FocusChange");
   }
 }
 

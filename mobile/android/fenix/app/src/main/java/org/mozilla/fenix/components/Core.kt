@@ -179,6 +179,7 @@ class Core(
             },
             webContentIsolationStrategy = WebContentIsolationStrategy.ISOLATE_HIGH_VALUE,
             fetchPriorityEnabled = FxNimbus.features.networking.value().fetchPriorityEnabled,
+            parallelMarkingEnabled = FxNimbus.features.javascript.value().parallelMarkingEnabled,
         )
 
         // Apply fingerprinting protection overrides if the feature is enabled in Nimbus
@@ -472,7 +473,7 @@ class Core(
     /**
      * The storage component to sync and persist tabs in a Firefox Sync account.
      */
-    val lazyRemoteTabsStorage = lazyMonitored { RemoteTabsStorage(context) }
+    val lazyRemoteTabsStorage = lazyMonitored { RemoteTabsStorage(context, crashReporter) }
 
     val recentlyClosedTabsStorage =
         lazyMonitored { RecentlyClosedTabsStorage(context, engine, crashReporter) }

@@ -124,11 +124,6 @@ if CONFIG["MOZ_X11"]:
         "nsX11ErrorHandler.cpp",
     ]
 
-if CONFIG["MOZ_WIDGET_TOOLKIT"] == "android":
-    UNIFIED_SOURCES += [
-        "nsAndroidStartup.cpp",
-    ]
-
 if CONFIG["MOZ_WIDGET_TOOLKIT"] != "android":
     UNIFIED_SOURCES += [
         "MultiInstanceLock.cpp",
@@ -161,6 +156,7 @@ if CONFIG["MOZ_UPDATER"]:
     if CONFIG["MOZ_WIDGET_TOOLKIT"] != "android":
         UNIFIED_SOURCES += [
             "nsUpdateDriver.cpp",
+            "nsUpdateMutex.cpp",
             "nsUpdateSyncManager.cpp",
         ]
 
@@ -244,6 +240,7 @@ LOCAL_INCLUDES += [
     "/dom/webbrowserpersist",
     "/js/xpconnect/loader",
     "/testing/gtest/mozilla",
+    "/third_party/sqlite3/ext/",
     "/toolkit/crashreporter",
     "/xpcom/build",
 ]

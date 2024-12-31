@@ -58,7 +58,7 @@ class QATests(SnapTestsBase):
                 (By.CSS_SELECTOR, video_selector or "video")
             )
         )
-        self._wait.until(lambda d: type(video.get_property("duration")) == float)
+        self._wait.until(lambda d: type(video.get_property("duration")) is float)
         assert video.get_property("duration") > 0.0, "<video> duration null"
 
         # For HE-AAC page, Google Drive does not like SPACE
@@ -580,9 +580,11 @@ class QATests(SnapTestsBase):
             EC.visibility_of_element_located(
                 (
                     By.ID,
-                    "context-copyimage-contents"
-                    if mime_type.startswith("image/")
-                    else "context-copy",
+                    (
+                        "context-copyimage-contents"
+                        if mime_type.startswith("image/")
+                        else "context-copy"
+                    ),
                 )
             )
         )

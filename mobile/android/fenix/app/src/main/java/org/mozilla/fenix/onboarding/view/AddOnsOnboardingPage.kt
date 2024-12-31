@@ -141,7 +141,7 @@ private fun MoreExtensionsLink() {
                         context = context,
                         url = url,
                     )
-                    startActivity(context, intent, null)
+                    context.startActivity(intent)
                 },
             ),
         ),

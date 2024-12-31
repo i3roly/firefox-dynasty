@@ -22,6 +22,7 @@
 #include "mozilla/dom/BrowsingContext.h"
 #include "mozilla/dom/WindowGlobalParent.h"
 #include "mozilla/dom/nsHTTPSOnlyUtils.h"
+#include "mozilla/dom/InternalRequest.h"
 #include "mozilla/net/CookieJarSettings.h"
 #include "mozilla/NullPrincipal.h"
 #include "mozilla/StaticPrefs_network.h"
@@ -693,7 +694,7 @@ LoadInfo::LoadInfo(const LoadInfo& rhs)
       mInterceptionInfo(rhs.mInterceptionInfo),
       mHasInjectedCookieForCookieBannerHandling(
           rhs.mHasInjectedCookieForCookieBannerHandling),
-      mWasSchemelessInput(rhs.mWasSchemelessInput),
+      mSchemelessInput(rhs.mSchemelessInput),
       mHttpsUpgradeTelemetry(rhs.mHttpsUpgradeTelemetry),
       mIsNewWindowTarget(rhs.mIsNewWindowTarget) {
 }
@@ -744,7 +745,8 @@ LoadInfo::LoadInfo(
     nsILoadInfo::CrossOriginEmbedderPolicy aLoadingEmbedderPolicy,
     bool aIsOriginTrialCoepCredentiallessEnabledForTopLevel,
     nsIURI* aUnstrippedURI, nsIInterceptionInfo* aInterceptionInfo,
-    bool aHasInjectedCookieForCookieBannerHandling, bool aWasSchemelessInput,
+    bool aHasInjectedCookieForCookieBannerHandling,
+    nsILoadInfo::SchemelessInputType aSchemelessInput,
     nsILoadInfo::HTTPSUpgradeTelemetryType aHttpsUpgradeTelemetry,
     bool aIsNewWindowTarget)
     : mLoadingPrincipal(aLoadingPrincipal),
@@ -827,7 +829,7 @@ LoadInfo::LoadInfo(
       mInterceptionInfo(aInterceptionInfo),
       mHasInjectedCookieForCookieBannerHandling(
           aHasInjectedCookieForCookieBannerHandling),
-      mWasSchemelessInput(aWasSchemelessInput),
+      mSchemelessInput(aSchemelessInput),
       mHttpsUpgradeTelemetry(aHttpsUpgradeTelemetry),
       mIsNewWindowTarget(aIsNewWindowTarget) {
   // Only top level TYPE_DOCUMENT loads can have a null loadingPrincipal
@@ -2227,7 +2229,7 @@ void LoadInfo::SetReservedClientInfo(const ClientInfo& aClientInfo) {
     if (mReservedClientInfo.ref() == aClientInfo) {
       return;
     }
-    MOZ_DIAGNOSTIC_ASSERT(false, "mReservedClientInfo already set");
+    MOZ_DIAGNOSTIC_CRASH("mReservedClientInfo already set");
     mReservedClientInfo.reset();
   }
   mReservedClientInfo.emplace(aClientInfo);
@@ -2321,6 +2323,14 @@ LoadInfo::SetCspEventListener(nsICSPEventListener* aCSPEventListener) {
 NS_IMETHODIMP
 LoadInfo::GetInternalContentPolicyType(nsContentPolicyType* aResult) {
   *aResult = mInternalContentPolicyType;
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+LoadInfo::GetFetchDestination(nsACString& aDestination) {
+  aDestination.Assign(
+      GetEnumString(InternalRequest::MapContentPolicyTypeToRequestDestination(
+          mInternalContentPolicyType)));
   return NS_OK;
 }
 
@@ -2454,14 +2464,16 @@ LoadInfo::SetHasInjectedCookieForCookieBannerHandling(
 }
 
 NS_IMETHODIMP
-LoadInfo::GetWasSchemelessInput(bool* aWasSchemelessInput) {
-  *aWasSchemelessInput = mWasSchemelessInput;
+LoadInfo::GetSchemelessInput(
+    nsILoadInfo::SchemelessInputType* aSchemelessInput) {
+  *aSchemelessInput = mSchemelessInput;
   return NS_OK;
 }
 
 NS_IMETHODIMP
-LoadInfo::SetWasSchemelessInput(bool aWasSchemelessInput) {
-  mWasSchemelessInput = aWasSchemelessInput;
+LoadInfo::SetSchemelessInput(
+    nsILoadInfo::SchemelessInputType aSchemelessInput) {
+  mSchemelessInput = aSchemelessInput;
   return NS_OK;
 }
 

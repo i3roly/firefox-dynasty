@@ -319,6 +319,12 @@ onboarding-mobile-download-security-and-privacy-subtitle = When you’re synced 
 onboarding-gratitude-security-and-privacy-title = { -brand-short-name } has your back
 onboarding-gratitude-security-and-privacy-subtitle = Thank you for using { -brand-short-name }, backed by the Mozilla Foundation. With your support, we’re working to make the internet safer and more accessible for everyone.
 
+# Sign up or Sign in screen
+onboarding-sign-up-title = Sync your data across devices
+onboarding-sign-up-description = Sign up for an account and all of your important info — passwords, bookmarks, and more — will be securely stored and available when you sign in to any device.
+onboarding-sign-up-button = Sign up or sign in
+onboarding-sign-up-secondary-button = Start browsing
+
 ## New user time and familiarity survey strings
 
 onboarding-new-user-time-based-survey-title = How long have you been using { -brand-short-name }?
@@ -402,3 +408,13 @@ onboarding-genai-sidebar-title = Try an AI chatbot in the sidebar
 onboarding-genai-sidebar-subtitle = Summarize web content, brainstorm ideas, draft messages — all as you browse. Choose from multiple providers. Switch anytime. <a data-l10n-name="learn-more">Learn more</a>
 onboarding-genai-sidebar-primary-button = Choose a chatbot
 onboarding-genai-sidebar-secondary-button = Start browsing
+
+## New user onboarding checklist
+
+onboarding-checklist-title = Finish setting up { -brand-short-name }
+onboarding-checklist-subtitle = Complete these steps to get the most out of your browsing experience.
+onboarding-checklist-set-default = Set { -brand-short-name } as default browser
+onboarding-checklist-pin = Pin { -brand-short-name } to taskbar
+onboarding-checklist-import = Import from previous browser
+onboarding-checklist-extension = Add an extension
+onboarding-checklist-sign-up = Sign up or sign in to your account

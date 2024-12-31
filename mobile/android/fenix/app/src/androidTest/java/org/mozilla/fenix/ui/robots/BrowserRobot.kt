@@ -66,6 +66,7 @@ import org.mozilla.fenix.helpers.TestHelper.appContext
 import org.mozilla.fenix.helpers.TestHelper.appName
 import org.mozilla.fenix.helpers.TestHelper.mDevice
 import org.mozilla.fenix.helpers.TestHelper.packageName
+import org.mozilla.fenix.helpers.TestHelper.waitForAppWindowToBeUpdated
 import org.mozilla.fenix.helpers.TestHelper.waitForObjects
 import org.mozilla.fenix.helpers.click
 import org.mozilla.fenix.helpers.ext.waitNotNull
@@ -557,17 +558,15 @@ class BrowserRobot {
         Log.i(TAG, "fillAndSaveCreditCard: Tying to set credit card number to: $cardNumber")
         itemWithResId("cardNumber").setText(cardNumber)
         Log.i(TAG, "fillAndSaveCreditCard: Credit card number was set to: $cardNumber")
-        mDevice.waitForIdle(waitingTime)
+        waitForAppWindowToBeUpdated()
         Log.i(TAG, "fillAndSaveCreditCard: Trying to set credit card name to: $cardName")
         itemWithResId("nameOnCard").setText(cardName)
         Log.i(TAG, "fillAndSaveCreditCard: Credit card name was set to: $cardName")
-        mDevice.waitForIdle(waitingTime)
+        waitForAppWindowToBeUpdated()
         Log.i(TAG, "fillAndSaveCreditCard: Trying to set credit card expiry month and year to: $expiryMonthAndYear")
         itemWithResId("expiryMonthAndYear").setText(expiryMonthAndYear)
         Log.i(TAG, "fillAndSaveCreditCard: Credit card expiry month and year were set to: $expiryMonthAndYear")
-        Log.i(TAG, "fillAndSaveCreditCard: Waiting for device to be idle for $waitingTime ms")
-        mDevice.waitForIdle(waitingTime)
-        Log.i(TAG, "fillAndSaveCreditCard: Waited for device to be idle for $waitingTime ms")
+        waitForAppWindowToBeUpdated()
         Log.i(TAG, "fillAndSaveCreditCard: Trying to click the credit card form submit button and wait for $waitingTime ms for a new window")
         itemWithResId("submit").clickAndWaitForNewWindow(waitingTime)
         Log.i(TAG, "fillAndSaveCreditCard: Clicked the credit card form submit button and waited for $waitingTime ms for a new window")
@@ -726,9 +725,8 @@ class BrowserRobot {
 
     fun verifyNoDateIsSelected() {
         val currentDate = LocalDate.now()
-        assertUIObjectExists(
-            itemContainingText("Selected date is: $currentDate"),
-            exists = false,
+        assertTrue(
+            itemContainingText("Selected date is: $currentDate").waitUntilGone(waitingTime),
         )
     }
 
@@ -1057,6 +1055,31 @@ class BrowserRobot {
         Log.i(TAG, "fillPdfForm: Clicked PDF form check box")
     }
 
+    fun refreshPageFromRedesignedToolbar() {
+        assertUIObjectExists(itemWithDescription(getStringResource(R.string.browser_menu_refresh)))
+        Log.i(TAG, "refreshPageFromRedesignedToolbar: Trying to click the \"Refresh\" button")
+        itemWithDescription(getStringResource(R.string.browser_menu_refresh)).click()
+        Log.i(TAG, "refreshPageFromRedesignedToolbar: Clicked the \"Refresh\" button")
+    }
+
+    fun goToPreviousPageFromRedesignedToolbar() {
+        Log.i(TAG, "goToPreviousPageFromRedesignedToolbar: Trying to click the \"Back\" button")
+        itemWithDescription(getStringResource(R.string.browser_menu_back)).click()
+        Log.i(TAG, "goToPreviousPageFromRedesignedToolbar: Clicked the \"Back\" button")
+    }
+
+    fun goForwardFromRedesignedToolbar() {
+        Log.i(TAG, "goForwardFromRedesignedToolbar: Trying to click the \"Forward\" button")
+        itemWithDescription(getStringResource(R.string.browser_menu_forward)).click()
+        Log.i(TAG, "goForwardFromRedesignedToolbar: Clicked the \"Forward\" button")
+    }
+
+    fun getCurrentUrl(): String {
+        val searchBar = searchBar()
+        waitForPageToLoad()
+        return searchBar.getText()
+    }
+
     class Transition {
         fun openThreeDotMenu(interact: ThreeDotMenuMainRobot.() -> Unit): ThreeDotMenuMainRobot.Transition {
             Log.i(TAG, "openThreeDotMenu: Waiting for device to be idle for $waitingTime ms")
@@ -1118,6 +1141,38 @@ class BrowserRobot {
             return TabDrawerRobot.Transition(composeTestRule)
         }
 
+        fun openTabDrawerFromRedesignedToolbar(composeTestRule: HomeActivityComposeTestRule, interact: TabDrawerRobot.() -> Unit): TabDrawerRobot.Transition {
+            for (i in 1..RETRY_COUNT) {
+                try {
+                    Log.i(TAG, "openTabDrawerFromRedesignedToolbar: Started try #$i")
+                    assertUIObjectExists(tabsCounterFromRedesignedToolbar())
+                    Log.i(TAG, "openTabDrawerFromRedesignedToolbar: Trying to click the tab counter button")
+                    tabsCounter().click()
+                    Log.i(TAG, "openTabDrawerFromRedesignedToolbar: Clicked the tab counter button")
+                    Log.i(TAG, "openTabDrawerFromRedesignedToolbar: Trying to verify the tabs tray exists")
+                    composeTestRule.onNodeWithTag(TabsTrayTestTag.tabsTray).assertExists()
+                    Log.i(TAG, "openTabDrawer: Verified the tabs tray exists")
+
+                    break
+                } catch (e: AssertionError) {
+                    Log.i(TAG, "openTabDrawerFromRedesignedToolbar: AssertionError caught, executing fallback methods")
+                    if (i == RETRY_COUNT) {
+                        throw e
+                    } else {
+                        Log.i(TAG, "openTabDrawerFromRedesignedToolbar: Waiting for device to be idle")
+                        mDevice.waitForIdle()
+                        Log.i(TAG, "openTabDrawerFromRedesignedToolbar: Waited for device to be idle")
+                    }
+                }
+            }
+            Log.i(TAG, "openTabDrawerFromRedesignedToolbar: Trying to verify the tabs tray new tab FAB button exists")
+            composeTestRule.onNodeWithTag(TabsTrayTestTag.fab).assertExists()
+            Log.i(TAG, "openTabDrawerFromRedesignedToolbar: Verified the tabs tray new tab FAB button exists")
+
+            TabDrawerRobot(composeTestRule).interact()
+            return TabDrawerRobot.Transition(composeTestRule)
+        }
+
         fun openNotificationShade(interact: NotificationRobot.() -> Unit): NotificationRobot.Transition {
             Log.i(TAG, "openNotificationShade: Trying to open the notification tray")
             mDevice.openNotification()
@@ -1138,6 +1193,25 @@ class BrowserRobot {
                     ),
                 ).waitForExists(waitingTime)
             Log.i(TAG, "goToHomescreen: Waited for $waitingTime ms for for home screen layout or jump back in contextual hint to exist")
+
+            HomeScreenRobot().interact()
+            return HomeScreenRobot.Transition()
+        }
+
+        fun goToHomescreenWithRedesignedToolbar(interact: HomeScreenRobot.() -> Unit): HomeScreenRobot.Transition {
+            itemWithResId("$packageName:id/new_tab_button").click()
+            searchScreen {
+            }.dismissSearchBar {
+            }
+            Log.i(TAG, "goToHomescreenWithRedesignedToolbar: Waiting for $waitingTime ms for for home screen layout or jump back in contextual hint to exist")
+            mDevice.findObject(UiSelector().resourceId("$packageName:id/homeLayout"))
+                .waitForExists(waitingTime) ||
+                mDevice.findObject(
+                    UiSelector().text(
+                        getStringResource(R.string.onboarding_home_screen_jump_back_contextual_hint_2),
+                    ),
+                ).waitForExists(waitingTime)
+            Log.i(TAG, "goToHomescreenWithRedesignedToolbar: Waited for $waitingTime ms for for home screen layout or jump back in contextual hint to exist")
 
             HomeScreenRobot().interact()
             return HomeScreenRobot.Transition()
@@ -1337,6 +1411,16 @@ class BrowserRobot {
             BrowserRobot().interact()
             return Transition()
         }
+
+        fun clickShareButtonFromRedesignedToolbar(interact: ShareOverlayRobot.() -> Unit): ShareOverlayRobot.Transition {
+            Log.i(TAG, "clickShareButtonFromRedesignedToolbar: Trying to click the \"Share\" button")
+            itemWithDescription(getStringResource(R.string.share_button_content_description)).click()
+            Log.i(TAG, "clickShareButtonFromRedesignedToolbar: Clicked the \"Share\" button")
+            mDevice.waitNotNull(Until.findObject(By.text("ALL ACTIONS")), waitingTime)
+
+            ShareOverlayRobot().interact()
+            return ShareOverlayRobot.Transition()
+        }
     }
 }
 
@@ -1353,6 +1437,8 @@ private fun threeDotButton() = onView(withContentDescription("Menu"))
 
 private fun tabsCounter() =
     mDevice.findObject(By.res("$packageName:id/counter_root"))
+
+private fun tabsCounterFromRedesignedToolbar() = itemWithResId("$packageName:id/counter_box")
 
 private fun progressBar() =
     itemWithResId("$packageName:id/mozac_browser_toolbar_progress")
@@ -1421,7 +1507,7 @@ fun longClickPageObject(item: UiObject) {
 fun clickContextMenuItem(item: String) {
     mDevice.waitNotNull(
         Until.findObject(text(item)),
-        waitingTime,
+        waitingTimeShort,
     )
     Log.i(TAG, "clickContextMenuItem: Trying to click context menu item: $item")
     mDevice.findObject(text(item)).click()

@@ -261,6 +261,14 @@ void nsINode::AssertInvariantsOnNodeInfoChange() {
 }
 #endif
 
+#ifdef DEBUG
+void nsINode::AssertIsRootElementSlow(bool aIsRoot) const {
+  // TODO(bug 1931301): Re-enable this assert.
+  // const bool isRootSlow = this == OwnerDoc()->GetRootElement();
+  // MOZ_ASSERT(aIsRoot == isRootSlow);
+}
+#endif
+
 void* nsINode::GetProperty(const nsAtom* aPropertyName,
                            nsresult* aStatus) const {
   if (!HasProperties()) {  // a fast HasFlag() test
@@ -818,6 +826,10 @@ void nsINode::LastRelease() {
       nsContentUtils::RemoveListenerManager(this);
       UnsetFlags(NODE_HAS_LISTENERMANAGER);
     }
+
+    if (Element* element = Element::FromNode(this)) {
+      element->ClearAttributes();
+    }
   }
 
   UnsetFlags(NODE_HAS_PROPERTIES);
@@ -910,11 +922,11 @@ static const char* NodeTypeAsString(nsINode* aNode) {
       "a DocumentFragment",
       "a Notation",
   };
-  static_assert(ArrayLength(NodeTypeStrings) == nsINode::MAX_NODE_TYPE + 1,
+  static_assert(std::size(NodeTypeStrings) == nsINode::MAX_NODE_TYPE + 1,
                 "Max node type out of range for our array");
 
   uint16_t nodeType = aNode->NodeType();
-  MOZ_RELEASE_ASSERT(nodeType < ArrayLength(NodeTypeStrings),
+  MOZ_RELEASE_ASSERT(nodeType < std::size(NodeTypeStrings),
                      "Uknown out-of-range node type");
   return NodeTypeStrings[nodeType];
 }

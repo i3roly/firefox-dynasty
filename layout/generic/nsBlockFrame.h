@@ -17,6 +17,7 @@
 #include "nsLineBox.h"
 #include "nsCSSPseudoElements.h"
 #include "nsFloatManager.h"
+#include "mozilla/IntrinsicISizesCache.h"
 
 enum class LineReflowStatus {
   // The line was completely reflowed and fit in available width, and we should
@@ -229,26 +230,20 @@ class nsBlockFrame : public nsContainerFrame {
   bool IsEmpty() override;
   bool CachedIsEmpty() override;
   bool IsSelfEmpty() override;
+  bool LinesAreEmpty() const;
 
   // Given that we have a ::marker frame, does it actually draw something, i.e.,
   // do we have either a 'list-style-type' or 'list-style-image' that is
   // not 'none', and no 'content'?
-  bool MarkerIsEmpty() const;
+  // This is expected to be used only for outside markers, and when the caller
+  // already has a pointer to the marker frame.
+  bool MarkerIsEmpty(const nsIFrame* aMarker) const;
 
   // Return true if this frame has a ::marker frame.
   bool HasMarker() const { return HasAnyStateBits(NS_BLOCK_HAS_MARKER); }
 
-  // Return true if this frame has an inside ::marker frame.
-  bool HasInsideMarker() const {
-    return HasMarker() && StyleList()->mListStylePosition ==
-                              mozilla::StyleListStylePosition::Inside;
-  }
-
   // Return true if this frame has an outside ::marker frame.
-  bool HasOutsideMarker() const {
-    return HasMarker() && StyleList()->mListStylePosition ==
-                              mozilla::StyleListStylePosition::Outside;
-  }
+  bool HasOutsideMarker() const;
 
   /**
    * @return the first-letter frame or nullptr if we don't have one.
@@ -268,6 +263,12 @@ class nsBlockFrame : public nsContainerFrame {
 
   void CheckIntrinsicCacheAgainstShrinkWrapState();
 
+  nsRect ComputePaddingInflatedScrollableOverflow(
+      const nsRect& aInFlowChildBounds) const;
+  Maybe<nsRect> GetLineFrameInFlowBounds(const nsLineBox& aLine,
+                                         const nsIFrame& aLineChildFrame,
+                                         bool aConsiderMargins = true) const;
+
   template <typename LineIteratorType>
   Maybe<nscoord> GetBaselineBOffset(LineIteratorType aStart,
                                     LineIteratorType aEnd,
@@ -275,6 +276,7 @@ class nsBlockFrame : public nsContainerFrame {
                                     BaselineSharingGroup aBaselineGroup,
                                     BaselineExportContext aExportContext) const;
 
+ protected:
   // MinISize() and PrefISize() are helpers to implement IntrinsicISize().
   nscoord MinISize(const mozilla::IntrinsicSizeInput& aInput);
   nscoord PrefISize(const mozilla::IntrinsicSizeInput& aInput);
@@ -503,16 +505,7 @@ class nsBlockFrame : public nsContainerFrame {
    * children, and includes them into aOverflowAreas.
    */
   void ComputeOverflowAreas(mozilla::OverflowAreas& aOverflowAreas,
-                            nscoord aBEndEdgeOfChildren,
                             const nsStyleDisplay* aDisplay) const;
-
-  /**
-   * Helper method for ComputeOverflowAreas(). Incorporates aBEndEdgeOfChildren
-   * into the aOverflowAreas.
-   */
-  void ConsiderBlockEndEdgeOfChildren(mozilla::OverflowAreas& aOverflowAreas,
-                                      nscoord aBEndEdgeOfChildren,
-                                      const nsStyleDisplay* aDisplay) const;
 
   /**
    * Add the frames in aFrameList to this block after aPrevSibling.
@@ -1045,8 +1038,7 @@ class nsBlockFrame : public nsContainerFrame {
   int32_t GetDepth() const;
 #endif
 
-  nscoord mCachedMinISize = NS_INTRINSIC_ISIZE_UNKNOWN;
-  nscoord mCachedPrefISize = NS_INTRINSIC_ISIZE_UNKNOWN;
+  mozilla::IntrinsicISizesCache mCachedIntrinsics;
 
   nsLineList mLines;
 

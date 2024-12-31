@@ -11,6 +11,7 @@ const PROFILE_THEMES_MAP = new Map([
   [
     "firefox-compact-light@mozilla.org",
     {
+      dataL10nId: "profiles-light-theme",
       colors: {
         chromeColor: "#F0F0F4",
         toolbarColor: "#F9F9FB",
@@ -21,7 +22,7 @@ const PROFILE_THEMES_MAP = new Map([
   [
     "expressionist-soft-colorway@mozilla.org",
     {
-      name: "Expressionist – Soft",
+      dataL10nId: "profiles-marigold-theme",
       downloadURL:
         "https://addons.mozilla.org/firefox/downloads/file/4066185/expressionist_soft-2.1.xpi",
       colors: {
@@ -34,7 +35,7 @@ const PROFILE_THEMES_MAP = new Map([
   [
     "lush-soft-colorway@mozilla.org",
     {
-      name: "Lush – Soft",
+      dataL10nId: "profiles-lichen-theme",
       downloadURL:
         "https://addons.mozilla.org/firefox/downloads/file/4066281/lush_soft-2.1.xpi",
       colors: {
@@ -47,7 +48,7 @@ const PROFILE_THEMES_MAP = new Map([
   [
     "playmaker-soft-colorway@mozilla.org",
     {
-      name: "Playmaker – Soft",
+      dataL10nId: "profiles-magnolia-theme",
       downloadURL:
         "https://addons.mozilla.org/firefox/downloads/file/4066243/playmaker_soft-2.1.xpi",
       colors: {
@@ -60,7 +61,7 @@ const PROFILE_THEMES_MAP = new Map([
   [
     "dreamer-soft-colorway@mozilla.org",
     {
-      name: "Dreamer – Soft",
+      dataL10nId: "profiles-lavender-theme",
       downloadURL:
         "https://addons.mozilla.org/firefox/downloads/file/4066182/dreamer_soft-2.1.xpi",
       colors: {
@@ -73,6 +74,7 @@ const PROFILE_THEMES_MAP = new Map([
   [
     "firefox-compact-dark@mozilla.org",
     {
+      dataL10nId: "profiles-dark-theme",
       colors: {
         chromeColor: "#1C1B22",
         toolbarColor: "#2B2A33",
@@ -83,7 +85,7 @@ const PROFILE_THEMES_MAP = new Map([
   [
     "activist-bold-colorway@mozilla.org",
     {
-      name: "Activist – Bold",
+      dataL10nId: "profiles-ocean-theme",
       downloadURL:
         "https://addons.mozilla.org/firefox/downloads/file/4066178/activist_bold-2.1.xpi",
       colors: {
@@ -96,7 +98,7 @@ const PROFILE_THEMES_MAP = new Map([
   [
     "playmaker-bold-colorway@mozilla.org",
     {
-      name: "Playmaker – Bold",
+      dataL10nId: "profiles-terracotta-theme",
       downloadURL:
         "https://addons.mozilla.org/firefox/downloads/file/4066242/playmaker_bold-2.1.xpi",
       colors: {
@@ -109,7 +111,7 @@ const PROFILE_THEMES_MAP = new Map([
   [
     "elemental-bold-colorway@mozilla.org",
     {
-      name: "Elemental – Bold",
+      dataL10nId: "profiles-moss-theme",
       downloadURL:
         "https://addons.mozilla.org/firefox/downloads/file/4066261/elemental_bold-2.1.xpi",
       colors: {
@@ -122,6 +124,7 @@ const PROFILE_THEMES_MAP = new Map([
   [
     "default-theme@mozilla.org",
     {
+      dataL10nId: "profiles-system-theme",
       colors: {
         chromeColor: "#1C1B22",
         toolbarColor: "#2B2A33",
@@ -140,16 +143,56 @@ ChromeUtils.defineESModuleGetters(lazy, {
 });
 
 export class ProfilesParent extends JSWindowActorParent {
+  get tab() {
+    const gBrowser = this.browsingContext.topChromeWindow.gBrowser;
+    const tab = gBrowser.getTabForBrowser(this.browsingContext.embedderElement);
+    return tab;
+  }
+
+  actorCreated() {
+    let favicon = this.tab.iconImage;
+    favicon.classList.add("profiles-tab");
+  }
+
+  didDestroy() {
+    const gBrowser = this.browsingContext.topChromeWindow?.gBrowser;
+    if (!gBrowser) {
+      // If gBrowser doesn't exist, then we've closed the tab so we can just return
+      return;
+    }
+    let favicon = this.tab.iconImage;
+    favicon.classList.remove("profiles-tab");
+  }
+
   async receiveMessage(message) {
     switch (message.name) {
       case "Profiles:DeleteProfile": {
-        // TODO (bug 1918523): update default and handle deletion in a
-        //                     background task.
+        let profiles = await SelectableProfileService.getAllProfiles();
+
+        if (profiles.length <= 1) {
+          return null;
+        }
+
+        // Notify windows that a quit has been requested.
+        let cancelQuit = Cc["@mozilla.org/supports-PRBool;1"].createInstance(
+          Ci.nsISupportsPRBool
+        );
+        Services.obs.notifyObservers(cancelQuit, "quit-application-requested");
+
+        if (cancelQuit.data) {
+          // Something blocked our attempt to quit.
+          return null;
+        }
+
+        await SelectableProfileService.deleteCurrentProfile();
+
+        // Finally, exit.
+        Services.startup.quit(Ci.nsIAppStartup.eAttemptQuit);
         break;
       }
       case "Profiles:CancelDelete": {
         let gBrowser = this.browsingContext.topChromeWindow.gBrowser;
-        gBrowser.removeTab(gBrowser.selectedTab);
+        gBrowser.removeTab(this.tab);
         break;
       }
       // Intentional fallthrough
@@ -164,6 +207,7 @@ export class ProfilesParent extends JSWindowActorParent {
           currentProfile: currentProfile.toObject(),
           profiles: profiles.map(p => p.toObject()),
           themes,
+          isInAutomation: Cu.isInAutomation,
         };
       }
       case "Profiles:OpenDeletePage": {
@@ -183,6 +227,8 @@ export class ProfilesParent extends JSWindowActorParent {
         break;
       }
       case "Profiles:GetDeleteProfileContent": {
+        // Make sure SelectableProfileService is initialized
+        await SelectableProfileService.init();
         let profileObj = SelectableProfileService.currentProfile.toObject();
         let windowCount = lazy.EveryWindow.readyWindows.length;
         let tabCount = lazy.EveryWindow.readyWindows
@@ -234,9 +280,9 @@ export class ProfilesParent extends JSWindowActorParent {
         Services.startup.quit(Ci.nsIAppStartup.eAttemptQuit);
         break;
       }
-      case "Profiles:CloseNewProfileTab": {
+      case "Profiles:CloseProfileTab": {
         let gBrowser = this.browsingContext.topChromeWindow.gBrowser;
-        gBrowser.removeTab(gBrowser.selectedTab);
+        gBrowser.removeTab(this.tab);
         break;
       }
     }
@@ -262,14 +308,14 @@ export class ProfilesParent extends JSWindowActorParent {
       if (theme) {
         themes.push({
           id: themeId,
-          name: theme.name,
+          dataL10nId: themeObj.dataL10nId,
           isActive: theme.isActive,
           ...themeObj.colors,
         });
       } else {
         themes.push({
           id: themeId,
-          name: themeObj.name,
+          dataL10nId: themeObj.dataL10nId,
           isActive: false,
           ...themeObj.colors,
         });

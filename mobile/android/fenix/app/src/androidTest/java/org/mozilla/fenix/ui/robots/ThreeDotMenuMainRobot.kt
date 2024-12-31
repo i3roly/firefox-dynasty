@@ -304,6 +304,18 @@ class ThreeDotMenuMainRobot {
             return DownloadRobot.Transition()
         }
 
+        fun openPasswords(interact: SettingsSubMenuLoginsAndPasswordsSavedLoginsRobot.() -> Unit): SettingsSubMenuLoginsAndPasswordsSavedLoginsRobot.Transition {
+            Log.i(TAG, "openPasswords: Trying to perform swipe down action on the three dot menu")
+            threeDotMenuRecyclerView().perform(swipeDown())
+            Log.i(TAG, "openPasswords: Performed swipe down action on the three dot menu")
+            Log.i(TAG, "openPasswords: Trying to click the \"Passwords\" button")
+            passwordsButton().click()
+            Log.i(TAG, "openPasswords: Clicked the \"Passwords\" button")
+
+            SettingsSubMenuLoginsAndPasswordsSavedLoginsRobot().interact()
+            return SettingsSubMenuLoginsAndPasswordsSavedLoginsRobot.Transition()
+        }
+
         fun openSyncSignIn(interact: SyncSignInRobot.() -> Unit): SyncSignInRobot.Transition {
             Log.i(TAG, "openSyncSignIn: Trying to perform swipe down action on the three dot menu")
             threeDotMenuRecyclerView().perform(swipeDown())
@@ -592,16 +604,16 @@ class ThreeDotMenuMainRobot {
             return AddToHomeScreenRobot.Transition()
         }
 
-        fun clickInstall(interact: AddToHomeScreenRobot.() -> Unit): AddToHomeScreenRobot.Transition {
+        fun clickAddAppToHomeScreen(interact: AddToHomeScreenRobot.() -> Unit): AddToHomeScreenRobot.Transition {
             Log.i(TAG, "clickInstall: Trying to perform swipe up action on the three dot menu")
             threeDotMenuRecyclerView().perform(swipeUp())
             Log.i(TAG, "clickInstall: Performed swipe up action on the three dot menu")
             Log.i(TAG, "clickInstall: Trying to perform swipe up action on the three dot menu")
             threeDotMenuRecyclerView().perform(swipeUp())
             Log.i(TAG, "clickInstall: Performed swipe up action on the three dot menu")
-            Log.i(TAG, "clickInstall: Trying to click the \"Install\" button")
-            installPWAButton().click()
-            Log.i(TAG, "clickInstall: Clicked the \"Install\" button")
+            Log.i(TAG, "clickInstall: Trying to click the \"Add app to Home screen\" button")
+            addAppToHomeScreenButton().click()
+            Log.i(TAG, "clickInstall: Clicked the \"Add app to Home screen\" button")
 
             AddToHomeScreenRobot().interact()
             return AddToHomeScreenRobot.Transition()
@@ -715,8 +727,8 @@ private fun readerViewAppearanceToggle() =
 private fun removeFromShortcutsButton() =
     onView(allOf(withText(R.string.browser_menu_remove_from_shortcuts)))
 
-private fun installPWAButton() =
-    itemContainingText(getStringResource(R.string.browser_menu_add_to_homescreen))
+private fun addAppToHomeScreenButton() =
+    itemContainingText(getStringResource(R.string.browser_menu_add_app_to_homescreen))
 
 private fun openInAppButton() =
     onView(
@@ -775,7 +787,7 @@ private fun addBookmarkButton() =
     )
 private fun findInPageButton() = itemContainingText(getStringResource(R.string.browser_menu_find_in_page))
 private fun translateButton() = itemContainingText(getStringResource(R.string.browser_menu_translations))
-private fun reportSiteIssueButton() = itemContainingText("Report Site Issue")
+private fun reportSiteIssueButton() = itemContainingText("Report broken site")
 private fun addToHomeScreenButton() = itemContainingText(getStringResource(R.string.browser_menu_add_to_homescreen))
 private fun addToShortcutsButton() = itemContainingText(getStringResource(R.string.browser_menu_add_to_shortcuts))
 private fun saveToCollectionButton() = itemContainingText(getStringResource(R.string.browser_menu_save_to_collection_2))

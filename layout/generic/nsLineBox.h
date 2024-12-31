@@ -306,6 +306,10 @@ class nsLineBox final : public nsLineLink {
     return GetOverflowArea(mozilla::OverflowType::Scrollable);
   }
 
+  // See comment on `mInFlowChildBounds`.
+  void SetInFlowChildBounds(const mozilla::Maybe<nsRect>& aInFlowChildBounds);
+  mozilla::Maybe<nsRect> GetInFlowChildBounds() const;
+
   void SlideBy(nscoord aDBCoord, const nsSize& aContainerSize) {
     NS_ASSERTION(
         aContainerSize == mContainerSize || mContainerSize == nsSize(-1, -1),
@@ -320,6 +324,9 @@ class nsLineBox final : public nsLineLink {
               .GetPhysicalPoint(mWritingMode, nullContainerSize);
       for (const auto otype : mozilla::AllOverflowTypes()) {
         mData->mOverflowAreas.Overflow(otype) += physicalDelta;
+      }
+      if (mData->mInFlowChildBounds) {
+        *mData->mInFlowChildBounds += physicalDelta;
       }
     }
   }
@@ -337,6 +344,9 @@ class nsLineBox final : public nsLineLink {
       nsPoint physicalDelta(-delta.width, 0);
       for (const auto otype : mozilla::AllOverflowTypes()) {
         mData->mOverflowAreas.Overflow(otype) += physicalDelta;
+      }
+      if (mData->mInFlowChildBounds) {
+        *mData->mInFlowChildBounds += physicalDelta;
       }
     }
     return delta;
@@ -411,12 +421,14 @@ class nsLineBox final : public nsLineLink {
   void AddSizeOfExcludingThis(nsWindowSizes& aSizes) const;
 
   // Find the index of aFrame within the line, starting search at the start.
-  int32_t IndexOf(nsIFrame* aFrame) const;
+  int32_t IndexOf(const nsIFrame* aFrame) const;
 
-  // Find the index of aFrame within the line, starting search at the end.
+  // Find the index of aFrame within the line, starting search from both ends
+  // of the line and working inwards.
   // (Produces the same result as IndexOf, but with different performance
   // characteristics.)  The caller must provide the last frame in the line.
-  int32_t RIndexOf(nsIFrame* aFrame, nsIFrame* aLastFrameInLine) const;
+  int32_t RLIndexOf(const nsIFrame* aFrame,
+                    const nsIFrame* aLastFrameInLine) const;
 
   bool Contains(nsIFrame* aFrame) const {
     return MOZ_UNLIKELY(mFlags.mHasHashedFrames) ? mFrames->Contains(aFrame)
@@ -522,6 +534,12 @@ class nsLineBox final : public nsLineLink {
     explicit ExtraData(const nsRect& aBounds)
         : mOverflowAreas(aBounds, aBounds) {}
     mozilla::OverflowAreas mOverflowAreas;
+    // Union of the margin-boxes of our in-flow children (only children,
+    // *not* their descendants). This is part of a special contribution to
+    // the scrollable overflow of a scrolled block; as such, this is only
+    // emplaced if our block is a scrolled frame (and we have in-flow children,
+    // and floats, which are considered in-flow for scrollable overflow).
+    mozilla::Maybe<nsRect> mInFlowChildBounds;
   };
 
   struct ExtraBlockData : public ExtraData {
@@ -985,7 +1003,9 @@ class nsLineList {
   void splice(iterator position, self_type& x, iterator first, iterator last) {
     NS_ASSERTION(!x.empty(), "Can't insert from empty list.");
 
-    if (first == last) return;
+    if (first == last) {
+      return;
+    }
 
     --last;  // so we now want to move [first, last]
     // remove from |x|

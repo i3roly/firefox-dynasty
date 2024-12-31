@@ -752,8 +752,8 @@ CodeOffset MacroAssembler::move32WithPatch(Register dest) {
   return CodeOffset(currentOffset());
 }
 
-void MacroAssembler::patchMove32(CodeOffset offset, int32_t n) {
-  X86Encoding::SetInt32(masm.data() + offset.offset(), n);
+void MacroAssembler::patchMove32(CodeOffset offset, Imm32 n) {
+  X86Encoding::SetInt32(masm.data() + offset.offset(), n.value);
 }
 
 // ===============================================================
@@ -1725,6 +1725,8 @@ void MacroAssembler::atomicFetchOpJS(Scalar::Type arrayType,
   AtomicFetchOpJS(*this, arrayType, sync, op, value, mem, temp1, temp2, output);
 }
 
+void MacroAssembler::atomicPause() { masm.pause(); }
+
 // ========================================================================
 // Spectre Mitigations.
 
@@ -2220,13 +2222,11 @@ void MacroAssembler::shiftIndex32AndAdd(Register indexTemp32, int shift,
   addPtr(indexTemp32, pointer);
 }
 
-#ifdef ENABLE_WASM_TAIL_CALLS
 CodeOffset MacroAssembler::wasmMarkedSlowCall(const wasm::CallSiteDesc& desc,
                                               const Register reg) {
   CodeOffset offset = call(desc, reg);
   wasmMarkCallAsSlow();
   return offset;
 }
-#endif  // ENABLE_WASM_TAIL_CALLS
 
 //}}} check_macroassembler_style

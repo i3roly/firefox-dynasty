@@ -216,7 +216,7 @@ static nsCString GetCLSIDNameStr(REFCLSID aCLSID) {
 
 static nsCString GetGUIDNameStr(REFGUID aGUID) {
   OLECHAR str[40];
-  int len = ::StringFromGUID2(aGUID, str, ArrayLength(str));
+  int len = ::StringFromGUID2(aGUID, str, std::size(str));
   if (!len || !str[0]) {
     return ""_ns;
   }
@@ -3405,11 +3405,11 @@ TSFTextStore::RecordCompositionUpdateAction() {
       }
       // The range may include out of composition string.  We should ignore
       // outside of the composition string.
-      LONG start = std::min(std::max(rangeStart, mComposition->StartOffset()),
-                            mComposition->EndOffset());
-      LONG end = std::max(
-          std::min(rangeStart + rangeLength, mComposition->EndOffset()),
-          mComposition->StartOffset());
+      LONG start = std::clamp(rangeStart, mComposition->StartOffset(),
+                              mComposition->EndOffset());
+      LONG end =
+          std::clamp(rangeStart + rangeLength, mComposition->StartOffset(),
+                     mComposition->EndOffset());
       LONG length = end - start;
       if (length < 0) {
         MOZ_LOG(gIMELog, LogLevel::Error,

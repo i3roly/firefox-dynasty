@@ -100,12 +100,6 @@
     <!-- Text for the negative action button -->
     <string name="open_in_app_cfr_negative_button_text">知道了</string>
 
-    <!-- Total cookie protection "contextual feature recommendation" (CFR) -->
-    <!-- Text for the message displayed in the contextual feature recommendation popup promoting the total cookie protection feature. -->
-    <string name="tcp_cfr_message" moz:removedIn="132" tools:ignore="UnusedResources">我们最强大的隐私功能：隔离跨站跟踪器。</string>
-    <!-- Text displayed that links to website containing documentation about the "Total cookie protection" feature. -->
-    <string name="tcp_cfr_learn_more" moz:removedIn="132" tools:ignore="UnusedResources">了解“全方位 Cookie 保护”</string>
-
 
     <!-- Private browsing erase action "contextual feature recommendation" (CFR) -->
     <!-- Text for the message displayed in the contextual feature recommendation popup promoting the erase private browsing feature. -->
@@ -122,11 +116,11 @@
     <!-- Text for the message displayed for the popup promoting the long press of navigation in the navigation bar. -->
     <string name="navbar_navigation_buttons_cfr_message">按住箭头可在此标签页的历史页面间跳转。</string>
 
-    <!-- Tablet navigation bar "contextual feature recommendation" (CFR) -->
-    <!-- Text for the title displayed in the contextual feature recommendation popup promoting the tablet navigation bar. -->
-    <string name="tablet_nav_bar_cfr_title" moz:removedIn="132" tools:ignore="UnusedResources">新功能：一触即达的后退和前进按钮</string>
-    <!-- Text for the message displayed in the contextual feature recommendation popup promoting the tablet navigation bar. -->
-    <string name="tablet_nav_bar_cfr_message" moz:removedIn="132" tools:ignore="UnusedResources">便捷浏览，一触即达。</string>
+    <!-- Address bar swipe "contextual feature recommendation" (CFR) -->
+    <!-- Text for the title displayed in the contextual feature recommendation popup promoting swipe of address bar. -->
+    <string name="address_bar_swipe_cfr_title">滑动工具栏切换标签页</string>
+    <!-- Text for the message displayed in the contextual feature recommendation popup promoting swipe of address bar. -->
+    <string name="address_bar_swipe_cfr_message">向左或向右滑动以切换，于最后一个标签页向左滑动可打开新标签页。</string>
 
     <!-- Text for the info dialog when camera permissions have been denied but user tries to access a camera feature. -->
     <string name="camera_permissions_needed_message">需要访问相机。请前往 Android 设置，点按“权限”，然后点按“允许”。</string>
@@ -251,8 +245,12 @@
     <string name="browser_menu_open_in_regular_tab">在常规标签页中打开</string>
     <!-- Browser menu toggle that adds a shortcut to the site on the device home screen. -->
     <string name="browser_menu_add_to_homescreen">添加到主屏幕</string>
+    <!-- Browser menu toggle that adds a PWA of the site on the device home screen. -->
+    <string name="browser_menu_add_app_to_homescreen">添加应用到主屏幕</string>
     <!-- Browser menu toggle that adds a shortcut to the site on the device home screen. -->
     <string name="browser_menu_add_to_homescreen_2">添加到主屏幕…</string>
+    <!-- Browser menu toggle that adds a PWA of the site on the device home screen. -->
+    <string name="browser_menu_add_app_to_homescreen_2">添加应用到主屏幕…</string>
     <!-- Text for notifying users that Xiaomi devices require additional permissions to add to home screen -->
     <string name="browser_menu_add_to_homescreen_xiaomi">在小米设备上，可能需要额外权限才能将快捷方式添加到主屏幕。请检查您的设置。</string>
     <!-- Content description (not visible, for screen readers etc.) for the Resync tabs button -->
@@ -343,9 +341,23 @@
     <!-- Content description (not visible, for screen readers etc.) for bottom sheet handlebar custom tab menu. -->
     <string name="browser_custom_tab_menu_handlebar_content_description">关闭定制标签页菜单表单</string>
     <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
-    <string name="browser_menu_tools_description_with_translate">阅读模式、翻译、打印、分享、在应用中打开</string>
+    <string name="browser_menu_tools_description_with_translate" moz:removedIn="134" tools:ignore="UnusedResources">阅读模式、翻译、打印、分享、在应用中打开</string>
     <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
-    <string name="browser_menu_tools_description">阅读模式、打印、分享、在应用中打开</string>
+    <string name="browser_menu_tools_description" moz:removedIn="134" tools:ignore="UnusedResources">阅读模式、打印、分享、在应用中打开</string>
+    <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu
+         The first parameter is the label of the report site issue (for example: Report Site issue) -->
+    <string name="browser_menu_tools_description_with_translate_with_report_site" moz:removedIn="135" tools:ignore="UnusedResources">阅读模式、翻译、%s、打印、分享、在应用中打开</string>
+    <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu when the "Report broken site" feature is available-->
+    <string name="browser_menu_tools_description_with_translate_with_report_site_2">阅读模式、翻译、反馈问题网站、打印、分享、在应用中打开</string>
+    <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
+    <string name="browser_menu_tools_description_with_translate_without_report_site">阅读模式、翻译、打印、分享、在应用中打开</string>
+    <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu
+         The first parameter is the label of the report site issue (for example: Report Site issue) -->
+    <string name="browser_menu_tools_description_with_report_site" moz:removedIn="135" tools:ignore="UnusedResources">阅读模式、%s、打印、分享、在应用中打开</string>
+    <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu when the "Report broken site" feature is available-->
+    <string name="browser_menu_tools_description_with_report_site_2">阅读模式、反馈问题网站、打印、分享、在应用中打开</string>
+    <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
+    <string name="browser_menu_tools_description_without_report_site">阅读模式、打印、分享、在应用中打开</string>
     <!-- Browser menu label that navigates to the save sub-menu, which contains various save related menu items such as
          bookmarking a page, saving to collection, shortcut or as a PDF, and adding to home screen -->
     <string name="browser_menu_save">保存</string>
@@ -362,8 +374,12 @@
     <string name="browser_menu_turn_on_reader_view">开启阅读模式</string>
     <!-- Browser menu label for turning OFF reader view of the current visited page -->
     <string name="browser_menu_turn_off_reader_view">关闭阅读视图</string>
+    <!-- Browser menu button that reopens a private tab as a regular tab -->
+    <string name="browser_menu_open_in_normal_tab">移动到非隐私标签页</string>dsa
     <!-- Browser menu label for navigating to the translation feature, which provides language translation options the current visited page -->
     <string name="browser_menu_translate_page">翻译页面…</string>
+    <!-- Browser menu label for navigating to the Web Compat Reporter feature, which provides users the ability to send bug reports for broken sites. -->
+    <string name="browser_menu_webcompat_reporter">反馈网站问题…</string>
     <!-- Browser menu label that is displayed when the current page has been translated by the translation feature.
          The first parameter is the name of the language that page was translated to (e.g. English). -->
     <string name="browser_menu_translated_to">已翻译成%1$s</string>
@@ -448,8 +464,6 @@
     <string name="search_engine_icon_content_description_1">搜索引擎：%s</string>
 
     <!-- Home onboarding -->
-    <!-- Onboarding home screen popup dialog, shown on top of the Jump back in section. -->
-    <string name="onboarding_home_screen_jump_back_contextual_hint_2" moz:removedIn="132">这里就是您的个性化主页。最近使用的标签页、书签、搜索结果会显示在这里。</string>
     <!-- Home onboarding dialog welcome screen title text. -->
     <string name="onboarding_home_welcome_title_2">欢迎进入更个性化的互联网</string>
     <!-- Home onboarding dialog welcome screen description text. -->
@@ -568,6 +582,82 @@
     <string name="onboarding_add_on_add_button_content_description">添加附加组件按钮</string>
     <!-- Content description for the star rating group. -->
     <string name="onboarding_add_on_star_rating_content_description">%1$s 颗星（满分 5 星）</string>
+
+    <!-- Title for the privacy preferences dialog shown during onboarding. Note: The word "Firefox" should NOT be translated. -->
+    <string name="onboarding_preferences_dialog_title" tools:ignore="BrandUsage,UnusedResources">帮助我们改进 Firefox</string>
+    <!-- Title for the crash reporting option in the privacy preferences dialog shown during onboarding. -->
+    <string name="onboarding_preferences_dialog_crash_reporting_title" tools:ignore="UnusedResources">自动发送崩溃报告</string>
+    <!-- Description for the crash reporting option in the privacy preferences dialog shown during onboarding. -->
+    <string name="onboarding_preferences_dialog_crash_reporting_description" tools:ignore="UnusedResources">我们可借助崩溃报告来诊断和修复浏览器的问题。报告中可能包含个人或敏感数据。</string>
+    <!-- Learn more link for the crash reporting option in the privacy preferences dialog shown during onboarding. -->
+    <string name="onboarding_preferences_dialog_crash_reporting_learn_more" tools:ignore="UnusedResources">详细了解崩溃报告</string>
+    <!-- Title for the usage data option in the privacy preferences dialog shown during onboarding. Note: The word "Mozilla" should NOT be translated. -->
+    <string name="onboarding_preferences_dialog_usage_data_title" tools:ignore="UnusedResources">向 Mozilla 发送技术与交互数据</string>
+    <!-- Description for the usage data option in the privacy preferences dialog shown during onboarding. Note: The word "Firefox" should NOT be translated. -->
+    <string name="onboarding_preferences_dialog_usage_data_description" tools:ignore="BrandUsage,UnusedResources">与您的设备、硬件配置、Firefox 使用方式相关的数据，有助于为全体用户改进功能、性能、稳定性。</string>
+    <!-- Learn more link for the usage data option in the privacy preferences dialog shown during onboarding. -->
+    <string name="onboarding_preferences_dialog_usage_data_learn_more" tools:ignore="UnusedResources">详细了解使用数据</string>
+    <!-- Positive button label for the privacy preferences dialog shown during onboarding. -->
+    <string name="onboarding_preferences_dialog_positive_button" tools:ignore="UnusedResources">完成</string>
+    <!-- Negative button label for the privacy preferences dialog shown during onboarding. -->
+    <string name="onboarding_preferences_dialog_negative_button" tools:ignore="UnusedResources">取消</string>
+
+    <!-- Terms of service onboarding title card label. 'Firefox' intentionally hardcoded here-->
+    <string name="onboarding_welcome_to_firefox" tools:ignore="UnusedResources,BrandUsage">欢迎使用 Firefox</string>
+    <!-- Terms of service onboarding page continue button label. -->
+    <string name="onboarding_term_of_service_agree_and_continue_button_label" tools:ignore="UnusedResources">同意并继续</string>
+    <!-- Line one of the terms of service onboarding page. 'Firefox' is intentionally hardcoded. %1$s is replaced by an active link, using onboarding_term_of_service_line_one_link_text as text (“Terms of Service”). -->
+    <string name="onboarding_term_of_service_line_one" tools:ignore="UnusedResources,BrandUsage">继续使用即表示您同意 Firefox %1$s。</string>
+    <!-- Used as text for the link in onboarding_term_of_service_line_one. -->
+    <string name="onboarding_term_of_service_line_one_link_text" tools:ignore="UnusedResources,BrandUsage">服务条款</string>
+    <!-- Line two of the terms of service onboarding page. 'Firefox' is intentionally hardcoded. %1$s is replaced by an active link, using onboarding_term_of_service_line_two_link_text as text (Privacy Notice”). -->
+    <string name="onboarding_term_of_service_line_two" tools:ignore="UnusedResources,BrandUsage">Firefox 重视您的隐私。阅读%1$s可详细了解。</string>
+    <!-- Used as text for the link in onboarding_term_of_service_line_two. -->
+    <string name="onboarding_term_of_service_line_two_link_text" tools:ignore="UnusedResources,BrandUsage">隐私声明</string>
+    <!-- Line three of the terms of service onboarding page. 'Firefox' and 'Mozilla' are intentionally hardcoded. %1$S is replaced by an active link, using onboarding_term_of_service_line_three_link_text as text (Manage”). -->
+    <string name="onboarding_term_of_service_line_three" tools:ignore="UnusedResources,BrandUsage">为帮助改进浏览器，Firefox 会向 Mozilla 发送诊断和交互数据。%1$s</string>
+    <!-- Used as text for the link in onboarding_term_of_service_line_three. -->
+    <string name="onboarding_term_of_service_line_three_link_text" tools:ignore="UnusedResources,BrandUsage">管理</string>
+    <!-- Onboarding header for the toolbar selection card, used by Nimbus experiments. -->
+    <string name="onboarding_customize_toolbar_title" tools:ignore="UnusedResources">选取工具栏位置</string>
+    <!-- Onboarding sub header for toolbar selection card, used by Nimbus experiments. -->
+    <string name="onboarding_customize_toolbar_description" tools:ignore="UnusedResources">轻松握持就可唤起搜索。</string>
+    <!-- Onboarding label for 'Save and continue' button, used by Nimbus experiments. -->
+    <string name="onboarding_save_and_continue_button">保存并继续</string>
+    <!-- Onboarding toolbar selection card label for 'skip' button, used by Nimbus experiments. -->
+    <string name="onboarding_customize_toolbar_skip_button">跳过</string>
+    <!-- Onboarding toolbar selection card label for 'top' option, used by Nimbus experiments. -->
+    <string name="onboarding_customize_toolbar_top_option">顶部</string>
+    <!-- Onboarding toolbar selection card label for 'bottom' option, used by Nimbus experiments. -->
+    <string name="onboarding_customize_toolbar_bottom_option">底部</string>
+
+    <!-- Onboarding toolbar selection card content description for the main image. -->
+    <string name="onboarding_customize_toolbar_main_image_content_description">工具栏选择视图中的大尺寸头图，展示工具栏示意图。</string>
+    <!-- Onboarding toolbar selection card content description for the toolbar placement image. %1$s is placeholder for either 'top' or 'bottom'. -->
+    <string name="onboarding_customize_toolbar_placement_content_description" moz:removedIn="135" tools:ignore="UnusedResources">%1$s工具栏的图像</string>
+
+    <!-- Onboarding toolbar selection card content description for the toolbar placement image. -->
+    <string name="onboarding_customize_toolbar_placement_bottom_content_description">底部工具栏的图像</string>
+    <string name="onboarding_customize_toolbar_placement_top_content_description">顶部工具栏的图像</string>
+
+    <!-- Onboarding header for the theme selection card, used by Nimbus experiments. -->
+    <string name="onboarding_customize_theme_title" tools:ignore="UnusedResources">选取主题</string>
+    <!-- Onboarding sub header for theme selection card, used by Nimbus experiments. -->
+    <string name="onboarding_customize_theme_description" tools:ignore="UnusedResources">选个舒适的氛围浏览网页。</string>
+    <!-- Onboarding label for 'Save and start browsing' button, used by Nimbus experiments. -->
+    <string name="onboarding_save_and_start_button">保存并开始浏览</string>
+    <!-- Onboarding theme selection card label for 'skip' button, used by Nimbus experiments. -->
+    <string name="onboarding_customize_theme_skip_button">跳过</string>
+    <!-- Onboarding theme selection card label for 'dark' option, used by Nimbus experiments. -->
+    <string name="onboarding_customize_theme_dark_option">深邃</string>
+    <!-- Onboarding theme selection card label for 'light' option, used by Nimbus experiments. -->
+    <string name="onboarding_customize_theme_light_option">明亮</string>
+    <!-- Onboarding theme selection card label for 'System auto' option, used by Nimbus experiments. -->
+    <string name="onboarding_customize_theme_system_option">系统自动调整</string>
+    <!-- Onboarding theme selection card content description for the main image. -->
+    <string name="onboarding_customize_theme_main_image_content_description">主题选择视图中的大尺寸头图，展示设计师与开发者工具示意图。</string>
+    <!-- Onboarding theme selection card content description for the theme selection image. %1$s is placeholder for either 'system', 'light' or 'dark'. -->
+    <string name="onboarding_customize_theme_content_description">%1$s主题的图像</string>
 
     <!-- Search Widget -->
     <!-- Content description for searching with a widget. The first parameter is the name of the application.-->
@@ -969,17 +1059,30 @@
     <string name="exceptions_empty_message_learn_more_link">详细了解</string>
 
     <!-- Preference switch for usage and technical data collection -->
-    <string name="preference_usage_data">使用率和技术数据</string>
+    <string name="preference_usage_data" moz:removedIn="134" tools:ignore="UnusedResources">使用率和技术数据</string>
+    <!-- Preference switch for usage and technical data collection -->
+    <string name="preference_usage_data_1">技术和交互数据</string>
+    <!-- Preference switch for usage and technical learn more link -->
+    <string name="preference_usage_data_learn_more" tools:ignore="UnusedResources">详细了解</string>
     <!-- Preference description for usage and technical data collection -->
     <string name="preferences_usage_data_description">与 Mozilla 分享使用浏览器时的工作性能、使用方式、硬件设备以及有关自定义的数据，帮助我们改进 %1$s，让它变得更好</string>
     <!-- Preference switch for marketing data collection -->
     <string name="preferences_marketing_data">营销数据</string>
     <!-- Preference description for marketing data collection -->
-    <string name="preferences_marketing_data_description2">与我们的移动营销服务商 Adjust 分享基本使用数据</string>
+    <string name="preferences_marketing_data_description2" moz:removedIn="134" tools:ignore="UnusedResources">与我们的移动营销服务商 Adjust 分享基本使用数据</string>
+    <!-- Preference description for marketing data collection. Note: The words "Firefox" and "Mozilla" should NOT be translated -->
+    <string name="preferences_marketing_data_description_3" tools:ignore="BrandUsage">与 Mozilla 的营销合作伙伴分享您发现 Firefox 的途径。这有助于我们推广 Firefox 并建设更美好的互联网</string>
+    <!-- Learn more link for marketing data preference -->
+    <string name="preferences_marketing_data_learn_more">详细了解营销数据</string>
+
     <!-- Preference switch title for automatically submitting crash reports -->
-    <string name="preferences_automatically_submit_crashes_title">自动提交崩溃报告</string>
+    <string name="preferences_automatically_send_crashes_title">自动发送崩溃报告</string>
+    <string name="preferences_automatically_submit_crashes_title" moz:removedIn="136" tools:ignore="UnusedResources">自动提交崩溃报告</string>
+
     <!-- Preference switch description for automatically submitting crash reports -->
-    <string name="preferences_automatically_submit_crashes_description">发生崩溃后，在下次启动时自动向 Mozilla 共享与崩溃相关的数据</string>
+    <string name="preferences_automatically_send_crashes_description">这有助于我们诊断和修复浏览器的问题。报告中可能包含个人或敏感数据。</string>
+    <string name="preferences_automatically_submit_crashes_description" moz:removedIn="136" tools:ignore="UnusedResources">发生崩溃后，在下次启动时自动向 Mozilla 共享与崩溃相关的数据</string>
+
     <!-- Title for studies preferences -->
     <string name="preference_experiments_2">研究</string>
     <!-- Summary for studies preferences -->
@@ -1148,14 +1251,14 @@
     <string name="studies_learn_more">详细了解</string>
 
     <!-- Dialog message shown after removing a study -->
-    <string name="studies_restart_app">应用程序将退出以应用更改</string>
+    <string name="studies_restart_app" moz:removedIn="135">应用程序将退出以应用更改</string>
     <!-- Dialog button to confirm the removing a study. -->
-    <string name="studies_restart_dialog_ok">确定</string>
+    <string name="studies_restart_dialog_ok" moz:removedIn="135">确定</string>
     <!-- Dialog button text for canceling removing a study. -->
-    <string name="studies_restart_dialog_cancel">取消</string>
+    <string name="studies_restart_dialog_cancel" moz:removedIn="135">取消</string>
 
     <!-- Toast shown after turning on/off studies preferences -->
-    <string name="studies_toast_quit_application" tools:ignore="UnusedResources">退出应用程序以应用更改…</string>
+    <string name="studies_toast_quit_application" moz:removedIn="135" tools:ignore="UnusedResources">退出应用程序以应用更改…</string>
 
     <!-- Sessions -->
     <!-- Title for the list of tabs -->
@@ -1268,6 +1371,29 @@
 
     <!-- WebCompat Reporter -->
 
+    <!-- WebCompat Reporter -->
+    <!-- The title of the Web Compat Reporter feature. This is displayed in the top app bar. -->
+    <string name="webcompat_reporter_screen_title">反馈网站问题</string>
+    <!-- The description of the Web Compat Reporter feature. This first parameter is the name of the application (For example: Fenix) -->
+    <string name="webcompat_reporter_description">帮助改善所有用户的 %1$s 使用体验。Mozilla 员工可借助您发送的信息修复网站问题。</string>
+    <!-- The text field label of the URL text field. This is displayed above the user-inputted URL. -->
+    <string name="webcompat_reporter_label_url">网址</string>
+    <!-- The error message of the URL text field when an invalid URL has been entered. -->
+    <string name="webcompat_reporter_url_error_invalid">请输入有效网址</string>
+    <!-- The label/title of an optional field in the Web Compat Reporter feature for explaining a high-level reason why the site is broken. -->
+    <string name="webcompat_reporter_label_whats_broken">什么方面出现问题？（选填）</string>
+    <!-- The placeholder text for the dropdown where a user can select a high-level reason why the site is broken. -->
+    <string name="webcompat_reporter_choose_reason">选择原因</string>
+    <!-- The label/title of an optional field in the Web Compat Reporter feature for adding additional information. -->
+    <string name="webcompat_reporter_label_description">描述问题（选填）</string>
+    <!-- The button text for navigating away from the feature to provide more information on the broken site's bug report. -->
+    <string name="webcompat_reporter_send_more_info">发送更多信息</string>
+    <!-- The button text for the cancel button to leave the Web Compat Reporter feature. -->
+    <string name="webcompat_reporter_cancel">取消</string>
+    <!-- The button text for the send button to submit the provided form data. -->
+    <string name="webcompat_reporter_send">发送</string>
+
+
     <!-- These reason strings are dropdown options on a WebCompat reporter form, indicating what is broken on the site. -->
     <!-- Broken site reason text for site slow or not working -->
     <string name="webcompat_reporter_reason_slow">网站速度缓慢或无法使用</string>
@@ -1313,8 +1439,6 @@
     <string name="bookmark_delete_negative">取消</string>
     <!-- Screen title for adding a bookmarks folder -->
     <string name="bookmark_add_folder">新建文件夹</string>
-    <!-- Snackbar title shown after a bookmark has been created. -->
-    <string name="bookmark_saved_snackbar" moz:removedIn="132" tools:ignore="UnusedResources">书签已保存！</string>
     <!-- Snackbar title that confirms a bookmark was saved into a folder. Parameter will be replaced by the name of the folder the bookmark was saved into. -->
     <string name="bookmark_saved_in_folder_snackbar">已保存到“%s”</string>
     <!-- Snackbar edit button shown after a bookmark has been created. -->
@@ -1680,8 +1804,6 @@
     <string name="snackbar_tabs_closed">标签页已关闭</string>
     <!-- Text shown in snackbar when user closes multiple inactive tabs. %1$s will be replaced with the number of tabs closed. -->
     <string name="snackbar_num_tabs_closed">已关闭 %1$s 个标签页</string>
-    <!-- Text shown in snackbar when user bookmarks a list of tabs -->
-    <string name="snackbar_message_bookmarks_saved" moz:removedIn="132" tools:ignore="UnusedResources">书签已保存！</string>
     <!-- Text shown in snackbar when user bookmarks a list of tabs. Parameter will be replaced by the name of the folder the bookmark was saved into.-->
     <string name="snackbar_message_bookmarks_saved_in">书签已保存到“%s”！</string>
     <!-- Text shown in snackbar when user adds a site to shortcuts -->
@@ -2103,7 +2225,7 @@
     <string name="preferences_credit_cards_sync_cards">同步卡片信息</string>
 
     <!-- Preference option for adding a card -->
-    <string name="preferences_credit_cards_add_credit_card_2">添加信用卡</string>
+    <string name="preferences_credit_cards_add_credit_card_2">添加卡片</string>
     <!-- Preference option for managing saved cards -->
     <string name="preferences_credit_cards_manage_saved_cards_2">管理信用卡</string>
     <!-- Preference option for adding an address -->
@@ -2117,7 +2239,7 @@
     <string name="preferences_addresses_save_and_autofill_addresses_summary_2">包括电话号码和邮箱地址</string>
 
     <!-- Title of the "Add card" screen -->
-    <string name="credit_cards_add_card">添加信用卡</string>
+    <string name="credit_cards_add_card">添加卡片</string>
     <!-- Title of the "Edit card" screen -->
     <string name="credit_cards_edit_card">编辑卡片</string>
     <!-- The header for the card number of a credit card -->
@@ -2135,7 +2257,7 @@
     <!-- The text for the "Delete card" button for deleting a credit card -->
     <string name="credit_cards_delete_card_button">删除卡片</string>
     <!-- The text for the confirmation message of "Delete card" dialog -->
-    <string name="credit_cards_delete_dialog_confirmation_2">确定删除信用卡吗？</string>
+    <string name="credit_cards_delete_dialog_confirmation_2">确定要删除卡片吗？</string>
     <!-- The text for the positive button on "Delete card" dialog -->
     <string name="credit_cards_delete_dialog_button">删除</string>
     <!-- The title for the "Save" menu item for saving a credit card -->
@@ -2200,7 +2322,7 @@
     <string name="addressess_delete_address_button">删除地址</string>
 
     <!-- The title for the "Delete address" confirmation dialog -->
-    <string name="addressess_confirm_dialog_message_2">确定删除此地址吗？</string>
+    <string name="addressess_confirm_dialog_message_2">确定要删除此地址吗？</string>
     <!-- The text for the positive button on "Delete address" dialog -->
     <string name="addressess_confirm_dialog_ok_button">删除</string>
     <!-- The text for the negative button on "Delete address" dialog -->
@@ -2602,14 +2724,6 @@
     <string name="review_quality_check_contextual_onboarding_primary_button_text">试试看</string>
     <!-- Text for opt-out button from the review quality check contextual onboarding card. -->
     <string name="review_quality_check_contextual_onboarding_secondary_button_text">暂时不要</string>
-    <!-- Text for the first CFR presenting the review quality check feature. -->
-    <string name="review_quality_check_first_cfr_message" moz:removedIn="132" tools:ignore="UnusedResources">在决定购买前，先看看对此商品的评价是否可信。</string>
-    <!-- Text displayed in the first CFR presenting the review quality check feature that opens the review checker when clicked. -->
-    <string name="review_quality_check_first_cfr_action" moz:removedIn="132" tools:ignore="UnusedResources">试试核查评价</string>
-    <!-- Text for the second CFR presenting the review quality check feature. -->
-    <string name="review_quality_check_second_cfr_message" moz:removedIn="132" tools:ignore="UnusedResources">这些评价可信吗？立即检查即可查看调整后的评分。</string>
-    <!-- Text displayed in the second CFR presenting the review quality check feature that opens the review checker when clicked. -->
-    <string name="review_quality_check_second_cfr_action" moz:removedIn="132" tools:ignore="UnusedResources">打开核查评价</string>
 
     <!-- Content description (not visible, for screen readers etc.) for opening browser menu button to open review quality check bottom sheet. -->
     <string name="review_quality_check_open_handle_content_description">打开核查评价</string>
@@ -2794,7 +2908,7 @@
     <string name="never_translate_site_error_warning_text">无法加载网站，请稍后再试。</string>
     <!-- The Delete site dialogue title will appear when the user clicks on a list item.
              The first parameter is web site url (for example:"wikipedia.com") -->
-    <string name="never_translate_site_dialog_title_preference">确定删除 %1$s 吗？</string>
+    <string name="never_translate_site_dialog_title_preference">确定要删除 %1$s 吗？</string>
     <!-- The Delete site dialogue positive button will appear when the user clicks on a list item. The site will be deleted. -->
     <string name="never_translate_site_dialog_confirm_delete_preference">删除</string>
     <!-- The Delete site dialogue negative button will appear when the user clicks on a list item. The dialog will be dismissed. -->
@@ -2844,13 +2958,13 @@
     <!-- Title for the dialog used by the translations feature to confirm deleting a language.
     The dialog will be presented when the user requests deletion of a language.
     The first parameter is the name of the language, for example, "Spanish" and the second parameter is the size in kilobytes or megabytes of the language file. -->
-    <string name="delete_language_file_dialog_title">确定删除%1$s（%2$s）吗？</string>
+    <string name="delete_language_file_dialog_title">确定要删除%1$s（%2$s）吗？</string>
     <!-- Additional information for the dialog used by the translations feature to confirm deleting a language. The first parameter is the name of the application, for example, "Fenix". -->
     <string name="delete_language_file_dialog_message">若删除此语言，%1$s 将在翻译时下载并缓存语言包中部分内容。</string>
     <!-- Title for the dialog used by the translations feature to confirm deleting all languages file.
     The dialog will be presented when the user requests deletion of all languages file.
     The first parameter is the size in kilobytes or megabytes of the language file. -->
-    <string name="delete_language_all_languages_file_dialog_title">确定删除所有语言（%1$s）吗？</string>
+    <string name="delete_language_all_languages_file_dialog_title">确定要删除所有语言（%1$s）吗？</string>
     <!-- Additional information for the dialog used by the translations feature to confirm deleting all languages file. The first parameter is the name of the application, for example, "Fenix". -->
     <string name="delete_language_all_languages_file_dialog_message">若删除所有语言，%1$s 将在翻译时下载并缓存语言包中部分内容。</string>
     <!-- Button text on the dialog used by the translations feature to confirm deleting a language. -->
@@ -2873,6 +2987,28 @@
     <string name="download_language_file_dialog_positive_button_text_all_languages">下载并翻译</string>
     <!-- Button text on the data saving mode warning dialog used by the translations feature to allow users to cancel the action and not perform a download of the language file. -->
     <string name="download_language_file_dialog_negative_button_text">取消</string>
+
+    <!-- Unified Trust Panel -->
+    <!-- Title text for the protection panel banner when the site is not secure. -->
+    <string name="protection_panel_banner_not_secure_title">请谨慎浏览此网站</string>
+    <!-- Description text for the protection panel banner when the site is not secure. -->
+    <string name="protection_panel_banner_not_secure_description">您的连接不安全。</string>
+    <!-- Title text for the protection panel banner when tracking protection is disabled. -->
+    <string name="protection_panel_banner_not_protected_title">已关闭保护</string>
+    <!-- Description text for the protection panel banner when tracking protection is disabled.
+        The first parameter is the name of the app defined in app_name (for example: Fenix) -->
+    <string name="protection_panel_banner_not_protected_description">%s 已暂停保护，建议重新启用。</string>
+    <!-- Title text for the protection panel banner when tracking protection is enabled.
+        The first parameter is the name of the app defined in app_name (for example: Fenix) -->
+    <string name="protection_panel_banner_protected_title">%s 正在防护</string>
+    <!-- Description text for the protection panel banner when tracking protection is enabled. -->
+    <string name="protection_panel_banner_protected_description">您已受保护，我们会在发现异常情况时告知您。</string>
+    <!-- Label text for the Enhanced Tracking Protection toggle. -->
+    <string name="protection_panel_etp_toggle_label">增强型跟踪保护</string>
+    <!-- Description text for the Enhanced Tracking Protection toggle when tracking protection is enabled. -->
+    <string name="protection_panel_etp_toggle_enabled_description">若网站功能异常，请尝试关闭保护。</string>
+    <!-- Description text for the Enhanced Tracking Protection toggle when tracking protection is disabled. -->
+    <string name="protection_panel_etp_toggle_disabled_description">保护已关闭，建议重新启用。</string>
 
     <!-- Debug drawer -->
     <!-- The user-facing title of the Debug Drawer feature. -->
@@ -2988,6 +3124,12 @@
     <!-- Content description for delete button where parameter will be the username of the login -->
     <string name="debug_drawer_logins_delete_login_button_content_description">删除用户名为“%s”的登录信息</string>
 
+    <!-- Debug drawer addresses -->
+    <!-- The title of the Addresses feature in the Debug Drawer. -->
+    <string name="debug_drawer_addresses_title">地址</string>
+    <!-- The title of the section header for the list of debug locales that can be enabled and disabled. -->
+    <string name="debug_drawer_addresses_debug_locales_header">选择要启用的调试区域设置</string>
+
     <!-- Debug drawer "contextual feature recommendation" (CFR) tools -->
     <!-- The title of the CFR Tools feature in the Debug Drawer -->
     <string name="debug_drawer_cfr_tools_title">CFR 工具</string>
@@ -2999,11 +3141,6 @@
     <string name="glean_debug_tools_title">Glean 调试工具</string>
 
     <!-- Messages explaining how to exit fullscreen mode -->
-    <!-- Message shown to explain how to exit fullscreen mode when gesture navigation is enabled -->
-    <string name="exit_fullscreen_with_gesture" moz:removedIn="132" tools:ignore="UnusedResources">从顶部下拉并使用返回手势，以退出全屏</string>
-    <!-- Message shown to explain how to exit fullscreen mode when using back button navigation -->
-    <string name="exit_fullscreen_with_back_button" moz:removedIn="132" tools:ignore="UnusedResources">从顶部下拉并按返回键，以退出全屏</string>
-
     <!-- Message shown to explain how to exit fullscreen mode when gesture navigation is enabled. -->
     <!-- Localisation note: this text should be as short as possible, max 68 chars -->
     <string name="exit_fullscreen_with_gesture_short">从屏幕顶部下拉，并使用返回手势退出</string>
@@ -3014,4 +3151,35 @@
     <!-- Beta Label Component !-->
     <!-- Text shown as a label or tag to indicate a feature or area is still undergoing active development. Note that here "Beta" should not be translated, as it is used as an icon styled element. -->
     <string name="beta_feature">BETA</string>
+
+    <!-- Root certificate expiration warnings -->
+    <!-- These strings for homepage cards and push notifications to be pushed to users running outdated versions of Firefox. We want to encourage these users to update to the latest version so their extensions and other features don't stop working when Firefox's old root certificate expires on 2025-03-14. For more information, see this SUMO article: https://support.mozilla.org/kb/root-certificate-expiration !-->
+    <!-- Homepage card button to open Google Play Store. "Update" is a verb. -->
+    <string name="certificate_warning_homepage_card_update_now_button" tools:ignore="UnusedResources">立即更新</string>
+    <!-- Homepage card title about old Firefox version. "Update" is a verb. Note: The word "Firefox" should NOT be translated. -->
+    <string name="certificate_warning_homepage_card_hca1_title" tools:ignore="BrandUsage,UnusedResources">更新您的 Firefox 浏览器</string>
+    <!-- Homepage card message about old Firefox version -->
+    <string name="certificate_warning_homepage_card_hca1_message" tools:ignore="UnusedResources">一份根证书即将过期，会导致部分功能自 3 月 14 日起失效。</string>
+    <!-- Homepage card title about old Firefox version. "Update" is a verb. -->
+    <string name="certificate_warning_homepage_card_hcr1_title" tools:ignore="UnusedResources">请在 3 月 14 日之前更新</string>
+    <!-- Homepage card message about old Firefox version. Note: The word "Firefox" should NOT be translated. -->
+    <string name="certificate_warning_homepage_card_hcr1_message" tools:ignore="BrandUsage,UnusedResources">一份根证书即将过期，会导致您的 Firefox 无法正常运作。</string>
+    <!-- Homepage card title about old Firefox version -->
+    <string name="certificate_warning_homepage_card_hcw2_title" tools:ignore="UnusedResources">更新时间只剩不到 7 天</string>
+    <!-- Homepage card message about old Firefox version. Note: The word "Firefox" should NOT be translated. -->
+    <string name="certificate_warning_homepage_card_hcw2_message" tools:ignore="BrandUsage,UnusedResources">由于一份根证书将于 3 月 14 日过期，附加组件和其他 Firefox 功能将会失效。</string>
+    <!-- Homepage card title about old Firefox version. Note: The word "Firefox" should NOT be translated. -->
+    <string name="certificate_warning_homepage_card_hcw3_title" tools:ignore="BrandUsage,UnusedResources">续用 Firefox 的最后机会</string>
+    <!-- Homepage card message about old Firefox version. Note: The word "Firefox" should NOT be translated. -->
+    <string name="certificate_warning_homepage_card_hcw3_message" tools:ignore="BrandUsage,UnusedResources">由于一份根证书即将过期，您的 Firefox 自 3 月 14 日起将无法正常运作。</string>
+    <!-- Push notification title about old Firefox version. "Update" is a noun. -->
+    <string name="certificate_warning_push_notification_update_recommended_title" tools:ignore="UnusedResources">建议更新</string>
+    <!-- Push notification message about old Firefox version -->
+    <string name="certificate_warning_push_notification_pnr1_message" tools:ignore="UnusedResources">自 3 月 14 日起，附加组件和部分功能将失效。</string>
+    <!-- Push notification title about old Firefox version. Note: The word "Firefox" should NOT be translated. -->
+    <string name="certificate_warning_push_notification_pnw2_title" tools:ignore="BrandUsage,UnusedResources">您正在使用旧版本 Firefox</string>
+    <!-- Push notification message about old Firefox version. "Update" is a verb. -->
+    <string name="certificate_warning_push_notification_pnw2_message" tools:ignore="UnusedResources">在 3 月 14 日前更新，以继续使用附加组件和其他功能。</string>
+    <!-- Push notification message about old Firefox version -->
+    <string name="certificate_warning_push_notification_pnw3_message" tools:ignore="UnusedResources">部分功能将从明天起失效。</string>
 </resources>

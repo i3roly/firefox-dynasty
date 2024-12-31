@@ -1460,14 +1460,15 @@ CodeOffset MacroAssembler::move32WithPatch(Register dest) {
   return offs;
 }
 
-void MacroAssembler::patchMove32(CodeOffset offset, int32_t n) {
+void MacroAssembler::patchMove32(CodeOffset offset, Imm32 n) {
   Instruction* i1 = getInstructionAt(BufferOffset(offset.offset()));
   MOZ_ASSERT(i1->IsMovz());
-  i1->SetInstructionBits(i1->InstructionBits() | ImmMoveWide(n));
+  i1->SetInstructionBits(i1->InstructionBits() | ImmMoveWide(n.value & 0xFFFF));
 
   Instruction* i2 = getInstructionAt(BufferOffset(offset.offset() + 4));
   MOZ_ASSERT(i2->IsMovk());
-  i2->SetInstructionBits(i2->InstructionBits() | ImmMoveWide(n >> 16));
+  i2->SetInstructionBits(i2->InstructionBits() |
+                         ImmMoveWide((n.value >> 16) & 0xFFFF));
 }
 
 void MacroAssembler::pushReturnAddress() {
@@ -2967,6 +2968,8 @@ void MacroAssembler::atomicEffectOpJS(Scalar::Type arrayType,
                        value, temp, temp);
 }
 
+void MacroAssembler::atomicPause() { Isb(); }
+
 void MacroAssembler::flexibleQuotient32(Register rhs, Register srcDest,
                                         bool isUnsigned,
                                         const LiveRegisterSet&) {
@@ -3495,7 +3498,6 @@ void MacroAssembler::shiftIndex32AndAdd(Register indexTemp32, int shift,
       Operand(ARMRegister(indexTemp32, 64), vixl::LSL, shift));
 }
 
-#ifdef ENABLE_WASM_TAIL_CALLS
 void MacroAssembler::wasmMarkCallAsSlow() { Mov(x28, x28); }
 
 const int32_t SlowCallMarker = 0xaa1c03fc;
@@ -3515,7 +3517,6 @@ CodeOffset MacroAssembler::wasmMarkedSlowCall(const wasm::CallSiteDesc& desc,
   wasmMarkCallAsSlow();
   return offset;
 }
-#endif  // ENABLE_WASM_TAIL_CALLS
 
 //}}} check_macroassembler_style
 

@@ -69,6 +69,24 @@ netwerk:
       - not_used
     expires: never
 
+  http3_time_to_reuse_idle_connection:
+    type: labeled_timing_distribution
+    time_unit: millisecond
+    description: >
+      The time to reuse an idle connection in HTTP3 (ms); keyed by the transaction reusing an idle connection has succeeded or failed
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1655566
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1906360
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1655566
+    notification_emails:
+      - necko@mozilla.com
+    labels:
+      - succeeded
+      - failed
+    expires: never
+    telemetry_mirror: HTTP3_TIME_TO_REUSE_IDLE_CONNECTTION_MS
+
 network:
   byte_range_request:
     type: labeled_counter
@@ -181,6 +199,52 @@ network:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1877839
     data_reviews:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1580077#c10
+    notification_emails:
+      - necko@mozilla.com
+    expires: never
+
+  cache_miss_time:
+    type: timing_distribution
+    time_unit: millisecond
+    telemetry_mirror: NETWORK_CACHE_V2_MISS_TIME_MS
+    description: >
+      Time spent to find out a cache entry file is missing.
+      (Migrated from the geckoview metric of the same name).
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1489524
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1580077
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1922661
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1580077#c10
+    notification_emails:
+      - necko@mozilla.com
+    expires: never
+
+  cache_hit_miss_stat_per_cache_size:
+    type: labeled_counter
+    description: >
+      Hit/Miss count split by cache size in file count Hit 0-5000, Miss 0-5000, Hit 5001-10000, ...
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1131600
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1922661
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1131600
+    notification_emails:
+      - necko@mozilla.com
+    expires: never
+
+  cache_hit_rate_per_cache_size:
+    type: labeled_custom_distribution
+    description: >
+      Hit rate for a specific cache size in file count. The hit rate is split into 20 buckets. The key is the cacheSize (20 buckets) and the value is between 0 and 100.
+    bucket_count: 20
+    range_min: 0
+    range_max: 100
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1131600
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1922661
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1131600
     notification_emails:
       - necko@mozilla.com
     expires: never
@@ -722,6 +786,23 @@ network:
     telemetry_mirror: HTTP3_COMPLETE_LOAD
     expires: never
 
+  http3_avg_read_interval:
+    type: labeled_timing_distribution
+    time_unit: millisecond
+    description: >
+      The average time between read operations in a HTTP/3 connection, keyed by the server header
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1902931
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1902931
+    notification_emails:
+      - necko@mozilla.com
+      - kershaw@mozilla.com
+    labels:
+      - cloudflare
+      - others
+    expires: never
+
   system_channel_success_or_failure: &system_channel_success_or_failure
     type: labeled_counter
     description: >
@@ -900,6 +981,32 @@ networking:
       - tihuang@mozilla.com
     expires: never
     telemetry_mirror: NETWORKING_DATA_TRANSFERRED_V3_KB
+
+  https_record_state:
+    type: labeled_counter
+    description: >
+      Gather the outcome of checking if a HTTPS record can be used:
+      - "invalid"
+      - "succeeded"
+      - "unmatched_cname"
+      - "all_excluded"
+      - "no_default_alpn"
+      - "others"
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1931349
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1931349
+    notification_emails:
+      - necko@mozilla.com
+      - kershaw@mozilla.com
+    expires: never
+    labels:
+      - invalid
+      - succeeded
+      - unmatched_cname
+      - all_excluded
+      - no_default_alpn
+      - others
 
 opaque.response.blocking:
   javascript_validation_count:

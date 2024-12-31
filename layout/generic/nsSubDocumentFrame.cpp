@@ -213,18 +213,60 @@ void nsSubDocumentFrame::ShowViewer() {
   }
 }
 
+void nsSubDocumentFrame::CreateView() {
+  MOZ_ASSERT(!HasView());
+
+  nsView* parentView = GetParent()->GetClosestView();
+  MOZ_ASSERT(parentView, "no parent with view");
+
+  nsViewManager* viewManager = parentView->GetViewManager();
+  MOZ_ASSERT(viewManager, "null view manager");
+
+  nsView* view = viewManager->CreateView(GetRect(), parentView);
+  SyncFrameViewProperties(view);
+
+  nsView* insertBefore = nsLayoutUtils::FindSiblingViewFor(parentView, this);
+  // we insert this view 'above' the insertBefore view, unless insertBefore is
+  // null, in which case we want to call with aAbove == false to insert at the
+  // beginning in document order
+  viewManager->InsertChild(parentView, view, insertBefore,
+                           insertBefore != nullptr);
+
+  // REVIEW: Don't create a widget for fixed-pos elements anymore.
+  // ComputeRepaintRegionForCopy will calculate the right area to repaint
+  // when we scroll.
+  // Reparent views on any child frames (or their descendants) to this
+  // view. We can just call ReparentFrameViewTo on this frame because
+  // we know this frame has no view, so it will crawl the children. Also,
+  // we know that any descendants with views must have 'parentView' as their
+  // parent view.
+  ReparentFrameViewTo(viewManager, view);
+
+  // Remember our view
+  SetView(view);
+
+  NS_FRAME_LOG(NS_FRAME_TRACE_CALLS,
+               ("nsIFrame::CreateView: frame=%p view=%p", this, view));
+}
+
 nsIFrame* nsSubDocumentFrame::GetSubdocumentRootFrame() {
-  if (!mInnerView) return nullptr;
+  if (!mInnerView) {
+    return nullptr;
+  }
   nsView* subdocView = mInnerView->GetFirstChild();
   return subdocView ? subdocView->GetFrame() : nullptr;
 }
 
 mozilla::PresShell* nsSubDocumentFrame::GetSubdocumentPresShellForPainting(
     uint32_t aFlags) {
-  if (!mInnerView) return nullptr;
+  if (!mInnerView) {
+    return nullptr;
+  }
 
   nsView* subdocView = mInnerView->GetFirstChild();
-  if (!subdocView) return nullptr;
+  if (!subdocView) {
+    return nullptr;
+  }
 
   mozilla::PresShell* presShell = nullptr;
 
@@ -258,9 +300,13 @@ mozilla::PresShell* nsSubDocumentFrame::GetSubdocumentPresShellForPainting(
     if (!presShell) {
       // If we don't have a frame we use this roundabout way to get the pres
       // shell.
-      if (!mFrameLoader) return nullptr;
+      if (!mFrameLoader) {
+        return nullptr;
+      }
       nsIDocShell* docShell = mFrameLoader->GetDocShell(IgnoreErrors());
-      if (!docShell) return nullptr;
+      if (!docShell) {
+        return nullptr;
+      }
       presShell = docShell->GetPresShell();
     }
   }
@@ -283,26 +329,27 @@ nsRect nsSubDocumentFrame::GetDestRect(const nsRect& aConstraintRect) {
       GetIntrinsicRatio(), StylePosition());
 }
 
-ScreenIntSize nsSubDocumentFrame::GetSubdocumentSize() {
+LayoutDeviceIntSize nsSubDocumentFrame::GetSubdocumentSize() {
   if (HasAnyStateBits(NS_FRAME_FIRST_REFLOW)) {
     if (RefPtr<nsFrameLoader> frameloader = FrameLoader()) {
       nsIFrame* detachedFrame = frameloader->GetDetachedSubdocFrame();
       if (nsView* view = detachedFrame ? detachedFrame->GetView() : nullptr) {
         nsSize size = view->GetBounds().Size();
         nsPresContext* presContext = detachedFrame->PresContext();
-        return ScreenIntSize(presContext->AppUnitsToDevPixels(size.width),
-                             presContext->AppUnitsToDevPixels(size.height));
+        return LayoutDeviceIntSize(
+            presContext->AppUnitsToDevPixels(size.width),
+            presContext->AppUnitsToDevPixels(size.height));
       }
     }
     // Pick some default size for now.  Using 10x10 because that's what the
     // code used to do.
-    return ScreenIntSize(10, 10);
+    return LayoutDeviceIntSize(10, 10);
   }
 
   nsSize docSizeAppUnits = GetDestRect().Size();
   nsPresContext* pc = PresContext();
-  return ScreenIntSize(pc->AppUnitsToDevPixels(docSizeAppUnits.width),
-                       pc->AppUnitsToDevPixels(docSizeAppUnits.height));
+  return LayoutDeviceIntSize(pc->AppUnitsToDevPixels(docSizeAppUnits.width),
+                             pc->AppUnitsToDevPixels(docSizeAppUnits.height));
 }
 
 static void WrapBackgroundColorInOwnLayer(nsDisplayListBuilder* aBuilder,
@@ -456,12 +503,16 @@ void nsSubDocumentFrame::BuildDisplayList(nsDisplayListBuilder* aBuilder,
                                                            visible, dirty);
 
     if (subdocRootFrame) {
-      bool hasDocumentLevelListenersForApzAwareEvents =
-          gfxPlatform::AsyncPanZoomEnabled() &&
-          nsLayoutUtils::HasDocumentLevelListenersForApzAwareEvents(presShell);
+      if (aBuilder->BuildCompositorHitTestInfo()) {
+        bool hasDocumentLevelListenersForApzAwareEvents =
+            gfxPlatform::AsyncPanZoomEnabled() &&
+            nsLayoutUtils::HasDocumentLevelListenersForApzAwareEvents(
+                presShell);
 
-      aBuilder->SetAncestorHasApzAwareEventHandler(
-          hasDocumentLevelListenersForApzAwareEvents);
+        aBuilder->SetAncestorHasApzAwareEventHandler(
+            hasDocumentLevelListenersForApzAwareEvents);
+      }
+
       subdocRootFrame->BuildDisplayListForStackingContext(aBuilder,
                                                           &childItems);
       if (!aBuilder->IsForEventDelivery()) {

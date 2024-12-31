@@ -16,7 +16,6 @@
 #include "gfxTypes.h"
 #include "gfxUtils.h"
 #include "LookAndFeel.h"
-#include "nsAlgorithm.h"
 #include "nsBidiPresUtils.h"
 #include "nsBlockFrame.h"
 #include "nsCaret.h"
@@ -141,7 +140,9 @@ static void IntersectInterval(uint32_t& aStart, uint32_t& aLength,
   if (aStartOther >= aEnd || aStart >= aEndOther) {
     aLength = 0;
   } else {
-    if (aStartOther >= aStart) aStart = aStartOther;
+    if (aStartOther >= aStart) {
+      aStart = aStartOther;
+    }
     aLength = std::min(aEnd, aEndOther) - aStart;
   }
 }
@@ -2787,6 +2788,15 @@ void SVGTextFrame::BuildDisplayList(nsDisplayListBuilder* aBuilder,
   aLists.Content()->AppendNewToTop<DisplaySVGText>(aBuilder, this);
 }
 
+void SVGTextFrame::DidSetComputedStyle(ComputedStyle* aOldComputedStyle) {
+  SVGDisplayContainerFrame::DidSetComputedStyle(aOldComputedStyle);
+  if (StyleSVGReset()->HasNonScalingStroke() &&
+      (!aOldComputedStyle ||
+       !aOldComputedStyle->StyleSVGReset()->HasNonScalingStroke())) {
+    SVGUtils::UpdateNonScalingStrokeStateBit(this);
+  }
+}
+
 nsresult SVGTextFrame::AttributeChanged(int32_t aNameSpaceID,
                                         nsAtom* aAttribute, int32_t aModType) {
   if (aNameSpaceID != kNameSpaceID_None) {
@@ -5264,9 +5274,9 @@ Point SVGTextFrame::TransformFramePointToTextChild(
       // The point was closer to this rendered run's rect than any others
       // we've seen so far.
       pointInRun.x =
-          clamped(pointInRunUserSpace.x.value, runRect.X(), runRect.XMost());
+          std::clamp(pointInRunUserSpace.x.value, runRect.X(), runRect.XMost());
       pointInRun.y =
-          clamped(pointInRunUserSpace.y.value, runRect.Y(), runRect.YMost());
+          std::clamp(pointInRunUserSpace.y.value, runRect.Y(), runRect.YMost());
       hit = run;
     }
   }

@@ -317,7 +317,7 @@ static void SetPropertiesFromFace(gfxFontEntry* aFontEntry,
     const OS2Table* os2 = reinterpret_cast<const OS2Table*>(data);
     os2weight = os2->usWeightClass;
     uint16_t os2width = os2->usWidthClass;
-    if (os2width < ArrayLength(kOS2WidthToStretch)) {
+    if (os2width < std::size(kOS2WidthToStretch)) {
       stretch = kOS2WidthToStretch[os2width];
     }
   }
@@ -702,13 +702,13 @@ void gfxFT2FontList::CollectInitData(const FontListEntry& aFLE,
   nsAutoCString psname(aPSName), fullname(aFullName);
   if (!psname.IsEmpty()) {
     ToLowerCase(psname);
-    mLocalNameTable.InsertOrUpdate(
+    MaybeAddToLocalNameTable(
         psname, fontlist::LocalFaceRec::InitData(key, aFLE.filepath()));
   }
   if (!fullname.IsEmpty()) {
     ToLowerCase(fullname);
     if (fullname != psname) {
-      mLocalNameTable.InsertOrUpdate(
+      MaybeAddToLocalNameTable(
           fullname, fontlist::LocalFaceRec::InitData(key, aFLE.filepath()));
     }
   }
@@ -1207,15 +1207,18 @@ void gfxFT2FontList::AppendFacesFromFontFile(const nsCString& aFileName,
       uint32_t(s.st_mtime) == timestamp && s.st_size == filesize) {
     CollectFunc unshared =
         [](const FontListEntry& aFLE, const nsCString& aPSName,
-           const nsCString& aFullName, StandardFile aStdFile) {
-          auto* pfl = PlatformFontList();
-          pfl->mLock.AssertCurrentThreadIn();
-          pfl->AppendFaceFromFontListEntry(aFLE, aStdFile);
-        };
+           const nsCString& aFullName, StandardFile aStdFile)
+            MOZ_REQUIRES(PlatformFontList()->mLock) {
+              auto* pfl = PlatformFontList();
+              pfl->mLock.AssertCurrentThreadIn();
+              pfl->AppendFaceFromFontListEntry(aFLE, aStdFile);
+            };
     CollectFunc shared = [](const FontListEntry& aFLE, const nsCString& aPSName,
-                            const nsCString& aFullName, StandardFile aStdFile) {
-      PlatformFontList()->CollectInitData(aFLE, aPSName, aFullName, aStdFile);
-    };
+                            const nsCString& aFullName, StandardFile aStdFile)
+                             MOZ_REQUIRES(PlatformFontList()->mLock) {
+                               PlatformFontList()->CollectInitData(
+                                   aFLE, aPSName, aFullName, aStdFile);
+                             };
     if (AppendFacesFromCachedFaceList(SharedFontList() ? shared : unshared,
                                       aFileName, cachedFaceList, aStdFile)) {
       LOG(("using cached font info for %s", aFileName.get()));
@@ -1254,7 +1257,7 @@ void gfxFT2FontList::FindFontsInOmnijar(FontNameCache* aCache) {
       "res/fonts/*.ttf$",
   };
   RefPtr<nsZipArchive> reader = Omnijar::GetReader(Omnijar::Type::GRE);
-  for (unsigned i = 0; i < ArrayLength(sJarSearchPaths); i++) {
+  for (unsigned i = 0; i < std::size(sJarSearchPaths); i++) {
     nsZipFind* find;
     if (NS_SUCCEEDED(reader->FindInit(sJarSearchPaths[i], &find))) {
       const char* path;
@@ -1353,25 +1356,24 @@ gfxFT2FontList::GetFilteredPlatformFontLists() {
   }
 
   fontLists.AppendElement(
-      std::make_pair(kBaseFonts_Android, ArrayLength(kBaseFonts_Android)));
+      std::make_pair(kBaseFonts_Android, std::size(kBaseFonts_Android)));
 
   if (fontVisibilityDevice == Device::Android_sub_9) {
     fontLists.AppendElement(std::make_pair(kBaseFonts_Android5_8,
-                                           ArrayLength(kBaseFonts_Android5_8)));
+                                           std::size(kBaseFonts_Android5_8)));
   } else {
     fontLists.AppendElement(std::make_pair(
-        kBaseFonts_Android9_Higher, ArrayLength(kBaseFonts_Android9_Higher)));
+        kBaseFonts_Android9_Higher, std::size(kBaseFonts_Android9_Higher)));
 
     if (fontVisibilityDevice == Device::Android_9_11) {
       fontLists.AppendElement(std::make_pair(
-          kBaseFonts_Android9_11, ArrayLength(kBaseFonts_Android9_11)));
+          kBaseFonts_Android9_11, std::size(kBaseFonts_Android9_11)));
     } else {
-      fontLists.AppendElement(
-          std::make_pair(kBaseFonts_Android12_Higher,
-                         ArrayLength(kBaseFonts_Android12_Higher)));
+      fontLists.AppendElement(std::make_pair(
+          kBaseFonts_Android12_Higher, std::size(kBaseFonts_Android12_Higher)));
       fontLists.AppendElement(
           std::make_pair(kLangPack_MFR_Android12_Higher,
-                         ArrayLength(kLangPack_MFR_Android12_Higher)));
+                         std::size(kLangPack_MFR_Android12_Higher)));
     }
   }
 
@@ -1496,10 +1498,11 @@ void gfxFT2FontList::AppendFacesFromOmnijarEntry(nsZipArchive* aArchive,
           };
       CollectFunc shared = [](const FontListEntry& aFLE,
                               const nsCString& aPSName,
-                              const nsCString& aFullName,
-                              StandardFile aStdFile) {
-        PlatformFontList()->CollectInitData(aFLE, aPSName, aFullName, aStdFile);
-      };
+                              const nsCString& aFullName, StandardFile aStdFile)
+                               MOZ_REQUIRES(PlatformFontList()->mLock) {
+                                 PlatformFontList()->CollectInitData(
+                                     aFLE, aPSName, aFullName, aStdFile);
+                               };
       if (AppendFacesFromCachedFaceList(SharedFontList() ? shared : unshared,
                                         aEntryName, faceList, kStandard)) {
         return;
@@ -1713,7 +1716,7 @@ void gfxFT2FontList::FindFontsInDir(const nsCString& aDir,
     if (strcasecmp(ext, ".ttf") == 0 || strcasecmp(ext, ".otf") == 0 ||
         strcasecmp(ext, ".woff") == 0 || strcasecmp(ext, ".ttc") == 0) {
       bool isStdFont = false;
-      for (unsigned int i = 0; i < ArrayLength(sStandardFonts) && !isStdFont;
+      for (unsigned int i = 0; i < std::size(sStandardFonts) && !isStdFont;
            i++) {
         isStdFont = strcmp(sStandardFonts[i], ent->d_name) == 0;
       }

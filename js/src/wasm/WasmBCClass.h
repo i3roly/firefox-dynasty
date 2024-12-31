@@ -771,15 +771,15 @@ struct BaseCompiler final {
   inline RegI32 popI64ToSpecificI32(RegI32 specific);
 
   // Pop an I32 or I64 as an I64. The value is zero extended out to 64-bits.
-  inline RegI64 popIndexToInt64(IndexType indexType);
+  inline RegI64 popAddressToInt64(AddressType addressType);
 
   // Pop an I32 or I64 as an I32. The value is clamped to UINT32_MAX to ensure
   // that it trips bounds checks.
-  inline RegI32 popTableIndexToClampedInt32(IndexType indexType);
+  inline RegI32 popTableAddressToClampedInt32(AddressType addressType);
 
   // A combined push/pop that replaces an I32 or I64 on the stack with a clamped
   // I32, which will trip bounds checks if out of I32 range.
-  inline void replaceTableIndexWithClampedInt32(IndexType indexType);
+  inline void replaceTableAddressWithClampedInt32(AddressType addressType);
 
   // Pop the stack until it has the desired size, but do not move the physical
   // stack pointer.
@@ -986,16 +986,12 @@ struct BaseCompiler final {
                     bool tailCall, CodeOffset* fastCallOffset,
                     CodeOffset* slowCallOffset);
   CodeOffset callImport(unsigned instanceDataOffset, const FunctionCall& call);
-#ifdef ENABLE_WASM_GC
   bool updateCallRefMetrics(size_t callRefIndex);
   bool callRef(const Stk& calleeRef, const FunctionCall& call,
                mozilla::Maybe<size_t> callRefIndex, CodeOffset* fastCallOffset,
                CodeOffset* slowCallOffset);
-#  ifdef ENABLE_WASM_TAIL_CALLS
   void returnCallRef(const Stk& calleeRef, const FunctionCall& call,
-                     const FuncType* funcType);
-#  endif
-#endif
+                     const FuncType& funcType);
   CodeOffset builtinCall(SymbolicAddress builtin, const FunctionCall& call);
   CodeOffset builtinInstanceMethodCall(const SymbolicAddressSignature& builtin,
                                        const ABIArg& instanceArg,
@@ -1180,9 +1176,9 @@ struct BaseCompiler final {
 
   // Fold offsets into ptr and bounds check as necessary.  The instance will be
   // valid in cases where it's needed.
-  template <typename RegIndexType>
+  template <typename RegAddressType>
   void prepareMemoryAccess(MemoryAccessDesc* access, AccessCheck* check,
-                           RegPtr instance, RegIndexType ptr);
+                           RegPtr instance, RegAddressType ptr);
 
   void branchAddNoOverflow(uint64_t offset, RegI32 ptr, Label* ok);
   void branchTestLowZero(RegI32 ptr, Imm32 mask, Label* ok);
@@ -1200,12 +1196,12 @@ struct BaseCompiler final {
 
   // Some consumers depend on the returned Address not incorporating instance,
   // as instance may be the scratch register.
-  template <typename RegIndexType>
+  template <typename RegAddressType>
   Address prepareAtomicMemoryAccess(MemoryAccessDesc* access,
                                     AccessCheck* check, RegPtr instance,
-                                    RegIndexType ptr);
+                                    RegAddressType ptr);
 
-  template <typename RegIndexType>
+  template <typename RegAddressType>
   void computeEffectiveAddress(MemoryAccessDesc* access);
 
   [[nodiscard]] bool needInstanceForAccess(const MemoryAccessDesc* access,
@@ -1249,28 +1245,28 @@ struct BaseCompiler final {
 
   void atomicLoad(MemoryAccessDesc* access, ValType type);
 #if !defined(JS_64BIT)
-  template <typename RegIndexType>
+  template <typename RegAddressType>
   void atomicLoad64(MemoryAccessDesc* desc);
 #endif
 
   void atomicStore(MemoryAccessDesc* access, ValType type);
 
   void atomicRMW(MemoryAccessDesc* access, ValType type, AtomicOp op);
-  template <typename RegIndexType>
+  template <typename RegAddressType>
   void atomicRMW32(MemoryAccessDesc* access, ValType type, AtomicOp op);
-  template <typename RegIndexType>
+  template <typename RegAddressType>
   void atomicRMW64(MemoryAccessDesc* access, ValType type, AtomicOp op);
 
   void atomicXchg(MemoryAccessDesc* access, ValType type);
-  template <typename RegIndexType>
+  template <typename RegAddressType>
   void atomicXchg64(MemoryAccessDesc* access, WantResult wantResult);
-  template <typename RegIndexType>
+  template <typename RegAddressType>
   void atomicXchg32(MemoryAccessDesc* access, ValType type);
 
   void atomicCmpXchg(MemoryAccessDesc* access, ValType type);
-  template <typename RegIndexType>
+  template <typename RegAddressType>
   void atomicCmpXchg32(MemoryAccessDesc* access, ValType type);
-  template <typename RegIndexType>
+  template <typename RegAddressType>
   void atomicCmpXchg64(MemoryAccessDesc* access, ValType type);
 
   template <typename RegType>
@@ -1398,14 +1394,12 @@ struct BaseCompiler final {
   template <typename Cond, typename Lhs, typename Rhs>
   [[nodiscard]] bool jumpConditionalWithResults(BranchState* b, Cond cond,
                                                 Lhs lhs, Rhs rhs);
-#ifdef ENABLE_WASM_GC
   // Jump to the given branch, passing results, if the WasmGcObject, `object`,
   // is a subtype of `destType`.
   [[nodiscard]] bool jumpConditionalWithResults(BranchState* b, RegRef object,
                                                 RefType sourceType,
                                                 RefType destType,
                                                 bool onSuccess);
-#endif
   template <typename Cond>
   [[nodiscard]] bool sniffConditionalControlCmp(Cond compareOp,
                                                 ValType operandType);
@@ -1663,13 +1657,11 @@ struct BaseCompiler final {
   [[nodiscard]] bool emitRefFunc();
   [[nodiscard]] bool emitRefNull();
   [[nodiscard]] bool emitRefIsNull();
-#ifdef ENABLE_WASM_GC
   [[nodiscard]] bool emitRefAsNonNull();
   [[nodiscard]] bool emitBrOnNull();
   [[nodiscard]] bool emitBrOnNonNull();
   [[nodiscard]] bool emitCallRef();
   [[nodiscard]] bool emitReturnCallRef();
-#endif
 
   [[nodiscard]] bool emitAtomicCmpXchg(ValType type, Scalar::Type viewType);
   [[nodiscard]] bool emitAtomicLoad(ValType type, Scalar::Type viewType);
@@ -1678,8 +1670,8 @@ struct BaseCompiler final {
   [[nodiscard]] bool emitAtomicStore(ValType type, Scalar::Type viewType);
   [[nodiscard]] bool emitWait(ValType type, uint32_t byteSize);
   [[nodiscard]] bool atomicWait(ValType type, MemoryAccessDesc* access);
-  [[nodiscard]] bool emitWake();
-  [[nodiscard]] bool atomicWake(MemoryAccessDesc* access);
+  [[nodiscard]] bool emitNotify();
+  [[nodiscard]] bool atomicNotify(MemoryAccessDesc* access);
   [[nodiscard]] bool emitFence();
   [[nodiscard]] bool emitAtomicXchg(ValType type, Scalar::Type viewType);
   [[nodiscard]] bool emitMemInit();
@@ -1699,11 +1691,11 @@ struct BaseCompiler final {
   [[nodiscard]] bool emitTableSet();
   [[nodiscard]] bool emitTableSize();
 
-  void emitTableBoundsCheck(uint32_t tableIndex, RegI32 index, RegPtr instance);
+  void emitTableBoundsCheck(uint32_t tableIndex, RegI32 address,
+                            RegPtr instance);
   [[nodiscard]] bool emitTableGetAnyRef(uint32_t tableIndex);
   [[nodiscard]] bool emitTableSetAnyRef(uint32_t tableIndex);
 
-#ifdef ENABLE_WASM_GC
   [[nodiscard]] bool emitStructNew();
   [[nodiscard]] bool emitStructNewDefault();
   [[nodiscard]] bool emitStructGet(FieldWideningOp wideningOp);
@@ -1794,7 +1786,6 @@ struct BaseCompiler final {
   [[nodiscard]] bool emitGcArraySet(RegRef object, RegPtr data, RegI32 index,
                                     const ArrayType& array, AnyReg value,
                                     PreBarrierKind preBarrierKind);
-#endif  // ENABLE_WASM_GC
 
 #ifdef ENABLE_WASM_SIMD
   void emitVectorAndNot();

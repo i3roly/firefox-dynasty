@@ -116,6 +116,7 @@
 #include "mozilla/layers/IAPZCTreeManager.h"  // for layers::ZoomToRectBehavior
 #include "mozilla/dom/Document.h"
 #include "mozilla/dom/Promise.h"
+#include "mozilla/RDDProcessManager.h"
 #include "mozilla/ServoBindings.h"
 #include "mozilla/StyleSheetInlines.h"
 #include "mozilla/gfx/gfxVars.h"
@@ -219,7 +220,7 @@ already_AddRefed<nsIRunnable> NativeInputRunnable::Create(
 
 }  // unnamed namespace
 
-LinkedList<OldWindowSize> OldWindowSize::sList;
+MOZ_RUNINIT LinkedList<OldWindowSize> OldWindowSize::sList;
 
 NS_INTERFACE_MAP_BEGIN(nsDOMWindowUtils)
   NS_INTERFACE_MAP_ENTRY_AMBIGUOUS(nsISupports, nsIDOMWindowUtils)
@@ -2317,6 +2318,16 @@ nsDOMWindowUtils::GetFocusedAutocapitalize(nsAString& aAutocapitalize) {
 }
 
 NS_IMETHODIMP
+nsDOMWindowUtils::GetFocusedAutocorrect(bool* aAutocorrect) {
+  nsCOMPtr<nsIWidget> widget = GetWidget();
+  if (!widget) {
+    return NS_ERROR_FAILURE;
+  }
+  *aAutocorrect = widget->GetInputContext().mAutocorrect;
+  return NS_OK;
+}
+
+NS_IMETHODIMP
 nsDOMWindowUtils::GetViewId(Element* aElement, nsViewID* aResult) {
   if (aElement && nsLayoutUtils::FindIDFor(aElement, aResult)) {
     return NS_OK;
@@ -3644,17 +3655,14 @@ static void PrepareForFullscreenChange(nsIDocShell* aDocShell,
     nsCOMPtr<nsIDocumentViewer> viewer;
     aDocShell->GetDocViewer(getter_AddRefs(viewer));
     if (viewer) {
-      nsIntRect viewerBounds;
+      LayoutDeviceIntRect viewerBounds;
       viewer->GetBounds(viewerBounds);
       nscoord auPerDev = presShell->GetPresContext()->AppUnitsPerDevPixel();
       if (aOldSize) {
-        *aOldSize = LayoutDeviceIntSize::ToAppUnits(
-            LayoutDeviceIntSize::FromUnknownSize(viewerBounds.Size()),
-            auPerDev);
+        *aOldSize =
+            LayoutDeviceIntSize::ToAppUnits(viewerBounds.Size(), auPerDev);
       }
-      LayoutDeviceIntSize newSize =
-          LayoutDeviceIntSize::FromAppUnitsRounded(aSize, auPerDev);
-
+      auto newSize = LayoutDeviceIntSize::FromAppUnitsRounded(aSize, auPerDev);
       viewerBounds.SizeTo(newSize.width, newSize.height);
       viewer->SetBounds(viewerBounds);
     }
@@ -3673,7 +3681,7 @@ nsDOMWindowUtils::HandleFullscreenRequests(bool* aRetVal) {
   // extra resize reflow after this point.
   nsRect screenRect;
   if (nsPresContext* presContext = GetPresContext()) {
-    presContext->DeviceContext()->GetRect(screenRect);
+    screenRect = presContext->DeviceContext()->GetRect();
   }
   nsSize oldSize;
   PrepareForFullscreenChange(GetDocShell(), screenRect.Size(), &oldSize);
@@ -4366,6 +4374,18 @@ nsDOMWindowUtils::GetGpuProcessPid(int32_t* aPid) {
   GPUProcessManager* pm = GPUProcessManager::Get();
   if (pm) {
     *aPid = pm->GPUProcessPid();
+  } else {
+    *aPid = -1;
+  }
+
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsDOMWindowUtils::GetRddProcessPid(int32_t* aPid) {
+  RDDProcessManager* pm = RDDProcessManager::Get();
+  if (pm) {
+    *aPid = pm->RDDProcessPid();
   } else {
     *aPid = -1;
   }

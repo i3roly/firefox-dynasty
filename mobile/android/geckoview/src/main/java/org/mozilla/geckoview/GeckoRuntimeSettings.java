@@ -675,6 +675,8 @@ public final class GeckoRuntimeSettings extends RuntimeSettings {
       new PrefWithoutDefault<Boolean>("fission.disableSessionHistoryInParent");
   /* package */ final Pref<Boolean> mFetchPriorityEnabled =
       new Pref<Boolean>("network.fetchpriority.enabled", false);
+  /* package */ final Pref<Boolean> mParallelMarkingEnabled =
+      new Pref<Boolean>("javascript.options.mem.gc_parallel_marking", false);
   /* package */ final Pref<Boolean> mCookieBehaviorOptInPartitioning =
       new Pref<Boolean>("network.cookie.cookieBehavior.optInPartitioning", false);
   /* package */ final Pref<Boolean> mCookieBehaviorOptInPartitioningPBM =
@@ -1027,6 +1029,27 @@ public final class GeckoRuntimeSettings extends RuntimeSettings {
   }
 
   /**
+   * Set the pref to control whether javascript.options.mem.gc_parallel_marking is enabled.
+   *
+   * @param enabled Whether to enable the JS GC Parallel Marking feature. This feature is purely a
+   *     performance feature and should have no noticeable behavior change for the user.
+   * @return This GeckoRuntimeSettings instance
+   */
+  public @NonNull GeckoRuntimeSettings setParallelMarkingEnabled(final boolean enabled) {
+    mParallelMarkingEnabled.commit(enabled);
+    return this;
+  }
+
+  /**
+   * Get whether javascript.options.mem.gc_parallel_marking is enabled.
+   *
+   * @return Whether Parallel Marking is enabled
+   */
+  public boolean getParallelMarkingEnabled() {
+    return mParallelMarkingEnabled.get();
+  }
+
+  /**
    * Get whether remote debugging support is enabled.
    *
    * @return True if remote debugging support is enabled.
@@ -1343,14 +1366,14 @@ public final class GeckoRuntimeSettings extends RuntimeSettings {
     return setFontSizeFactorInternal(fontSizeFactor);
   }
 
-  /*
+  /**
    * Enable the Enteprise Roots feature.
    *
-   * When Enabled, GeckoView will fetch the third-party root certificates added to the
-   * Android OS CA store and will use them internally.
+   * <p>When Enabled, GeckoView will fetch the third-party root certificates added to the Android OS
+   * CA store and will use them internally.
    *
-   * @param enabled whether to enable this feature or not
-   * @return This GeckoRuntimeSettings instance
+   * @param enabled Whether to enable this feature or not.
+   * @return This GeckoRuntimeSettings instance.
    */
   public @NonNull GeckoRuntimeSettings setEnterpriseRootsEnabled(final boolean enabled) {
     mEnterpriseRootsEnabled.commit(enabled);

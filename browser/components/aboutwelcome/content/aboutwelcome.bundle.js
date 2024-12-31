@@ -100,6 +100,13 @@ const AboutWelcomeUtils = {
   getLoadingStrategyFor(url) {
     return url?.startsWith("http") ? "lazy" : "eager";
   },
+  handleCampaignAction(action, messageId) {
+    window.AWSendToParent("HANDLE_CAMPAIGN_ACTION", action).then(handled => {
+      if (handled) {
+        this.sendActionTelemetry(messageId, "CAMPAIGN_ACTION");
+      }
+    });
+  },
 };
 
 const DEFAULT_RTAMO_CONTENT = {
@@ -215,6 +222,20 @@ const MultiStageAboutWelcome = props => {
       // e.g. if AW_LANGUAGE_MISMATCH exists, use it from existing screens
       setScreens(filteredScreens.map(filtered => screens.find(s => s.id === filtered.id) ?? filtered));
       didFilter.current = true;
+
+      // After completing screen filtering, trigger any unhandled campaign
+      // action present in the attribution campaign data. This updates the
+      // "trailhead.firstrun.didHandleCampaignAction" preference, marking the
+      // actions as complete to prevent them from being handled on subsequent
+      // visits to about:welcome. Do not await getting the action to avoid
+      // blocking the thread.
+      window.AWGetUnhandledCampaignAction?.().then(action => {
+        if (typeof action === "string") {
+          _lib_aboutwelcome_utils_mjs__WEBPACK_IMPORTED_MODULE_2__.AboutWelcomeUtils.handleCampaignAction(action, props.message_id);
+        }
+      }).catch(error => {
+        console.error("Failed to get unhandled campaign action:", error);
+      });
       const screenInitials = filteredScreens.map(({
         id
       }) => id?.split("_")[1]?.[0]).join("");
@@ -564,9 +585,9 @@ class WelcomeScreen extends (react__WEBPACK_IMPORTED_MODULE_0___default().PureCo
     }
     let actionResult;
     if (["OPEN_URL", "SHOW_FIREFOX_ACCOUNTS"].includes(action.type)) {
-      actionResult = await this.handleOpenURL(action, props.flowParams, props.UTMTerm);
+      actionResult = this.handleOpenURL(action, props.flowParams, props.UTMTerm);
     } else if (action.type) {
-      actionResult = await _lib_aboutwelcome_utils_mjs__WEBPACK_IMPORTED_MODULE_2__.AboutWelcomeUtils.handleUserAction(action);
+      actionResult = action.needsAwait ? await _lib_aboutwelcome_utils_mjs__WEBPACK_IMPORTED_MODULE_2__.AboutWelcomeUtils.handleUserAction(action) : _lib_aboutwelcome_utils_mjs__WEBPACK_IMPORTED_MODULE_2__.AboutWelcomeUtils.handleUserAction(action);
       if (action.type === "FXA_SIGNIN_FLOW") {
         _lib_aboutwelcome_utils_mjs__WEBPACK_IMPORTED_MODULE_2__.AboutWelcomeUtils.sendActionTelemetry(props.messageId, actionResult ? "sign_in" : "sign_in_cancel", "FXA_SIGNIN_FLOW");
       }
@@ -593,7 +614,7 @@ class WelcomeScreen extends (react__WEBPACK_IMPORTED_MODULE_0___default().PureCo
           } else {
             wpAction.data.pref.value = `light-${theme}`;
           }
-          await _lib_aboutwelcome_utils_mjs__WEBPACK_IMPORTED_MODULE_2__.AboutWelcomeUtils.handleUserAction(actionWallpaper);
+          _lib_aboutwelcome_utils_mjs__WEBPACK_IMPORTED_MODULE_2__.AboutWelcomeUtils.handleUserAction(actionWallpaper);
         });
       } else {
         window.AWSelectTheme(themeToUse);
@@ -617,7 +638,16 @@ class WelcomeScreen extends (react__WEBPACK_IMPORTED_MODULE_0___default().PureCo
     // `navigate` and `dismiss` can be true/false/undefined, or they can be a
     // string "actionResult" in which case we should use the actionResult
     // (boolean resolved by handleUserAction)
-    const shouldDoBehavior = behavior => behavior === "actionResult" ? actionResult : behavior;
+    const shouldDoBehavior = behavior => {
+      if (behavior !== "actionResult") {
+        return behavior;
+      }
+      if (action.needsAwait) {
+        return actionResult;
+      }
+      console.error("actionResult is only supported for actions with needsAwait");
+      return false;
+    };
     if (shouldDoBehavior(action.navigate)) {
       props.navigate();
     }
@@ -1249,6 +1279,7 @@ class ProtonScreen extends (react__WEBPACK_IMPORTED_MODULE_0___default().PureCom
     // by checking if screen order is even or odd.
     const screenClassName = isCenterPosition ? this.getScreenClassName(isFirstScreen, isLastScreen, includeNoodles, content?.video_container, content.tiles?.type === "addons-picker") : "";
     const isEmbeddedMigration = content.tiles?.type === "migration-wizard";
+    const isSystemPromptStyleSpotlight = content.isSystemPromptStyleSpotlight === true;
     return /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("main", {
       className: `screen ${this.props.id || ""}
           ${screenClassName} ${textColorClass}`,
@@ -1264,7 +1295,7 @@ class ProtonScreen extends (react__WEBPACK_IMPORTED_MODULE_0___default().PureCom
       },
       "no-rdm": content.no_rdm ? "" : null
     }, isCenterPosition ? null : this.renderSecondarySection(content), /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("div", {
-      className: `section-main ${isEmbeddedMigration ? "embedded-migration" : ""}`,
+      className: `section-main ${isEmbeddedMigration ? "embedded-migration" : ""}${isSystemPromptStyleSpotlight ? "system-prompt-spotlight" : ""}`,
       "hide-secondary-section": content.hide_secondary_section ? String(content.hide_secondary_section) : null,
       role: "document"
     }, content.secondary_button_top ? /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement(_MultiStageAboutWelcome__WEBPACK_IMPORTED_MODULE_6__.SecondaryCTA, {

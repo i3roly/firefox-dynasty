@@ -89,9 +89,7 @@ static nsSize GetDeviceSize(const Document& aDocument) {
     return pc->GetPageSize();
   }
 
-  nsSize size;
-  pc->DeviceContext()->GetDeviceSurfaceDimensions(size.width, size.height);
-  return size;
+  return pc->DeviceContext()->GetDeviceSurfaceDimensions();
 }
 
 bool Gecko_MediaFeatures_IsResourceDocument(const Document* aDocument) {
@@ -195,7 +193,8 @@ float Gecko_MediaFeatures_GetResolution(const Document* aDocument) {
   }
 
   if (aDocument->ShouldResistFingerprinting(RFPTarget::CSSResolution)) {
-    return pc->DeviceContext()->GetFullZoom();
+    return float(nsRFPService::GetDevicePixelRatioAtZoom(
+        pc->DeviceContext()->GetFullZoom()));
   }
   // Get the actual device pixel ratio, which also takes zoom into account.
   return float(AppUnitsPerCSSPixel()) /

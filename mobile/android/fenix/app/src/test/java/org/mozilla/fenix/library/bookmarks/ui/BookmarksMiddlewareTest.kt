@@ -35,6 +35,7 @@ import org.mockito.Mockito.never
 import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.`when`
+import org.mozilla.fenix.GleanMetrics.CustomizeHome.bookmarks
 import org.mozilla.fenix.R
 import org.mozilla.fenix.browser.browsingmode.BrowsingMode
 import org.mozilla.fenix.library.bookmarks.friendlyRootTitle
@@ -99,6 +100,42 @@ class BookmarksMiddlewareTest {
         val store = middleware.makeStore()
 
         assertEquals(10, store.state.bookmarkItems.size)
+    }
+
+    @Test
+    fun `GIVEN bookmarks in storage and not signed into sync WHEN store is initialized THEN bookmarks will be sorted by last modified date`() = runTestOnMain {
+        val reverseOrderByModifiedBookmarks = List(5) {
+            generateBookmark(
+                guid = "$it",
+                title = "$it",
+                url = "$it",
+                lastModified = it.toLong(),
+            )
+        }
+        val root = BookmarkNode(
+            type = BookmarkNodeType.FOLDER,
+            guid = BookmarkRoot.Mobile.id,
+            parentGuid = null,
+            position = 0U,
+            title = "mobile",
+            url = null,
+            dateAdded = 0,
+            lastModified = 0,
+            children = reverseOrderByModifiedBookmarks,
+        )
+        `when`(bookmarksStorage.countBookmarksInTrees(listOf(BookmarkRoot.Menu.id, BookmarkRoot.Toolbar.id, BookmarkRoot.Unfiled.id))).thenReturn(0u)
+        `when`(bookmarksStorage.getTree(BookmarkRoot.Mobile.id)).thenReturn(root)
+        val middleware = buildMiddleware()
+
+        val store = middleware.makeStore()
+
+        val bookmarksConvertedToSortedItems = reverseOrderByModifiedBookmarks
+            .map {
+                BookmarkItem.Bookmark(url = it.url!!, title = it.title!!, previewImageUrl = it.url!!, guid = it.guid)
+            }
+            .reversed()
+        assertEquals(5, store.state.bookmarkItems.size)
+        assertEquals(bookmarksConvertedToSortedItems, store.state.bookmarkItems)
     }
 
     @Test
@@ -1346,7 +1383,8 @@ class BookmarksMiddlewareTest {
         position = 0U,
         title = "root",
         url = null,
-        dateAdded = 0L,
+        dateAdded = 0,
+        lastModified = 0,
         children = listOf(
             generateBookmarkFolder(BookmarkRoot.Menu.id, "Menu", BookmarkRoot.Root.id),
             generateBookmarkFolder(BookmarkRoot.Toolbar.id, "Toolbar", BookmarkRoot.Root.id),
@@ -1362,7 +1400,8 @@ class BookmarksMiddlewareTest {
         position = 0U,
         title = "mobile",
         url = null,
-        dateAdded = 0L,
+        dateAdded = 0,
+        lastModified = 0,
         children = generateBookmarkFolders(BookmarkRoot.Mobile.id) + bookmarkItems,
     )
 
@@ -1373,18 +1412,20 @@ class BookmarksMiddlewareTest {
         position = 0U,
         title = title,
         url = null,
-        dateAdded = 0L,
+        dateAdded = 0,
+        lastModified = 0,
         children = bookmarkItems,
     )
 
-    private fun generateBookmark(guid: String, title: String, url: String) = BookmarkNode(
+    private fun generateBookmark(guid: String, title: String, url: String, lastModified: Long = 0) = BookmarkNode(
         type = BookmarkNodeType.ITEM,
         guid = guid,
         parentGuid = null,
         position = 0U,
         title = title,
         url = url,
-        dateAdded = 0L,
+        dateAdded = 0,
+        lastModified = lastModified,
         children = listOf(),
     )
 

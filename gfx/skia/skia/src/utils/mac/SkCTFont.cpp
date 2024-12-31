@@ -29,13 +29,13 @@
 #endif
 
 #include <dlfcn.h>
-#include <sys/utsname.h>
-// See Source/WebKit/chromium/base/mac/mac_util.mm DarwinMajorVersionInternal for original source.
-//bring in changes by im blue, da ba dee, da ba dai, daba dee daba dai, box (@blueboxd)
-
 template <typename T, size_t N> char (&SkArrayCountHelper(T (&array)[N]))[N];
 #define SK_ARRAY_COUNT(array) (sizeof(SkArrayCountHelper(array)))
 
+#include <sys/utsname.h>
+
+// i'm blue--da ba dee, da ba dai, daba dee daba dai--box
+// See Source/WebKit/chromium/base/mac/mac_util.mm DarwinMajorVersionInternal for original source.
 static int readVersion() {
     struct utsname info;
     if (uname(&info) != 0) {
@@ -70,6 +70,9 @@ static bool isMountainLion() {
 static bool isMavericks() {
     return darwinVersion() == 13;
 }
+
+
+
 
 static constexpr CGBitmapInfo kBitmapInfoRGB = ((CGBitmapInfo)kCGImageAlphaNoneSkipFirst |
                                                 kCGBitmapByteOrder32Host);
@@ -408,7 +411,6 @@ SkCTFontWeightMapping& SkCTFontGetDataFontWeightMapping() {
         CGFloat previousWeight = -CGFLOAT_MAX;
         for (int i = 0; i < 11; ++i) {
             os2Table->usWeightClass.value = SkEndian_SwapBE16(i * 100);
-
             SkUniqueCFRef<CTFontRef> ctFont;
             if(isMavericks()){
                 SkUniqueCFRef<CGDataProviderRef> cgdata(
@@ -435,6 +437,7 @@ SkCTFontWeightMapping& SkCTFontGetDataFontWeightMapping() {
                 if (!desc) {
                     return;
                 }
+
                 // On macOS 10.14 and earlier, the CTFontDescriptorRef returned from
                 // CTFontManagerCreateFontDescriptorFromData is incomplete and does not have the
                 // correct traits. It is necessary to create the CTFont and then get the descriptor
@@ -445,6 +448,7 @@ SkCTFontWeightMapping& SkCTFontGetDataFontWeightMapping() {
                 }
                 ctFont = std::move(tmp);
             }
+
             SkUniqueCFRef<CTFontDescriptorRef> desc2(CTFontCopyFontDescriptor(ctFont.get()));
             if (!desc2) {
                 return;

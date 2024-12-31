@@ -8781,14 +8781,7 @@ var gCSSProperties = {
     applies_to_cue: true,
     applies_to_marker: true,
     initial_values: ["normal"],
-    other_values: [
-      "pre",
-      "nowrap",
-      "pre-wrap",
-      "pre-line",
-      "-moz-pre-space",
-      "break-spaces",
-    ],
+    other_values: ["pre", "nowrap", "pre-wrap", "pre-line", "break-spaces"],
     invalid_values: [],
   },
   "white-space-collapse": {
@@ -8804,6 +8797,7 @@ var gCSSProperties = {
       "preserve-breaks",
       "preserve-spaces",
       "break-spaces",
+      "-moz-pre-space",
     ],
     invalid_values: ["normal", "auto"],
   },
@@ -11976,19 +11970,6 @@ function get_computed_value(cs, property) {
       );
     }
   }
-}
-
-if (IsCSSPropertyPrefEnabled("layout.css.moz-user-modify.enabled")) {
-  Object.assign(gCSSProperties, {
-    "-moz-user-modify": {
-      domProp: "MozUserModify",
-      inherited: true,
-      type: CSS_TYPE_LONGHAND,
-      initial_values: ["read-only"],
-      other_values: ["read-write", "write-only"],
-      invalid_values: [],
-    },
-  });
 }
 
 gCSSProperties.rotate = {

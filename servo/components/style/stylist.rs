@@ -2483,7 +2483,7 @@ struct ScopeConditionReference {
     parent: ScopeConditionId,
     condition: Option<ScopeBoundsWithHashes>,
     #[ignore_malloc_size_of = "Raw ptr behind the scenes"]
-    implicit_scope_root: Option<StylistImplicitScopeRoot>,
+    implicit_scope_root: StylistImplicitScopeRoot,
     is_trivial: bool,
 }
 
@@ -2492,7 +2492,7 @@ impl ScopeConditionReference {
         Self {
             parent: ScopeConditionId::none(),
             condition: None,
-            implicit_scope_root: None,
+            implicit_scope_root: StylistImplicitScopeRoot::default_const(),
             is_trivial: true,
         }
     }
@@ -2575,13 +2575,26 @@ impl ScopeBoundsWithHashes {
 
 /// Implicit scope root, which may or may not be cached (i.e. For shadow DOM author
 /// styles that are cached and shared).
-#[derive(Clone, Debug, MallocSizeOf)]
+#[derive(Copy, Clone, Debug, MallocSizeOf)]
 enum StylistImplicitScopeRoot {
     Normal(ImplicitScopeRoot),
     Cached(usize),
 }
 // Should be safe, only mutated through mutable methods in `Stylist`.
 unsafe impl Sync for StylistImplicitScopeRoot {}
+
+impl StylistImplicitScopeRoot {
+    const fn default_const() -> Self {
+        // Use the "safest" fallback.
+        Self::Normal(ImplicitScopeRoot::DocumentElement)
+    }
+}
+
+impl Default for StylistImplicitScopeRoot {
+    fn default() -> Self {
+        Self::default_const()
+    }
+}
 
 /// Data resulting from performing the CSS cascade that is specific to a given
 /// origin.
@@ -2713,11 +2726,11 @@ pub struct CascadeData {
     num_declarations: usize,
 }
 
-// TODO(emilio, dshin): According to https://github.com/w3c/csswg-drafts/issues/10431 other browsers don't quite do this.
 fn parent_selector_for_scope(parent: Option<&SelectorList<SelectorImpl>>) -> &SelectorList<SelectorImpl> {
     lazy_static! {
         static ref SCOPE: SelectorList<SelectorImpl> = {
-            let list = SelectorList::scope();
+            // Implicit scope, as per https://github.com/w3c/csswg-drafts/issues/10196
+            let list = SelectorList::implicit_scope();
             list.mark_as_intentionally_leaked();
             list
         };
@@ -3027,16 +3040,10 @@ impl CascadeData {
                 }),
             )
         } else {
-            let implicit_root = condition_ref
-                .implicit_scope_root
-                .as_ref()
-                .expect("No boundaries, no implicit root?");
+            let implicit_root = condition_ref.implicit_scope_root;
             match implicit_root {
                 StylistImplicitScopeRoot::Normal(r) => {
-                    match r.element(context.current_host.clone()) {
-                        None => return ScopeRootCandidates::empty(is_trivial),
-                        Some(root) => (ScopeTarget::Element(root), r.matches_shadow_host()),
-                    }
+                    (ScopeTarget::Implicit(r.element(context.current_host.clone())), r.matches_shadow_host())
                 },
                 StylistImplicitScopeRoot::Cached(index) => {
                     use crate::dom::TShadowRoot;
@@ -3046,14 +3053,10 @@ impl CascadeData {
                     let shadow_root = E::unopaque(host)
                         .shadow_root()
                         .expect("Shadow host without root?");
-                    match shadow_root.implicit_scope_for_sheet(*index) {
+                    match shadow_root.implicit_scope_for_sheet(index) {
                         None => return ScopeRootCandidates::empty(is_trivial),
-                        Some(root) => {
-                            match root.element(context.current_host.clone()) {
-                                None => return ScopeRootCandidates::empty(is_trivial),
-                                Some(r) =>  (ScopeTarget::Element(r), root.matches_shadow_host()),
-                            }
-                        },
+                        Some(root) =>
+                            (ScopeTarget::Implicit(root.element(context.current_host.clone())), root.matches_shadow_host()),
                     }
                 },
             }
@@ -3688,16 +3691,17 @@ impl CascadeData {
                             !s.matches_featureless_host_selector_or_pseudo_element()
                                 .is_empty()
                         });
-                        // Would be unused anyway.
-                        None
+                        // Would be unused, but use the default as fallback.
+                        StylistImplicitScopeRoot::default()
                     } else {
                         // (Re)Moving stylesheets trigger a complete flush, so saving the implicit
                         // root here should be safe.
-                        stylesheet.implicit_scope_root().map(|root| {
+                        if let Some(root) = stylesheet.implicit_scope_root() {
                             matches_shadow_host = root.matches_shadow_host();
                             match root {
                                 ImplicitScopeRoot::InLightTree(_) |
-                                ImplicitScopeRoot::Constructed => {
+                                ImplicitScopeRoot::Constructed |
+                                ImplicitScopeRoot::DocumentElement => {
                                     StylistImplicitScopeRoot::Normal(root)
                                 },
                                 ImplicitScopeRoot::ShadowHost(_) | ImplicitScopeRoot::InShadowTree(_) => {
@@ -3710,7 +3714,10 @@ impl CascadeData {
                                     StylistImplicitScopeRoot::Cached(sheet_index)
                                 },
                             }
-                        })
+                        } else {
+                            // Could not find implicit scope root, but use the default as fallback.
+                            StylistImplicitScopeRoot::default()
+                        }
                     };
 
                     let replaced = {

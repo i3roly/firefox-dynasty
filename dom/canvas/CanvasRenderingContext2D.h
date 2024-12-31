@@ -36,6 +36,7 @@ class nsXULElement;
 
 namespace mozilla {
 class ErrorResult;
+class ISVGFilterObserverList;
 class PresShell;
 
 namespace gl {
@@ -98,6 +99,10 @@ class CanvasRenderingContext2D : public nsICanvasRenderingContextInternal,
   }
 
   void GetContextAttributes(CanvasRenderingContext2DSettings& aSettings) const;
+
+  void GetDebugInfo(bool aEnsureTarget,
+                    CanvasRenderingContext2DDebugInfo& aDebugInfo,
+                    ErrorResult& aError);
 
   void OnMemoryPressure() override;
   void OnBeforePaintTransaction() override;
@@ -1079,7 +1084,7 @@ class CanvasRenderingContext2D : public nsICanvasRenderingContextInternal,
     StyleOwnedSlice<StyleFilter> filterChain;
     // RAII object that we obtain when we start to observer SVG filter elements
     // for rendering changes.  When released we stop observing the SVG elements.
-    nsCOMPtr<nsISupports> autoSVGFiltersObserver;
+    nsCOMPtr<ISVGFilterObserverList> autoSVGFiltersObserver;
     mozilla::gfx::FilterDescription filter;
     nsTArray<RefPtr<mozilla::gfx::SourceSurface>> filterAdditionalImages;
 

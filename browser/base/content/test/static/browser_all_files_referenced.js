@@ -100,6 +100,9 @@ var gExceptionPaths = [
 
   // The ONNX runtime picks files to run programmaticaly
   "chrome://global/content/ml/",
+
+  // The profile avatars are directly referenced.
+  "chrome://browser/content/profiles/assets/",
 ];
 
 // These are not part of the omni.ja file, so we find them only when running
@@ -307,6 +310,11 @@ var allowlist = [
   // Referenced programmatically
   { file: "chrome://browser/content/backup/BackupManifest.1.schema.json" },
   { file: "chrome://browser/content/backup/ArchiveJSONBlock.1.schema.json" },
+
+  // Bug 1733498 - Migrate necko errors l10n strings from .properties to Fluent
+  {
+    file: "resource://gre/localization/en-US/netwerk/necko.ftl",
+  },
 ];
 
 if (AppConstants.NIGHTLY_BUILD) {

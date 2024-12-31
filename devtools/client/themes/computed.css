@@ -128,7 +128,7 @@
   background-repeat: no-repeat;
   background-size: contain;
   -moz-context-properties: fill;
-  fill: var(--theme-text-color-inactive);
+  fill: var(--theme-icon-dimmed-color);
 }
 
 .computed-other-property-value:dir(rtl)::before {
@@ -213,6 +213,11 @@
   border-style: dotted;
   border-color: var(--theme-splitter-color);
   border-width: 1px 1px 0 1px;
+
+  /* Make the border more visible in High Contrast Mode */
+  :root[forced-colors-active]  &{
+    border-style: solid;
+  }
 }
 
 .matchedselectors > p:last-of-type {
@@ -240,6 +245,7 @@
   padding: 0 3px;
   cursor: pointer;
   float: inline-end;
+  color: var(--theme-internal-link-color);
 }
 
 /* Take away these two :visited rules to get a core dumper     */

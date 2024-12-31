@@ -661,6 +661,32 @@ newtab:
     send_in_pings:
       - newtab
 
+  sections_impression:
+    type: event
+    description: >
+      Recorded when a section is viewport and triggers an impression event
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1927916
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1927916
+    data_sensitivity:
+      - interaction
+    notification_emails:
+      - nbarrett@mozilla.com
+    expires: never
+    extra_keys:
+      newtab_visit_id: *newtab_visit_id
+      section:
+        description: >
+          section that had impression event
+        type: string
+      section_position:
+        description: >
+          position of section on newtab
+        type: string
+    send_in_pings:
+      - newtab
+
 newtab.search:
   enabled:
     lifetime: application
@@ -1143,6 +1169,14 @@ pocket:
         description: >
           Where the article card is in the list component
         type: boolean
+      section:
+        description: >
+          If click belongs in a section, the name of the section
+        type: string
+      section_position:
+        description: >
+          If click belongs in a section, the numberic position of the section
+        type: string
     send_in_pings:
       - newtab
 
@@ -1197,6 +1231,14 @@ pocket:
         description: >
           Where the article card is in the list component
         type: boolean
+      section:
+        description: >
+          If click belongs in a section, the name of the section
+        type: string
+      section_position:
+        description: >
+          If click belongs in a section, the numberic position of the section
+        type: string
     send_in_pings:
       - newtab
 
@@ -1227,6 +1269,14 @@ pocket:
         description: >
           Where the article card is in the list component
         type: boolean
+      section:
+        description: >
+          If click belongs in a section, the name of the section
+        type: string
+      section_position:
+        description: >
+          If click belongs in a section, the numberic position of the section
+        type: string
     send_in_pings:
       - newtab
 
@@ -1282,7 +1332,14 @@ pocket:
         description: >
           Where the article card is in the list component
         type: boolean
-
+      section:
+        description: >
+          If click belongs in a section, the name of the section
+        type: string
+      section_position:
+        description: >
+          If click belongs in a section, the numberic position of the section
+        type: string
     send_in_pings:
       - newtab
 
@@ -3011,3 +3068,75 @@ activity_stream:
     expires: never
     extra_keys: *activity_stream_event_extra
     telemetry_mirror: Activity_stream_Event_Unpin
+
+deletion.request:
+  impression_id:
+    type: string
+    description: >
+      An identifier used by user interaction pings in Pocket/newtab and
+      Messaging System.
+      This metric was generated to correspond to the Legacy Telemetry
+      scalar deletion.request.impression_id.
+    bugs:
+      - https://bugzil.la/1602064
+    data_reviews:
+      - https://bugzil.la/1602064
+    notification_emails:
+      - najiang@mozilla.com
+    expires: never
+    send_in_pings: ["deletion-request"]
+    telemetry_mirror: DELETION_REQUEST_IMPRESSION_ID
+
+  context_id:
+    type: string
+    description: >
+      An identifier to identify users for Contextual Services user
+      interaction pings.
+      This metric was generated to correspond to the Legacy Telemetry
+      scalar deletion.request.context_id.
+    bugs:
+      - https://bugzil.la/1729474
+    data_reviews:
+      - https://bugzil.la/1729474
+    notification_emails:
+      - najiang@mozilla.com
+    expires: never
+    send_in_pings: ["deletion-request"]
+    telemetry_mirror: DELETION_REQUEST_CONTEXT_ID
+
+contextual.services.topsites:
+  impression:
+    type: labeled_counter
+    description: >
+      A keyed uint recording how many times the user has viewed the
+      sponsored TopSites on the newtab page. The key is a combination of
+      the source and the placement of the TopSites tile (1-based). such as
+      'urlbar_1', 'newtab_2'.
+      This metric was generated to correspond to the Legacy Telemetry
+      scalar contextual.services.topsites.impression.
+    bugs:
+      - https://bugzil.la/1688698
+    data_reviews:
+      - https://bugzil.la/1688698
+    notification_emails:
+      - najiang@mozilla.com
+    expires: never
+    telemetry_mirror: CONTEXTUAL_SERVICES_TOPSITES_IMPRESSION
+
+  click:
+    type: labeled_counter
+    description: >
+      A keyed uint recording how many times the user has clicked on the
+      sponsored TopSites on the newtab page. The key is a combination of
+      the source and the placement of the TopSites tile (1-based). such as
+      'urlbar_1', 'newtab_2'.
+      This metric was generated to correspond to the Legacy Telemetry
+      scalar contextual.services.topsites.click.
+    bugs:
+      - https://bugzil.la/1688698
+    data_reviews:
+      - https://bugzil.la/1688698
+    notification_emails:
+      - najiang@mozilla.com
+    expires: never
+    telemetry_mirror: CONTEXTUAL_SERVICES_TOPSITES_CLICK

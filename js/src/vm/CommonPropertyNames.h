@@ -26,6 +26,7 @@
   IF_DECORATORS(MACRO_(accessor, "accessor"))                                  \
   MACRO_(add, "add")                                                           \
   IF_DECORATORS(MACRO_(addInitializer, "addInitializer"))                      \
+  MACRO_(address, "address")                                                   \
   MACRO_(allowContentIter, "allowContentIter")                                 \
   MACRO_(allowContentIterWith, "allowContentIterWith")                         \
   MACRO_(allowContentIterWithNext, "allowContentIterWithNext")                 \
@@ -298,6 +299,7 @@
   MACRO_(InitializeCollator, "InitializeCollator")                             \
   MACRO_(InitializeDateTimeFormat, "InitializeDateTimeFormat")                 \
   MACRO_(InitializeDisplayNames, "InitializeDisplayNames")                     \
+  MACRO_(InitializeDurationFormat, "InitializeDurationFormat")                 \
   MACRO_(InitializeListFormat, "InitializeListFormat")                         \
   MACRO_(InitializeLocale, "InitializeLocale")                                 \
   MACRO_(InitializeNumberFormat, "InitializeNumberFormat")                     \
@@ -467,6 +469,7 @@
   MACRO_(parseFloat, "parseFloat")                                             \
   MACRO_(parseInt, "parseInt")                                                 \
   MACRO_(pattern, "pattern")                                                   \
+  MACRO_(pause, "pause")                                                       \
   MACRO_(pending, "pending")                                                   \
   MACRO_(percentSign, "percentSign")                                           \
   MACRO_(pipeTo, "pipeTo")                                                     \

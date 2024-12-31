@@ -85,6 +85,8 @@ class SnapTestsBase:
         channel = self.update_channel()
         if self.is_esr_115():
             channel = "esr-115"
+        if self.is_esr_128():
+            channel = "esr-128"
         for m in object_methods:
             self._logger.test_start(m)
             expectations = (
@@ -211,6 +213,9 @@ class SnapTestsBase:
     def is_esr_115(self):
         return self.update_channel() == "esr" and self.version_major() == "115"
 
+    def is_esr_128(self):
+        return self.update_channel() == "esr" and self.version_major() == "128"
+
     def assert_rendering(self, exp, element_or_driver):
         # wait a bit for things to settle down
         time.sleep(0.5)
@@ -219,9 +224,11 @@ class SnapTestsBase:
         png_bytes = (
             element_or_driver.screenshot_as_png
             if isinstance(element_or_driver, WebElement)
-            else element_or_driver.get_screenshot_as_png()
-            if isinstance(element_or_driver, WebDriver)
-            else base64.b64decode(element_or_driver)
+            else (
+                element_or_driver.get_screenshot_as_png()
+                if isinstance(element_or_driver, WebDriver)
+                else base64.b64decode(element_or_driver)
+            )
         )
         svg_png = Image.open(io.BytesIO(png_bytes)).convert("RGB")
         svg_png_cropped = svg_png.crop((0, 35, svg_png.width - 20, svg_png.height - 10))
@@ -393,7 +400,7 @@ class SnapTests(SnapTestsBase):
         video = self._wait.until(
             EC.visibility_of_element_located((By.CLASS_NAME, "html5-main-video"))
         )
-        self._wait.until(lambda d: type(video.get_property("duration")) == float)
+        self._wait.until(lambda d: type(video.get_property("duration")) is float)
         self._logger.info("video duration: {}".format(video.get_property("duration")))
         assert (
             video.get_property("duration") > exp["duration"]
@@ -463,7 +470,7 @@ class SnapTests(SnapTestsBase):
                 (By.CSS_SELECTOR, "video.html5-main-video")
             )
         )
-        self._wait.until(lambda d: type(video.get_property("duration")) == float)
+        self._wait.until(lambda d: type(video.get_property("duration")) is float)
         self._logger.info("video duration: {}".format(video.get_property("duration")))
         assert (
             video.get_property("duration") > exp["duration"]

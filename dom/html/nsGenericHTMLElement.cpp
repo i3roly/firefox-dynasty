@@ -24,6 +24,7 @@
 #include "mozilla/dom/AncestorIterator.h"
 #include "mozilla/dom/FetchPriority.h"
 #include "mozilla/dom/FormData.h"
+#include "nsCaseTreatment.h"
 #include "nscore.h"
 #include "nsGenericHTMLElement.h"
 #include "nsCOMPtr.h"
@@ -473,6 +474,11 @@ bool nsGenericHTMLElement::Spellcheck() {
   return spellcheckLevel == 2;  // "Spellcheck multi- and single-line"
 }
 
+bool nsGenericHTMLElement::Autocorrect() const {
+  return !AttrValueIs(kNameSpaceID_None, nsGkAtoms::autocorrect, nsGkAtoms::OFF,
+                      eIgnoreCase);
+}
+
 bool nsGenericHTMLElement::InNavQuirksMode(Document* aDoc) {
   return aDoc && aDoc->GetCompatibilityMode() == eCompatibility_NavQuirks;
 }
@@ -504,8 +510,8 @@ nsresult nsGenericHTMLElement::BindToTree(BindContext& aContext,
     }
   }
 
-  if (HasFlag(NODE_IS_EDITABLE) && IsEditableState(GetContentEditableState()) &&
-      IsInComposedDoc()) {
+  if (HasFlag(NODE_IS_EDITABLE) &&
+      HasContentEditableAttrTrueOrPlainTextOnly() && IsInComposedDoc()) {
     aContext.OwnerDoc().ChangeContentEditableCount(this, +1);
   }
 
@@ -548,7 +554,7 @@ void nsGenericHTMLElement::UnbindFromTree(UnbindContext& aContext) {
 
   RemoveFromNameTable();
 
-  if (IsEditableState(GetContentEditableState())) {
+  if (HasContentEditableAttrTrueOrPlainTextOnly()) {
     if (Document* doc = GetComposedDoc()) {
       doc->ChangeContentEditableCount(this, -1);
     }
@@ -828,22 +834,26 @@ void nsGenericHTMLElement::AfterSetAttr(int32_t aNamespaceID, nsAtom* aName,
       }
       SetDirectionalityOnDescendants(this, dir, aNotify);
     } else if (aName == nsGkAtoms::contenteditable) {
-      auto IsEditableExceptInherit = [](const nsAttrValue* aValue) {
-        if (!aValue) {
-          return false;
-        }
-        return aValue->Equals(EmptyString(), eCaseMatters) ||
-               aValue->Equals(u"true"_ns, eIgnoreCase) ||
+      const auto IsEditableExceptInherit = [](const nsAttrValue& aValue) {
+        return aValue.Equals(EmptyString(), eCaseMatters) ||
+               aValue.Equals(u"true"_ns, eIgnoreCase) ||
                (StaticPrefs::
                     dom_element_contenteditable_plaintext_only_enabled() &&
-                aValue->Equals(u"plaintext-only"_ns, eIgnoreCase));
+                aValue.Equals(u"plaintext-only"_ns, eIgnoreCase));
       };
+      // FYI: Now, both HasContentEditableAttrTrueOrPlainTextOnly() and
+      // HasContentEditableAttrFalse() return true.  Therefore, we need to clear
+      // one of them or both of them.
       int32_t editableCountDelta = 0;
-      if (IsEditableExceptInherit(aOldValue)) {
+      if (aOldValue && IsEditableExceptInherit(*aOldValue)) {
         editableCountDelta = -1;
+        ClearHasContentEditableAttrTrueOrPlainTextOnly();
       }
-      if (IsEditableExceptInherit(aValue)) {
+      if (!aValue) {
+        ClearMayHaveContentEditableAttr();
+      } else if (IsEditableExceptInherit(*aValue)) {
         ++editableCountDelta;
+        SetHasContentEditableAttrTrueOrPlainTextOnly();
       }
       ChangeEditableState(editableCountDelta);
     } else if (aName == nsGkAtoms::accesskey) {
@@ -1318,23 +1328,6 @@ static inline void MapLangAttributeInto(MappedDeclarationsBuilder& aBuilder) {
  */
 void nsGenericHTMLElement::MapCommonAttributesIntoExceptHidden(
     MappedDeclarationsBuilder& aBuilder) {
-  if (!aBuilder.PropertyIsSet(eCSSProperty__moz_user_modify)) {
-    const nsAttrValue* value = aBuilder.GetAttr(nsGkAtoms::contenteditable);
-    if (value) {
-      // FIXME: plaintext-only should be mapped to read-write-plaintext-only
-      if (value->Equals(nsGkAtoms::_empty, eCaseMatters) ||
-          value->Equals(nsGkAtoms::_true, eIgnoreCase) ||
-          (StaticPrefs::dom_element_contenteditable_plaintext_only_enabled() &&
-           value->Equals(nsGkAtoms::plaintextOnly, eIgnoreCase))) {
-        aBuilder.SetKeywordValue(eCSSProperty__moz_user_modify,
-                                 StyleUserModify::ReadWrite);
-      } else if (value->Equals(nsGkAtoms::_false, eIgnoreCase)) {
-        aBuilder.SetKeywordValue(eCSSProperty__moz_user_modify,
-                                 StyleUserModify::ReadOnly);
-      }
-    }
-  }
-
   MapLangAttributeInto(aBuilder);
 }
 
@@ -2594,9 +2587,33 @@ void nsGenericHTMLFormControlElement::GetAutocapitalize(
     return;
   }
 
-  if (mForm && IsAutocapitalizeInheriting()) {
+  if (mForm && IsAutocapitalizeOrAutocorrectInheriting()) {
     mForm->GetAutocapitalize(aValue);
   }
+}
+
+// https://html.spec.whatwg.org/#dom-autocorrect
+bool nsGenericHTMLFormControlElement::Autocorrect() const {
+  auto controlType = ControlType();
+
+  switch (controlType) {
+    case FormControlType::InputEmail:
+    case FormControlType::InputPassword:
+    case FormControlType::InputUrl:
+      return false;
+    default:
+      break;
+  }
+
+  if (HasAttr(kNameSpaceID_None, nsGkAtoms::autocorrect)) {
+    return nsGenericHTMLElement::Autocorrect();
+  }
+
+  if (mForm && IsAutocapitalizeOrAutocorrectInheriting()) {
+    return mForm->Autocorrect();
+  }
+
+  return true;
 }
 
 bool nsGenericHTMLFormControlElement::IsHTMLFocusable(IsFocusableFlags aFlags,
@@ -2740,7 +2757,8 @@ void nsGenericHTMLFormControlElement::UpdateRequiredState(bool aIsRequired,
   }
 }
 
-bool nsGenericHTMLFormControlElement::IsAutocapitalizeInheriting() const {
+bool nsGenericHTMLFormControlElement::IsAutocapitalizeOrAutocorrectInheriting()
+    const {
   auto type = ControlType();
   return IsInputElement(type) || IsButtonElement(type) ||
          type == FormControlType::Fieldset || type == FormControlType::Output ||

@@ -52,6 +52,45 @@
 
 #include <algorithm>
 
+#include <sys/utsname.h>
+
+// i'm blue--da ba dee, da ba dai, daba dee daba dai--box (@blueboxd)
+// See Source/WebKit/chromium/base/mac/mac_util.mm DarwinMajorVersionInternal for original source.
+static int readVersion() {
+    struct utsname info;
+    if (uname(&info) != 0) {
+        SkDebugf("uname failed\n");
+        return 0;
+    }
+    if (strcmp(info.sysname, "Darwin") != 0) {
+        SkDebugf("unexpected uname sysname %s\n", info.sysname);
+        return 0;
+    }
+    char* dot = strchr(info.release, '.');
+    if (!dot) {
+        SkDebugf("expected dot in uname release %s\n", info.release);
+        return 0;
+    }
+    int version = atoi(info.release);
+    if (version == 0) {
+        SkDebugf("could not parse uname release %s\n", info.release);
+    }
+    return version;
+}
+static int darwinVersion() {
+    static int darwin_version = readVersion();
+    return darwin_version;
+}
+static bool isLion() {
+    return darwinVersion() == 11;
+}
+static bool isMountainLion() {
+    return darwinVersion() == 12;
+}
+static bool isMavericks() {
+    return darwinVersion() == 13;
+}
+
 class SkDescriptor;
 
 
@@ -177,8 +216,7 @@ SkScalerContext_Mac::Offscreen::Offscreen(SkColor foregroundColor)
 CGRGBPixel* SkScalerContext_Mac::Offscreen::getCG(const SkScalerContext_Mac& context,
                                                   const SkGlyph& glyph, CGGlyph glyphID,
                                                   size_t* rowBytesPtr,
-                                                  bool generateA8FromLCD,
-                                                  bool lightOnDark) {
+                                                  bool generateA8FromLCD) {
     if (!fRGBSpace) {
         //It doesn't appear to matter what color space is specified.
         //Regular blends and antialiased text are always (s*a + d*(1-a))
@@ -243,7 +281,7 @@ CGRGBPixel* SkScalerContext_Mac::Offscreen::getCG(const SkScalerContext_Mac& con
         if (SkMask::kARGB32_Format != glyph.maskFormat()) {
             // Draw black on white to create mask. (Special path exists to speed this up in CG.)
             // If light-on-dark is requested, draw white on black.
-            CGContextSetGrayFillColor(fCG.get(), lightOnDark ? 1.0f : 0.0f, 1.0f);
+            CGContextSetGrayFillColor(fCG.get(), 0.0f, 1.0f);
         } else {
             CGContextSetFillColorWithColor(fCG.get(), fCGForegroundColor.get());
         }
@@ -270,7 +308,7 @@ CGRGBPixel* SkScalerContext_Mac::Offscreen::getCG(const SkScalerContext_Mac& con
 
     // Erase to white (or transparent black if it's a color glyph, to not composite against white).
     // For light-on-dark, instead erase to black.
-    uint32_t bgColor = (!glyph.isColor()) ? (lightOnDark ? 0xFF000000 : 0xFFFFFFFF) : 0x00000000;
+    uint32_t bgColor = (!glyph.isColor()) ? 0xFFFFFFFF : 0x00000000;
     sk_memset_rect32(image, bgColor, glyph.width(), glyph.height(), rowBytes);
 
     float subX = 0;
@@ -338,7 +376,7 @@ SkScalerContext::GlyphMetrics SkScalerContext_Mac::generateMetrics(const SkGlyph
         // is rare, so we won't incur a big performance cost for this extra check.
         // Avoid trying to create a path from a color font due to crashing on 10.9.
         if (0 == cgAdvance.width && 0 == cgAdvance.height &&
-            SkMask::kARGB32_Format != glyph.maskFormat()) {
+            SkMask::kARGB32_Format != glyph.maskFormat()  && !isMavericks()) {
             SkUniqueCFRef<CGPathRef> path(CTFontCreatePathForGlyph(fCTFont.get(), cgGlyph,nullptr));
             if (!path || CGPathIsEmpty(path.get())) {
                 return mx;
@@ -473,11 +511,10 @@ void SkScalerContext_Mac::generateImage(const SkGlyph& glyph, void* imageBuffer)
 
     // FIXME: lcd smoothed un-hinted rasterization unsupported.
     bool requestSmooth = fRec.getHinting() != SkFontHinting::kNone;
-    bool lightOnDark = (fRec.fFlags & SkScalerContext::kLightOnDark_Flag) != 0;
 
     // Draw the glyph
     size_t cgRowBytes;
-    CGRGBPixel* cgPixels = fOffscreen.getCG(*this, glyph, cgGlyph, &cgRowBytes, requestSmooth, lightOnDark);
+    CGRGBPixel* cgPixels = fOffscreen.getCG(*this, glyph, cgGlyph, &cgRowBytes, requestSmooth);
     if (cgPixels == nullptr) {
         return;
     }
@@ -501,13 +538,7 @@ void SkScalerContext_Mac::generateImage(const SkGlyph& glyph, void* imageBuffer)
                 int r = linear[(addr[x] >> 16) & 0xFF];
                 int g = linear[(addr[x] >>  8) & 0xFF];
                 int b = linear[(addr[x] >>  0) & 0xFF];
-                // If light-on-dark was requested, the mask is drawn inverted.
-                if (lightOnDark) {
-                    r = 255 - r;
-                    g = 255 - g;
-                    b = 255 - b;
-                }
-                addr[x] = (r << 16) | (g << 8) | b;
+                addr[x] = (linear[r] << 16) | (linear[g] << 8) | linear[b];
             }
             addr = SkTAddOffset<CGRGBPixel>(addr, cgRowBytes);
         }
@@ -640,7 +671,9 @@ public:
  */
 #define kScaleForSubPixelPositionHinting (4.0f)
 
-bool SkScalerContext_Mac::generatePath(const SkGlyph& glyph, SkPath* path) {
+bool SkScalerContext_Mac::generatePath(const SkGlyph& glyph, SkPath* path, bool* modified) {
+    if(isMavericks())
+        return false;
     SkScalar scaleX = SK_Scalar1;
     SkScalar scaleY = SK_Scalar1;
 

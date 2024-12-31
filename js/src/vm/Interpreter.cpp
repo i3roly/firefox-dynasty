@@ -458,6 +458,10 @@ bool js::RunScript(JSContext* cx, RunState& state) {
   // Since any script can conceivably GC, make sure it's safe to do so.
   cx->verifyIsSafeToGC();
 
+  // Don't run script while suppressing GC to not confuse JIT code that assumes
+  // some new objects will be allocated in the nursery.
+  MOZ_ASSERT(!cx->suppressGC);
+
   MOZ_ASSERT(cx->realm() == state.script()->realm());
 
   MOZ_DIAGNOSTIC_ASSERT(cx->realm()->isSystem() ||
@@ -1969,7 +1973,6 @@ bool MOZ_NEVER_INLINE JS_HAZ_JSNATIVE_CALLER js::Interpret(JSContext* cx,
     return false;
   }
 
-  ActivationEntryMonitor entryMonitor(cx, entryFrame);
   InterpreterActivation activation(state, cx, entryFrame);
 
   /* The script is used frequently, so keep a local copy. */

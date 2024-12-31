@@ -58,6 +58,10 @@ $in-content-page-background-dark: #2B2A33;
 $newtab-background-secondary: #FFF;
 $newtab-background-secondary-dark: rgb(66, 65, 77);
 
+// Mirrors $newtab-background-secondary with 20% opacity
+$newtab-background-card: rgba(255, 255, 255, 80%);
+$newtab-background-card-dark: rgb(66, 65, 77, 80%);
+
 // Photon transitions from http://design.firefox.com/photon/motion/duration-and-easing.html
 $photon-easing: cubic-bezier(0.07, 0.95, 0, 1);
 
@@ -103,6 +107,8 @@ $break-point-medium: $wrapper-max-width-medium + $base-gutter * 2 + $scrollbar-w
 $break-point-layout-variant: 724px;
 $break-point-large: $wrapper-max-width-large + $base-gutter * 2 + $scrollbar-width; // 866px
 $break-point-widest: $wrapper-max-width-widest + $base-gutter * 2 + $scrollbar-width; // 1122px
+// temporary breakpoint for sections experiment
+$break-point-sections-variant: 1310px + $base-gutter * 2 + $scrollbar-width;
 $break-point-weather: $wrapper-max-width-weather + $base-gutter * 2 + $scrollbar-width; // 1506px
 $break-point-ultra-wide: $wrapper-max-width-ultra-wide + $base-gutter * 2 + $scrollbar-width; // 1698px
 
@@ -157,8 +163,7 @@ $customize-menu-border-tint: 1px solid rgba(0, 0, 0, 15%);
 
 @mixin ds-focus {
   border: 0;
-  outline: 0;
-  box-shadow: 0 0 0 3px var(--newtab-primary-action-background-dimmed), 0 0 0 1px var(--newtab-primary-action-background);
+  outline: var(--focus-outline);
 }
 
 @mixin context-menu-button {
@@ -171,7 +176,6 @@ $customize-menu-border-tint: 1px solid rgba(0, 0, 0, 15%);
     outline: $border-primary;
     outline-width: 0;
     border-radius: 100%;
-    box-shadow: $context-menu-button-boxshadow;
     cursor: pointer;
     color: var(--button-text-color);
     fill: var(--newtab-button-text);

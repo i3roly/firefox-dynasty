@@ -13,6 +13,7 @@ const { ProgressStatusText, ProgressType } = ChromeUtils.importESModule(
 // Root URL of the fake hub, see the `data` dir in the tests.
 const FAKE_HUB =
   "chrome://mochitests/content/browser/toolkit/components/ml/tests/browser/data";
+const FAKE_URL_TEMPLATE = "{model}/resolve/{revision}";
 
 const FAKE_MODEL_ARGS = {
   model: "acme/bert",
@@ -35,17 +36,6 @@ const FAKE_ONNX_MODEL_ARGS = {
   taskName: "task_onnx",
 };
 
-const badHubs = [
-  "https://my.cool.hub",
-  "https://sub.localhost/myhub", // Subdomain of allowed domain
-  "https://model-hub.mozilla.org.evil.com", // Manipulating path to mimic domain
-  "httpsz://localhost/myhub", // Similar-looking scheme
-  "https://localhost.", // Trailing dot in domain
-  "resource://user@localhost", // User info in URL
-  "ftp://localhost/myhub", // Disallowed scheme with allowed host
-  "https://model-hub.mozilla.org.hack", // Domain that contains allowed domain
-];
-
 function createRandomBlob(blockSize = 8, count = 1) {
   const blocks = Array.from({ length: count }, () =>
     Uint32Array.from(
@@ -59,31 +49,6 @@ function createRandomBlob(blockSize = 8, count = 1) {
 function createBlob(size = 8) {
   return createRandomBlob(size);
 }
-
-/**
- * Make sure we reject bad model hub URLs.
- */
-add_task(async function test_bad_hubs() {
-  for (const badHub of badHubs) {
-    Assert.throws(
-      () => new ModelHub({ rootUrl: badHub }),
-      new RegExp(`Error: Invalid model hub root url: ${badHub}`),
-      `Should throw with ${badHub}`
-    );
-  }
-});
-
-let goodHubs = [
-  "https:///localhost/myhub", // Triple slashes, see https://stackoverflow.com/a/22775589
-  "https://localhost:8080/myhub",
-  "http://localhost/myhub",
-  "https://model-hub.mozilla.org",
-  "chrome://gre/somewhere/in/the/code/base",
-];
-
-add_task(async function test_allowed_hub() {
-  goodHubs.forEach(url => new ModelHub({ rootUrl: url }));
-});
 
 /**
  * Test the MOZ_ALLOW_EXTERNAL_ML_HUB environment variable
@@ -149,7 +114,10 @@ const badInputs = [
  * Make sure we reject bad inputs.
  */
 add_task(async function test_bad_inputs() {
-  const hub = new ModelHub({ rootUrl: FAKE_HUB });
+  const hub = new ModelHub({
+    rootUrl: FAKE_HUB,
+    urlTemplate: FAKE_URL_TEMPLATE,
+  });
 
   for (const badInput of badInputs) {
     const params = badInput[0];
@@ -167,7 +135,10 @@ add_task(async function test_bad_inputs() {
  * Test that we can retrieve a file as an ArrayBuffer.
  */
 add_task(async function test_getting_file() {
-  const hub = new ModelHub({ rootUrl: FAKE_HUB });
+  const hub = new ModelHub({
+    rootUrl: FAKE_HUB,
+    urlTemplate: FAKE_URL_TEMPLATE,
+  });
 
   let [array, headers] = await hub.getModelFileAsArrayBuffer(FAKE_MODEL_ARGS);
 
@@ -185,9 +156,10 @@ add_task(async function test_getting_file() {
  * Test that we can retrieve a file from a released model and skip head calls
  */
 add_task(async function test_getting_released_file() {
-  const hub = new ModelHub({ rootUrl: FAKE_HUB });
-  console.log(hub);
-
+  const hub = new ModelHub({
+    rootUrl: FAKE_HUB,
+    urlTemplate: FAKE_URL_TEMPLATE,
+  });
   let spy = sinon.spy(hub, "getETag");
   let [array, headers] = await hub.getModelFileAsArrayBuffer(
     FAKE_RELEASED_MODEL_ARGS
@@ -211,7 +183,10 @@ add_task(async function test_getting_released_file() {
  * Make sure files can be located in sub directories
  */
 add_task(async function test_getting_file_in_subdir() {
-  const hub = new ModelHub({ rootUrl: FAKE_HUB });
+  const hub = new ModelHub({
+    rootUrl: FAKE_HUB,
+    urlTemplate: FAKE_URL_TEMPLATE,
+  });
 
   let [array, metadata] = await hub.getModelFileAsArrayBuffer(
     FAKE_ONNX_MODEL_ARGS
@@ -257,7 +232,10 @@ add_task(async function test_getting_file_custom_path_rogue() {
  * Test that the file can be returned as a response and its content correct.
  */
 add_task(async function test_getting_file_as_response() {
-  const hub = new ModelHub({ rootUrl: FAKE_HUB });
+  const hub = new ModelHub({
+    rootUrl: FAKE_HUB,
+    urlTemplate: FAKE_URL_TEMPLATE,
+  });
 
   let response = await hub.getModelFileAsResponse(FAKE_MODEL_ARGS);
 
@@ -271,7 +249,10 @@ add_task(async function test_getting_file_as_response() {
  * and that the cache is updated with the new data.
  */
 add_task(async function test_getting_file_from_cache() {
-  const hub = new ModelHub({ rootUrl: FAKE_HUB });
+  const hub = new ModelHub({
+    rootUrl: FAKE_HUB,
+    urlTemplate: FAKE_URL_TEMPLATE,
+  });
   let array = await hub.getModelFileAsArrayBuffer(FAKE_MODEL_ARGS);
 
   // stub to verify that the data was retrieved from IndexDB
@@ -296,7 +277,10 @@ add_task(async function test_getting_file_from_cache() {
  * or from the cache.
  */
 add_task(async function test_getting_file_from_url_cache_with_callback() {
-  const hub = new ModelHub({ rootUrl: FAKE_HUB });
+  const hub = new ModelHub({
+    rootUrl: FAKE_HUB,
+    urlTemplate: FAKE_URL_TEMPLATE,
+  });
 
   hub.cache = await initializeCache();
 
@@ -521,7 +505,10 @@ add_task(async function testWellFormedRelativeUrl() {
  * Ensures an error is thrown when the URL does not start with the expected root URL or a slash.
  */
 add_task(async function testInvalidDomain() {
-  const hub = new ModelHub({ rootUrl: FAKE_HUB });
+  const hub = new ModelHub({
+    rootUrl: FAKE_HUB,
+    urlTemplate: FAKE_URL_TEMPLATE,
+  });
   const url = "https://example.com/org1/model1/resolve/v1/file/path";
   Assert.throws(
     () => hub.parseUrl(url),
@@ -534,7 +521,10 @@ add_task(async function testInvalidDomain() {
  *
  */
 add_task(async function testTooFewParts() {
-  const hub = new ModelHub({ rootUrl: FAKE_HUB });
+  const hub = new ModelHub({
+    rootUrl: FAKE_HUB,
+    urlTemplate: FAKE_URL_TEMPLATE,
+  });
   const url = "/org1/model1/resolve";
   Assert.throws(
     () => hub.parseUrl(url),
@@ -913,7 +903,10 @@ add_task(async function test_DeleteModelsUsingNonExistingTaskName() {
  * Test that after deleting a model from the cache, the remaing models are still there.
  */
 add_task(async function test_deleteNonMatchingModelRevisions() {
-  const hub = new ModelHub({ rootUrl: FAKE_HUB });
+  const hub = new ModelHub({
+    rootUrl: FAKE_HUB,
+    urlTemplate: FAKE_URL_TEMPLATE,
+  });
 
   const cache = await initializeCache();
 
@@ -1339,82 +1332,6 @@ add_task(async function test_initDbFromExistingNoChange() {
 });
 
 /**
- * Test that upgrading the indices of an existing database does not lead to data deletion.
- */
-add_task(async function test_initDbFromExistingIndexChanges() {
-  const randomSuffix = Math.floor(Math.random() * 10000);
-  const dbName = `modelFiles-${randomSuffix}`;
-
-  const dbVersion = 2;
-  const model = "mozilla/distilvit";
-  const revision = "main";
-  const taskName = "echo";
-
-  const blob = createBlob();
-  // Create version 2
-  let cache = await IndexedDBCache.init({ dbName, version: dbVersion });
-
-  Assert.notEqual(cache, null);
-  Assert.equal(cache.db.version, 2);
-  await cache.put({
-    taskName,
-    model,
-    revision,
-    file: "file.txt",
-    data: blob,
-    headers: null,
-  });
-
-  cache.db.close();
-
-  // Delete all indices
-  async function openDB() {
-    return new Promise((resolve, reject) => {
-      const request = indexedDB.open(dbName, dbVersion + 1);
-      request.onerror = event => reject(event.target.error);
-      request.onsuccess = event => resolve(event.target.result);
-      request.onupgradeneeded = event => {
-        const db = event.target.result;
-
-        for (const storeName of db.objectStoreNames) {
-          const store = request.transaction.objectStore(storeName);
-
-          for (const indexName of store.indexNames) {
-            store.deleteIndex(indexName);
-          }
-        }
-      };
-    });
-  }
-
-  const db = await openDB();
-  db.close();
-
-  // Create version 4
-  cache = await IndexedDBCache.init({ dbName, version: dbVersion + 2 });
-
-  Assert.notEqual(cache, null);
-  Assert.equal(cache.db.version, 4);
-
-  const expected = [
-    {
-      path: "file.txt",
-      headers: {
-        "Content-Type": "application/octet-stream",
-        fileSize: 8,
-        ETag: "NO_ETAG",
-      },
-    },
-  ];
-
-  // Ensure every table & indices is on so that we can list files
-  const files = await cache.listFiles({ taskName });
-  Assert.deepEqual(files, expected);
-
-  await deleteCache(cache);
-});
-
-/**
  * Test that upgrading an existing cache from another source is possible.
  */
 add_task(async function test_initDbFromExistingElseWhereStoreChanges() {
@@ -1534,7 +1451,7 @@ add_task(async function test_getting_file_disallowed_custom_hub() {
       () => {
         throw error;
       },
-      new RegExp(`Error: Invalid model hub root url: https://forbidden.com`),
+      new RegExp(`ForbiddenURLError`),
       `Should throw with https://forbidden.com`
     );
   }
@@ -1547,7 +1464,7 @@ add_task(async function test_getting_file_disallowed_custom_hub() {
       () => {
         throw error;
       },
-      new RegExp(`Error: Invalid model hub root url: https://forbidden.com`),
+      new RegExp(`ForbiddenURLError`),
       `Should throw with https://forbidden.com`
     );
   }
@@ -1560,8 +1477,75 @@ add_task(async function test_getting_file_disallowed_custom_hub() {
       () => {
         throw error;
       },
-      new RegExp(`Error: Invalid model hub root url: https://forbidden.com`),
+      new RegExp(`ForbiddenURLError`),
       `Should throw with https://forbidden.com`
     );
   }
+});
+
+/**
+ * Test deleting files used by several engines
+ */
+add_task(async function test_DeleteFileByEngines() {
+  const cache = await initializeCache();
+  const testData = createBlob();
+  const engineOne = "engine-1";
+  const engineTwo = "engine-2";
+
+  // a file is stored by engineOne
+  await cache.put({
+    engineId: engineOne,
+    taskName: "task",
+    model: "org/model",
+    revision: "v1",
+    file: "file.txt",
+    data: createBlob(),
+    headers: null,
+  });
+
+  // The file is read by engineTwo
+  let retrievedData = await cache.getFile({
+    engineId: engineTwo,
+    model: "org/model",
+    revision: "v1",
+    file: "file.txt",
+  });
+
+  Assert.deepEqual(
+    retrievedData[0],
+    testData,
+    "The retrieved data should match the stored data."
+  );
+
+  // if we delete the model by engineOne, it will still be around for engineTwo
+  await cache.deleteFilesByEngine(engineOne);
+
+  retrievedData = await cache.getFile({
+    engineId: engineTwo,
+    model: "org/model",
+    revision: "v1",
+    file: "file.txt",
+  });
+  Assert.deepEqual(
+    retrievedData[0],
+    testData,
+    "The retrieved data should match the stored data."
+  );
+
+  // now deleting via engineTwo
+  await cache.deleteFilesByEngine(engineTwo);
+
+  // at this point we should not have anymore files
+  const dataAfterDelete = await cache.getFile({
+    engineId: engineOne,
+    model: "org/model",
+    revision: "v1",
+    file: "file.txt",
+  });
+  Assert.equal(
+    dataAfterDelete,
+    null,
+    "The data for the deleted model should not exist."
+  );
+  await deleteCache(cache);
 });

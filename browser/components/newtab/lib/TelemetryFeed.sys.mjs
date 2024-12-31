@@ -98,8 +98,6 @@ ChromeUtils.defineLazyGetter(
   () => lazy.TelemetrySession.getMetadata("").sessionId
 );
 
-// The scalar category for TopSites of Contextual Services
-const SCALAR_CATEGORY_TOPSITES = "contextual.services.topsites";
 // `contextId` is a unique identifier used by Contextual Services
 const CONTEXT_ID_PREF = "browser.contextual-services.contextId";
 ChromeUtils.defineLazyGetter(lazy, "contextId", () => {
@@ -196,11 +194,8 @@ export class TelemetryFeed {
       "browser-open-newtab-start"
     );
     // Set two scalars for the "deletion-request" ping (See bug 1602064 and 1729474)
-    Services.telemetry.scalarSet(
-      "deletion.request.impression_id",
-      this._impressionId
-    );
-    Services.telemetry.scalarSet("deletion.request.context_id", lazy.contextId);
+    Glean.deletionRequest.impressionId.set(this._impressionId);
+    Glean.deletionRequest.contextId.set(lazy.contextId);
     Glean.newtab.locale.set(Services.locale.appLocaleAsBCP47);
     Glean.newtabHandoffPreference.enabled.set(
       lazy.handoffToAwesomebarPrefValue
@@ -669,11 +664,9 @@ export class TelemetryFeed {
     const session = this.sessions.get(au.getPortIdOfSender(action));
     if (type === "impression") {
       pingType = "topsites-impression";
-      Services.telemetry.keyedScalarAdd(
-        `${SCALAR_CATEGORY_TOPSITES}.impression`,
-        `${source}_${legacyTelemetryPosition}`,
-        1
-      );
+      Glean.contextualServicesTopsites.impression[
+        `${source}_${legacyTelemetryPosition}`
+      ].add(1);
       if (session) {
         Glean.topsites.impression.record({
           advertiser_name,
@@ -685,11 +678,9 @@ export class TelemetryFeed {
       }
     } else if (type === "click") {
       pingType = "topsites-click";
-      Services.telemetry.keyedScalarAdd(
-        `${SCALAR_CATEGORY_TOPSITES}.click`,
-        `${source}_${legacyTelemetryPosition}`,
-        1
-      );
+      Glean.contextualServicesTopsites.click[
+        `${source}_${legacyTelemetryPosition}`
+      ].add(1);
       if (session) {
         Glean.topsites.click.record({
           advertiser_name,
@@ -789,6 +780,8 @@ export class TelemetryFeed {
           selected_topics,
           is_list_card,
           format,
+          section,
+          section_position,
         } = action.data.value ?? {};
         if (
           action.data.source === "POPULAR_TOPICS" ||
@@ -808,6 +801,12 @@ export class TelemetryFeed {
             newtab_visit_id: session.session_id,
             is_sponsored: card_type === "spoc",
             ...(format ? { format } : {}),
+            ...(section
+              ? {
+                  section,
+                  section_position,
+                }
+              : {}),
             matches_selected_topic,
             selected_topics,
             topic,
@@ -893,11 +892,19 @@ export class TelemetryFeed {
           selected_topics,
           is_list_card,
           format,
+          section,
+          section_position,
         } = action.data.value ?? {};
         Glean.pocket.save.record({
           newtab_visit_id: session.session_id,
           is_sponsored: card_type === "spoc",
           ...(format ? { format } : {}),
+          ...(section
+            ? {
+                section,
+                section_position,
+              }
+            : {}),
           topic,
           matches_selected_topic,
           selected_topics,
@@ -1158,6 +1165,18 @@ export class TelemetryFeed {
         }
         break;
       }
+      case at.CARD_SECTION_IMPRESSION: {
+        const session = this.sessions.get(au.getPortIdOfSender(action));
+        if (session) {
+          const { section, section_position } = action.data;
+          Glean.newtab.sectionsImpression.record({
+            newtab_visit_id: session.session_id,
+            section,
+            section_position,
+          });
+        }
+        break;
+      }
 
       // The remaining action types come from ASRouter, which doesn't use
       // Actions from Actions.mjs, but uses these other custom strings.
@@ -1320,6 +1339,12 @@ export class TelemetryFeed {
           position: datum.pos,
           tile_id: datum.id || datum.tile_id,
           is_list_card: datum.is_list_card,
+          ...(datum.section
+            ? {
+                section: datum.section,
+                section_position: datum.section_position,
+              }
+            : {}),
           ...(datum.scheduled_corpus_item_id
             ? {
                 scheduled_corpus_item_id: datum.scheduled_corpus_item_id,
@@ -1387,6 +1412,12 @@ export class TelemetryFeed {
           newtab_visit_id: session.session_id,
           is_sponsored: tile.type === "spoc",
           ...(tile.format ? { format: tile.format } : {}),
+          ...(tile.section
+            ? {
+                section: tile.section,
+                section_position: tile.section_position,
+              }
+            : {}),
           position: tile.pos,
           tile_id: tile.id,
           topic: tile.topic,

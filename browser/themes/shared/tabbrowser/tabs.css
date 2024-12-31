@@ -4,6 +4,7 @@
 
 :root {
   --tabstrip-inner-border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  --tabstrip-min-height: calc(var(--tab-min-height) + 2 * var(--tab-block-margin));
   --tab-min-height: 36px;
   &[uidensity=compact] {
     --tab-min-height: 29px;
@@ -16,7 +17,7 @@
   --tab-collapsed-background-width: var(--tab-min-height);
   --tab-collapsed-width: calc(var(--tab-collapsed-background-width) + 2 * var(--tab-inner-inline-margin));
   --tab-inner-inline-margin: var(--space-medium);
-  --tab-inline-padding: var(--space-medium);
+  --tab-inline-padding: 8px;
   --tab-pinned-expanded-background-width: 40px;
   --tab-pinned-margin-inline-expanded: var(--space-xsmall);
   --tab-pinned-min-width-expanded: calc(var(--tab-pinned-expanded-background-width) + 2 * var(--tab-pinned-margin-inline-expanded));
@@ -44,10 +45,9 @@
   --tab-selected-shadow: 0 0 4px rgba(0,0,0,.4);
   --tab-outline: 1px solid var(--tab-outline-color);
   --tab-outline-color: transparent;
+  --tab-outline-offset: -1px;
   --tab-selected-outline-color: transparent;
   --tab-hover-outline-color: transparent;
-  --tab-outline-offset: -1px;
-  --tabstrip-min-height: calc(var(--tab-min-height) + 2 * var(--tab-block-margin));
   @media (prefers-contrast) {
     --tab-selected-outline-color: currentColor;
     --tab-hover-outline-color: currentColor;
@@ -62,6 +62,7 @@
   &[lwtheme] {
     --tab-selected-outline-color: var(--lwt-tab-line-color, currentColor);
   }
+  --tab-dragover-transition: transform 200ms var(--animation-easing-function);
 
   --vertical-tabs-scrollbar-color: auto;
   @media (-moz-platform: macos) {
@@ -99,6 +100,8 @@
   --tab-group-color-gray: #5E6A77;
   --tab-group-color-gray-invert: #99A6B4;
   --tab-group-color-gray-pale: #F2F9FF;
+
+  --tab-group-label-text-dark: var(--color-gray-100);
 }
 
 /* stylelint-disable-next-line media-query-no-invalid */
@@ -106,6 +109,7 @@
   :root {
     --tab-min-height: max(32px, calc(var(--tab-label-line-height) * 1em));
     --tab-block-margin: 2px;
+    --tab-inline-padding: var(--space-medium);
   }
 }
 
@@ -215,7 +219,7 @@
     #tabbrowser-tabs[movingtab] &[fadein]:not([selected]):not([multiselected]),
     &[multiselected-move-together],
     &[tabdrop-samewindow] {
-      transition: transform 200ms var(--animation-easing-function);
+      transition: var(--tab-dragover-transition);
     }
   }
 
@@ -370,13 +374,6 @@
           /* this runs tab-throbber-animation 43 times (~45s) and delays swap-icon-animation by 45s  */
           animation: tab-throbber-animation 1.05s steps(30) 43, swap-icon-animation 0s linear 45s 1 forwards;
           -moz-context-properties: fill;
-
-          /* XXX: It would be nice to transition between the "connecting" color and the
-             "loading" color (see the `[progress]::before` rule below);
-             however, that currently forces main thread painting. When this is fixed
-             (after WebRender lands), we can do something like
-             `transition: fill 0.333s, opacity 0.333s;` */
-
           fill: currentColor;
           opacity: 0.7;
         }
@@ -431,7 +428,7 @@
 }
 
 .tab-icon-image {
-  -moz-context-properties: fill;
+  -moz-context-properties: fill, stroke;
   fill: currentColor;
 
   /* Apply crisp rendering for favicons at exactly 2dppx resolution */
@@ -454,6 +451,11 @@
   #tabbrowser-tabs[orient="horizontal"] &:not([src], [pinned], [crashed], [sharing], [pictureinpicture]),
   &[busy] {
     display: none;
+  }
+
+  &.profiles-tab {
+    fill: var(--toolbar-bgcolor);
+    stroke: var(--toolbar-color);
   }
 }
 
@@ -686,7 +688,7 @@
   }
 
   #tabbrowser-tabs[movingtab-createGroup] & {
-    transition: background-color 300ms ease, color 300ms ease, outline-color 300ms ease;
+    transition: background-color 100ms ease, color 100ms ease, outline-color 100ms ease;
 
     &[dragover-createGroup] {
       background-color: light-dark(var(--dragover-tab-group-color-pale), var(--dragover-tab-group-color));
@@ -705,7 +707,7 @@
 /* Keyboard focus outline */
 
 #TabsToolbar #firefox-view-button:focus-visible > .toolbarbutton-icon,
-.tabbrowser-tab:is(.keyboard-focused-tab, :focus:not([aria-activedescendant])) > .tab-stack > .tab-background {
+#tabbrowser-tabs[tablist-has-focus] .tabbrowser-tab.tablist-keyboard-focus > .tab-stack > .tab-background {
   outline: var(--focus-outline);
   outline-offset: var(--focus-outline-inset);
 }
@@ -726,17 +728,10 @@
 }
 
 .tabbrowser-tab[image] > .tab-stack > .tab-content[attention]:not([pinned], [selected]) {
-  background-position-x: left 14px;
+  background-position-x: left calc(var(--tab-inline-padding) + 6px);
 
   &:-moz-locale-dir(rtl) {
-    background-position-x: right 14px;
-  }
-  #tabbrowser-tabs[orient="vertical"] & {
-    background-position-x: left 22.5px;
-
-    &:-moz-locale-dir(rtl) {
-      background-position-x: right 22.5px;
-    }
+    background-position-x: right calc(var(--tab-inline-padding) + 6px);
   }
 }
 
@@ -759,7 +754,7 @@
  */
 .tab-group-line {
   display: none;
-  background-color: var(--tab-group-color, var(--dragover-tab-group-color));
+  background-color: light-dark(var(--tab-group-color), var(--tab-group-color-invert));
   height: 2px;
   margin: 0 calc(-1 * var(--tab-overflow-clip-margin)) calc(-1 * var(--tab-block-margin));
 
@@ -767,9 +762,17 @@
     margin-inline-end: 0;
   }
 
-  tab-group &,
-  #tabbrowser-tabs[movingtab]:not([movingtab-createGroup]) &:is([selected],[multiselected]) {
+  tab-group & {
     display: flex;
+  }
+
+  #tabbrowser-tabs[movingtab] &:is([selected],[multiselected]) {
+    display: flex;
+    background-color: light-dark(var(--dragover-tab-group-color), var(--dragover-tab-group-color-invert));
+  }
+
+  #tabbrowser-tabs:is([movingtab-createGroup],[movingtab-ungroup]) &:is([selected],[multiselected]) {
+    display: none;
   }
 }
 
@@ -800,10 +803,12 @@ tab-group {
   padding-inline-end: 3px;
 
   position: relative;
+  transform: var(--tabgroup-dragover-transform);
+  transition: var(--tab-dragover-transition);
 
   tab-group:not([collapsed]) > &::after {
     content: "";
-    background-color: var(--tab-group-color);
+    background-color: light-dark(var(--tab-group-color), var(--tab-group-color-invert));
     height: 2px;
     position: absolute;
     inset: auto 0 0;
@@ -822,9 +827,14 @@ tab-group {
   min-width: var(--tab-group-label-height);
   max-width: 10em;
   padding-inline: 4px;
-  color: light-dark(var(--tab-group-color-pale), ButtonText);
+  color: light-dark(var(--tab-group-color-pale), var(--tab-group-label-text-dark));
   background-color: light-dark(var(--tab-group-color), var(--tab-group-color-invert));
   margin: auto 0;
+
+  #tabbrowser-tabs[tablist-has-focus] &.tablist-keyboard-focus {
+    outline: var(--focus-outline);
+    outline-offset: var(--focus-outline-offset);
+  }
 
   tab-group[collapsed] > .tab-group-label-container > & {
     background-color: light-dark(var(--tab-group-color-pale), var(--tab-group-color));
@@ -889,18 +899,19 @@ tab-group {
   .tab-group-editor-swatch {
     width: 16px;
     height: 16px;
-    border-radius: var(--border-radius-small);
+    padding: var(--focus-outline-offset);
+    border: var(--focus-outline-width) solid transparent;
+    border-radius: var(--border-radius-medium);
+    background-clip: content-box;
     background-color: light-dark(var(--tabgroup-swatch-color), var(--tabgroup-swatch-color-invert));
 
     input:checked + & {
-      outline: var(--focus-outline);
-      outline-color: currentColor;
-      outline-offset: var(--focus-outline-offset);
+      border-color: var(--focus-outline-color);
     }
 
     input:focus-visible + & {
-      outline-color: var(--focus-outline-color);
-      box-shadow: 0 0 0 calc(var(--focus-outline-width) * 3) color-mix(in srgb, var(--focus-outline-color) 50%, transparent);
+      outline: 1px solid var(--focus-outline-color);
+      outline-offset: 1px;
     }
   }
 
@@ -915,12 +926,11 @@ tab-group {
   toolbarbutton {
     margin: 0;
   }
-  .tab-group-delete label {
-    color: var(--text-color-error);
-  }
 }
 
-
+#tabGroupEditor_deleteGroup {
+  color: var(--text-color-error);
+}
 
 /* Tab Overflow */
 
@@ -968,7 +978,8 @@ tab-group {
       background-image: linear-gradient(
         to top,
         transparent 0%,
-        var(--toolbar-bgcolor));
+        var(--toolbox-bgcolor)
+      );
       background-repeat: no-repeat;
       pointer-events: none;
 

@@ -4,7 +4,6 @@
 
 import io
 import os
-import pipes
 import posixpath
 import re
 import shlex
@@ -1293,8 +1292,6 @@ class ADBDevice(ADBCommand):
         """Utility function to return quoted version of command argument."""
         if hasattr(shlex, "quote"):
             quote = shlex.quote
-        elif hasattr(pipes, "quote"):
-            quote = pipes.quote
         else:
 
             def quote(arg):
@@ -2084,7 +2081,16 @@ class ADBDevice(ADBCommand):
                 time.sleep(self._polling_interval)
                 exitcode = adb_process.proc.poll()
         else:
-            stdout2 = open(adb_process.stdout_file.name, "rb")
+            # https://docs.python.org/3/library/tempfile.html#tempfile.NamedTemporaryFile
+            #
+            # NamedTemporaryFile with delete=True, Windows cannot open this file
+            # file normally. We have to add the temporary flag.
+            def opener(path, flags):
+                if sys.platform == "win32":
+                    flags |= os.O_TEMPORARY
+                return os.open(path, flags, mode=0o666)
+
+            stdout2 = open(adb_process.stdout_file.name, "rb", opener=opener)
             partial = b""
             while ((time.time() - start_time) <= float(timeout)) and exitcode is None:
                 try:

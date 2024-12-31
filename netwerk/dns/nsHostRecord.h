@@ -79,13 +79,15 @@ struct nsHostKey {
   const nsCString host;
   const nsCString mTrrServer;
   uint16_t type = 0;
-  nsIDNSService::DNSFlags flags = nsIDNSService::RESOLVE_DEFAULT_FLAGS;
+  mozilla::Atomic<nsIDNSService::DNSFlags> flags{
+      nsIDNSService::RESOLVE_DEFAULT_FLAGS};
   uint16_t af = 0;
   bool pb = false;
   const nsCString originSuffix;
   explicit nsHostKey(const nsACString& host, const nsACString& aTrrServer,
                      uint16_t type, nsIDNSService::DNSFlags flags, uint16_t af,
                      bool pb, const nsACString& originSuffix);
+  explicit nsHostKey(const nsHostKey& other);
   bool operator==(const nsHostKey& other) const;
   size_t SizeOfExcludingThis(mozilla::MallocSizeOf mallocSizeOf) const;
   PLDHashNumber Hash() const;
@@ -392,10 +394,11 @@ class TypeHostRecord final : public nsHostRecord,
 
   void ResolveComplete() override;
 
-  mozilla::net::TypeRecordResultType mResults = AsVariant(mozilla::Nothing());
-  mozilla::Mutex mResultsLock MOZ_UNANNOTATED{"TypeHostRecord.mResultsLock"};
+  mozilla::net::TypeRecordResultType mResults MOZ_GUARDED_BY(mResultsLock) =
+      AsVariant(mozilla::Nothing());
+  mozilla::Mutex mResultsLock{"TypeHostRecord.mResultsLock"};
 
-  mozilla::Maybe<nsCString> mOriginHost;
+  mozilla::Maybe<nsCString> mOriginHost MOZ_GUARDED_BY(mResultsLock);
   bool mAllRecordsExcluded = false;
 };
 

@@ -1622,6 +1622,8 @@ nsObjectLoadingContent::ObjectType nsObjectLoadingContent::GetTypeOfContent(
   Element* el = AsElement();
   NS_ASSERTION(el, "must be a content");
 
+  Document* doc = el->OwnerDoc();
+
   // Images and documents are always supported.
   MOZ_ASSERT((GetCapabilities() & (eSupportImages | eSupportDocuments)) ==
              (eSupportImages | eSupportDocuments));
@@ -1630,8 +1632,9 @@ nsObjectLoadingContent::ObjectType nsObjectLoadingContent::GetTypeOfContent(
       ("OBJLC [%p]: calling HtmlObjectContentTypeForMIMEType: aMIMEType: %s - "
        "el: %p\n",
        this, aMIMEType.get(), el));
-  auto ret = static_cast<ObjectType>(
-      nsContentUtils::HtmlObjectContentTypeForMIMEType(aMIMEType));
+  auto ret =
+      static_cast<ObjectType>(nsContentUtils::HtmlObjectContentTypeForMIMEType(
+          aMIMEType, doc->GetSandboxFlags()));
   LOG(("OBJLC [%p]: called HtmlObjectContentTypeForMIMEType\n", this));
   return ret;
 }

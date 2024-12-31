@@ -237,22 +237,6 @@ WASM_DECLARE_CACHEABLE_POD(FuncDesc);
 
 using FuncDescVector = Vector<FuncDesc, 0, SystemAllocPolicy>;
 
-struct FuncDefRange {
-  explicit FuncDefRange(uint32_t bytecodeOffset, uint32_t bodyLength)
-      : bytecodeOffset(bytecodeOffset), bodyLength(bodyLength) {}
-
-  // Bytecode offset of the beginning of the function body
-  uint32_t bytecodeOffset = 0;
-  // Length of the body, in bytes
-  uint32_t bodyLength = 0;
-
-  WASM_CHECK_CACHEABLE_POD(bytecodeOffset, bodyLength);
-};
-
-WASM_DECLARE_CACHEABLE_POD(FuncDefRange);
-
-using FuncDefRangeVector = Vector<FuncDefRange, 0, SystemAllocPolicy>;
-
 struct CallRefMetricsRange {
   explicit CallRefMetricsRange() {}
   explicit CallRefMetricsRange(uint32_t begin, uint32_t length)
@@ -500,23 +484,29 @@ using GlobalDescVector = Vector<GlobalDesc, 0, SystemAllocPolicy>;
 using TagOffsetVector = Vector<uint32_t, 2, SystemAllocPolicy>;
 
 class TagType : public AtomicRefCounted<TagType> {
-  ValTypeVector argTypes_;
+  SharedTypeDef type_;
   TagOffsetVector argOffsets_;
   uint32_t size_;
 
  public:
   TagType() : size_(0) {}
-  ~TagType();
 
-  const ValTypeVector& argTypes() const { return argTypes_; }
+  [[nodiscard]] bool initialize(const SharedTypeDef& funcType);
+
+  const TypeDef& type() const { return *type_; }
+  const ValTypeVector& argTypes() const { return type_->funcType().args(); }
   const TagOffsetVector& argOffsets() const { return argOffsets_; }
-  ResultType resultType() const { return ResultType::Vector(argTypes_); }
+  ResultType resultType() const { return ResultType::Vector(argTypes()); }
 
   uint32_t tagSize() const { return size_; }
 
-  [[nodiscard]] bool initialize(ValTypeVector&& argTypes);
+  static bool matches(const TagType& a, const TagType& b) {
+    // Note that this does NOT use subtyping. This is deliberate per the spec.
+    return a.type_ == b.type_;
+  }
 
   size_t sizeOfExcludingThis(mozilla::MallocSizeOf mallocSizeOf) const;
+  WASM_DECLARE_FRIEND_SERIALIZE(TagType);
 };
 
 using MutableTagType = RefPtr<TagType>;
@@ -710,11 +700,13 @@ enum class LimitsKind {
   Table,
 };
 
+extern const char* ToString(LimitsKind kind);
+
 // Represents the resizable limits of memories and tables.
 
 struct Limits {
-  // `indexType` may be I64 when memory64 is enabled.
-  IndexType indexType;
+  // `addressType` may be I64 when memory64 is enabled.
+  AddressType addressType;
 
   // The initial and maximum limit. The unit is pages for memories and elements
   // for tables.
@@ -725,13 +717,13 @@ struct Limits {
   // memories.
   Shareable shared;
 
-  WASM_CHECK_CACHEABLE_POD(indexType, initial, maximum, shared);
+  WASM_CHECK_CACHEABLE_POD(addressType, initial, maximum, shared);
 
   Limits() = default;
   explicit Limits(uint64_t initial,
                   const mozilla::Maybe<uint64_t>& maximum = mozilla::Nothing(),
                   Shareable shared = Shareable::False)
-      : indexType(IndexType::I32),
+      : addressType(AddressType::I32),
         initial(initial),
         maximum(maximum),
         shared(shared) {}
@@ -759,7 +751,7 @@ struct MemoryDesc {
            limits.maximum.value() < (0x100000000 / PageSize);
   }
 
-  IndexType indexType() const { return limits.indexType; }
+  AddressType addressType() const { return limits.addressType; }
 
   // The initial length of this memory in pages.
   Pages initialPages() const { return Pages(limits.initial); }
@@ -771,13 +763,13 @@ struct MemoryDesc {
 
   // The initial length of this memory in bytes. Only valid for memory32.
   uint64_t initialLength32() const {
-    MOZ_ASSERT(indexType() == IndexType::I32);
+    MOZ_ASSERT(addressType() == AddressType::I32);
     // See static_assert after MemoryDesc for why this is safe.
     return limits.initial * PageSize;
   }
 
   uint64_t initialLength64() const {
-    MOZ_ASSERT(indexType() == IndexType::I64);
+    MOZ_ASSERT(addressType() == AddressType::I64);
     return limits.initial * PageSize;
   }
 
@@ -812,7 +804,7 @@ struct TableDesc {
         isAsmJS(isAsmJS),
         initExpr(std::move(initExpr)) {}
 
-  IndexType indexType() const { return limits.indexType; }
+  AddressType addressType() const { return limits.addressType; }
 
   uint64_t initialLength() const { return limits.initial; }
 

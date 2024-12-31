@@ -122,6 +122,53 @@ export const FormAutofillHeuristics = {
   },
 
   /**
+   * This function handles the case when two adjacent fields are incorrectly
+   * identified with the same field name. Currently, only given-name and
+   * family-name are handled as possible errors.
+   *
+   * @param {FieldScanner} scanner
+   *        The current parsing status for all elements
+   * @returns {boolean}
+   *        Return true if any field is recognized and updated, otherwise false.
+   */
+  _parseNameFieldsContent(scanner, fieldDetail) {
+    const TARGET_FIELDS = ["given-name", "family-name"];
+    if (!TARGET_FIELDS.includes(fieldDetail.fieldName)) {
+      return false;
+    }
+
+    let idx = scanner.parsingIndex;
+    const detailBefore = scanner.getFieldDetailByIndex(idx - 1);
+    if (fieldDetail.fieldName == detailBefore?.fieldName) {
+      let otherFieldName =
+        fieldDetail.fieldName == TARGET_FIELDS[0]
+          ? TARGET_FIELDS[1]
+          : TARGET_FIELDS[0];
+
+      // If the second field matches both field names, or both fields match
+      // both field names, then we change the second field, since the author
+      // was more likely to miscopy the second field from the first. However,
+      // if the earlier field only matches, then we change the first field.
+      if (
+        this._findMatchedFieldNames(fieldDetail.element, [otherFieldName])
+          .length
+      ) {
+        scanner.updateFieldName(idx, otherFieldName);
+      } else if (
+        this._findMatchedFieldNames(detailBefore.element, [otherFieldName])
+          .length
+      ) {
+        scanner.updateFieldName(idx - 1, otherFieldName);
+      }
+
+      scanner.parsingIndex++;
+      return true;
+    }
+
+    return false;
+  },
+
+  /**
    * In some languages such French (nom) and German (Name), name can mean either family name or
    * full name in a form, depending on the context. We want to be sure that if "name" is
    * detected in the context of "family-name" or "given-name", it is updated accordingly.
@@ -330,7 +377,38 @@ export const FormAutofillHeuristics = {
           fields[0].reason != "autocomplete" &&
           ["address-line2", "address-line3"].includes(fields[0].fieldName)
         ) {
-          scanner.updateFieldName(fieldIndicies[0], "address-line1");
+          // If an earlier address field was already found, ignore any
+          // address-related fields from the OTHER_ADDRESS_FIELDS
+          // list since those can appear in-between the address-level1
+          // and additional address info fields. If no address field
+          // exists, update the field to be address-line1.
+          const OTHER_ADDRESS_FIELDS = [
+            "address-level1",
+            "address-level2",
+            "postal-code",
+            "organization",
+          ];
+          let canUpdate = true;
+
+          for (let idx = scanner.parsingIndex - 1; idx >= 0; idx--) {
+            const detail = scanner.getFieldDetailByIndex(idx);
+            if (
+              detail?.fieldName == "street-address" ||
+              detail?.fieldName == "address-line1" ||
+              detail?.fieldName == "address-housenumber"
+            ) {
+              canUpdate = false;
+              break;
+            }
+
+            if (!OTHER_ADDRESS_FIELDS.includes(detail?.fieldName)) {
+              break;
+            }
+          }
+
+          if (canUpdate) {
+            scanner.updateFieldName(fieldIndicies[0], "address-line1");
+          }
         }
         break;
       case 2:
@@ -555,17 +633,24 @@ export const FormAutofillHeuristics = {
       prevCCFields.add(detail.fieldName);
     }
 
+    const isLastField =
+      scanner.getFieldDetailByIndex(scanner.parsingIndex + 1) === null;
+
     // We update the "name" fields to "cc-name" fields when the following
     // conditions are met:
     // 1. The preceding fields are identified as credit card fields and
     //    contain the "cc-number" field.
     // 2. No "cc-name-*" field is found among the preceding credit card fields.
-    // 3. The "cc-csc" field is not present among the preceding credit card fields.
+    // 3. The "cc-csc" field is either not present among the preceding credit card fields,
+    //    or the current field is the last field in the form. This condition is in place
+    //    because "cc-csc" is often the last field in a credit card form, and we want to
+    //    avoid mistakenly updating fields in subsequent address forms.
     if (
       ["cc-number"].some(f => prevCCFields.has(f)) &&
-      !["cc-name", "cc-given-name", "cc-family-name", "cc-csc"].some(f =>
+      !["cc-name", "cc-given-name", "cc-family-name"].some(f =>
         prevCCFields.has(f)
-      )
+      ) &&
+      (isLastField || !prevCCFields.has("cc-csc"))
     ) {
       // If there is only one field, assume the name field a `cc-name` field
       if (fields.length == 1) {
@@ -680,7 +765,10 @@ export const FormAutofillHeuristics = {
       // First, we get the inferred field info
       const fieldDetail = scanner.getFieldDetailByIndex(scanner.parsingIndex);
 
-      if (this._parsePhoneFields(scanner, fieldDetail)) {
+      if (
+        this._parseNameFieldsContent(scanner, fieldDetail) ||
+        this._parsePhoneFields(scanner, fieldDetail)
+      ) {
         continue;
       }
 

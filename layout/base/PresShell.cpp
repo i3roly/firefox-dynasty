@@ -228,7 +228,7 @@ using namespace mozilla::layout;
 using PaintFrameFlags = nsLayoutUtils::PaintFrameFlags;
 typedef ScrollableLayerGuid::ViewID ViewID;
 
-PresShell::CapturingContentInfo PresShell::sCapturingContentInfo;
+MOZ_RUNINIT PresShell::CapturingContentInfo PresShell::sCapturingContentInfo;
 
 // RangePaintInfo is used to paint ranges to offscreen buffers
 struct RangePaintInfo {
@@ -554,7 +554,7 @@ class nsBeforeFirstPaintDispatcher : public Runnable {
 // This is a helper class to track whether the targeted frame is destroyed after
 // dispatching pointer events. In that case, we need the original targeted
 // content so that we can dispatch the mouse events to it.
-class MOZ_STACK_CLASS AutoPointerEventTargetUpdater final {
+class MOZ_RAII AutoPointerEventTargetUpdater final {
  public:
   AutoPointerEventTargetUpdater(PresShell* aShell, WidgetEvent* aEvent,
                                 nsIFrame* aFrame, nsIContent* aTargetContent,
@@ -772,7 +772,6 @@ PresShell::PresShell(Document* aDocument)
     : mDocument(aDocument),
       mViewManager(nullptr),
       mAutoWeakFrames(nullptr),
-      mLastAnchorVerticalScrollViewPosition(WhereToScroll::Start),
 #ifdef ACCESSIBILITY
       mDocAccessible(nullptr),
 #endif  // ACCESSIBILITY
@@ -1632,7 +1631,9 @@ PresShell::GetDisplaySelection(int16_t* aToggle) {
 NS_IMETHODIMP
 PresShell::GetSelectionFromScript(RawSelectionType aRawSelectionType,
                                   Selection** aSelection) {
-  if (!aSelection || !mSelection) return NS_ERROR_NULL_POINTER;
+  if (!aSelection || !mSelection) {
+    return NS_ERROR_NULL_POINTER;
+  }
 
   RefPtr<nsFrameSelection> frameSelection = mSelection;
   RefPtr<Selection> selection =
@@ -2284,7 +2285,9 @@ NS_IMETHODIMP PresShell::SetCaretEnabled(bool aInEnable) {
 }
 
 NS_IMETHODIMP PresShell::SetCaretReadOnly(bool aReadOnly) {
-  if (mCaret) mCaret->SetCaretReadOnly(aReadOnly);
+  if (mCaret) {
+    mCaret->SetCaretReadOnly(aReadOnly);
+  }
   return NS_OK;
 }
 
@@ -2295,7 +2298,9 @@ NS_IMETHODIMP PresShell::GetCaretEnabled(bool* aOutEnabled) {
 }
 
 NS_IMETHODIMP PresShell::SetCaretVisibilityDuringSelection(bool aVisibility) {
-  if (mCaret) mCaret->SetVisibilityDuringSelection(aVisibility);
+  if (mCaret) {
+    mCaret->SetVisibilityDuringSelection(aVisibility);
+  }
   return NS_OK;
 }
 
@@ -2341,7 +2346,9 @@ PresShell::WordMove(bool aForward, bool aExtend) {
   nsresult result = frameSelection->WordMove(aForward, aExtend);
   // if we can't go down/up any more we must then move caret completely to
   // end/beginning respectively.
-  if (NS_FAILED(result)) result = CompleteMove(aForward, aExtend);
+  if (NS_FAILED(result)) {
+    result = CompleteMove(aForward, aExtend);
+  }
   return result;
 }
 
@@ -2351,7 +2358,9 @@ PresShell::LineMove(bool aForward, bool aExtend) {
   nsresult result = frameSelection->LineMove(aForward, aExtend);
   // if we can't go down/up any more we must then move caret completely to
   // end/beginning respectively.
-  if (NS_FAILED(result)) result = CompleteMove(aForward, aExtend);
+  if (NS_FAILED(result)) {
+    result = CompleteMove(aForward, aExtend);
+  }
   return result;
 }
 
@@ -2456,7 +2465,9 @@ PresShell::CompleteMove(bool aForward, bool aExtend) {
   nsIContent* limiter = frameSelection->GetAncestorLimiter();
   nsIFrame* frame = limiter ? limiter->GetPrimaryFrame()
                             : FrameConstructor()->GetRootElementFrame();
-  if (!frame) return NS_ERROR_FAILURE;
+  if (!frame) {
+    return NS_ERROR_FAILURE;
+  }
   nsIFrame::CaretPosition pos = frame->GetExtremeCaretPosition(!aForward);
 
   const nsFrameSelection::FocusMode focusMode =
@@ -2666,10 +2677,14 @@ void PresShell::FrameNeedsReflow(nsIFrame* aFrame,
 
   // If we've not yet done the initial reflow, then don't bother
   // enqueuing a reflow command yet.
-  if (!mDidInitialize) return;
+  if (!mDidInitialize) {
+    return;
+  }
 
   // If we're already destroying, don't bother with this either.
-  if (mIsDestroying) return;
+  if (mIsDestroying) {
+    return;
+  }
 
 #ifdef DEBUG
   // printf("gShellCounter: %d\n", gShellCounter++);
@@ -3187,24 +3202,35 @@ nsresult PresShell::GoToAnchor(const nsAString& aAnchorName,
       // From "Monkeypatching HTML § 7.4.6.3 Scrolling to a fragment:"
       // 3.9 Let blockPosition be "center" if scrollTarget is a range, "start"
       //     otherwise.
-      const auto verticalScrollPosition =
-          thereIsATextFragment ? WhereToScroll(WhereToScroll::Center)
-                               : WhereToScroll(WhereToScroll::Start);
+      // Implementation note: Use `ScrollSelectionIntoView` for text fragment,
+      // since the text fragment is stored as a `eTargetText` selection.
+      //
       // 3.3. TODO: Run the ancestor details revealing algorithm on target.
       // 3.4. Scroll target into view, with behavior set to "auto", block set to
       //      "start", and inline set to "nearest".
       // FIXME(emilio): Not all callers pass ScrollSmoothAuto (but we use auto
       // smooth scroll for `top` regardless below, so maybe they should!).
       ScrollingInteractionContext scrollToAnchorContext(true);
-      MOZ_TRY(ScrollContentIntoView(
-          target, ScrollAxis(verticalScrollPosition, WhenToScroll::Always),
-          ScrollAxis(),
-          ScrollFlags::AnchorScrollFlags | aAdditionalScrollFlags));
-
+      if (thereIsATextFragment) {
+        MOZ_TRY(ScrollSelectionIntoView(
+            SelectionType::eTargetText,
+            nsISelectionController::SELECTION_ANCHOR_REGION,
+            ScrollAxis(WhereToScroll::Center, WhenToScroll::Always),
+            ScrollAxis(),
+            ScrollFlags::AnchorScrollFlags | aAdditionalScrollFlags,
+            SelectionScrollMode::SyncFlush));
+      } else {
+        MOZ_TRY(ScrollContentIntoView(
+            target, ScrollAxis(WhereToScroll::Start, WhenToScroll::Always),
+            ScrollAxis(),
+            ScrollFlags::AnchorScrollFlags | aAdditionalScrollFlags));
+      }
       if (ScrollContainerFrame* rootScroll = GetRootScrollContainerFrame()) {
         mLastAnchorScrolledTo = target;
         mLastAnchorScrollPositionY = rootScroll->GetScrollPosition().y;
-        mLastAnchorVerticalScrollViewPosition = verticalScrollPosition;
+        mLastAnchorScrollType = thereIsATextFragment
+                                    ? AnchorScrollType::TextDirective
+                                    : AnchorScrollType::Anchor;
       }
     }
 
@@ -3278,7 +3304,20 @@ nsresult PresShell::GoToAnchor(const nsAString& aAnchorName,
 
 #ifdef ACCESSIBILITY
     if (nsAccessibilityService* accService = GetAccService()) {
-      accService->NotifyOfAnchorJumpTo(target);
+      nsIContent* a11yTarget = target;
+      if (thereIsATextFragment) {
+        // A text fragment starts in a text leaf node. `target` is the element
+        // parent, but there may be many other children of that element before
+        // the start of the text fragment. Explicitly use the start leaf node
+        // here to get a11y clients as close as possible to the fragment (on
+        // platforms which support this).
+        a11yTarget = nsIContent::FromNodeOrNull(
+            aFirstTextDirective->GetStartContainer());
+        if (!a11yTarget) {
+          a11yTarget = target;
+        }
+      }
+      accService->NotifyOfAnchorJumpTo(a11yTarget);
     }
 #endif
   } else if (nsContentUtils::EqualsIgnoreASCIICase(aAnchorName, u"top"_ns)) {
@@ -3300,21 +3339,28 @@ nsresult PresShell::GoToAnchor(const nsAString& aAnchorName,
 }
 
 nsresult PresShell::ScrollToAnchor() {
-  nsCOMPtr<nsIContent> lastAnchor = std::move(mLastAnchorScrolledTo);
-  if (!lastAnchor) {
-    return NS_OK;
+  NS_ASSERTION(mDidInitialize, "should have done initial reflow by now");
+  if (mLastAnchorScrollType == AnchorScrollType::Anchor) {
+    nsCOMPtr<nsIContent> lastAnchor = std::move(mLastAnchorScrolledTo);
+    if (!lastAnchor) {
+      return NS_OK;
+    }
+
+    ScrollContainerFrame* rootScroll = GetRootScrollContainerFrame();
+    if (!rootScroll ||
+        mLastAnchorScrollPositionY != rootScroll->GetScrollPosition().y) {
+      return NS_OK;
+    }
+    return ScrollContentIntoView(
+        lastAnchor, ScrollAxis(WhereToScroll::Start, WhenToScroll::Always),
+        ScrollAxis(), ScrollFlags::AnchorScrollFlags);
   }
 
-  NS_ASSERTION(mDidInitialize, "should have done initial reflow by now");
-  ScrollContainerFrame* rootScroll = GetRootScrollContainerFrame();
-  if (!rootScroll ||
-      mLastAnchorScrollPositionY != rootScroll->GetScrollPosition().y) {
-    return NS_OK;
-  }
-  return ScrollContentIntoView(
-      lastAnchor,
-      ScrollAxis(mLastAnchorVerticalScrollViewPosition, WhenToScroll::Always),
-      ScrollAxis(), ScrollFlags::AnchorScrollFlags);
+  return ScrollSelectionIntoView(
+      SelectionType::eTargetText,
+      nsISelectionController::SELECTION_ANCHOR_REGION,
+      ScrollAxis(WhereToScroll::Center, WhenToScroll::Always), ScrollAxis(),
+      ScrollFlags::AnchorScrollFlags, SelectionScrollMode::SyncFlush);
 }
 
 /*
@@ -3925,7 +3971,9 @@ void PresShell::DispatchSynthMouseMove(WidgetGUIEvent* aEvent) {
                                         GRAPHICS, mPresContext->GetDocShell());
   nsEventStatus status = nsEventStatus_eIgnore;
   nsView* targetView = nsView::GetViewFor(aEvent->mWidget);
-  if (!targetView) return;
+  if (!targetView) {
+    return;
+  }
   RefPtr<nsViewManager> viewManager = targetView->GetViewManager();
   viewManager->DispatchEvent(aEvent, targetView, &status);
 }
@@ -3999,7 +4047,9 @@ nsresult PresShell::CaptureHistoryState(nsILayoutHistoryState** aState) {
   // state could be wrong.  We should sort out a better ownership
   // model for the layout history state.
   nsCOMPtr<nsIDocShell> docShell(mPresContext->GetDocShell());
-  if (!docShell) return NS_ERROR_FAILURE;
+  if (!docShell) {
+    return NS_ERROR_FAILURE;
+  }
 
   nsCOMPtr<nsILayoutHistoryState> historyState;
   docShell->GetLayoutHistoryState(getter_AddRefs(historyState));
@@ -4014,7 +4064,9 @@ nsresult PresShell::CaptureHistoryState(nsILayoutHistoryState** aState) {
 
   // Capture frame state for the entire frame hierarchy
   nsIFrame* rootFrame = mFrameConstructor->GetRootFrame();
-  if (!rootFrame) return NS_OK;
+  if (!rootFrame) {
+    return NS_OK;
+  }
 
   mFrameConstructor->CaptureFrameState(rootFrame, historyState);
 
@@ -4092,10 +4144,11 @@ void PresShell::UnsuppressPainting() {
   // the reflows and get all the frames where we want them
   // before actually unlocking the painting.  Otherwise
   // go ahead and unlock now.
-  if (!mDirtyRoots.IsEmpty())
+  if (!mDirtyRoots.IsEmpty()) {
     mShouldUnsuppressPainting = true;
-  else
+  } else {
     UnsuppressAndInvalidate();
+  }
 }
 
 // Post a request to handle an arbitrary callback after reflow has finished.
@@ -4590,8 +4643,7 @@ MOZ_CAN_RUN_SCRIPT_BOUNDARY void PresShell::ContentRemoved(
   // frame reconstruction.
   nsIContent* oldNextSibling = nullptr;
 
-  // Editor calls into here with NAC via HTMLEditor::DeleteRefToAnonymousNode.
-  // This could be asserted if that caller is fixed.
+  // Editor and view transitions code call into here with NAC.
   if (MOZ_LIKELY(!aChild->IsRootOfNativeAnonymousSubtree())) {
     oldNextSibling = aPreviousSibling ? aPreviousSibling->GetNextSibling()
                                       : container->GetFirstChild();
@@ -4653,7 +4705,9 @@ nsresult PresShell::RenderDocument(const nsRect& aRect,
   nsRootPresContext* rootPresContext = mPresContext->GetRootPresContext();
   if (rootPresContext) {
     rootPresContext->FlushWillPaintObservers();
-    if (mIsDestroying) return NS_OK;
+    if (mIsDestroying) {
+      return NS_OK;
+    }
   }
 
   nsAutoScriptBlocker blockScripts;
@@ -4867,9 +4921,10 @@ nsRect PresShell::ClipListToRange(nsDisplayListBuilder* aBuilder,
     if (itemToInsert || sublist) {
       aList->AppendToTop(itemToInsert ? itemToInsert : i);
       // if the item is a list, iterate over it as well
-      if (sublist)
+      if (sublist) {
         surfaceRect.UnionRect(surfaceRect,
                               ClipListToRange(aBuilder, sublist, aRange));
+      }
     } else {
       // otherwise, just delete the item and don't readd it to the list
       i->Destroy(aBuilder);
@@ -4920,8 +4975,9 @@ UniquePtr<RangePaintInfo> PresShell::CreateRangePaintInfo(
     // use the nearest ancestor frame that includes all continuations as the
     // root for building the display list
     while (ancestorFrame &&
-           nsLayoutUtils::GetNextContinuationOrIBSplitSibling(ancestorFrame))
+           nsLayoutUtils::GetNextContinuationOrIBSplitSibling(ancestorFrame)) {
       ancestorFrame = ancestorFrame->GetParent();
+    }
   }
 
   if (!ancestorFrame) {
@@ -5041,7 +5097,9 @@ already_AddRefed<SourceSurface> PresShell::PaintRangePaintInfo(
     const LayoutDeviceIntPoint aPoint, LayoutDeviceIntRect* aScreenRect,
     RenderImageFlags aFlags) {
   nsPresContext* pc = GetPresContext();
-  if (!pc || aArea.width == 0 || aArea.height == 0) return nullptr;
+  if (!pc || aArea.width == 0 || aArea.height == 0) {
+    return nullptr;
+  }
 
   // use the rectangle to create the surface
   LayoutDeviceIntRect pixelArea = LayoutDeviceIntRect::FromAppUnitsToOutside(
@@ -5050,8 +5108,7 @@ already_AddRefed<SourceSurface> PresShell::PaintRangePaintInfo(
   // if the image should not be resized, scale must be 1
   float scale = 1.0;
 
-  nsRect maxSize;
-  pc->DeviceContext()->GetClientRect(maxSize);
+  const nsRect maxSize = pc->DeviceContext()->GetClientRect();
 
   // check if the image should be resized
   bool resize = !!(aFlags & RenderImageFlags::AutoScale);
@@ -5086,10 +5143,12 @@ already_AddRefed<SourceSurface> PresShell::PaintRangePaintInfo(
         // divide the maximum size by the image size in both directions.
         // Whichever direction produces the smallest result determines how much
         // should be scaled.
-        if (pixelArea.width > maxWidth)
+        if (pixelArea.width > maxWidth) {
           scale = std::min(scale, float(maxWidth) / pixelArea.width);
-        if (pixelArea.height > maxHeight)
+        }
+        if (pixelArea.height > maxHeight) {
           scale = std::min(scale, float(maxHeight) / pixelArea.height);
+        }
       }
     }
 
@@ -5267,7 +5326,9 @@ already_AddRefed<SourceSurface> PresShell::RenderNode(
     area.IntersectRect(area, rrect);
 
     nsPresContext* pc = GetPresContext();
-    if (!pc) return nullptr;
+    if (!pc) {
+      return nullptr;
+    }
 
     // move the region so that it is offset from the topleft corner of the
     // surface
@@ -5785,7 +5846,9 @@ static nsView* FindViewContaining(nsView* aRelativeToView,
   for (nsView* v = aView->GetFirstChild(); v; v = v->GetNextSibling()) {
     nsView* r =
         FindViewContaining(aRelativeToView, aRelativeToViewportType, v, aPt);
-    if (r) return r;
+    if (r) {
+      return r;
+    }
   }
 
   return frame ? aView : nullptr;
@@ -6287,7 +6350,9 @@ void PresShell::ScheduleApproximateFrameVisibilityUpdateNow() {
   if (!mPresContext->IsRootContentDocumentInProcess()) {
     nsPresContext* presContext =
         mPresContext->GetInProcessRootContentDocumentPresContext();
-    if (!presContext) return;
+    if (!presContext) {
+      return;
+    }
     MOZ_ASSERT(presContext->IsRootContentDocumentInProcess(),
                "Didn't get a root prescontext from "
                "GetInProcessRootContentDocumentPresContext?");
@@ -7198,7 +7263,7 @@ nsresult PresShell::EventHandler::HandleEventUsingCoordinates(
   nsCOMPtr<nsIContent> capturingContent =
       EventHandler::GetCapturingContentFor(aGUIEvent);
   if (GetDocument() && aGUIEvent->mClass == eTouchEventClass) {
-    PointerLockManager::Unlock();
+    PointerLockManager::Unlock("TouchEvent");
   }
 
   nsIFrame* frameForPresShell = MaybeFlushThrottledStyles(aFrameForPresShell);
@@ -8850,7 +8915,7 @@ void PresShell::EventHandler::MaybeHandleKeyboardEventBeforeDispatch(
           CrossProcessForwarding::eStop);
       aKeyboardEvent->mFlags.mOnlyChromeDispatch = true;
       if (aKeyboardEvent->mMessage == eKeyUp) {
-        PointerLockManager::Unlock();
+        PointerLockManager::Unlock("EscapeKey");
       }
     }
   }
@@ -9203,7 +9268,9 @@ bool PresShell::EventHandler::AdjustContextMenuKeyEvent(
     if (popupFrame) {
       nsIFrame* itemFrame = (static_cast<nsMenuPopupFrame*>(popupFrame))
                                 ->GetCurrentMenuItemFrame();
-      if (!itemFrame) itemFrame = popupFrame;
+      if (!itemFrame) {
+        itemFrame = popupFrame;
+      }
 
       nsCOMPtr<nsIWidget> widget = popupFrame->GetNearestWidget();
       aMouseEvent->mWidget = widget;
@@ -9311,7 +9378,9 @@ bool PresShell::EventHandler::PrepareToUseCaretPosition(
   NS_ENSURE_TRUE(caret, false);
 
   bool caretVisible = caret->IsVisible();
-  if (!caretVisible) return false;
+  if (!caretVisible) {
+    return false;
+  }
 
   // caret selection, this is a temporary weak reference, so no refcounting is
   // needed
@@ -9380,10 +9449,14 @@ bool PresShell::EventHandler::PrepareToUseCaretPosition(
   // get caret position relative to the closest view
   nsRect caretCoords;
   nsIFrame* caretFrame = caret->GetGeometry(&caretCoords);
-  if (!caretFrame) return false;
+  if (!caretFrame) {
+    return false;
+  }
   nsPoint viewOffset;
   nsView* view = caretFrame->GetClosestView(&viewOffset);
-  if (!view) return false;
+  if (!view) {
+    return false;
+  }
   // and then get the caret coords relative to the event widget
   if (aEventWidget) {
     viewOffset += view->GetOffsetToWidget(aEventWidget);
@@ -9556,7 +9629,9 @@ void PresShell::WillPaint() {
   }
 
   rootPresContext->FlushWillPaintObservers();
-  if (mIsDestroying) return;
+  if (mIsDestroying) {
+    return;
+  }
 
   // Process reflows, if we have them, to reduce flicker due to invalidates and
   // reflow being interspersed.  Note that we _do_ allow this to be
@@ -9588,21 +9663,31 @@ void PresShell::DidPaintWindow() {
 }
 
 bool PresShell::IsVisible() const {
-  if (!mIsActive || !mViewManager) return false;
+  if (!mIsActive || !mViewManager) {
+    return false;
+  }
 
   nsView* view = mViewManager->GetRootView();
-  if (!view) return true;
+  if (!view) {
+    return true;
+  }
 
   // inner view of subdoc frame
   view = view->GetParent();
-  if (!view) return true;
+  if (!view) {
+    return true;
+  }
 
   // subdoc view
   view = view->GetParent();
-  if (!view) return true;
+  if (!view) {
+    return true;
+  }
 
   nsIFrame* frame = view->GetFrame();
-  if (!frame) return true;
+  if (!frame) {
+    return true;
+  }
 
   return frame->IsVisibleConsideringAncestors(
       nsIFrame::VISIBILITY_CROSS_CHROME_CONTENT_BOUNDARY);
@@ -11026,7 +11111,7 @@ void ReflowCountMgr::DoGrandHTMLTotals() {
 
   static const char* title[] = {"Class", "Reflows"};
   fprintf(mFD, "<tr>");
-  for (uint32_t i = 0; i < ArrayLength(title); i++) {
+  for (uint32_t i = 0; i < std::size(title); i++) {
     fprintf(mFD, "<td><center><b>%s<b></center></td>", title[i]);
   }
   fprintf(mFD, "</tr>\n");

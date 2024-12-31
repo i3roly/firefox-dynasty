@@ -34,6 +34,7 @@ ChromeUtils.defineESModuleGetters(lazy, {
 
 const RS_RUNTIME_COLLECTION = "ml-onnx-runtime";
 const RS_INFERENCE_OPTIONS_COLLECTION = "ml-inference-options";
+const RS_ALLOW_DENY_COLLECTION = "ml-model-allow-deny-list";
 const TERMINATE_TIMEOUT = 5000;
 
 /**
@@ -291,6 +292,7 @@ export class MLEngineParent extends JSWindowActorParent {
    * only once and reused for subsequent calls to optimize performance.
    *
    * @param {object} config
+   * @param {string} config.engineId - The engine id.
    * @param {string} config.taskName - name of the inference task.
    * @param {string} config.url - The URL of the model file to fetch. Can be a path relative to
    * the model hub root or an absolute URL.
@@ -300,13 +302,14 @@ export class MLEngineParent extends JSWindowActorParent {
    * the model hub root or an absolute URL.
    * @returns {Promise<[ArrayBuffer, object]>} The file content and headers
    */
-  async getModelFile({ taskName, url, rootUrl, urlTemplate }) {
+  async getModelFile({ engineId, taskName, url, rootUrl, urlTemplate }) {
     // Create the model hub instance if needed
     if (!this.modelHub) {
       lazy.console.debug("Creating model hub instance");
       this.modelHub = new lazy.ModelHub({
         rootUrl,
         urlTemplate,
+        allowDenyList: await MLEngineParent.getAllowDenyList(),
       });
     }
 
@@ -323,6 +326,7 @@ export class MLEngineParent extends JSWindowActorParent {
     const parsedUrl = this.modelHub.parseUrl(url, { rootUrl, urlTemplate });
 
     const [data, headers] = await this.modelHub.getModelFileAsArrayBuffer({
+      engineId,
       taskName,
       ...parsedUrl,
       modelHubRootUrl: rootUrl,
@@ -377,6 +381,14 @@ export class MLEngineParent extends JSWindowActorParent {
       record
     );
     return record;
+  }
+
+  /**
+   * Gets the allow/deny list from remote settings
+   *
+   */
+  static async getAllowDenyList() {
+    return MLEngineParent.#getRemoteClient(RS_ALLOW_DENY_COLLECTION).get();
   }
 
   /**

@@ -85,7 +85,6 @@ MACH_COMMANDS = {
     ),
     "configure": MachCommandReference("python/mozbuild/mozbuild/build_commands.py"),
     "cppunittest": MachCommandReference("testing/mach_commands.py"),
-    "cramtest": MachCommandReference("testing/mach_commands.py"),
     "crashtest": MachCommandReference("layout/tools/reftest/mach_commands.py"),
     "data-review": MachCommandReference(
         "toolkit/components/glean/build_scripts/mach_commands.py"
@@ -247,9 +246,6 @@ MACH_COMMANDS = {
     "webidl-parser-test": MachCommandReference("dom/bindings/mach_commands.py"),
     "wpt": MachCommandReference("testing/web-platform/mach_commands.py"),
     "wpt-fetch-logs": MachCommandReference("testing/web-platform/mach_commands.py"),
-    "wpt-fission-regressions": MachCommandReference(
-        "testing/web-platform/mach_commands.py"
-    ),
     "wpt-interop-score": MachCommandReference("testing/web-platform/mach_commands.py"),
     "wpt-manifest-update": MachCommandReference(
         "testing/web-platform/mach_commands.py"

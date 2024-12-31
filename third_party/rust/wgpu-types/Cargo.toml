@@ -13,7 +13,7 @@
 edition = "2021"
 rust-version = "1.73"
 name = "wgpu-types"
-version = "22.0.0"
+version = "23.0.0"
 authors = ["gfx-rs developers"]
 build = false
 autobins = false
@@ -30,14 +30,14 @@ repository = "https://github.com/gfx-rs/wgpu"
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = [
-"--cfg",
-"docsrs",
+    "--cfg",
+    "docsrs",
 ]
 targets = [
-"x86_64-unknown-linux-gnu",
-"x86_64-apple-darwin",
-"x86_64-pc-windows-msvc",
-"wasm32-unknown-unknown",
+    "x86_64-unknown-linux-gnu",
+    "x86_64-apple-darwin",
+    "x86_64-pc-windows-msvc",
+    "wasm32-unknown-unknown",
 ]
 
 [lib]
@@ -57,7 +57,7 @@ version = "1"
 features = ["derive"]
 
 [dev-dependencies.serde_json]
-version = "1.0.128"
+version = "1.0.132"
 
 [features]
 counters = []
@@ -69,13 +69,13 @@ strict_asserts = []
 version = "0.3.70"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies.web-sys]
-version = "0.3.70"
+version = "0.3.72"
 features = [
-"ImageBitmap",
-"ImageData",
-"HtmlImageElement",
-"HtmlVideoElement",
-"HtmlCanvasElement",
-"OffscreenCanvas",
-"VideoFrame",
+    "ImageBitmap",
+    "ImageData",
+    "HtmlImageElement",
+    "HtmlVideoElement",
+    "HtmlCanvasElement",
+    "OffscreenCanvas",
+    "VideoFrame",
 ]

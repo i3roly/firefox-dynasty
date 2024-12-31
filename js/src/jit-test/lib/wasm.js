@@ -74,7 +74,7 @@ function wasmValidateBinary(binary) {
 
 function wasmFailValidateBinary(binary, pattern) {
     assertEq(WebAssembly.validate(binary), false, "module passed WebAssembly.validate when it should not have");
-    assertErrorMessage(() => new WebAssembly.Module(binary), WebAssembly.CompileError, pattern, "module failed WebAssembly.validate but did not fail to compile as expected");
+    assertErrorMessage(() => new WebAssembly.Module(binary), WebAssembly.CompileError, pattern, "module failed WebAssembly.validate but did not fail to compile in the expected way");
 }
 
 function wasmValidateText(str) {
@@ -438,21 +438,19 @@ let WasmFuncrefValues = [
 // Valid values for structref/arrayref
 let WasmStructrefValues = [];
 let WasmArrayrefValues = [];
-if (wasmGcEnabled()) {
-    let { newStruct, newArray } = wasmEvalText(`
-      (module
-        (type $s (sub (struct)))
-        (type $a (sub (array i32)))
-        (func (export "newStruct") (result anyref)
-            struct.new $s)
-        (func (export "newArray") (result anyref)
-            i32.const 0
-            i32.const 0
-            array.new $a)
-      )`).exports;
-    WasmStructrefValues.push(newStruct());
-    WasmArrayrefValues.push(newArray());
-}
+let { newStruct, newArray } = wasmEvalText(`
+    (module
+    (type $s (sub (struct)))
+    (type $a (sub (array i32)))
+    (func (export "newStruct") (result anyref)
+        struct.new $s)
+    (func (export "newArray") (result anyref)
+        i32.const 0
+        i32.const 0
+        array.new $a)
+    )`).exports;
+WasmStructrefValues.push(newStruct());
+WasmArrayrefValues.push(newArray());
 
 let WasmGcObjectValues = WasmStructrefValues.concat(WasmArrayrefValues);
 

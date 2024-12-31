@@ -112,7 +112,7 @@ bool nsContentSecurityManager::AllowTopLevelNavigationToDataURI(
 
   // Allow data: images as long as they are not SVGs
   if (StringBeginsWith(contentType, "image/"_ns) &&
-      !contentType.EqualsLiteral("image/svg+xml")) {
+      !contentType.EqualsLiteral(IMAGE_SVG_XML)) {
     return true;
   }
   // Allow all data: PDFs. or JSON documents
@@ -728,8 +728,7 @@ static void DebugDoContentSecurityCheck(nsIChannel* aChannel,
             ("  allowDeprecatedSystemRequests: %s\n",
              aLoadInfo->GetAllowDeprecatedSystemRequests() ? "true" : "false"));
     MOZ_LOG(sCSMLog, LogLevel::Verbose,
-            ("  wasSchemeless: %s\n",
-             aLoadInfo->GetWasSchemelessInput() ? "true" : "false"));
+            ("  schemelessInput: %d\n", aLoadInfo->GetSchemelessInput()));
 
     // Log CSPrequestPrincipal
     nsCOMPtr<nsIContentSecurityPolicy> csp = aLoadInfo->GetCsp();

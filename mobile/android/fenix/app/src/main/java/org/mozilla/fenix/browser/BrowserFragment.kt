@@ -14,7 +14,6 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Observer
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
-import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -35,18 +34,22 @@ import mozilla.components.support.base.feature.ViewBoundFeatureWrapper
 import mozilla.components.support.utils.ext.isLandscape
 import mozilla.telemetry.glean.private.NoExtras
 import org.mozilla.fenix.GleanMetrics.AddressToolbar
+import org.mozilla.fenix.GleanMetrics.NavigationBar
 import org.mozilla.fenix.GleanMetrics.ReaderMode
 import org.mozilla.fenix.GleanMetrics.Shopping
 import org.mozilla.fenix.HomeActivity
 import org.mozilla.fenix.R
 import org.mozilla.fenix.browser.tabstrip.isTabStripEnabled
-import org.mozilla.fenix.components.FenixSnackbar
 import org.mozilla.fenix.components.TabCollectionStorage
 import org.mozilla.fenix.components.appstate.AppAction.ShoppingAction
 import org.mozilla.fenix.components.appstate.AppAction.SnackbarAction
 import org.mozilla.fenix.components.toolbar.BrowserToolbarView
 import org.mozilla.fenix.components.toolbar.ToolbarMenu
 import org.mozilla.fenix.components.toolbar.navbar.shouldAddNavigationBar
+import org.mozilla.fenix.components.toolbar.ui.createShareBrowserAction
+import org.mozilla.fenix.compose.core.Action
+import org.mozilla.fenix.compose.snackbar.Snackbar
+import org.mozilla.fenix.compose.snackbar.SnackbarState
 import org.mozilla.fenix.ext.components
 import org.mozilla.fenix.ext.isLargeWindow
 import org.mozilla.fenix.ext.nav
@@ -59,6 +62,7 @@ import org.mozilla.fenix.settings.quicksettings.protections.cookiebanners.getCoo
 import org.mozilla.fenix.shopping.DefaultShoppingExperienceFeature
 import org.mozilla.fenix.shopping.ReviewQualityCheckFeature
 import org.mozilla.fenix.shortcut.PwaOnboardingObserver
+import org.mozilla.fenix.theme.AcornWindowSize
 import org.mozilla.fenix.theme.ThemeManager
 
 /**
@@ -114,6 +118,7 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler {
             isTablet = isLargeWindow(),
             isPrivate = (activity as HomeActivity).browsingModeManager.mode.isPrivate,
             feltPrivateBrowsingEnabled = context.settings().feltPrivateBrowsingEnabled,
+            isWindowSizeSmall = AcornWindowSize.getWindowSize(context) == AcornWindowSize.Small,
         )
 
         updateBrowserToolbarMenuVisibility()
@@ -158,24 +163,16 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler {
     }
 
     private fun initSharePageAction(context: Context) {
-        if (!context.settings().navigationToolbarEnabled) {
+        if (!context.settings().navigationToolbarEnabled || context.isTabStripEnabled()) {
             return
         }
 
-        val sharePageAction =
-            BrowserToolbar.Button(
-                imageDrawable = AppCompatResources.getDrawable(
-                    context,
-                    R.drawable.mozac_ic_share_android_24,
-                )!!,
-                contentDescription = getString(R.string.browser_menu_share),
-                weight = { SHARE_WEIGHT },
-                iconTintColorResource = ThemeManager.resolveAttribute(R.attr.textPrimary, context),
-                listener = {
-                    AddressToolbar.shareTapped.record((NoExtras()))
-                    browserToolbarInteractor.onShareActionClicked()
-                },
-            )
+        val sharePageAction = BrowserToolbar.createShareBrowserAction(
+            context = context,
+        ) {
+            AddressToolbar.shareTapped.record((NoExtras()))
+            browserToolbarInteractor.onShareActionClicked()
+        }
 
         browserToolbarView.view.addPageAction(sharePageAction)
     }
@@ -446,12 +443,12 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler {
         isTablet: Boolean,
         isPrivate: Boolean,
         feltPrivateBrowsingEnabled: Boolean,
+        isWindowSizeSmall: Boolean,
     ) {
         if (redesignEnabled) {
             updateAddressBarNavigationActions(
-                isLandscape = isLandscape,
-                isTablet = isTablet,
                 context = context,
+                isWindowSizeSmall = isWindowSizeSmall,
             )
             updateAddressBarLeadingAction(
                 redesignEnabled = true,
@@ -507,10 +504,9 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler {
     @VisibleForTesting
     internal fun updateAddressBarNavigationActions(
         context: Context,
-        isLandscape: Boolean,
-        isTablet: Boolean,
+        isWindowSizeSmall: Boolean,
     ) {
-        if (isLandscape || isTablet) {
+        if (!isWindowSizeSmall) {
             addNavigationActions(context)
         } else {
             removeNavigationActions()
@@ -527,6 +523,7 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler {
             isTablet = isLargeWindow(),
             isPrivate = (activity as HomeActivity).browsingModeManager.mode.isPrivate,
             feltPrivateBrowsingEnabled = requireContext().settings().feltPrivateBrowsingEnabled,
+            isWindowSizeSmall = AcornWindowSize.getWindowSize(requireContext()) == AcornWindowSize.Small,
         )
 
         updateBrowserToolbarMenuVisibility()
@@ -562,11 +559,17 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler {
                 secondaryImageTintResource = disableTint,
                 disableInSecondaryState = true,
                 longClickListener = {
+                    if (!this.isTablet) {
+                        NavigationBar.browserBackLongTapped.record(NoExtras())
+                    }
                     browserToolbarInteractor.onBrowserToolbarMenuItemTapped(
                         ToolbarMenu.Item.Back(viewHistory = true),
                     )
                 },
                 listener = {
+                    if (!this.isTablet) {
+                        NavigationBar.browserBackTapped.record(NoExtras())
+                    }
                     browserToolbarInteractor.onBrowserToolbarMenuItemTapped(
                         ToolbarMenu.Item.Back(viewHistory = false),
                     )
@@ -588,11 +591,17 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler {
                 secondaryImageTintResource = disableTint,
                 disableInSecondaryState = true,
                 longClickListener = {
+                    if (!this.isTablet) {
+                        NavigationBar.browserForwardLongTapped.record(NoExtras())
+                    }
                     browserToolbarInteractor.onBrowserToolbarMenuItemTapped(
                         ToolbarMenu.Item.Forward(viewHistory = true),
                     )
                 },
                 listener = {
+                    if (!this.isTablet) {
+                        NavigationBar.browserForwardTapped.record(NoExtras())
+                    }
                     browserToolbarInteractor.onBrowserToolbarMenuItemTapped(
                         ToolbarMenu.Item.Forward(viewHistory = false),
                     )
@@ -780,7 +789,7 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler {
             tabSize: Int,
             isNewCollection: Boolean = false,
         ) {
-            view?.let { view ->
+            view?.let {
                 val messageStringRes = when {
                     isNewCollection -> {
                         R.string.create_collection_tabs_saved_new_collection
@@ -792,20 +801,23 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler {
                         R.string.create_collection_tab_saved
                     }
                 }
-                FenixSnackbar.make(
-                    view = binding.dynamicSnackbarContainer,
-                    duration = Snackbar.LENGTH_SHORT,
-                )
-                    .setText(view.context.getString(messageStringRes))
-                    .setAction(requireContext().getString(R.string.create_collection_view)) {
-                        findNavController().navigate(
-                            BrowserFragmentDirections.actionGlobalHome(
-                                focusOnAddressBar = false,
-                                scrollToCollection = true,
-                            ),
-                        )
-                    }
-                    .show()
+                Snackbar.make(
+                    snackBarParentView = binding.dynamicSnackbarContainer,
+                    snackbarState = SnackbarState(
+                        message = getString(messageStringRes),
+                        action = Action(
+                            label = getString(R.string.create_collection_view),
+                            onClick = {
+                                findNavController().navigate(
+                                    BrowserFragmentDirections.actionGlobalHome(
+                                        focusOnAddressBar = false,
+                                        scrollToCollection = true,
+                                    ),
+                                )
+                            },
+                        ),
+                    ),
+                ).show()
             }
         }
     }

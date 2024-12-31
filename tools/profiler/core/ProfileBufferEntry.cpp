@@ -1080,6 +1080,11 @@ void ProfileBuffer::MaybeStreamExecutionTraceToJSON(
         continue;
       }
 
+      if (event.kind == JS::ExecutionTrace::EventKind::Error) {
+        writer.SetFailure("Error during tracing (likely OOM)");
+        continue;
+      }
+
       if (event.kind == JS::ExecutionTrace::EventKind::FunctionEnter) {
         HashMap<uint32_t, size_t>::Ptr functionName =
             context.atoms.lookup(event.functionEvent.functionNameId);
@@ -1116,9 +1121,9 @@ void ProfileBuffer::MaybeStreamExecutionTraceToJSON(
             break;
         }
 
-        UniqueStacks::FrameKey newFrame(nsCString(name.get()), true, false, 0,
-                                        Nothing{}, Nothing{},
-                                        Some(categoryPair));
+        UniqueStacks::FrameKey newFrame(nsCString(name.get()), true, false,
+                                        event.functionEvent.realmID, Nothing{},
+                                        Nothing{}, Some(categoryPair));
         maybeStack = uniqueStacks.AppendFrame(stack, newFrame);
         if (!maybeStack) {
           writer.SetFailure("AppendFrame failure");

@@ -2,7 +2,6 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-import distutils.ccompiler
 import os
 import subprocess
 
@@ -11,6 +10,7 @@ from mach.decorators import Command, SubCommand
 CPP_PATH = "toolkit/components/uniffi-js/UniFFIGeneratedScaffolding.cpp"
 JS_DIR = "toolkit/components/uniffi-bindgen-gecko-js/components/generated"
 FIXTURE_JS_DIR = "toolkit/components/uniffi-bindgen-gecko-js/fixtures/generated"
+DOCS_PATH = "docs/rust-components/api/js/"
 
 
 def build_gkrust_uniffi_library(command_context, package_name):
@@ -27,11 +27,14 @@ def build_gkrust_uniffi_library(command_context, package_name):
     ]
     subprocess.check_call(cmdline, cwd=uniffi_root)
     print()
-    ccompiler = distutils.ccompiler.new_compiler()
-    return ccompiler.find_library_file(
-        [os.path.join(command_context.topsrcdir, "target", "release")],
-        package_name.replace("-", "_"),
-    )
+
+    out_dir = os.path.join(command_context.topsrcdir, "target", "release")
+    lib_basename = "lib{}".format(package_name.replace("-", "_"))
+    for ext in [".a", ".so", ".dll", ".dylib"]:
+        candidate = os.path.join(out_dir, lib_basename + ext)
+        if os.path.exists(candidate):
+            return candidate
+    raise Exception("Can't find gkrust_uniffi library in {}".format(out_dir))
 
 
 def build_uniffi_bindgen_gecko_js(command_context):
@@ -89,6 +92,8 @@ def generate_command(command_context):
         FIXTURE_JS_DIR,
         "--cpp-path",
         CPP_PATH,
+        "--docs-path",
+        DOCS_PATH,
     ]
     subprocess.check_call(cmdline, cwd=command_context.topsrcdir)
     return 0

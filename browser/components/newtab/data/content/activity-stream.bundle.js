@@ -105,6 +105,7 @@ for (const type of [
   "ARCHIVE_FROM_POCKET",
   "BLOCK_URL",
   "BOOKMARK_URL",
+  "CARD_SECTION_IMPRESSION",
   "CLEAR_PREF",
   "COPY_DOWNLOAD_LINK",
   "DELETE_BOOKMARK_BY_ID",
@@ -694,6 +695,7 @@ class DiscoveryStreamAdminUI extends (external_React_default()).PureComponent {
     this.handleWeatherUpdate = this.handleWeatherUpdate.bind(this);
     this.refreshTopicSelectionCache = this.refreshTopicSelectionCache.bind(this);
     this.toggleTBRFeed = this.toggleTBRFeed.bind(this);
+    this.handleSectionsToggle = this.handleSectionsToggle.bind(this);
     this.state = {
       toggledStories: {},
       weatherQuery: ""
@@ -762,6 +764,14 @@ class DiscoveryStreamAdminUI extends (external_React_default()).PureComponent {
       weatherQuery
     } = this.state;
     this.props.dispatch(actionCreators.SetPref("weather.query", weatherQuery));
+  }
+  handleSectionsToggle(e) {
+    const {
+      pressed
+    } = e.target;
+    this.props.dispatch(actionCreators.SetPref("discoverystream.sections.enabled", pressed));
+    this.props.dispatch(actionCreators.SetPref("discoverystream.sections.cards.enabled", pressed));
+    this.props.dispatch(actionCreators.SetPref("discoverystream.sections.cards.thumbsUpDown.enabled", pressed));
   }
   renderComponent(width, component) {
     return /*#__PURE__*/external_React_default().createElement("table", null, /*#__PURE__*/external_React_default().createElement("tbody", null, /*#__PURE__*/external_React_default().createElement(Row, null, /*#__PURE__*/external_React_default().createElement("td", {
@@ -892,6 +902,7 @@ class DiscoveryStreamAdminUI extends (external_React_default()).PureComponent {
     } = this.props.state.DiscoveryStream;
     const personalized = this.props.otherPrefs["discoverystream.personalization.enabled"];
     const selectedFeed = this.props.otherPrefs["discoverystream.contextualContent.selectedFeed"];
+    const sectionsEnabled = this.props.otherPrefs["discoverystream.sections.enabled"];
     const TBRFeeds = this.props.otherPrefs["discoverystream.contextualContent.feeds"].split(",").map(s => s.trim()).filter(item => item);
     return /*#__PURE__*/external_React_default().createElement("div", null, /*#__PURE__*/external_React_default().createElement("button", {
       className: "button",
@@ -924,7 +935,14 @@ class DiscoveryStreamAdminUI extends (external_React_default()).PureComponent {
     }, TBRFeeds.map(feed => /*#__PURE__*/external_React_default().createElement("option", {
       key: feed,
       value: feed
-    }, feed))), /*#__PURE__*/external_React_default().createElement("table", null, /*#__PURE__*/external_React_default().createElement("tbody", null, prefToggles.map(pref => /*#__PURE__*/external_React_default().createElement(Row, {
+    }, feed))), /*#__PURE__*/external_React_default().createElement("div", {
+      className: "toggle-wrapper"
+    }, /*#__PURE__*/external_React_default().createElement("moz-toggle", {
+      id: "sections-toggle",
+      pressed: sectionsEnabled || null,
+      onToggle: this.handleSectionsToggle,
+      label: "Toggle DS Sections"
+    })), /*#__PURE__*/external_React_default().createElement("table", null, /*#__PURE__*/external_React_default().createElement("tbody", null, prefToggles.map(pref => /*#__PURE__*/external_React_default().createElement(Row, {
       key: pref
     }, /*#__PURE__*/external_React_default().createElement("td", null, /*#__PURE__*/external_React_default().createElement(TogglePrefCheckbox, {
       checked: config[pref],
@@ -1492,12 +1510,14 @@ class _ContextMenuItem extends (external_React_default()).PureComponent {
     const {
       option
     } = this.props;
+    const listItemClassNames = [option.className || ""].join(" ");
+    const buttonClassNames = [option.disabled ? "disabled" : ""].join(" ");
     return /*#__PURE__*/external_React_default().createElement("li", {
       role: "presentation",
-      className: "context-menu-item"
+      className: `context-menu-item ${listItemClassNames}`
     }, /*#__PURE__*/external_React_default().createElement("button", {
-      className: option.disabled ? "disabled" : "",
       role: "menuitem",
+      className: buttonClassNames,
       onClick: this.onClick,
       onKeyDown: this.onKeyDown,
       onKeyUp: this.onKeyUp,
@@ -1633,6 +1653,12 @@ const LinkMenuOptions = {
         is_pocket_card: site.type === "CardGrid",
         is_list_card: site.is_list_card,
         ...(site.format ? { format: site.format } : {}),
+        ...(site.section
+          ? {
+              section: site.section,
+              section_position: site.section_position,
+            }
+          : {}),
       })),
     }),
     impression: actionCreators.ImpressionStats({
@@ -1758,6 +1784,7 @@ const LinkMenuOptions = {
   SaveToPocket: (site, index, eventSource = "CARDGRID") => ({
     id: "newtab-menu-save-to-pocket",
     icon: "pocket-save",
+    className: "stp-context-menu",
     action: actionCreators.AlsoToMain({
       type: actionTypes.SAVE_TO_POCKET,
       data: {
@@ -2104,6 +2131,10 @@ class DSLinkMenu extends (external_React_default()).PureComponent {
       if (this.props.pocket_button_enabled) {
         pocketMenuOptions = this.props.saveToPocketCard ? ["CheckDeleteFromPocket"] : ["CheckSavedToPocket"];
       }
+      // Override pocketMenuOptions to add Save to Pocket btn link to all section cards
+      if (this.props.isSectionsCard) {
+        pocketMenuOptions = ["CheckSavedToPocket"];
+      }
       TOP_STORIES_CONTEXT_MENU_OPTIONS = ["CheckBookmark", "CheckArchiveFromPocket", ...pocketMenuOptions, "Separator", "OpenInNewWindow", "OpenInPrivateWindow", "Separator", "BlockUrl", ...(this.props.showPrivacyInfo ? ["ShowPrivacyInfo"] : [])];
     }
     const type = this.props.type || "DISCOVERY_STREAM";
@@ -2143,6 +2174,10 @@ class DSLinkMenu extends (external_React_default()).PureComponent {
         is_list_card: this.props.is_list_card,
         ...(this.props.format ? {
           format: this.props.format
+        } : {}),
+        ...(this.props.section ? {
+          section: this.props.section,
+          section_position: this.props.section_position
         } : {})
       }
     })));
@@ -2304,6 +2339,10 @@ class ImpressionStats_ImpressionStats extends (external_React_default()).PureCom
             is_list_card: link.is_list_card,
             ...(link.format ? {
               format: link.format
+            } : {}),
+            ...(link.section ? {
+              section: link.section,
+              section_position: link.section_position
             } : {})
           })),
           firstVisibleTimestamp: this.props.firstVisibleTimestamp
@@ -2693,13 +2732,14 @@ const ANIMATION_DURATION = 3000;
 const DSMessageLabel = props => {
   const {
     context,
-    context_type
+    context_type,
+    mayHaveSectionsCards
   } = props;
   const {
     icon,
     fluentID
   } = cardContextTypes[context_type] || {};
-  if (!context && context_type) {
+  if (!context && context_type && !mayHaveSectionsCards) {
     return /*#__PURE__*/external_React_default().createElement(external_ReactTransitionGroup_namespaceObject.TransitionGroup, {
       component: null
     }, /*#__PURE__*/external_React_default().createElement(external_ReactTransitionGroup_namespaceObject.CSSTransition, {
@@ -2770,7 +2810,8 @@ class DSContextFooter extends (external_React_default()).PureComponent {
       cta_button_variant,
       source,
       spocMessageVariant,
-      dispatch
+      dispatch,
+      mayHaveSectionsCards
     } = this.props;
     const sponsorLabel = SponsorLabel({
       sponsored_by_override,
@@ -2779,7 +2820,8 @@ class DSContextFooter extends (external_React_default()).PureComponent {
     });
     const dsMessageLabel = DSMessageLabel({
       context,
-      context_type
+      context_type,
+      mayHaveSectionsCards
     });
     if (cta_button_variant === "variant-a") {
       return /*#__PURE__*/external_React_default().createElement("div", {
@@ -2938,12 +2980,16 @@ const DefaultMeta = ({
   ctaButtonVariant,
   dispatch,
   spocMessageVariant,
+  mayHaveSectionsCards,
   mayHaveThumbsUpDown,
   onThumbsUpClick,
   onThumbsDownClick,
   isListCard,
   state,
-  format
+  format,
+  topic,
+  isSectionsCard,
+  showTopics
 }) => /*#__PURE__*/external_React_default().createElement("div", {
   className: "meta"
 }, /*#__PURE__*/external_React_default().createElement("div", {
@@ -2955,21 +3001,32 @@ const DefaultMeta = ({
   context: context,
   sponsor: sponsor,
   sponsored_by_override: sponsored_by_override
-}), format !== "rectangle" && /*#__PURE__*/external_React_default().createElement((external_React_default()).Fragment, null, /*#__PURE__*/external_React_default().createElement("header", {
+}), format !== "rectangle" && /*#__PURE__*/external_React_default().createElement((external_React_default()).Fragment, null, /*#__PURE__*/external_React_default().createElement("h3", {
   className: "title clamp"
 }, title), excerpt && /*#__PURE__*/external_React_default().createElement("p", {
   className: "excerpt clamp"
-}, excerpt)), format === "rectangle" && /*#__PURE__*/external_React_default().createElement((external_React_default()).Fragment, null, /*#__PURE__*/external_React_default().createElement("header", {
+}, excerpt)), format === "rectangle" && /*#__PURE__*/external_React_default().createElement((external_React_default()).Fragment, null, /*#__PURE__*/external_React_default().createElement("h3", {
   className: "title clamp"
 }, "Sponsored"), /*#__PURE__*/external_React_default().createElement("p", {
   className: "excerpt clamp"
-}, "Sponsored content supports our mission to build a better web."))), !isListCard && format !== "rectangle" && mayHaveThumbsUpDown && /*#__PURE__*/external_React_default().createElement(DSThumbsUpDownButtons, {
+}, "Sponsored content supports our mission to build a better web."))), !isListCard && format !== "rectangle" && !mayHaveSectionsCards && mayHaveThumbsUpDown && /*#__PURE__*/external_React_default().createElement(DSThumbsUpDownButtons, {
   onThumbsDownClick: onThumbsDownClick,
   onThumbsUpClick: onThumbsUpClick,
   sponsor: sponsor,
   isThumbsDownActive: state.isThumbsDownActive,
   isThumbsUpActive: state.isThumbsUpActive
-}), !newSponsoredLabel && /*#__PURE__*/external_React_default().createElement(DSContextFooter, {
+}), isSectionsCard && /*#__PURE__*/external_React_default().createElement("div", {
+  className: "sections-card-footer"
+}, !isListCard && format !== "rectangle" && mayHaveSectionsCards && mayHaveThumbsUpDown && /*#__PURE__*/external_React_default().createElement(DSThumbsUpDownButtons, {
+  onThumbsDownClick: onThumbsDownClick,
+  onThumbsUpClick: onThumbsUpClick,
+  sponsor: sponsor,
+  isThumbsDownActive: state.isThumbsDownActive,
+  isThumbsUpActive: state.isThumbsUpActive
+}), showTopics && /*#__PURE__*/external_React_default().createElement("span", {
+  className: "ds-card-topic",
+  "data-l10n-id": `newtab-topic-label-${topic}`
+})), !newSponsoredLabel && /*#__PURE__*/external_React_default().createElement(DSContextFooter, {
   context_type: context_type,
   context: context,
   sponsor: sponsor,
@@ -2977,7 +3034,8 @@ const DefaultMeta = ({
   cta_button_variant: ctaButtonVariant,
   source: source,
   dispatch: dispatch,
-  spocMessageVariant: spocMessageVariant
+  spocMessageVariant: spocMessageVariant,
+  mayHaveSectionsCards: mayHaveSectionsCards
 }), newSponsoredLabel && /*#__PURE__*/external_React_default().createElement(DSMessageFooter, {
   context_type: context_type,
   context: null,
@@ -3023,6 +3081,19 @@ class _DSCard extends (external_React_default()).PureComponent {
       mediaMatcher: "(min-width: 1122px)",
       width: 296,
       height: 148
+    }, {
+      mediaMatcher: "(min-width: 866px)",
+      width: 218,
+      height: 109
+    }, {
+      mediaMatcher: "(max-width: 610px)",
+      width: 202,
+      height: 101
+    }];
+    this.largeCardImageSizes = [{
+      mediaMatcher: "(min-width: 1122px)",
+      width: 220,
+      height: 220
     }, {
       mediaMatcher: "(min-width: 866px)",
       width: 218,
@@ -3091,6 +3162,10 @@ class _DSCard extends (external_React_default()).PureComponent {
             is_list_card: this.props.isListCard,
             ...(this.props.format ? {
               format: this.props.format
+            } : {}),
+            ...(this.props.section ? {
+              section: this.props.section,
+              section_position: this.props.sectionPosition
             } : {})
           }
         }));
@@ -3112,6 +3187,10 @@ class _DSCard extends (external_React_default()).PureComponent {
             is_list_card: this.props.isListCard,
             ...(this.props.format ? {
               format: this.props.format
+            } : {}),
+            ...(this.props.section ? {
+              section: this.props.section,
+              section_position: this.props.sectionPosition
             } : {})
           }]
         }));
@@ -3152,6 +3231,10 @@ class _DSCard extends (external_React_default()).PureComponent {
           is_list_card: this.props.isListCard,
           ...(this.props.format ? {
             format: this.props.format
+          } : {}),
+          ...(this.props.section ? {
+            section: this.props.section,
+            section_position: this.props.sectionPosition
           } : {})
         }
       }));
@@ -3170,6 +3253,10 @@ class _DSCard extends (external_React_default()).PureComponent {
           is_list_card: this.props.isListCard,
           ...(this.props.format ? {
             format: this.props.format
+          } : {}),
+          ...(this.props.section ? {
+            section: this.props.section,
+            section_position: this.props.sectionPosition
           } : {})
         }]
       }));
@@ -3345,6 +3432,7 @@ class _DSCard extends (external_React_default()).PureComponent {
       saveToPocketCard,
       isListCard,
       isFakespot,
+      mayHaveSectionsCards,
       format,
       alt_text
     } = this.props;
@@ -3396,6 +3484,7 @@ class _DSCard extends (external_React_default()).PureComponent {
     const imageGradientClassName = imageGradient ? `ds-card-image-gradient` : ``;
     const listCardClassName = isListCard ? `list-feed-card` : ``;
     const fakespotClassName = isFakespot ? `fakespot` : ``;
+    const sectionsCardsClassName = [mayHaveSectionsCards ? `sections-card-ui` : ``, this.props.sectionsClassNames].join(" ");
     const titleLinesName = `ds-card-title-lines-${titleLines}`;
     const descLinesClassName = `ds-card-desc-lines-${descLines}`;
     const isMediumRectangle = format === "rectangle";
@@ -3404,6 +3493,9 @@ class _DSCard extends (external_React_default()).PureComponent {
     if (!isMediumRectangle) {
       sizes = isListCard ? this.listCardImageSizes : this.dsImageSizes;
     }
+
+    // TODO: Add logic to assign this.largeCardImageSizes
+
     let stpButton = () => {
       return /*#__PURE__*/external_React_default().createElement("button", {
         className: "card-stp-button",
@@ -3423,9 +3515,13 @@ class _DSCard extends (external_React_default()).PureComponent {
       })));
     };
     return /*#__PURE__*/external_React_default().createElement("article", {
-      className: `ds-card ${listCardClassName} ${fakespotClassName} ${compactImagesClassName} ${imageGradientClassName} ${titleLinesName} ${descLinesClassName} ${spocFormatClassName} ${ctaButtonClassName} ${ctaButtonVariantClassName}`,
-      ref: this.setContextMenuButtonHostRef
-    }, this.props.showTopics && this.props.topic && !isListCard && /*#__PURE__*/external_React_default().createElement("span", {
+      className: `ds-card ${listCardClassName} ${fakespotClassName} ${sectionsCardsClassName} ${compactImagesClassName} ${imageGradientClassName} ${titleLinesName} ${descLinesClassName} ${spocFormatClassName} ${ctaButtonClassName} ${ctaButtonVariantClassName}`,
+      ref: this.setContextMenuButtonHostRef,
+      "data-position-one": this.props["data-position-one"],
+      "data-position-two": this.props["data-position-one"],
+      "data-position-three": this.props["data-position-one"],
+      "data-position-four": this.props["data-position-one"]
+    }, this.props.showTopics && !this.props.mayHaveSectionsCards && this.props.topic && !isListCard && /*#__PURE__*/external_React_default().createElement("span", {
       className: "ds-card-topic",
       "data-l10n-id": `newtab-topic-label-${this.props.topic}`
     }), /*#__PURE__*/external_React_default().createElement("div", {
@@ -3464,7 +3560,11 @@ class _DSCard extends (external_React_default()).PureComponent {
           format
         } : {}),
         isFakespot,
-        category: this.props.category
+        category: this.props.category,
+        ...(this.props.section ? {
+          section: this.props.section,
+          section_position: this.props.sectionPosition
+        } : {})
       }],
       dispatch: this.props.dispatch,
       isFakespot: isFakespot,
@@ -3476,7 +3576,7 @@ class _DSCard extends (external_React_default()).PureComponent {
       className: "meta"
     }, /*#__PURE__*/external_React_default().createElement("div", {
       className: "info-wrap"
-    }, /*#__PURE__*/external_React_default().createElement("header", {
+    }, /*#__PURE__*/external_React_default().createElement("h3", {
       className: "title clamp"
     }, this.props.title))) : /*#__PURE__*/external_React_default().createElement(DefaultMeta, {
       source: source,
@@ -3493,11 +3593,15 @@ class _DSCard extends (external_React_default()).PureComponent {
       dispatch: this.props.dispatch,
       spocMessageVariant: this.props.spocMessageVariant,
       mayHaveThumbsUpDown: this.props.mayHaveThumbsUpDown,
+      mayHaveSectionsCards: this.props.mayHaveSectionsCards,
       onThumbsUpClick: this.onThumbsUpClick,
       onThumbsDownClick: this.onThumbsDownClick,
       state: this.state,
       isListCard: isListCard,
-      format: format
+      showTopics: this.props.showTopics,
+      isSectionsCard: this.props.mayHaveSectionsCards && this.props.topic && !isListCard,
+      format: format,
+      topic: this.props.topic
     }), /*#__PURE__*/external_React_default().createElement("div", {
       className: "card-stp-button-hover-background"
     }, /*#__PURE__*/external_React_default().createElement("div", {
@@ -3528,7 +3632,10 @@ class _DSCard extends (external_React_default()).PureComponent {
       recommended_at: this.props.recommended_at,
       received_rank: this.props.received_rank,
       is_list_card: this.props.isListCard,
-      format: format
+      section: this.props.section,
+      section_position: this.props.sectionPosition,
+      format: format,
+      isSectionsCard: this.props.mayHaveSectionsCards
     }))));
   }
 }
@@ -3957,6 +4064,7 @@ function ListFeed({
 
 
 const PREF_ONBOARDING_EXPERIENCE_DISMISSED = "discoverystream.onboardingExperience.dismissed";
+const PREF_SECTIONS_CARDS_ENABLED = "discoverystream.sections.cards.enabled";
 const PREF_THUMBS_UP_DOWN_ENABLED = "discoverystream.thumbsUpDown.enabled";
 const PREF_TOPICS_ENABLED = "discoverystream.topicLabels.enabled";
 const PREF_TOPICS_SELECTED = "discoverystream.topicSelection.selectedTopics";
@@ -4237,6 +4345,7 @@ class _CardGrid extends (external_React_default()).PureComponent {
     } = DiscoveryStream;
     const showRecentSaves = prefs.showRecentSaves && recentSavesEnabled;
     const isOnboardingExperienceDismissed = prefs[PREF_ONBOARDING_EXPERIENCE_DISMISSED];
+    const mayHaveSectionsCards = prefs[PREF_SECTIONS_CARDS_ENABLED];
     const mayHaveThumbsUpDown = prefs[PREF_THUMBS_UP_DOWN_ENABLED];
     const showTopics = prefs[PREF_TOPICS_ENABLED];
     const selectedTopics = prefs[PREF_TOPICS_SELECTED];
@@ -4289,6 +4398,7 @@ class _CardGrid extends (external_React_default()).PureComponent {
         recommendation_id: rec.recommendation_id,
         firstVisibleTimestamp: this.props.firstVisibleTimestamp,
         mayHaveThumbsUpDown: mayHaveThumbsUpDown,
+        mayHaveSectionsCards: mayHaveSectionsCards,
         scheduled_corpus_item_id: rec.scheduled_corpus_item_id,
         recommended_at: rec.recommended_at,
         received_rank: rec.received_rank,
@@ -4756,7 +4866,8 @@ class _CollapsibleSection extends (external_React_default()).PureComponent {
       title,
       subTitle,
       mayHaveSponsoredStories,
-      mayHaveTopicsSelection
+      mayHaveTopicsSelection,
+      sectionsEnabled
     } = this.props;
     const active = menuButtonHover || showContextMenu;
     let bodyStyle;
@@ -4784,7 +4895,7 @@ class _CollapsibleSection extends (external_React_default()).PureComponent {
       // Note: data-section-id is used for web extension api tests in mozilla central
       ,
       "data-section-id": id
-    }, /*#__PURE__*/external_React_default().createElement("div", {
+    }, !sectionsEnabled && /*#__PURE__*/external_React_default().createElement("div", {
       className: "section-top-bar"
     }, /*#__PURE__*/external_React_default().createElement("h2", {
       className: `section-title-container ${hasSubtitleClassName}`,
@@ -5934,40 +6045,6 @@ class _PocketLoggedInCta extends (external_React_default()).PureComponent {
 const PocketLoggedInCta = (0,external_ReactRedux_namespaceObject.connect)(state => ({
   Pocket: state.Pocket
 }))(_PocketLoggedInCta);
-;// CONCATENATED MODULE: ./content-src/components/Topics/Topics.jsx
-/* This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this file,
- * You can obtain one at http://mozilla.org/MPL/2.0/. */
-
-
-class Topic extends (external_React_default()).PureComponent {
-  render() {
-    const {
-      url,
-      name: topicName
-    } = this.props;
-    return /*#__PURE__*/external_React_default().createElement("li", null, /*#__PURE__*/external_React_default().createElement("a", {
-      key: topicName,
-      href: url
-    }, topicName));
-  }
-}
-class Topics extends (external_React_default()).PureComponent {
-  render() {
-    const {
-      topics
-    } = this.props;
-    return /*#__PURE__*/external_React_default().createElement("span", {
-      className: "topics"
-    }, /*#__PURE__*/external_React_default().createElement("span", {
-      "data-l10n-id": "newtab-pocket-read-more"
-    }), /*#__PURE__*/external_React_default().createElement("ul", null, topics && topics.map(t => /*#__PURE__*/external_React_default().createElement(Topic, {
-      key: t.name,
-      url: t.url,
-      name: t.name
-    }))));
-  }
-}
 ;// CONCATENATED MODULE: ./content-src/components/TopSites/SearchShortcutsForm.jsx
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -8643,7 +8720,6 @@ function Sections_extends() { Sections_extends = Object.assign ? Object.assign.b
 
 
 
-
 const Sections_VISIBLE = "visible";
 const Sections_VISIBILITY_CHANGE_EVENT = "visibilitychange";
 const CARDS_PER_ROW_DEFAULT = 3;
@@ -8776,7 +8852,6 @@ class Section extends (external_React_default()).PureComponent {
       title,
       rows,
       Pocket,
-      topics,
       emptyState,
       dispatch,
       compactCards,
@@ -8803,19 +8878,8 @@ class Section extends (external_React_default()).PureComponent {
     const {
       useCta
     } = pocketCta || {};
-
-    // Don't display anything until we have a definitve result from Pocket,
-    // to avoid a flash of logged out state while we render.
-    const isPocketLoggedInDefined = isUserLoggedIn === true || isUserLoggedIn === false;
-    const hasTopics = topics && !!topics.length;
     const shouldShowPocketCta = id === "topstories" && useCta && isUserLoggedIn === false;
-
-    // Show topics only for top stories and if it has loaded with topics.
-    // The classs .top-stories-bottom-container ensures content doesn't shift as things load.
-    const shouldShowTopics = id === "topstories" && hasTopics && (useCta && isUserLoggedIn === true || !useCta && isPocketLoggedInDefined);
-
-    // We use topics to determine language support for read more.
-    const shouldShowReadMore = read_more_endpoint && hasTopics;
+    const shouldShowReadMore = read_more_endpoint;
     const realRows = rows.slice(0, maxCards);
 
     // The empty state should only be shown after we have initialized and there is no content.
@@ -8884,11 +8948,7 @@ class Section extends (external_React_default()).PureComponent {
       className: "empty-state-message"
     })))), id === "topstories" && /*#__PURE__*/external_React_default().createElement("div", {
       className: "top-stories-bottom-container"
-    }, shouldShowTopics && /*#__PURE__*/external_React_default().createElement("div", {
-      className: "wrapper-topics"
-    }, /*#__PURE__*/external_React_default().createElement(Topics, {
-      topics: this.props.topics
-    })), shouldShowPocketCta && /*#__PURE__*/external_React_default().createElement("div", {
+    }, shouldShowPocketCta && /*#__PURE__*/external_React_default().createElement("div", {
       className: "wrapper-cta"
     }, /*#__PURE__*/external_React_default().createElement(PocketLoggedInCta, null)), /*#__PURE__*/external_React_default().createElement("div", {
       className: "wrapper-more-recommendations"
@@ -8992,7 +9052,7 @@ class HorizontalRule extends (external_React_default()).PureComponent {
 
 
 
-class Navigation_Topic extends (external_React_default()).PureComponent {
+class Topic extends (external_React_default()).PureComponent {
   constructor(props) {
     super(props);
     this.onLinkClick = this.onLinkClick.bind(this);
@@ -9051,7 +9111,7 @@ class Navigation extends (external_React_default()).PureComponent {
       className: "ds-navigation-header"
     })) : null, english ? /*#__PURE__*/external_React_default().createElement("ul", null, links && links.map(t => /*#__PURE__*/external_React_default().createElement("li", {
       key: t.name
-    }, /*#__PURE__*/external_React_default().createElement(Navigation_Topic, {
+    }, /*#__PURE__*/external_React_default().createElement(Topic, {
       url: t.url,
       name: t.name,
       dispatch: this.props.dispatch
@@ -9134,7 +9194,7 @@ const selectLayoutRender = ({ state = {}, prefs = {} }) => {
    */
   function fillSpocPositionsForPlacement(
     data,
-    spocsConfig,
+    spocsPositions,
     spocsData,
     placementName
   ) {
@@ -9145,7 +9205,7 @@ const selectLayoutRender = ({ state = {}, prefs = {} }) => {
       spocIndexPlacementMap[placementName] = 0;
     }
     const results = [...data];
-    for (let position of spocsConfig.positions) {
+    for (let position of spocsPositions) {
       const spoc = spocsData[spocIndexPlacementMap[placementName]];
       // If there are no spocs left, we can stop filling positions.
       if (!spoc) {
@@ -9193,6 +9253,21 @@ const selectLayoutRender = ({ state = {}, prefs = {} }) => {
     filterArray.push(...DS_COMPONENTS);
   }
 
+  // function to determine amount of tiles shown per section per viewport
+  function getMaxTiles(responsiveLayouts) {
+    return responsiveLayouts
+      .flatMap(responsiveLayout => responsiveLayout)
+      .reduce((acc, t) => {
+        acc[t.columnCount] = t.tiles.length;
+
+        // Update maxTile if current tile count is greater
+        if (!acc.maxTile || t.tiles.length > acc.maxTile) {
+          acc.maxTile = t.tiles.length;
+        }
+        return acc;
+      }, {});
+  }
+
   const placeholderComponent = component => {
     if (!component.feed) {
       // TODO we now need a placeholder for topsites and textPromo.
@@ -9205,6 +9280,14 @@ const selectLayoutRender = ({ state = {}, prefs = {} }) => {
     }
     const data = {
       recommendations: [],
+      sections: [
+        {
+          layout: {
+            responsiveLayouts: [],
+          },
+          data: [],
+        },
+      ],
     };
 
     let items = 0;
@@ -9215,31 +9298,29 @@ const selectLayoutRender = ({ state = {}, prefs = {} }) => {
       data.recommendations.push({ placeholder: true });
     }
 
+    const sectionsEnabled = prefs["discoverystream.sections.enabled"];
+    if (sectionsEnabled) {
+      for (let i = 0; i < items; i++) {
+        data.sections[0].data.push({ placeholder: true });
+      }
+    }
+
     return { ...component, data };
   };
 
   // TODO update devtools to show placements
-  const handleSpocs = (data, component) => {
+  const handleSpocs = (data = [], spocsPositions, spocsPlacement) => {
     let result = [...data];
     // Do we ever expect to possibly have a spoc.
-    if (
-      component.spocs &&
-      component.spocs.positions &&
-      component.spocs.positions.length
-    ) {
-      const placement = component.placement || {};
-      const placementName = placement.name || "spocs";
+    if (spocsPositions?.length) {
+      const placement = spocsPlacement || {};
+      const placementName = placement.name || "newtab_spocs";
       const spocsData = spocs.data[placementName];
       // We expect a spoc, spocs are loaded, and the server returned spocs.
-      if (
-        spocs.loaded &&
-        spocsData &&
-        spocsData.items &&
-        spocsData.items.length
-      ) {
+      if (spocs.loaded && spocsData?.items?.length) {
         result = fillSpocPositionsForPlacement(
           result,
-          component.spocs,
+          spocsPositions,
           spocsData.items,
           placementName
         );
@@ -9248,21 +9329,30 @@ const selectLayoutRender = ({ state = {}, prefs = {} }) => {
     return result;
   };
 
+  const handleSections = (sections = [], recommendations = []) => {
+    let result = sections.sort((a, b) => a.receivedRank - b.receivedRank);
+
+    const sectionsMap = recommendations.reduce((acc, recommendation) => {
+      const { section } = recommendation;
+      acc[section] = acc[section] || [];
+      acc[section].push(recommendation);
+      return acc;
+    }, {});
+
+    result.forEach(section => {
+      const { sectionKey } = section;
+      section.data = sectionsMap[sectionKey];
+    });
+
+    return result;
+  };
+
   const handleComponent = component => {
-    if (
-      component.spocs &&
-      component.spocs.positions &&
-      component.spocs.positions.length
-    ) {
+    if (component?.spocs?.positions?.length) {
       const placement = component.placement || {};
-      const placementName = placement.name || "spocs";
+      const placementName = placement.name || "newtab_spocs";
       const spocsData = spocs.data[placementName];
-      if (
-        spocs.loaded &&
-        spocsData &&
-        spocsData.items &&
-        spocsData.items.length
-      ) {
+      if (spocs.loaded && spocsData?.items?.length) {
         return {
           ...component,
           data: {
@@ -9288,13 +9378,15 @@ const selectLayoutRender = ({ state = {}, prefs = {} }) => {
     positions[component.type] = positions[component.type] || 0;
     let data = {
       recommendations: [],
+      sections: [],
     };
 
     const feed = feeds.data[component.feed.url];
-    if (feed && feed.data) {
+    if (feed?.data) {
       data = {
         ...feed.data,
         recommendations: [...(feed.data.recommendations || [])],
+        sections: [...(feed.data.sections || [])],
       };
     }
 
@@ -9306,10 +9398,47 @@ const selectLayoutRender = ({ state = {}, prefs = {} }) => {
         ),
       };
     }
+    const spocsPositions = component?.spocs?.positions;
+    const spocsPlacement = component?.placement;
 
+    const sectionsEnabled = prefs["discoverystream.sections.enabled"];
     data = {
       ...data,
-      recommendations: handleSpocs(data.recommendations, component),
+      ...(sectionsEnabled
+        ? {
+            sections: handleSections(data.sections, data.recommendations).map(
+              section => {
+                const sectionsSpocsPositions = [];
+                section.layout.responsiveLayouts
+                  // Initial position for spocs is going to be for the smallest breakpoint.
+                  // We can then move it from there via breakpoints.
+                  .find(item => item.columnCount === 1)
+                  .tiles.forEach(tile => {
+                    if (tile.hasAd) {
+                      sectionsSpocsPositions.push({ index: tile.position });
+                    }
+                  });
+                return {
+                  ...section,
+                  data: handleSpocs(
+                    section.data,
+                    sectionsSpocsPositions,
+                    spocsPlacement
+                  ),
+                };
+              }
+            ),
+            // We don't fill spocs in recs if sections are enabled,
+            // because recs are not going to be seen.
+            recommendations: data.recommendations,
+          }
+        : {
+            recommendations: handleSpocs(
+              data.recommendations,
+              spocsPositions,
+              spocsPlacement
+            ),
+          }),
     };
 
     let items = 0;
@@ -9325,6 +9454,23 @@ const selectLayoutRender = ({ state = {}, prefs = {} }) => {
         ...data.recommendations[i],
         pos: positions[component.type]++,
       };
+    }
+
+    // Setup absolute positions for sections layout.
+    if (sectionsEnabled) {
+      let currentPosition = 0;
+      data.sections.forEach(section => {
+        // We assume the count for the breakpoint with the most tiles.
+        const { maxTile } = getMaxTiles(section?.layout?.responsiveLayouts);
+        for (let i = 0; i < maxTile; i++) {
+          if (section.data[i]) {
+            section.data[i] = {
+              ...section.data[i],
+              pos: currentPosition++,
+            };
+          }
+        }
+      });
     }
 
     return { ...component, data };
@@ -9371,10 +9517,247 @@ const selectLayoutRender = ({ state = {}, prefs = {} }) => {
   return { layoutRender };
 };
 
+;// CONCATENATED MODULE: ./content-src/lib/hooks.jsx
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+
+/**
+ * A custom react hook that sets up an IntersectionObserver to observe a single
+ * or list of elements and triggers a callback when the element comes into the viewport
+ * Note: The refs used should be an array type
+ * @function useIntersectionObserver
+ * @param {function} callback - The function to call when an element comes into the viewport
+ * @param {Object} options - Options object passed to Intersection Observer:
+ * https://developer.mozilla.org/en-US/docs/Web/API/IntersectionObserver/IntersectionObserver#options
+ * @param {Boolean} [isSingle = false] Boolean if the elements are an array or single element
+ *
+ * @returns {React.MutableRefObject} a ref containing an array of elements or single element
+ *
+ *
+ *
+ */
+function useIntersectionObserver(callback, threshold = 0.3) {
+  const elementsRef = (0,external_React_namespaceObject.useRef)([]);
+  (0,external_React_namespaceObject.useEffect)(() => {
+    const observer = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          callback(entry.target);
+          observer.unobserve(entry.target);
+        }
+      });
+    }, {
+      threshold
+    });
+    elementsRef.current.forEach(el => {
+      if (el) {
+        observer.observe(el);
+      }
+    });
+  }, [callback, threshold]);
+  return elementsRef;
+}
+
+;// CONCATENATED MODULE: ./content-src/components/DiscoveryStreamComponents/CardSections/CardSections.jsx
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+
+
+
+
+
+
+
+// Prefs
+const CardSections_PREF_SECTIONS_CARDS_ENABLED = "discoverystream.sections.cards.enabled";
+const PREF_SECTIONS_CARDS_THUMBS_UP_DOWN_ENABLED = "discoverystream.sections.cards.thumbsUpDown.enabled";
+const CardSections_PREF_TOPICS_ENABLED = "discoverystream.topicLabels.enabled";
+const CardSections_PREF_TOPICS_SELECTED = "discoverystream.topicSelection.selectedTopics";
+const CardSections_PREF_TOPICS_AVAILABLE = "discoverystream.topicSelection.topics";
+const CardSections_PREF_THUMBS_UP_DOWN_ENABLED = "discoverystream.thumbsUpDown.enabled";
+function CardSections({
+  data,
+  feed,
+  dispatch,
+  type,
+  firstVisibleTimestamp,
+  is_collection,
+  spocMessageVariant,
+  ctaButtonVariant,
+  ctaButtonSponsors
+}) {
+  const {
+    recommendations,
+    sections
+  } = data;
+  const isEmpty = !recommendations?.length || !sections;
+  const prefs = (0,external_ReactRedux_namespaceObject.useSelector)(state => state.Prefs.values);
+  const showTopics = prefs[CardSections_PREF_TOPICS_ENABLED];
+  const mayHaveSectionsCards = prefs[CardSections_PREF_SECTIONS_CARDS_ENABLED];
+  const mayHaveSectionsCardsThumbsUpDown = prefs[PREF_SECTIONS_CARDS_THUMBS_UP_DOWN_ENABLED];
+  const mayHaveThumbsUpDown = prefs[CardSections_PREF_THUMBS_UP_DOWN_ENABLED];
+  const selectedTopics = prefs[CardSections_PREF_TOPICS_SELECTED];
+  const availableTopics = prefs[CardSections_PREF_TOPICS_AVAILABLE];
+  const {
+    saveToPocketCard
+  } = (0,external_ReactRedux_namespaceObject.useSelector)(state => state.DiscoveryStream);
+  const handleIntersection = (0,external_React_namespaceObject.useCallback)(el => {
+    dispatch(actionCreators.AlsoToMain({
+      type: actionTypes.CARD_SECTION_IMPRESSION,
+      data: {
+        section: el.id,
+        section_position: el.dataset.sectionPosition
+      }
+    }));
+  }, [dispatch]);
+
+  // Ref to hold all of the section elements
+  const sectionRefs = useIntersectionObserver(handleIntersection);
+
+  // Handle a render before feed has been fetched by displaying nothing
+  if (!data) {
+    return null;
+  }
+
+  // Only show thumbs up/down buttons if both default thumbs and sections thumbs prefs are enabled
+  const mayHaveCombinedThumbsUpDown = mayHaveSectionsCardsThumbsUpDown && mayHaveThumbsUpDown;
+  function getLayoutData(responsiveLayout, index) {
+    let layoutData = {
+      classNames: []
+    };
+    responsiveLayout.forEach(layout => {
+      layout.tiles.forEach((tile, tileIndex) => {
+        if (tile.position === index) {
+          layoutData.classNames.push(`col-${layout.columnCount}-${tile.size}`);
+          layoutData.classNames.push(`col-${layout.columnCount}-position-${tileIndex}`);
+        }
+      });
+    });
+    return layoutData;
+  }
+
+  // function to determine amount of tiles shown per section per viewport
+  function getMaxTiles(responsiveLayouts) {
+    return responsiveLayouts.flatMap(responsiveLayout => responsiveLayout).reduce((acc, t) => {
+      acc[t.columnCount] = t.tiles.length;
+
+      // Update maxTile if current tile count is greater
+      if (!acc.maxTile || t.tiles.length > acc.maxTile) {
+        acc.maxTile = t.tiles.length;
+      }
+      return acc;
+    }, {});
+  }
+  return isEmpty ? /*#__PURE__*/external_React_default().createElement("div", {
+    className: "ds-card-grid empty"
+  }, /*#__PURE__*/external_React_default().createElement(DSEmptyState, {
+    status: data.status,
+    dispatch: dispatch,
+    feed: feed
+  })) : /*#__PURE__*/external_React_default().createElement("div", {
+    className: "ds-section-wrapper"
+  }, sections.map((section, sectionIndex) => {
+    const {
+      sectionKey,
+      title,
+      subtitle
+    } = section;
+    const {
+      responsiveLayouts
+    } = section.layout;
+    const {
+      maxTile
+    } = getMaxTiles(responsiveLayouts);
+    const displaySections = section.data.slice(0, maxTile);
+    const isSectionEmpty = !displaySections?.length;
+    const shouldShowLabels = sectionKey === "top_stories_section" && showTopics;
+    if (isSectionEmpty) {
+      return null;
+    }
+    return /*#__PURE__*/external_React_default().createElement("section", {
+      key: sectionKey,
+      id: sectionKey,
+      className: "ds-section",
+      "data-section-position": sectionIndex,
+      ref: el => {
+        sectionRefs.current[sectionIndex] = el;
+      }
+    }, /*#__PURE__*/external_React_default().createElement("div", {
+      className: "section-heading"
+    }, /*#__PURE__*/external_React_default().createElement("h2", {
+      className: "section-title"
+    }, title), subtitle && /*#__PURE__*/external_React_default().createElement("p", {
+      className: "section-subtitle"
+    }, subtitle)), /*#__PURE__*/external_React_default().createElement("div", {
+      className: "ds-section-grid ds-card-grid"
+    }, section.data.slice(0, maxTile).map((rec, index) => {
+      const {
+        classNames
+      } = getLayoutData(responsiveLayouts, index);
+      if (!rec || rec.placeholder) {
+        return /*#__PURE__*/external_React_default().createElement(PlaceholderDSCard, {
+          key: `dscard-${index}`
+        });
+      }
+      return /*#__PURE__*/external_React_default().createElement(DSCard, {
+        key: `dscard-${rec.id}`,
+        pos: rec.pos,
+        flightId: rec.flight_id,
+        image_src: rec.image_src,
+        raw_image_src: rec.raw_image_src,
+        word_count: rec.word_count,
+        time_to_read: rec.time_to_read,
+        title: rec.title,
+        topic: rec.topic,
+        excerpt: rec.excerpt,
+        url: rec.url,
+        id: rec.id,
+        shim: rec.shim,
+        fetchTimestamp: rec.fetchTimestamp,
+        type: type,
+        context: rec.context,
+        sponsor: rec.sponsor,
+        sponsored_by_override: rec.sponsored_by_override,
+        dispatch: dispatch,
+        source: rec.domain,
+        publisher: rec.publisher,
+        pocket_id: rec.pocket_id,
+        context_type: rec.context_type,
+        bookmarkGuid: rec.bookmarkGuid,
+        recommendation_id: rec.recommendation_id,
+        firstVisibleTimestamp: firstVisibleTimestamp,
+        scheduled_corpus_item_id: rec.scheduled_corpus_item_id,
+        recommended_at: rec.recommended_at,
+        received_rank: rec.received_rank,
+        format: rec.format,
+        alt_text: rec.alt_text,
+        mayHaveThumbsUpDown: mayHaveCombinedThumbsUpDown,
+        mayHaveSectionsCards: mayHaveSectionsCards,
+        showTopics: shouldShowLabels,
+        selectedTopics: selectedTopics,
+        availableTopics: availableTopics,
+        is_collection: is_collection,
+        saveToPocketCard: saveToPocketCard,
+        ctaButtonSponsors: ctaButtonSponsors,
+        ctaButtonVariant: ctaButtonVariant,
+        spocMessageVariant: spocMessageVariant,
+        sectionsClassNames: classNames.join(" "),
+        section: sectionKey,
+        sectionPosition: sectionIndex
+      });
+    })));
+  }));
+}
+
 ;// CONCATENATED MODULE: ./content-src/components/DiscoveryStreamBase/DiscoveryStreamBase.jsx
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
+
 
 
 
@@ -9528,28 +9911,44 @@ class _DiscoveryStreamBase extends (external_React_default()).PureComponent {
           });
         }
       case "CardGrid":
-        return /*#__PURE__*/external_React_default().createElement(CardGrid, {
-          title: component.header && component.header.title,
-          data: component.data,
-          feed: component.feed,
-          widgets: component.widgets,
-          type: component.type,
-          dispatch: this.props.dispatch,
-          items: component.properties.items,
-          hybridLayout: component.properties.hybridLayout,
-          hideCardBackground: component.properties.hideCardBackground,
-          fourCardLayout: component.properties.fourCardLayout,
-          compactGrid: component.properties.compactGrid,
-          essentialReadsHeader: component.properties.essentialReadsHeader,
-          onboardingExperience: component.properties.onboardingExperience,
-          ctaButtonSponsors: component.properties.ctaButtonSponsors,
-          ctaButtonVariant: component.properties.ctaButtonVariant,
-          spocMessageVariant: component.properties.spocMessageVariant,
-          editorsPicksHeader: component.properties.editorsPicksHeader,
-          recentSavesEnabled: this.props.DiscoveryStream.recentSavesEnabled,
-          hideDescriptions: this.props.DiscoveryStream.hideDescriptions,
-          firstVisibleTimestamp: this.props.firstVisibleTimestamp
-        });
+        {
+          const sectionsEnabled = this.props.Prefs.values["discoverystream.sections.enabled"];
+          if (sectionsEnabled) {
+            return /*#__PURE__*/external_React_default().createElement(CardSections, {
+              feed: component.feed,
+              data: component.data,
+              dispatch: this.props.dispatch,
+              type: component.type,
+              firstVisibleTimestamp: this.props.firstVisibleTimestamp,
+              is_collection: true,
+              ctaButtonSponsors: component.properties.ctaButtonSponsors,
+              ctaButtonVariant: component.properties.ctaButtonVariant,
+              spocMessageVariant: component.properties.spocMessageVariant
+            });
+          }
+          return /*#__PURE__*/external_React_default().createElement(CardGrid, {
+            title: component.header && component.header.title,
+            data: component.data,
+            feed: component.feed,
+            widgets: component.widgets,
+            type: component.type,
+            dispatch: this.props.dispatch,
+            items: component.properties.items,
+            hybridLayout: component.properties.hybridLayout,
+            hideCardBackground: component.properties.hideCardBackground,
+            fourCardLayout: component.properties.fourCardLayout,
+            compactGrid: component.properties.compactGrid,
+            essentialReadsHeader: component.properties.essentialReadsHeader,
+            onboardingExperience: component.properties.onboardingExperience,
+            ctaButtonSponsors: component.properties.ctaButtonSponsors,
+            ctaButtonVariant: component.properties.ctaButtonVariant,
+            spocMessageVariant: component.properties.spocMessageVariant,
+            editorsPicksHeader: component.properties.editorsPicksHeader,
+            recentSavesEnabled: this.props.DiscoveryStream.recentSavesEnabled,
+            hideDescriptions: this.props.DiscoveryStream.hideDescriptions,
+            firstVisibleTimestamp: this.props.firstVisibleTimestamp
+          });
+        }
       case "HorizontalRule":
         return /*#__PURE__*/external_React_default().createElement(HorizontalRule, null);
       case "PrivacyLink":
@@ -9583,6 +9982,7 @@ class _DiscoveryStreamBase extends (external_React_default()).PureComponent {
       prefs: this.props.Prefs.values,
       locale
     });
+    const sectionsEnabled = this.props.Prefs.values["discoverystream.sections.enabled"];
     const {
       config
     } = this.props.DiscoveryStream;
@@ -9654,7 +10054,8 @@ class _DiscoveryStreamBase extends (external_React_default()).PureComponent {
       dispatch: this.props.dispatch
     }), topSites && this.renderLayout([{
       width: 12,
-      components: [topSites]
+      components: [topSites],
+      sectionType: "topsites"
     }]), sponsoredCollection && this.renderLayout([{
       width: 12,
       components: [sponsoredCollection]
@@ -9671,6 +10072,7 @@ class _DiscoveryStreamBase extends (external_React_default()).PureComponent {
       subTitle: subTitle,
       mayHaveSponsoredStories: mayHaveSponsoredStories,
       mayHaveTopicsSelection: topicSelectionEnabled,
+      sectionsEnabled: sectionsEnabled,
       spocMessageVariant: message?.properties?.spocMessageVariant,
       eventSource: "CARDGRID"
     }, this.renderLayout(layoutRender)), this.renderLayout([{
@@ -9685,8 +10087,11 @@ class _DiscoveryStreamBase extends (external_React_default()).PureComponent {
   }
   renderLayout(layoutRender) {
     const styles = [];
+    let [data] = layoutRender;
+    // Add helper class for topsites
+    const topsitesClass = data.sectionType ? "ds-layout-topsites" : "";
     return /*#__PURE__*/external_React_default().createElement("div", {
-      className: "discovery-stream ds-layout"
+      className: `discovery-stream ds-layout ${topsitesClass}`
     }, layoutRender.map((row, rowIndex) => /*#__PURE__*/external_React_default().createElement("div", {
       key: `row-${rowIndex}`,
       className: `ds-column ds-column-${row.width}`
@@ -9961,6 +10366,7 @@ class _WallpaperCategories extends (external_React_default()).PureComponent {
       }, /*#__PURE__*/external_React_default().createElement("input", {
         id: category,
         style: style,
+        type: "radio",
         onClick: this.handleCategory,
         className: "wallpaper-input"
       }), /*#__PURE__*/external_React_default().createElement("label", {
@@ -10319,7 +10725,12 @@ class _CustomizeMenu extends (external_React_default()).PureComponent {
     }, /*#__PURE__*/external_React_default().createElement("button", {
       className: "icon icon-settings personalize-button",
       onClick: () => this.props.onOpen(),
-      "data-l10n-id": "newtab-personalize-icon-label",
+      onKeyDown: e => {
+        if (e.key === 13) {
+          this.props.onOpen();
+        }
+      },
+      "data-l10n-id": "newtab-personalize-settings-icon-label",
       ref: c => this.openButton = c
     })), /*#__PURE__*/external_React_default().createElement(external_ReactTransitionGroup_namespaceObject.CSSTransition, {
       timeout: 250,
@@ -10331,7 +10742,7 @@ class _CustomizeMenu extends (external_React_default()).PureComponent {
     }, /*#__PURE__*/external_React_default().createElement("div", {
       className: "customize-menu",
       role: "dialog",
-      "data-l10n-id": "newtab-personalize-dialog-label"
+      "data-l10n-id": "newtab-settings-dialog-label"
     }, /*#__PURE__*/external_React_default().createElement("div", {
       className: "close-button-wrapper"
     }, /*#__PURE__*/external_React_default().createElement("button", {
@@ -10672,8 +11083,11 @@ function LocationSearch({
     onChange: handleChange,
     value: userInput,
     onKeyDown: handleKeyDown
-  }), /*#__PURE__*/external_React_default().createElement("button", {
-    className: "close-icon",
+  }), /*#__PURE__*/external_React_default().createElement("moz-button", {
+    class: "close-icon",
+    type: "icon ghost",
+    size: "small",
+    iconSrc: "chrome://global/skin/icons/close.svg",
     onClick: handleCloseSearch
   }), /*#__PURE__*/external_React_default().createElement("datalist", {
     id: "merino-location-list"
@@ -11829,13 +12243,14 @@ class BaseContent extends (external_React_default()).PureComponent {
     const supportUrl = prefs["support.url"];
     const hasThumbsUpDownLayout = prefs["discoverystream.thumbsUpDown.searchTopsitesCompact"];
     const hasThumbsUpDown = prefs["discoverystream.thumbsUpDown.enabled"];
+    const sectionsEnabled = prefs["discoverystream.sections.enabled"];
     const featureClassName = [weatherEnabled && mayHaveWeather && "has-weather",
     // Show is weather is enabled/visible
     prefs.showSearch ? "has-search" : "no-search", layoutsVariantAEnabled ? "layout-variant-a" : "",
     // Layout experiment variant A
     layoutsVariantBEnabled ? "layout-variant-b" : "",
     // Layout experiment variant B
-    pocketEnabled ? "has-recommended-stories" : "no-recommended-stories"].filter(v => v).join(" ");
+    pocketEnabled ? "has-recommended-stories" : "no-recommended-stories", sectionsEnabled ? "has-sections-grid" : ""].filter(v => v).join(" ");
     const outerClassName = ["outer-wrapper", isDiscoveryStream && pocketEnabled && "ds-outer-wrapper-search-alignment", isDiscoveryStream && "ds-outer-wrapper-breakpoint-override", prefs.showSearch && this.state.fixedSearch && !noSectionsEnabled && "fixed-search", prefs.showSearch && noSectionsEnabled && "only-search", prefs["feeds.topsites"] && !pocketEnabled && !prefs.showSearch && "only-topsites", noSectionsEnabled && "no-sections", prefs["logowordmark.alwaysVisible"] && "visible-logo", hasThumbsUpDownLayout && hasThumbsUpDown && "thumbs-ui-compact"].filter(v => v).join(" ");
     if (wallpapersEnabled || wallpapersV2Enabled) {
       this.updateWallpaper();

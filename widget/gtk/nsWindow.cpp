@@ -348,7 +348,7 @@ static uint32_t gLastTouchID = 0;
 // event is a correct one when we get it.
 // Store it and issue it later from enter notify event if it's correct,
 // throw it away otherwise.
-static GUniquePtr<GdkEventCrossing> sStoredLeaveNotifyEvent;
+MOZ_RUNINIT static GUniquePtr<GdkEventCrossing> sStoredLeaveNotifyEvent;
 
 #define NS_WINDOW_TITLE_MAX_LENGTH 4095
 
@@ -465,6 +465,7 @@ nsWindow::nsWindow()
 
 nsWindow::~nsWindow() {
   LOG("nsWindow::~nsWindow()");
+  MOZ_DIAGNOSTIC_ASSERT(mIsDestroyed);
   Destroy();
 }
 
@@ -693,27 +694,11 @@ DesktopToLayoutDeviceScale nsWindow::GetDesktopToDeviceScale() {
 
 DesktopToLayoutDeviceScale nsWindow::GetDesktopToDeviceScaleByScreen() {
 #ifdef MOZ_WAYLAND
-  // In Wayland there's no way to get absolute position of the window and use it
-  // to determine the screen factor of the monitor on which the window is
-  // placed. The window is notified of the current scale factor but not at this
-  // point, so the GdkScaleFactor can return wrong value which can lead to wrong
-  // popup placement. We need to use parent's window scale factor for the new
-  // one.
   if (GdkIsWaylandDisplay()) {
-    nsView* view = nsView::GetViewFor(this);
-    if (view) {
-      nsView* parentView = view->GetParent();
-      if (parentView) {
-        nsIWidget* parentWidget = parentView->GetNearestWidget(nullptr);
-        if (parentWidget) {
-          return DesktopToLayoutDeviceScale(
-              parentWidget->RoundsWidgetCoordinatesTo());
-        }
-        NS_WARNING("Widget has no parent");
-      }
-    } else {
-      NS_WARNING("Cannot find widget view");
-    }
+    // In wayland there's no absolute screen position, so we need to use the
+    // scale factor of our top level, which is what FractionalScaleFactor does,
+    // luckily.
+    return DesktopToLayoutDeviceScale(FractionalScaleFactor());
   }
 #endif
   return nsBaseWidget::GetDesktopToDeviceScale();
@@ -740,7 +725,7 @@ void nsWindow::DidChangeParent(nsIWidget* aOldParent) {
     return;
   }
 
-  if (!IsTopLevelWindowType()) {
+  if (!IsTopLevelWidget()) {
     GdkWindow* window = GetToplevelGdkWindow();
     GdkWindow* parentWindow = newParent->GetToplevelGdkWindow();
     gdk_window_reparent(window, parentWindow, 0, 0);
@@ -1089,7 +1074,7 @@ void nsWindow::Move(double aX, double aY) {
 
   LOG("nsWindow::Move to %d x %d\n", x, y);
 
-  if (mSizeMode != nsSizeMode_Normal && IsTopLevelWindowType()) {
+  if (mSizeMode != nsSizeMode_Normal && IsTopLevelWidget()) {
     LOG("  size state is not normal, bailing");
     return;
   }
@@ -2013,12 +1998,18 @@ void nsWindow::NativeMoveResizeWaylandPopupCallback(
   LOG("  orig mBounds [%d, %d] -> [%d x %d]\n", mBounds.x, mBounds.y,
       mBounds.width, mBounds.height);
 
-  LayoutDeviceIntRect newBounds = [&] {
+  const LayoutDeviceIntRect newBounds = [&] {
     GdkRectangle finalRect = *aFinalSize;
     GdkPoint parent = WaylandGetParentPosition();
     finalRect.x += parent.x;
     finalRect.y += parent.y;
-    return GdkRectToDevicePixels(finalRect);
+    auto roundTo = RoundsWidgetCoordinatesTo();
+    auto rect = GdkRectToDevicePixels(finalRect);
+    // Ensure we do the same rounding that nsView would do, see
+    // MaybeRoundToDisplayPixels.
+    auto size = !mIsTransparent ? rect.Size().TruncatedToMultiple(roundTo)
+                                : rect.Size().CeiledToMultiple(roundTo);
+    return LayoutDeviceIntRect(rect.TopLeft().RoundedToMultiple(roundTo), size);
   }();
 
   LOG("  new mBounds [%d, %d] -> [%d x %d]", newBounds.x, newBounds.y,
@@ -3224,7 +3215,7 @@ LayoutDeviceIntRect nsWindow::GetClientBounds() {
 }
 
 void nsWindow::RecomputeClientOffset(bool aNotify) {
-  if (!IsTopLevelWindowType()) {
+  if (!IsTopLevelWidget()) {
     return;
   }
 
@@ -3498,9 +3489,9 @@ void nsWindow::SetIcon(const nsAString& aIconSpec) {
                                        u"48.png",  u"64.png", u"128.png",
                                        u"256.png", u".xpm",   u"16.xpm"};
 
-    for (uint32_t i = 0; i < ArrayLength(extensions); i++) {
+    for (uint32_t i = 0; i < std::size(extensions); i++) {
       // Don't bother looking for XPM versions if we found a PNG.
-      if (i == ArrayLength(extensions) - 2 && foundIcon) break;
+      if (i == std::size(extensions) - 2 && foundIcon) break;
 
       ResolveIconName(aIconSpec, nsDependentString(extensions[i]),
                       getter_AddRefs(iconFile));
@@ -3987,7 +3978,7 @@ gboolean nsWindow::OnConfigureEvent(GtkWidget* aWidget,
 
   // Don't fire configure event for scale changes, we handle that
   // OnScaleChanged event. Skip that for toplevel windows only.
-  if (mGdkWindow && IsTopLevelWindowType()) {
+  if (mGdkWindow && IsTopLevelWidget()) {
     if (mCeiledScaleFactor != gdk_window_get_scale_factor(mGdkWindow)) {
       LOG("  scale factor changed to %d,return early",
           gdk_window_get_scale_factor(mGdkWindow));
@@ -3997,7 +3988,7 @@ gboolean nsWindow::OnConfigureEvent(GtkWidget* aWidget,
 
   LayoutDeviceIntRect screenBounds = GetScreenBounds();
 
-  if (IsTopLevelWindowType()) {
+  if (IsTopLevelWidget()) {
     // This check avoids unwanted rollup on spurious configure events from
     // Cygwin/X (bug 672103).
     if (mBounds.x != screenBounds.x || mBounds.y != screenBounds.y) {
@@ -4198,7 +4189,7 @@ void nsWindow::OnLeaveNotifyEvent(GdkEventCrossing* aEvent) {
 
   // The filter out for subwindows should make sure that this is targeted to
   // this nsWindow.
-  const bool leavingTopLevel = IsTopLevelWindowType();
+  const bool leavingTopLevel = IsTopLevelWidget();
   if (leavingTopLevel && IsBogusLeaveNotifyEvent(mGdkWindow, aEvent)) {
     return;
   }
@@ -4815,7 +4806,7 @@ void nsWindow::OnContainerFocusInEvent(GdkEventFocus* aEvent) {
 void nsWindow::OnContainerFocusOutEvent(GdkEventFocus* aEvent) {
   LOG("OnContainerFocusOutEvent");
 
-  if (IsTopLevelWindowType()) {
+  if (IsTopLevelWidget()) {
     // Rollup menus when a window is focused out unless a drag is occurring.
     // This check is because drags grab the keyboard and cause a focus out on
     // versions of GTK before 2.18.
@@ -5346,7 +5337,7 @@ void nsWindow::OnCompositedChanged() {
 }
 
 void nsWindow::OnScaleChanged(bool aNotify) {
-  if (!IsTopLevelWindowType()) {
+  if (!IsTopLevelWidget()) {
     return;
   }
   if (!mGdkWindow) {
@@ -5921,7 +5912,7 @@ nsresult nsWindow::Create(nsIWidget* aParent, const LayoutDeviceIntRect& aRect,
   // gfxVars, used below.
   Unused << gfxPlatform::GetPlatform();
 
-  if (IsTopLevelWindowType()) {
+  if (IsTopLevelWidget()) {
     mGtkWindowDecoration = GetSystemGtkWindowDecoration();
     // Inherit initial scale from our parent, or use the default monitor scale
     // otherwise.
@@ -6251,7 +6242,7 @@ nsresult nsWindow::Create(nsIWidget* aParent, const LayoutDeviceIntRect& aRect,
   // Only use for toplevel windows for now, see bug 1619246.
   if (GdkIsWaylandDisplay() &&
       StaticPrefs::widget_wayland_vsync_enabled_AtStartup() &&
-      IsTopLevelWindowType()) {
+      IsTopLevelWidget()) {
     mWaylandVsyncSource = new WaylandVsyncSource(this);
     mWaylandVsyncDispatcher = new VsyncDispatcher(mWaylandVsyncSource);
     LOG_VSYNC("  created WaylandVsyncSource");
@@ -6512,7 +6503,7 @@ void nsWindow::NativeMoveResize(bool aMoved, bool aResized) {
 #define COMPOSITOR_PAUSE_TIMEOUT (1000)
 
 void nsWindow::PauseCompositorFlickering() {
-  bool pauseCompositor = IsTopLevelWindowType() &&
+  bool pauseCompositor = IsTopLevelWidget() &&
                          mCompositorState == COMPOSITOR_ENABLED &&
                          mCompositorWidgetDelegate && !mIsDestroyed;
   if (!pauseCompositor) {
@@ -6916,7 +6907,7 @@ void nsWindow::UpdateOpaqueRegionInternal() {
     return;
   }
 
-  if (!IsTopLevelWindowType()) {
+  if (!IsTopLevelWidget()) {
     // We need to clear target buffer alpha values of popup windows as
     // SW-WR paints with alpha blending (see Bug 1674473).
     return;
@@ -8912,7 +8903,7 @@ GtkWindow* nsWindow::GetCurrentTopmostWindow() const {
 }
 
 gint nsWindow::GdkCeiledScaleFactor() {
-  if (IsTopLevelWindowType()) {
+  if (IsTopLevelWidget()) {
     return mCeiledScaleFactor;
   }
   if (nsWindow* topmost = GetTopmostWindow()) {
@@ -8924,7 +8915,7 @@ gint nsWindow::GdkCeiledScaleFactor() {
 double nsWindow::FractionalScaleFactor() {
 #ifdef MOZ_WAYLAND
   double fractional_scale = [&] {
-    if (IsTopLevelWindowType()) {
+    if (IsTopLevelWidget()) {
       return mFractionalScaleFactor;
     }
     if (nsWindow* topmost = GetTopmostWindow()) {
@@ -9894,7 +9885,7 @@ bool nsWindow::ApplyEnterLeaveMutterWorkaround() {
 }
 
 void nsWindow::NotifyOcclusionState(OcclusionState aState) {
-  if (!IsTopLevelWindowType()) {
+  if (!IsTopLevelWidget()) {
     return;
   }
 

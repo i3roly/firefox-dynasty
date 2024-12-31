@@ -1566,12 +1566,6 @@ void LocalAccessible::DOMAttributeChanged(int32_t aNameSpaceID,
     // also changed. Push a cache update for Relations.
     mDoc->QueueCacheUpdate(this, CacheDomain::Relations);
   }
-
-  if (aAttribute == nsGkAtoms::slot &&
-      !mContent->GetFlattenedTreeParentNode() && this != mDoc) {
-    // This is inside a shadow host but is no longer slotted.
-    mDoc->ContentRemoved(this);
-  }
 }
 
 void LocalAccessible::ARIAGroupPosition(int32_t* aLevel, int32_t* aSetSize,
@@ -2492,78 +2486,65 @@ Relation LocalAccessible::RelationByType(RelationType aType) const {
 
 void LocalAccessible::GetNativeInterface(void** aNativeAccessible) {}
 
-void LocalAccessible::DoCommand(nsIContent* aContent,
-                                uint32_t aActionIndex) const {
-  class Runnable final : public mozilla::Runnable {
-   public:
-    Runnable(const LocalAccessible* aAcc, nsIContent* aContent, uint32_t aIdx)
-        : mozilla::Runnable("Runnable"),
-          mAcc(aAcc),
-          mContent(aContent),
-          mIdx(aIdx) {}
-
-    // XXX Cannot mark as MOZ_CAN_RUN_SCRIPT because the base class change
-    //     requires too big changes across a lot of modules.
-    MOZ_CAN_RUN_SCRIPT_BOUNDARY NS_IMETHOD Run() override {
-      if (mAcc) {
-        MOZ_KnownLive(mAcc)->DispatchClickEvent(MOZ_KnownLive(mContent), mIdx);
-      }
-      return NS_OK;
-    }
-
-    void Revoke() {
-      mAcc = nullptr;
-      mContent = nullptr;
-    }
-
-   private:
-    RefPtr<const LocalAccessible> mAcc;
-    nsCOMPtr<nsIContent> mContent;
-    uint32_t mIdx;
-  };
-
-  nsIContent* content = aContent ? aContent : mContent.get();
-  nsCOMPtr<nsIRunnable> runnable = new Runnable(this, content, aActionIndex);
-  NS_DispatchToMainThread(runnable);
+void LocalAccessible::DoCommand(uint32_t aActionIndex) const {
+  NS_DispatchToMainThread(NS_NewRunnableFunction(
+      "LocalAccessible::DispatchClickEvent",
+      [aActionIndex, acc = RefPtr{this}]() MOZ_CAN_RUN_SCRIPT_BOUNDARY {
+        acc->DispatchClickEvent(aActionIndex);
+      }));
 }
 
-void LocalAccessible::DispatchClickEvent(nsIContent* aContent,
-                                         uint32_t aActionIndex) const {
+void LocalAccessible::DispatchClickEvent(uint32_t aActionIndex) const {
   if (IsDefunct()) return;
+  MOZ_ASSERT(mContent);
 
   RefPtr<PresShell> presShell = mDoc->PresShellPtr();
 
   // Scroll into view.
-  presShell->ScrollContentIntoView(aContent, ScrollAxis(), ScrollAxis(),
+  presShell->ScrollContentIntoView(mContent, ScrollAxis(), ScrollAxis(),
                                    ScrollFlags::ScrollOverflowHidden);
 
-  AutoWeakFrame frame = aContent->GetPrimaryFrame();
-  if (!frame) return;
+  AutoWeakFrame frame = GetFrame();
+  if (!frame) {
+    return;
+  }
 
-  // Compute x and y coordinates.
-  nsPoint point;
-  nsCOMPtr<nsIWidget> widget = frame->GetNearestWidget(point);
-  if (!widget) return;
+  // We use RelativeBounds rather than querying the frame directly because of
+  // special cases like image map areas which don't have their own frame.
+  // RelativeBounds overrides handle these special cases.
+  nsIFrame* boundingFrame = nullptr;
+  nsRect rect = RelativeBounds(&boundingFrame);
+  MOZ_ASSERT(boundingFrame);
 
-  nsSize size = frame->GetSize();
+  // Compute x and y coordinates in dev pixels relative to the widget.
+  nsPoint offsetToWidget;
+  nsCOMPtr<nsIWidget> widget = boundingFrame->GetNearestWidget(offsetToWidget);
+  if (!widget) {
+    return;
+  }
 
+  rect += offsetToWidget;
   RefPtr<nsPresContext> presContext = presShell->GetPresContext();
-  int32_t x = presContext->AppUnitsToDevPixels(point.x + size.width / 2);
-  int32_t y = presContext->AppUnitsToDevPixels(point.y + size.height / 2);
+  int32_t x = presContext->AppUnitsToDevPixels(rect.x + rect.width / 2);
+  int32_t y = presContext->AppUnitsToDevPixels(rect.y + rect.height / 2);
 
   // Simulate a touch interaction by dispatching touch events with mouse events.
-  nsCoreUtils::DispatchTouchEvent(eTouchStart, x, y, aContent, frame, presShell,
+  // Even though we calculated x and y using the bounding frame, we must use the
+  // primary frame for the event. In most cases, these two frames will be
+  // different, but they are the same for special cases such as image map areas
+  // which don't have their own frame.
+  nsCoreUtils::DispatchTouchEvent(eTouchStart, x, y, mContent, frame, presShell,
                                   widget);
 
   if (StaticPrefs::dom_popup_experimental()) {
     // This isn't needed once bug 1924790 is fixed.
-    aContent->OwnerDoc()->NotifyUserGestureActivation();
+    mContent->OwnerDoc()->NotifyUserGestureActivation();
   }
-  nsCoreUtils::DispatchMouseEvent(eMouseDown, x, y, aContent, frame, presShell,
+  nsCoreUtils::DispatchMouseEvent(eMouseDown, x, y, mContent, frame, presShell,
                                   widget);
-  nsCoreUtils::DispatchTouchEvent(eTouchEnd, x, y, aContent, frame, presShell,
+  nsCoreUtils::DispatchTouchEvent(eTouchEnd, x, y, mContent, frame, presShell,
                                   widget);
-  nsCoreUtils::DispatchMouseEvent(eMouseUp, x, y, aContent, frame, presShell,
+  nsCoreUtils::DispatchMouseEvent(eMouseUp, x, y, mContent, frame, presShell,
                                   widget);
 }
 
@@ -3601,6 +3582,22 @@ already_AddRefed<AccAttributes> LocalAccessible::BundleFieldsForCache(
       if (viewportCache.Length()) {
         fields->SetAttribute(CacheKey::Viewport, std::move(viewportCache));
       }
+    }
+  }
+
+  if (aCacheDomain & CacheDomain::APZ && IsDoc()) {
+    PresShell* presShell = AsDoc()->PresShellPtr();
+    MOZ_ASSERT(presShell, "Can't get APZ factor for null presShell");
+    nsPoint viewportOffset =
+        presShell->GetVisualViewportOffsetRelativeToLayoutViewport();
+    if (viewportOffset.x || viewportOffset.y) {
+      nsTArray<int32_t> offsetArray(2);
+      offsetArray.AppendElement(viewportOffset.x);
+      offsetArray.AppendElement(viewportOffset.y);
+      fields->SetAttribute(CacheKey::VisualViewportOffset,
+                           std::move(offsetArray));
+    } else if (IsUpdatePush(CacheDomain::APZ)) {
+      fields->SetAttribute(CacheKey::VisualViewportOffset, DeleteEntry());
     }
   }
 

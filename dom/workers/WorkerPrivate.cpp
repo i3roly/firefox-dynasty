@@ -51,6 +51,7 @@
 #include "mozilla/dom/PromiseDebugging.h"
 #include "mozilla/dom/ReferrerInfo.h"
 #include "mozilla/dom/RemoteWorkerChild.h"
+#include "mozilla/dom/RemoteWorkerNonLifeCycleOpControllerChild.h"
 #include "mozilla/dom/RemoteWorkerService.h"
 #include "mozilla/dom/RootedDictionary.h"
 #include "mozilla/dom/SimpleGlobalObject.h"
@@ -2494,7 +2495,9 @@ WorkerPrivate::WorkerPrivate(
     nsString&& aId, const nsID& aAgentClusterId,
     const nsILoadInfo::CrossOriginOpenerPolicy aAgentClusterOpenerPolicy,
     CancellationCallback&& aCancellationCallback,
-    TerminationCallback&& aTerminationCallback)
+    TerminationCallback&& aTerminationCallback,
+    mozilla::ipc::Endpoint<PRemoteWorkerNonLifeCycleOpControllerChild>&&
+        aChildEp)
     : mMutex("WorkerPrivate Mutex"),
       mCondVar(mMutex, "WorkerPrivate CondVar"),
       mParent(aParent),
@@ -2513,6 +2516,7 @@ WorkerPrivate::WorkerPrivate(
           this, WorkerEventTarget::Behavior::ControlOnly)),
       mWorkerHybridEventTarget(
           new WorkerEventTarget(this, WorkerEventTarget::Behavior::Hybrid)),
+      mChildEp(std::move(aChildEp)),
       mParentStatus(Pending),
       mStatus(Pending),
       mCreationTimeStamp(TimeStamp::Now()),
@@ -2724,15 +2728,21 @@ WorkerPrivate::ComputeAgentClusterIdAndCoop(WorkerPrivate* aParent,
     return {agentClusterId, bc->Top()->GetOpenerPolicy()};
   }
 
-  // Allow chrome workers within the "inference" content process access to
-  // SharedArrayBuffer by enabling COOP/COEP for their agent cluster group.
-  // This is useful for accelerating WASM-based inference engines.
-  if (aIsChromeWorker && XRE_IsContentProcess() &&
-      dom::ContentChild::GetSingleton()->GetRemoteType() ==
-          INFERENCE_REMOTE_TYPE) {
-    agentClusterCoop =
-        nsILoadInfo::OPENER_POLICY_SAME_ORIGIN_EMBEDDER_POLICY_REQUIRE_CORP;
+  // Chrome workers share an AgentCluster with the XPC module global. This
+  // allows things like shared memory and WASM modules to be transferred between
+  // chrome workers and system JS.
+  // Also set COOP+COEP flags to allow access to shared memory.
+  if (aIsChromeWorker) {
+    if (nsIGlobalObject* systemGlobal =
+            xpc::NativeGlobal(xpc::PrivilegedJunkScope())) {
+      nsID agentClusterId = systemGlobal->GetAgentClusterId().valueOrFrom(
+          [] { return nsID::GenerateUUID(); });
+      return {
+          agentClusterId,
+          nsILoadInfo::OPENER_POLICY_SAME_ORIGIN_EMBEDDER_POLICY_REQUIRE_CORP};
+    }
   }
+
   // If the window object was failed to be set into the WorkerLoadInfo, we
   // make the worker into another agent cluster group instead of failures.
   return {nsID::GenerateUUID(), agentClusterCoop};
@@ -2746,7 +2756,9 @@ already_AddRefed<WorkerPrivate> WorkerPrivate::Constructor(
     const nsACString& aServiceWorkerScope, WorkerLoadInfo* aLoadInfo,
     ErrorResult& aRv, nsString aId,
     CancellationCallback&& aCancellationCallback,
-    TerminationCallback&& aTerminationCallback) {
+    TerminationCallback&& aTerminationCallback,
+    mozilla::ipc::Endpoint<PRemoteWorkerNonLifeCycleOpControllerChild>&&
+        aChildEp) {
   WorkerPrivate* parent =
       NS_IsMainThread() ? nullptr : GetCurrentThreadWorkerPrivate();
 
@@ -2811,7 +2823,7 @@ already_AddRefed<WorkerPrivate> WorkerPrivate::Constructor(
       parent, aScriptURL, aIsChromeWorker, aWorkerKind, aRequestCredentials,
       aWorkerType, aWorkerName, aServiceWorkerScope, *aLoadInfo, std::move(aId),
       idAndCoop.mId, idAndCoop.mCoop, std::move(aCancellationCallback),
-      std::move(aTerminationCallback));
+      std::move(aTerminationCallback), std::move(aChildEp));
 
   // Gecko contexts always have an explicitly-set default locale (set by
   // XPJSRuntime::Initialize for the main thread, set by
@@ -3375,6 +3387,16 @@ void WorkerPrivate::DoRunLoop(JSContext* aCx) {
     // Now, start to run the event loop, mPreStartRunnables can be cleared,
     // since when get here, Worker initialization has done successfully.
     mPreStartRunnables.Clear();
+  }
+
+  // Create IPC between the content process worker thread and the parent
+  // process background thread for non-life cycle related operations of
+  // SharedWorker/ServiceWorker
+  if (mChildEp.IsValid()) {
+    mRemoteWorkerNonLifeCycleOpController =
+        RemoteWorkerNonLifeCycleOpControllerChild::Create();
+    MOZ_ASSERT_DEBUG_OR_FUZZING(mRemoteWorkerNonLifeCycleOpController);
+    mChildEp.Bind(mRemoteWorkerNonLifeCycleOpController);
   }
 
   // Now that we've done that, we can go ahead and set up our AutoJSAPI.  We
@@ -5318,6 +5340,15 @@ bool WorkerPrivate::NotifyInternal(WorkerStatus aStatus) {
     NotifyWorkerRefs(aStatus);
   }
 
+  if (aStatus == Canceling && mRemoteWorkerNonLifeCycleOpController) {
+    mRemoteWorkerNonLifeCycleOpController->TransistionStateToCanceled();
+  }
+
+  if (aStatus == Killing && mRemoteWorkerNonLifeCycleOpController) {
+    mRemoteWorkerNonLifeCycleOpController->TransistionStateToKilled();
+    mRemoteWorkerNonLifeCycleOpController = nullptr;
+  }
+
   // If the worker script never ran, or failed to compile, we don't need to do
   // anything else.
   WorkerGlobalScope* global = GlobalScope();
@@ -6259,6 +6290,7 @@ bool WorkerPrivate::IsSharedMemoryAllowed() const {
     return true;
   }
 
+  // Allow privileged addons to access shared memory.
   if (mIsPrivilegedAddonGlobal) {
     return true;
   }

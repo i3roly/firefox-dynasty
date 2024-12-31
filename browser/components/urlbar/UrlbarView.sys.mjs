@@ -42,9 +42,6 @@ const KEYBOARD_SELECTABLE_ELEMENT_SELECTOR =
   "[role=button]:not([keyboard-inaccessible]), [selectable]";
 
 const ZERO_PREFIX_HISTOGRAM_DWELL_TIME = "FX_URLBAR_ZERO_PREFIX_DWELL_TIME_MS";
-const ZERO_PREFIX_SCALAR_ABANDONMENT = "urlbar.zeroprefix.abandonment";
-const ZERO_PREFIX_SCALAR_ENGAGEMENT = "urlbar.zeroprefix.engagement";
-const ZERO_PREFIX_SCALAR_EXPOSURE = "urlbar.zeroprefix.exposure";
 
 const RESULT_MENU_COMMANDS = {
   DISMISS: "dismiss",
@@ -383,10 +380,10 @@ export class UrlbarView {
 
     // We cache the first and last rows since they will not change while
     // selectBy is running.
-    let firstSelectableElement = this.#getFirstSelectableElement();
-    // #getLastSelectableElement will not return an element that is over
+    let firstSelectableElement = this.getFirstSelectableElement();
+    // getLastSelectableElement will not return an element that is over
     // maxResults and thus may be hidden and not selectable.
-    let lastSelectableElement = this.#getLastSelectableElement();
+    let lastSelectableElement = this.getLastSelectableElement();
 
     if (!selectedElement) {
       selectedElement = reverse
@@ -591,9 +588,9 @@ export class UrlbarView {
 
     if (this.#isShowingZeroPrefix) {
       if (elementPicked) {
-        Services.telemetry.scalarAdd(ZERO_PREFIX_SCALAR_ENGAGEMENT, 1);
+        Glean.urlbarZeroprefix.engagement.add(1);
       } else {
-        Services.telemetry.scalarAdd(ZERO_PREFIX_SCALAR_ABANDONMENT, 1);
+        Glean.urlbarZeroprefix.abandonment.add(1);
       }
       this.#setIsShowingZeroPrefix(false);
     }
@@ -806,7 +803,7 @@ export class UrlbarView {
         // result added, which is why we do this check here when each result is
         // added and not above.
         if (this.#shouldShowHeuristic(firstResult)) {
-          this.#selectElement(this.#getFirstSelectableElement(), {
+          this.#selectElement(this.getFirstSelectableElement(), {
             updateInput: false,
             setAccessibleFocus:
               this.controller._userSelectionBehavior == "arrow",
@@ -1791,6 +1788,7 @@ export class UrlbarView {
     let isFirstChild = item === this.#rows.children[0];
     let secAction = result.payload.action;
     let container = item.querySelector(".urlbarView-actions-container");
+    item.toggleAttribute("secondary-action", !!secAction);
     if (secAction && !container) {
       item.appendChild(this.#createSecondaryAction(secAction, isFirstChild));
     } else if (
@@ -2246,7 +2244,7 @@ export class UrlbarView {
       }
     }
 
-    let selectableElement = this.#getFirstSelectableElement();
+    let selectableElement = this.getFirstSelectableElement();
     let uiIndex = 0;
     while (selectableElement) {
       selectableElement.elementIndex = uiIndex++;
@@ -2258,6 +2256,11 @@ export class UrlbarView {
     } else {
       this.panel.setAttribute("noresults", "true");
     }
+
+    this.#rows.toggleAttribute(
+      "actionmode",
+      this.visibleResults[0]?.source == lazy.UrlbarUtils.RESULT_SOURCE.ACTIONS
+    );
   }
 
   /**
@@ -2596,7 +2599,7 @@ export class UrlbarView {
    * @returns {Element}
    *   The first selectable element in the view.
    */
-  #getFirstSelectableElement() {
+  getFirstSelectableElement() {
     let element = this.#rows.firstElementChild;
     if (element && !this.#isSelectableElement(element)) {
       element = this.#getNextSelectableElement(element);
@@ -2610,7 +2613,7 @@ export class UrlbarView {
    * @returns {Element}
    *   The last selectable element in the view.
    */
-  #getLastSelectableElement() {
+  getLastSelectableElement() {
     let element = this.#rows.lastElementChild;
     if (element && !this.#isSelectableElement(element)) {
       element = this.#getPreviousSelectableElement(element);
@@ -3235,7 +3238,7 @@ export class UrlbarView {
       this.#zeroPrefixStopwatchInstance
     );
 
-    Services.telemetry.scalarAdd(ZERO_PREFIX_SCALAR_EXPOSURE, 1);
+    Glean.urlbarZeroprefix.exposure.add(1);
   }
 
   /**

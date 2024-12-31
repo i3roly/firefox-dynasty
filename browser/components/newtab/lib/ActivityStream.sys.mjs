@@ -47,6 +47,11 @@ import {
   actionTypes as at,
 } from "resource://activity-stream/common/Actions.mjs";
 
+const REGION_WEATHER_CONFIG =
+  "browser.newtabpage.activity-stream.discoverystream.region-weather-config";
+const LOCALE_WEATHER_CONFIG =
+  "browser.newtabpage.activity-stream.discoverystream.locale-weather-config";
+
 const REGION_TOPICS_CONFIG =
   "browser.newtabpage.activity-stream.discoverystream.topicSelection.region-topics-config";
 const LOCALE_TOPICS_CONFIG =
@@ -68,6 +73,11 @@ const REGION_CONTEXTUAL_CONTENT_CONFIG =
   "browser.newtabpage.activity-stream.discoverystream.contextualContent.region-content-config";
 const LOCALE_CONTEXTUAL_CONTENT_CONFIG =
   "browser.newtabpage.activity-stream.discoverystream.contextualContent.locale-content-config";
+
+const REGION_SECTIONS_CONFIG =
+  "browser.newtabpage.activity-stream.discoverystream.sections.region-content-config";
+const LOCALE_SECTIONS_CONFIG =
+  "browser.newtabpage.activity-stream.discoverystream.sections.locale-content-config";
 
 export function csvPrefHasValue(stringPrefName, value) {
   if (typeof stringPrefName !== "string") {
@@ -92,19 +102,10 @@ function showSpocs({ geo }) {
 }
 
 function showWeather({ geo, locale }) {
-  const weatherGeoString =
-    lazy.NimbusFeatures.pocketNewtab.getVariable("regionWeatherConfig") || "";
-  const weatherLocaleString =
-    lazy.NimbusFeatures.pocketNewtab.getVariable("localeWeatherConfig") || "";
-  const weatherGeo = weatherGeoString
-    .split(",")
-    .map(s => s.trim())
-    .filter(item => item);
-  const weatherLocale = weatherLocaleString
-    .split(",")
-    .map(s => s.trim())
-    .filter(item => item);
-  return weatherGeo.includes(geo) && weatherLocale.includes(locale);
+  return (
+    csvPrefHasValue(REGION_WEATHER_CONFIG, geo) &&
+    csvPrefHasValue(LOCALE_WEATHER_CONFIG, locale)
+  );
 }
 
 function showTopicsSelection({ geo, locale }) {
@@ -132,6 +133,13 @@ function showContextualContent({ geo, locale }) {
   return (
     csvPrefHasValue(REGION_CONTEXTUAL_CONTENT_CONFIG, geo) &&
     csvPrefHasValue(LOCALE_CONTEXTUAL_CONTENT_CONFIG, locale)
+  );
+}
+
+function showSectionLayout({ geo, locale }) {
+  return (
+    csvPrefHasValue(REGION_SECTIONS_CONFIG, geo) &&
+    csvPrefHasValue(LOCALE_SECTIONS_CONFIG, locale)
   );
 }
 
@@ -426,6 +434,29 @@ export const PREFS_CONFIG = new Map([
     {
       title: "Boolean flag to turn layout variant B on and off",
       value: false,
+    },
+  ],
+  [
+    "discoverystream.sections.enabled",
+    {
+      title: "Boolean flag to enable section layout UI in recommended stories",
+      getValue: showSectionLayout,
+    },
+  ],
+  [
+    "discoverystream.sections.cards.enabled",
+    {
+      title:
+        "Boolean flag to enable revised pocket story card UI in recommended stories",
+      value: false,
+    },
+  ],
+  [
+    "discoverystream.sections.cards.thumbsUpDown.enabled",
+    {
+      title:
+        "Boolean flag to enable thumbs up/down buttons in the new card UI in recommended stories",
+      value: true,
     },
   ],
   [

@@ -9,10 +9,13 @@ ChromeUtils.defineESModuleGetters(lazy, {
   NetworkUtils:
     "resource://devtools/shared/network-observer/NetworkUtils.sys.mjs",
 
+  Log: "chrome://remote/content/shared/Log.sys.mjs",
   notifyNavigationStarted:
     "chrome://remote/content/shared/NavigationManager.sys.mjs",
   TabManager: "chrome://remote/content/shared/TabManager.sys.mjs",
 });
+
+ChromeUtils.defineLazyGetter(lazy, "logger", () => lazy.Log.get());
 
 /**
  * The NetworkRequest class is a wrapper around the internal channel which
@@ -62,6 +65,7 @@ export class NetworkRequest {
         ? this.#channel.QueryInterface(Ci.nsITimedChannel)
         : {
             redirectCount: 0,
+            initiatorType: "",
             asyncOpenTime: currentTimeStamp,
             redirectStartTime: 0,
             redirectEndTime: 0,
@@ -97,6 +101,14 @@ export class NetworkRequest {
     return this.#contextId;
   }
 
+  get destination() {
+    if (this.#isTopLevelDocumentLoad()) {
+      return "";
+    }
+
+    return this.#channel.loadInfo?.fetchDestination;
+  }
+
   get errorText() {
     // TODO: Update with a proper error text. Bug 1873037.
     return ChromeUtils.getXPCOMErrorName(this.#channel.status);
@@ -111,6 +123,19 @@ export class NetworkRequest {
     // request interception. Need to find another way to retrieve the
     // information dynamically.
     return this.#rawHeaders.length;
+  }
+
+  get initiatorType() {
+    const initiatorType = this.#timedChannel.initiatorType;
+    if (initiatorType === "") {
+      return null;
+    }
+
+    if (this.#isTopLevelDocumentLoad()) {
+      return null;
+    }
+
+    return initiatorType;
   }
 
   get isHttpChannel() {
@@ -301,8 +326,10 @@ export class NetworkRequest {
    */
   toJSON() {
     return {
+      destination: this.destination,
       headers: this.headers,
       headersSize: this.headersSize,
+      initiatorType: this.initiatorType,
       method: this.method,
       navigationId: this.navigationId,
       postDataSize: this.postDataSize,
@@ -360,6 +387,7 @@ export class NetworkRequest {
   #getFetchTimings() {
     const {
       asyncOpenTime,
+      channelCreationTime,
       redirectStartTime,
       redirectEndTime,
       dispatchFetchEventStartTime,
@@ -387,9 +415,25 @@ export class NetworkRequest {
     // available in the parent process, so for now we will use 0.
     const timeOrigin = 0;
 
+    let requestTime;
+    if (asyncOpenTime == 0) {
+      lazy.logger.warn(
+        `[NetworkRequest] Invalid asyncOpenTime=0 for channel [id: ${
+          this.#channel.channelId
+        }, url: ${
+          this.#channel.URI.spec
+        }], falling back to channelCreationTime=${
+          this.#timedChannel.channelCreationTime
+        }.`
+      );
+      requestTime = channelCreationTime;
+    } else {
+      requestTime = asyncOpenTime;
+    }
+
     return {
       timeOrigin,
-      requestTime: this.#convertTimestamp(asyncOpenTime, timeOrigin),
+      requestTime: this.#convertTimestamp(requestTime, timeOrigin),
       redirectStart: this.#convertTimestamp(redirectStartTime, timeOrigin),
       redirectEnd: this.#convertTimestamp(redirectEndTime, timeOrigin),
       fetchStart: this.#convertTimestamp(fetchStartTime, timeOrigin),
@@ -464,5 +508,16 @@ export class NetworkRequest {
     }
 
     return navigation ? navigation.navigationId : null;
+  }
+
+  #isTopLevelDocumentLoad() {
+    if (!this.#channel.isDocument) {
+      return false;
+    }
+
+    const browsingContext = lazy.TabManager.getBrowsingContextById(
+      this.#contextId
+    );
+    return !browsingContext.parent;
   }
 }

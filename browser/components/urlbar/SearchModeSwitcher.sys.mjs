@@ -104,6 +104,16 @@ export class SearchModeSwitcher {
         { once: true }
       );
     }
+
+    if (event.type == "keypress") {
+      // If open the panel by key, set urlbar input filed as focusedElement to
+      // move the focus to the input field it when popup will be closed.
+      // Please see _prevFocus element in toolkit/content/widgets/panel.js about
+      // the implementation.
+      this.#input.document.commandDispatcher.focusedElement =
+        this.#input.inputField;
+    }
+
     lazy.PanelMultiView.openPopup(this.#popup, anchor, {
       position: "bottomleft topleft",
       triggerEvent: event,
@@ -150,6 +160,19 @@ export class SearchModeSwitcher {
   }
 
   handleEvent(event) {
+    if (event.keyCode == KeyEvent.DOM_VK_TAB && this.#input.view.isOpen) {
+      // The urlbar view is opening, which means the unified search button got
+      // focus by tab key from urlbar. So, move the focus to urlbar view to make
+      // cyclable.
+      this.#input.focus();
+      this.#input.view.selectBy(1, {
+        reverse: event.shiftKey,
+        userPressedTab: true,
+      });
+      event.preventDefault();
+      return;
+    }
+
     let action = event.currentTarget.dataset.action ?? event.type;
 
     switch (action) {
@@ -270,7 +293,8 @@ export class SearchModeSwitcher {
       let engine = searchMode
         ? lazy.UrlbarSearchUtils.getEngineByName(searchMode.engineName)
         : lazy.UrlbarSearchUtils.getDefaultEngine();
-      return { label: engine.name, icon: await engine.getIconURL() };
+      let icon = (await engine.getIconURL()) ?? SearchModeSwitcher.DEFAULT_ICON;
+      return { label: engine.name, icon };
     }
 
     let mode = lazy.UrlbarUtils.LOCAL_SEARCH_MODES.find(
@@ -334,7 +358,8 @@ export class SearchModeSwitcher {
         this.search({ engine, openEngineHomePage: e.shiftKey });
       });
 
-      menuitem.setAttribute("image", await engine.getIconURL());
+      let icon = (await engine.getIconURL()) ?? SearchModeSwitcher.DEFAULT_ICON;
+      menuitem.setAttribute("image", icon);
       remoteContainer.appendChild(menuitem);
     }
     // Add local options.

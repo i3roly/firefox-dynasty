@@ -88,6 +88,26 @@ export class BaseFeature {
   }
 
   /**
+   * @returns {string}
+   *   If the feature manages a suggestion type served by the Suggest ML
+   *   backend, the subclass should override this getter and return the ML
+   *   intent name as returned by `MLSuggest`. e.g., "yelp_intent"
+   */
+  get mlIntent() {
+    return "";
+  }
+
+  /**
+   * @returns {boolean}
+   *   If the feature manages a suggestion type served by the Suggest ML
+   *   backend, the subclass should override this getter and return true if the
+   *   ML suggestion type is enabled and false otherwise.
+   */
+  get isMlIntentEnabled() {
+    return false;
+  }
+
+  /**
    * This method should initialize or uninitialize any state related to the
    * feature.
    *
@@ -280,7 +300,9 @@ export class BaseFeature {
     let enable =
       lazy.UrlbarPrefs.get("quickSuggestEnabled") && this.shouldEnable;
     if (enable != this.isEnabled) {
-      this.logger.info(`Setting enabled = ${enable}`);
+      this.logger.info("Feature enabled status changed", {
+        nowEnabled: enable,
+      });
       this.#isEnabled = enable;
       this.enable(enable);
     }

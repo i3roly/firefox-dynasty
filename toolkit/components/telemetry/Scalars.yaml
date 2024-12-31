@@ -373,6 +373,63 @@ installation.firstSeen:
       - 'new-profile'
 
 browser.backup:
+  enabled:
+    bug_numbers:
+      - 1908727
+    description: >
+      True if the BackupService is enabled by default.
+    expires: never
+    kind: boolean
+    notification_emails:
+      - mconley@mozilla.com
+    release_channel_collection: opt-out
+    products:
+      - 'firefox'
+    record_in_processes:
+      - 'main'
+  scheduler_enabled:
+    bug_numbers:
+      - 1908727
+    description: >
+      True if the BackupService is configured to automatically create backups
+      in the background.
+    expires: never
+    kind: boolean
+    notification_emails:
+      - mconley@mozilla.com
+    release_channel_collection: opt-out
+    products:
+      - 'firefox'
+    record_in_processes:
+      - 'main'
+  pswd_encrypted:
+    bug_numbers:
+      - 1908727
+    description: >
+      True if the BackupService is configured to encrypt backups.
+    expires: never
+    kind: boolean
+    notification_emails:
+      - mconley@mozilla.com
+    release_channel_collection: opt-out
+    products:
+      - 'firefox'
+    record_in_processes:
+      - 'main'
+  location_on_device:
+    bug_numbers:
+      - 1908727
+    description: >
+      1 = the default location, 2 = a non-default location
+    expires: never
+    kind: uint
+    notification_emails:
+      - mconley@mozilla.com
+    release_channel_collection: opt-out
+    products:
+      - 'firefox'
+    record_in_processes:
+      - 'main'
   prof_d_disk_space:
     bug_numbers:
       - 1884407
@@ -1923,9 +1980,10 @@ extensions.startupCache:
     bug_numbers:
       - 1767336
       - 1892151
+      - 1928258
     description: >
       The amount of bytes writted into the Extensions StartupCache file.
-    expires: "135"
+    expires: "140"
     kind: uint
     notification_emails:
       - addons-dev-internal@mozilla.com
@@ -1938,10 +1996,11 @@ extensions.startupCache:
     bug_numbers:
       - 1767336
       - 1892151
+      - 1928258
     description: >
       The amount of times an unexpected error has been raised while
       reading the Extensions StartupCache file
-    expires: "135"
+    expires: "140"
     kind: uint
     keyed: true
     notification_emails:
@@ -2854,26 +2913,6 @@ media:
     record_in_processes:
       - main
 
-  decode_error_per_mime_type:
-    bug_numbers:
-      - 1688775
-      - 1804291
-    description: >
-      Count the number of times the media with a specific mime type (Eg. audio/vorbis, that would be used as the key) encounters a decode error during playback.
-    expires: never
-    kind: uint
-    keyed: true
-    notification_emails:
-      - media-alerts@mozilla.com
-    release_channel_collection: opt-out
-    products:
-      - 'firefox'
-    record_in_processes:
-      - 'content'
-      - 'gpu'
-      - 'rdd'
-      - 'utility'
-
   video_hardware_decoding_support:
     bug_numbers:
       - 1733722
@@ -2955,10 +2994,11 @@ dom.contentprocess:
       - 1777404
       - 1817104
       - 1866197
+      - 1928259
     description: >
       The number of times a process crashed early but we could verify it was not
       because of buildID mismatch between the parent and the content processes.
-    expires: "135"
+    expires: "150"
     kind: uint
     notification_emails:
       - alissy@mozilla.com
@@ -3055,79 +3095,6 @@ dom.parentprocess:
       - 'main'
     release_channel_collection: opt-out
 
-devtools.toolbar.eyedropper:
-  opened:
-    bug_numbers:
-      - 1247985
-      - 1352115
-    description: Number of times the DevTools Eyedropper has been opened via the inspector toolbar.
-    expires: never
-    kind: uint
-    notification_emails:
-      - dev-developer-tools@lists.mozilla.org
-    release_channel_collection: opt-out
-    products:
-      - 'firefox'
-      - 'fennec'
-    record_in_processes:
-      - 'main'
-
-devtools.copy.unique.css.selector:
-  opened:
-    bug_numbers:
-      - 1323700
-      - 1352115
-      - 1566395
-    description: Number of times the DevTools copy unique CSS selector has been used.
-    expires: never
-    kind: uint
-    notification_emails:
-      - dev-developer-tools@lists.mozilla.org
-      - mbalfanz@mozilla.com
-    release_channel_collection: opt-out
-    products:
-      - 'firefox'
-      - 'fennec'
-    record_in_processes:
-      - 'main'
-
-devtools.copy.full.css.selector:
-  opened:
-    bug_numbers:
-      - 1323700
-      - 1352115
-      - 1566395
-    description: Number of times the DevTools copy full CSS selector has been used.
-    expires: never
-    kind: uint
-    notification_emails:
-      - dev-developer-tools@lists.mozilla.org
-      - mbalfanz@mozilla.com
-    release_channel_collection: opt-out
-    products:
-      - 'firefox'
-      - 'fennec'
-    record_in_processes:
-      - 'main'
-
-devtools.copy.xpath:
-  opened:
-    bug_numbers:
-      - 987877
-      - 1566395
-    description: Number of times the DevTools copy XPath has been used.
-    expires: never
-    kind: uint
-    notification_emails:
-      - dev-developer-tools@lists.mozilla.org
-      - mbalfanz@mozilla.com
-    release_channel_collection: opt-out
-    products:
-      - 'firefox'
-      - 'fennec'
-    record_in_processes:
-      - 'main'
-
 devtools.layout.flexboxhighlighter:
   opened:
     bug_numbers:
@@ -3219,57 +3186,6 @@ devtools.grid.gridinspector:
       - 1373483
     description: >
       Number of times the DevTools grid inspector was opened from the grid view.
-    expires: never
-    kind: uint
-    notification_emails:
-      - dev-developer-tools@lists.mozilla.org
-    release_channel_collection: opt-out
-    products:
-      - 'firefox'
-      - 'fennec'
-    record_in_processes:
-      - 'main'
-
-devtools.grid.showGridAreasOverlay:
-  checked:
-    bug_numbers:
-      - 1373483
-    description: >
-      Number of times the DevTools grid inspector's "Display grid areas" was checked.
-    expires: never
-    kind: uint
-    notification_emails:
-      - dev-developer-tools@lists.mozilla.org
-    release_channel_collection: opt-out
-    products:
-      - 'firefox'
-      - 'fennec'
-    record_in_processes:
-      - 'main'
-
-devtools.grid.showGridLineNumbers:
-  checked:
-    bug_numbers:
-      - 1373483
-    description: >
-      Number of times the DevTools grid inspector's "Display grid numbers" was checked.
-    expires: never
-    kind: uint
-    notification_emails:
-      - dev-developer-tools@lists.mozilla.org
-    release_channel_collection: opt-out
-    products:
-      - 'firefox'
-      - 'fennec'
-    record_in_processes:
-      - 'main'
-
-devtools.grid.showInfiniteLines:
-  checked:
-    bug_numbers:
-      - 1373483
-    description: >
-      Number of times the DevTools grid inspector's "Extend grid lines infinitely" was checked.
     expires: never
     kind: uint
     notification_emails:
@@ -4010,21 +3926,6 @@ gfx:
     record_in_processes:
       - 'main'
     release_channel_collection: opt-out
-  tmp_writable:
-    bug_numbers:
-      - 1923741
-    description: >
-      Is the system temporary directory writable
-    expires: "134"
-    kind: boolean
-    notification_emails:
-      - gfx-telemetry-alerts@mozilla.com
-      - aosmond@mozilla.com
-    products:
-      - 'firefox'
-    record_in_processes:
-      - 'main'
-    release_channel_collection: opt-out
 
 # The following section contains the form autofill related scalars.
 formautofill:
@@ -4138,165 +4039,6 @@ formautofill.creditCards:
     release_channel_collection: opt-out
     products:
       - 'firefox'
-    record_in_processes:
-      - 'main'
-
-# This section is for notification bars testing
-notificationbar:
-  # Used only for testing
-  testone:
-    bug_numbers:
-      - 1676943
-    description: >
-      Used to test notificationbar telemetry
-    expires: never
-    kind: uint
-    keyed: true
-    notification_emails:
-      - telemetry-client-dev@mozilla.com
-    release_channel_collection: opt-out
-    products:
-      - 'firefox'
-    record_in_processes:
-      - 'main'
-
-  # Used only for testing
-  testtwo:
-    bug_numbers:
-      - 1676943
-    description: >
-      Used to test notificationbar telemetry
-    expires: never
-    kind: uint
-    keyed: true
-    notification_emails:
-      - telemetry-client-dev@mozilla.com
-    release_channel_collection: opt-out
-    products:
-      - 'firefox'
-    record_in_processes:
-      - 'main'
-
-# The following section contains scalars for the Screenshots extension.
-screenshots:
-  download:
-    bug_numbers:
-      - 1412411
-    description: >
-      The count of new screenshots created, then downloaded per session
-      via the Firefox Screenshots feature. Excludes failed attempts due
-      to any error.
-    expires: never
-    kind: uint
-    notification_emails:
-      - screenshots-dev@mozilla.org
-    release_channel_collection: opt-out
-    products:
-      - 'firefox'
-      - 'fennec'
-    record_in_processes:
-      - 'main'
-
-  upload:
-    bug_numbers:
-      - 1412411
-    description: >
-      The count of new screenshots created, then uploaded per session
-      via the Firefox Screenshots feature. Excludes attempts to create
-      and upload the screenshot that may have failed.
-    expires: never
-    kind: uint
-    notification_emails:
-      - screenshots-dev@mozilla.org
-    release_channel_collection: opt-out
-    products:
-      - 'firefox'
-      - 'fennec'
-    record_in_processes:
-      - 'main'
-
-  copy:
-    bug_numbers:
-      - 1412411
-    description: >
-      The count of new screenshots created, then copied directly to the
-      clipboard per session via the Firefox Screenshots feature.
-    expires: never
-    kind: uint
-    notification_emails:
-      - screenshots-dev@mozilla.org
-    release_channel_collection: opt-out
-    products:
-      - 'firefox'
-      - 'fennec'
-    record_in_processes:
-      - 'main'
-
-  visible:
-    bug_numbers:
-      - 1722774
-    description: >
-      The count of new screenshots created using just the viewport,
-      no scrolling.
-    expires: never
-    kind: uint
-    notification_emails:
-      - screenshots-dev@mozilla.org
-    release_channel_collection: opt-out
-    products:
-      - 'firefox'
-      - 'fennec'
-    record_in_processes:
-      - 'main'
-
-  full_page:
-    bug_numbers:
-      - 1722774
-    description: >
-      The count of new screenshots created by capturing the full,
-      scrolled page.
-    expires: never
-    kind: uint
-    notification_emails:
-      - screenshots-dev@mozilla.org
-    release_channel_collection: opt-out
-    products:
-      - 'firefox'
-      - 'fennec'
-    record_in_processes:
-      - 'main'
-
-  custom:
-    bug_numbers:
-      - 1722774
-    description: >
-      The count of new screenshots created using the drag handles
-      to draw the box size and position.
-    expires: never
-    kind: uint
-    notification_emails:
-      - screenshots-dev@mozilla.org
-    release_channel_collection: opt-out
-    products:
-      - 'firefox'
-      - 'fennec'
-    record_in_processes:
-      - 'main'
-
-  element:
-    bug_numbers:
-      - 1722774
-    description: >
-      The count of new screenshots created using the highlighter
-      to select element bounds.
-    expires: never
-    kind: uint
-    notification_emails:
-      - screenshots-dev@mozilla.org
-    release_channel_collection: opt-out
-    products:
-      - 'firefox'
-      - 'fennec'
     record_in_processes:
       - 'main'
 
@@ -4772,34 +4514,6 @@ update:
       - 'thunderbird'
     record_in_processes:
       - main
-
-# The following section contains search counters.
-browser.search:
-  data_transferred:
-    bug_numbers:
-      - 1614777
-      - 1619954
-      - 1656135
-      - 1694852
-      - 1736658
-    description: >
-      Records bytes that have been transferred for search requests, including
-      top-level documents, sub-resources, iframes and search suggestions.
-      The key format could be one of:
-        <search-provider-name>
-        <search-provider-name>-pb
-        sggt-<search-engine-id>
-        sggt-<search-engine-id>-pb
-    expires: never
-    keyed: true
-    kind: uint
-    notification_emails:
-      - tihuang@mozilla.com
-    products:
-      - 'firefox'
-    record_in_processes:
-      - 'main'
-    release_channel_collection: opt-out
 
 browser.search.content:
   urlbar:
@@ -6121,31 +5835,6 @@ networking:
       - main
 
 blocklist:
-  lastModified_rs_addons_mlbf:
-    bug_numbers:
-      - 1633466
-      - 1649960
-      - 1689274
-      - 1730037
-      - 1763529
-      - 1811159
-      - 1861296
-      - 1912167
-    description: >
-      Keep track of the last time the "addons-bloomfilters" remotesetting blocklist has been successfully
-      updated (as a datetime string in UTC format), set to "Missing Date" when the timestamp
-      couldn't be retrieved.
-    expires: never
-    kind: string
-    release_channel_collection: opt-out
-    notification_emails:
-      - addons-dev-internal@mozilla.com
-      - rwu@mozilla.com
-    products:
-      - 'firefox'
-    record_in_processes:
-      - main
-
   mlbf_source:
     bug_numbers:
       - 1662857
@@ -6192,99 +5881,6 @@ blocklist:
       (e.g. because the latest version cannot be downloaded).
       "unknown" means that the bloomfilter cannot be loaded at all. This can happen if the blocklist is disabled
       via preferences or enterprise policies.
-    expires: never
-    kind: string
-    release_channel_collection: opt-out
-    notification_emails:
-      - addons-dev-internal@mozilla.com
-      - rwu@mozilla.com
-    products:
-      - 'firefox'
-    record_in_processes:
-      - main
-
-  mlbf_generation_time:
-    bug_numbers:
-      - 1633466
-      - 1649960
-      - 1689274
-      - 1730037
-      - 1763529
-      - 1811159
-      - 1861296
-      - 1912167
-    description: >
-      Keep track of the generation time of the addon blocklist's hard-blocks bloom filter. This marks the
-      point in time until which signed add-ons are recognized by the selected bloom filter from the
-      addons-bloomfilters collection.
-      The value is a datetime string in UTC format, or  "Missing Date" when unavailable.
-    expires: never
-    kind: string
-    release_channel_collection: opt-out
-    notification_emails:
-      - addons-dev-internal@mozilla.com
-      - rwu@mozilla.com
-    products:
-      - 'firefox'
-    record_in_processes:
-      - main
-
-  mlbf_softblocks_generation_time:
-    bug_numbers:
-      - 1917859
-    description: >
-      Keep track of the generation time of the addon blocklist's soft-blocks bloom filter. This marks the
-      point in time until which signed add-ons are recognized by the selected bloom filter from the
-      addons-bloomfilters collection.
-      The value is a datetime string in UTC format, or  "Missing Date" when unavailable.
-    expires: never
-    kind: string
-    release_channel_collection: opt-out
-    notification_emails:
-      - addons-dev-internal@mozilla.com
-      - rwu@mozilla.com
-    products:
-      - 'firefox'
-    record_in_processes:
-      - main
-
-  mlbf_stash_time_oldest:
-    bug_numbers:
-      - 1633466
-      - 1649960
-      - 1689274
-      - 1730037
-      - 1763529
-      - 1811159
-      - 1861296
-      - 1912167
-    description: >
-      Keep track of the timestamp of the oldest stash of the addons blocklist.
-      The value is a datetime string in UTC format, or "Missing Date" when unavailable.
-    expires: never
-    kind: string
-    release_channel_collection: opt-out
-    notification_emails:
-      - addons-dev-internal@mozilla.com
-      - rwu@mozilla.com
-    products:
-      - 'firefox'
-    record_in_processes:
-      - main
-
-  mlbf_stash_time_newest:
-    bug_numbers:
-      - 1633466
-      - 1649960
-      - 1689274
-      - 1730037
-      - 1763529
-      - 1811159
-      - 1861296
-      - 1912167
-    description: >
-      Keep track of the timestamp of the most recent stash of the addons blocklist.
-      The value is a datetime string in UTC format, or "Missing Date" when unavailable.
     expires: never
     kind: string
     release_channel_collection: opt-out
@@ -7765,23 +7361,6 @@ urlbar.zeroprefix:
       - main
 
 quickaction:
-  impression:
-    bug_numbers:
-      - 1806024
-    description: >
-      Counts how many times quickaction results were shown. The key
-      is the in the form "actionkey-N" where N is the number of characters
-      the user typed to be shown the action.
-    expires: never
-    kind: uint
-    keyed: true
-    notification_emails:
-      - fx-search-telemetry@mozilla.com
-    release_channel_collection: opt-out
-    products:
-      - 'firefox'
-    record_in_processes:
-      - main
   picked:
     bug_numbers:
       - 1783155
@@ -8339,6 +7918,23 @@ telemetry.test:
     products:
       - 'firefox'
       - 'fennec'
+      - 'thunderbird'
+    record_in_processes:
+      - 'main'
+      - 'content'
+
+  mirror_for_labeled_quantity:
+    bug_numbers:
+      - 1929979
+    description: A testing keyed uint scalar; not meant to be touched.
+    expires: never
+    kind: uint
+    keyed: true
+    notification_emails:
+      - telemetry-client-dev@mozilla.com
+    release_channel_collection: opt-out
+    products:
+      - 'firefox'
       - 'thunderbird'
     record_in_processes:
       - 'main'

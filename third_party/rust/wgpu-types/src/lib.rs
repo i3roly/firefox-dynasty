@@ -1,6 +1,6 @@
 //! This library describes the API surface of WebGPU that is agnostic of the backend.
 //! This API is used for targeting both Web and Native.
-#![feature(ptr_from_ref)]
+
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 #![allow(
     // We don't use syntax sugar where it's not necessary.
@@ -13,7 +13,6 @@ use serde::Deserialize;
 #[cfg(any(feature = "serde", test))]
 use serde::Serialize;
 use std::hash::{Hash, Hasher};
-use std::mem::size_of;
 use std::path::PathBuf;
 use std::{num::NonZeroU32, ops::Range};
 
@@ -568,7 +567,7 @@ bitflags::bitflags! {
         /// may also create uniform arrays of storage textures.
         ///
         /// ex.
-        /// - `var textures: array<texture_storage_2d<r32float, write>, 10>` (WGSL)
+        /// - `var textures: array<texture_storage_2d<f32, write>, 10>` (WGSL)
         /// - `uniform image2D textures[10]` (GLSL)
         ///
         /// This capability allows them to exist and to be indexed by dynamically uniform
@@ -1959,13 +1958,12 @@ impl TextureViewDimension {
 
 /// Alpha blend factor.
 ///
-/// Corresponds to [WebGPU `GPUBlendFactor`](
-/// https://gpuweb.github.io/gpuweb/#enumdef-gpublendfactor). Values using `Src1`
-/// require [`Features::DUAL_SOURCE_BLENDING`] and can only be used with the first
-/// render target.
+/// Alpha blending is very complicated: see the OpenGL or Vulkan spec for more information.
 ///
-/// For further details on how the blend factors are applied, see the analogous
-/// functionality in OpenGL: <https://www.khronos.org/opengl/wiki/Blending#Blending_Parameters>.
+/// Corresponds to [WebGPU `GPUBlendFactor`](
+/// https://gpuweb.github.io/gpuweb/#enumdef-gpublendfactor).
+/// Values using S1 requires [`Features::DUAL_SOURCE_BLENDING`] and can only be
+/// used with the first render target.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Hash, Eq, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -2025,11 +2023,10 @@ impl BlendFactor {
 
 /// Alpha blend operation.
 ///
+/// Alpha blending is very complicated: see the OpenGL or Vulkan spec for more information.
+///
 /// Corresponds to [WebGPU `GPUBlendOperation`](
 /// https://gpuweb.github.io/gpuweb/#enumdef-gpublendoperation).
-///
-/// For further details on how the blend operations are applied, see
-/// the analogous functionality in OpenGL: <https://www.khronos.org/opengl/wiki/Blending#Blend_Equations>.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default, Hash, Eq, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -2103,6 +2100,8 @@ impl Default for BlendComponent {
 
 /// Describe the blend state of a render pipeline,
 /// within [`ColorTargetState`].
+///
+/// See the OpenGL or Vulkan spec for more information.
 ///
 /// Corresponds to [WebGPU `GPUBlendState`](
 /// https://gpuweb.github.io/gpuweb/#dictdef-gpublendstate).
@@ -5547,18 +5546,8 @@ pub struct SurfaceConfiguration<V> {
     /// `Bgra8Unorm` and `Bgra8UnormSrgb`
     pub format: TextureFormat,
     /// Width of the swap chain. Must be the same size as the surface, and nonzero.
-    ///
-    /// If this is not the same size as the underlying surface (e.g. if it is
-    /// set once, and the window is later resized), the behaviour is defined
-    /// but platform-specific, and may change in the future (currently macOS
-    /// scales the surface, other platforms may do something else).
     pub width: u32,
     /// Height of the swap chain. Must be the same size as the surface, and nonzero.
-    ///
-    /// If this is not the same size as the underlying surface (e.g. if it is
-    /// set once, and the window is later resized), the behaviour is defined
-    /// but platform-specific, and may change in the future (currently macOS
-    /// scales the surface, other platforms may do something else).
     pub height: u32,
     /// Presentation mode of the swap chain. Fifo is the only mode guaranteed to be supported.
     /// FifoRelaxed, Immediate, and Mailbox will crash if unsupported, while AutoVsync and
@@ -6543,7 +6532,7 @@ pub enum StorageTextureAccess {
     /// Example WGSL syntax:
     /// ```rust,ignore
     /// @group(0) @binding(0)
-    /// var my_storage_image: texture_storage_2d<r32float, write>;
+    /// var my_storage_image: texture_storage_2d<f32, write>;
     /// ```
     ///
     /// Example GLSL syntax:
@@ -6560,7 +6549,7 @@ pub enum StorageTextureAccess {
     /// Example WGSL syntax:
     /// ```rust,ignore
     /// @group(0) @binding(0)
-    /// var my_storage_image: texture_storage_2d<r32float, read>;
+    /// var my_storage_image: texture_storage_2d<f32, read>;
     /// ```
     ///
     /// Example GLSL syntax:
@@ -6577,7 +6566,7 @@ pub enum StorageTextureAccess {
     /// Example WGSL syntax:
     /// ```rust,ignore
     /// @group(0) @binding(0)
-    /// var my_storage_image: texture_storage_2d<r32float, read_write>;
+    /// var my_storage_image: texture_storage_2d<f32, read_write>;
     /// ```
     ///
     /// Example GLSL syntax:
@@ -6701,8 +6690,8 @@ pub enum BindingType {
         /// Dimension of the texture view that is going to be sampled.
         view_dimension: TextureViewDimension,
         /// True if the texture has a sample count greater than 1. If this is true,
-        /// the texture must be declared as `texture_multisampled_2d` or
-        /// `texture_depth_multisampled_2d` in the shader, and read using `textureLoad`.
+        /// the texture must be read from shaders with `texture1DMS`, `texture2DMS`, or `texture3DMS`,
+        /// depending on `dimension`.
         multisampled: bool,
     },
     /// A storage texture.
@@ -6710,16 +6699,15 @@ pub enum BindingType {
     /// Example WGSL syntax:
     /// ```rust,ignore
     /// @group(0) @binding(0)
-    /// var my_storage_image: texture_storage_2d<r32float, write>;
+    /// var my_storage_image: texture_storage_2d<f32, write>;
     /// ```
     ///
     /// Example GLSL syntax:
     /// ```cpp,ignore
     /// layout(set=0, binding=0, r32f) writeonly uniform image2D myStorageImage;
     /// ```
-    /// Note that the texture format must be specified in the shader, along with the
-    /// access mode. For WGSL, the format must be one of the enumerants in the list
-    /// of [storage texel formats](https://gpuweb.github.io/gpuweb/wgsl/#storage-texel-formats).
+    /// Note that the texture format must be specified in the shader as well.
+    /// A list of valid formats can be found in the specification here: <https://www.khronos.org/registry/OpenGL/specs/gl/GLSLangSpec.4.60.html#layout-qualifiers>
     ///
     /// Corresponds to [WebGPU `GPUStorageTextureBindingLayout`](
     /// https://gpuweb.github.io/gpuweb/#dictdef-gpustoragetexturebindinglayout).
@@ -6986,7 +6974,7 @@ pub struct ImageCopyTextureTagged<T> {
     pub premultiplied_alpha: bool,
 }
 
-impl<T: Copy> ImageCopyTextureTagged<T> {
+impl<T> ImageCopyTextureTagged<T> {
     /// Removes the colorspace information from the type.
     pub fn to_untagged(self) -> ImageCopyTexture<T> {
         ImageCopyTexture {
@@ -7239,8 +7227,8 @@ impl DrawIndirectArgs {
     pub fn as_bytes(&self) -> &[u8] {
         unsafe {
             std::mem::transmute(std::slice::from_raw_parts(
-                std::ptr::from_ref(self).cast::<u8>(),
-                size_of::<Self>(),
+                self as *const _ as *const u8, 
+                std::mem::size_of::<Self>(),
             ))
         }
     }
@@ -7270,8 +7258,8 @@ impl DrawIndexedIndirectArgs {
     pub fn as_bytes(&self) -> &[u8] {
         unsafe {
             std::mem::transmute(std::slice::from_raw_parts(
-                std::ptr::from_ref(self).cast::<u8>(),
-                size_of::<Self>(),
+                self as *const _ as *const u8,
+                std::mem::size_of::<Self>(),
             ))
         }
     }
@@ -7295,8 +7283,8 @@ impl DispatchIndirectArgs {
     pub fn as_bytes(&self) -> &[u8] {
         unsafe {
             std::mem::transmute(std::slice::from_raw_parts(
-                std::ptr::from_ref(self).cast::<u8>(),
-                size_of::<Self>(),
+               self as *const _ as *const u8, 
+                std::mem::size_of::<Self>(),
             ))
         }
     }
@@ -7321,15 +7309,8 @@ impl ShaderBoundChecks {
     /// Creates a new configuration where the shader isn't bound checked.
     ///
     /// # Safety
-    ///
-    /// The caller MUST ensure that all shaders built with this configuration
-    /// don't perform any out of bounds reads or writes.
-    ///
-    /// Note that `wgpu_core`, in particular, initializes only those portions of
-    /// buffers that it expects might be read, and it does not expect contents
-    /// outside the ranges bound in bindgroups to be accessible, so using this
-    /// configuration with ill-behaved shaders could expose uninitialized GPU
-    /// memory contents to the application.
+    /// The caller MUST ensure that all shaders built with this configuration don't perform any
+    /// out of bounds reads or writes.
     #[must_use]
     pub unsafe fn unchecked() -> Self {
         ShaderBoundChecks {
@@ -7352,6 +7333,10 @@ impl Default for ShaderBoundChecks {
 
 /// Selects which DX12 shader compiler to use.
 ///
+/// If the `wgpu-hal/dx12-shader-compiler` feature isn't enabled then this will fall back
+/// to the Fxc compiler at runtime and log an error.
+/// This feature is always enabled when using `wgpu`.
+///
 /// If the `Dxc` option is selected, but `dxcompiler.dll` and `dxil.dll` files aren't found,
 /// then this will fall back to the Fxc compiler at runtime and log an error.
 ///
@@ -7368,10 +7353,6 @@ pub enum Dx12Compiler {
     ///
     /// However, it requires both `dxcompiler.dll` and `dxil.dll` to be shipped with the application.
     /// These files can be downloaded from <https://github.com/microsoft/DirectXShaderCompiler/releases>.
-    ///
-    /// Minimum supported version: [v1.5.2010](https://github.com/microsoft/DirectXShaderCompiler/releases/tag/v1.5.2010)
-    ///
-    /// It also requires WDDM 2.1 (Windows 10 version 1607).
     Dxc {
         /// Path to the `dxil.dll` file, or path to the directory containing `dxil.dll` file. Passing `None` will use standard platform specific dll loading rules.
         dxil_path: Option<PathBuf>,
@@ -7551,4 +7532,10 @@ pub enum DeviceLostReason {
     /// exactly once before it is dropped, which helps with managing the
     /// memory owned by the callback.
     ReplacedCallback = 3,
+    /// When setting the callback, but the device is already invalid
+    ///
+    /// As above, when the callback is provided, wgpu guarantees that it
+    /// will eventually be called. If the device is already invalid, wgpu
+    /// will call the callback immediately, with this reason.
+    DeviceInvalid = 4,
 }

@@ -10,12 +10,14 @@
   class MozTabbrowserTabGroup extends MozXULElement {
     static markup = `
       <vbox class="tab-group-label-container" pack="center">
-        <label class="tab-group-label"/>
+        <label class="tab-group-label" role="button"/>
       </vbox>
       <html:slot/>
       `;
 
+    /** @type {MozTextLabel} */
     #labelElement;
+
     #colorCode;
 
     constructor() {
@@ -41,6 +43,9 @@
 
       this.#labelElement = this.querySelector(".tab-group-label");
       this.#labelElement.addEventListener("click", this);
+
+      this.#updateLabelAriaAttributes(this.label);
+      this.#updateCollapsedAriaAttributes(this.collapsed);
 
       this.createdDate = Date.now();
 
@@ -69,7 +74,7 @@
         }
         if (!this.tabs.length) {
           this.dispatchEvent(
-            new CustomEvent("TabGroupRemove", { bubbles: true })
+            new CustomEvent("TabGroupRemoved", { bubbles: true })
           );
           this.remove();
         }
@@ -121,6 +126,7 @@
 
     set label(val) {
       this.setAttribute("label", val);
+      this.#updateLabelAriaAttributes(val);
     }
 
     get collapsed() {
@@ -132,12 +138,38 @@
         return;
       }
       this.toggleAttribute("collapsed", val);
+      this.#updateCollapsedAriaAttributes(val);
       const eventName = val ? "TabGroupCollapse" : "TabGroupExpand";
       this.dispatchEvent(new CustomEvent(eventName, { bubbles: true }));
     }
 
+    /**
+     * @param {string} label
+     */
+    #updateLabelAriaAttributes(label) {
+      const ariaLabel = label == "" ? "unnamed" : label;
+      const ariaDescription = `${ariaLabel} tab group`;
+      this.#labelElement?.setAttribute("aria-label", ariaLabel);
+      this.#labelElement?.setAttribute("aria-description", ariaDescription);
+    }
+
+    /**
+     * @param {boolean} collapsed
+     */
+    #updateCollapsedAriaAttributes(collapsed) {
+      const ariaExpanded = collapsed ? "false" : "true";
+      this.#labelElement?.setAttribute("aria-expanded", ariaExpanded);
+    }
+
     get tabs() {
       return Array.from(this.children).filter(node => node.matches("tab"));
+    }
+
+    /**
+     * @returns {MozTextLabel}
+     */
+    get labelElement() {
+      return this.#labelElement;
     }
 
     /**
@@ -147,7 +179,15 @@
      */
     addTabs(tabs) {
       for (let tab of tabs) {
-        gBrowser.moveTabToGroup(tab, this);
+        let tabToMove =
+          this.ownerGlobal === tab.ownerGlobal
+            ? tab
+            : gBrowser.adoptTab(
+                tab,
+                gBrowser.tabs.at(-1)._tPos + 1,
+                tab.selected
+              );
+        gBrowser.moveTabToGroup(tabToMove, this);
       }
     }
 
@@ -156,11 +196,21 @@
      *
      */
     ungroupTabs() {
-      for (let tab of this.tabs) {
-        gBrowser.ungroupTab(tab);
+      for (let i = this.tabs.length - 1; i >= 0; i--) {
+        gBrowser.ungroupTab(this.tabs[i]);
       }
     }
 
+    /**
+     * Save group data to session store.
+     */
+    save() {
+      SessionStore.addSavedTabGroup(this);
+    }
+
+    /**
+     * @param {PointerEvent} event
+     */
     on_click(event) {
       if (event.target === this.#labelElement && event.button === 0) {
         event.preventDefault();

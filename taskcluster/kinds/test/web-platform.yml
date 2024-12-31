@@ -76,6 +76,7 @@ web-platform-tests:
             geckoview-no-fission-ship:
                 by-test-platform:
                     android-em-7.0-x86_64-qr/debug-isolated-process: []
+                    android-em.*: built-projects
                     default: []
             no-fission:
                 by-test-platform:
@@ -300,10 +301,10 @@ web-platform-tests-webgpu:
     # 50% overhead, so let's aim for 15m (20m debug)
     chunks:
         by-test-platform:
-            linux2204.*/debug.*: 14
-            linux2204.*: 12
-            windows.*-64.*/opt.*: 6
-            default: 5
+            linux2204.*/debug.*: 17
+            linux2204.*: 15
+            windows.*-64.*/opt.*: 10
+            default: 10
     max-run-time:
         by-test-platform:
             .*/debug.*: 2700  # 45m
@@ -366,10 +367,10 @@ web-platform-tests-webgpu-backlog:
     # 50% overhead, so let's aim for 15m (20m debug)
     chunks:
         by-test-platform:
-            linux2204.*-64.*: 15
-            macos.*: 20
-            windows.*-64.*/opt.*: 15
-            windows.*-64.*/debug.*: 20
+            linux2204.*-64.*: 20
+            macos.*: 25
+            windows.*-64.*/opt.*: 17
+            windows.*-64.*/debug.*: 22
             default: 10
     max-run-time:
         by-test-platform:
@@ -406,8 +407,8 @@ web-platform-tests-webgpu-backlog-long:
     tier: 3
     chunks:
         by-test-platform:
-            windows.*-64.*: 3
-            default: 2
+            windows.*-64.*: 5
+            default: 4
     max-run-time: 5400  # 90m
     variants: []  # We don't need sw or nofis testing.
     run-on-projects:
@@ -533,6 +534,7 @@ web-platform-tests-wdspec:
                     - --test-type=wdspec
     variants:
         - no-fission
+        - geckoview-no-fission-ship
         - headless
         - async-event-dispatching
     run-on-projects:
@@ -540,7 +542,6 @@ web-platform-tests-wdspec:
             headless:
                 by-test-platform:
                     android.*: []
-                    .*wayland.*: []
                     default: built-projects
             no-fission:
                 by-test-platform:
@@ -548,16 +549,17 @@ web-platform-tests-wdspec:
                     linux1804-64(-shippable|-asan)?-qr/opt: ['mozilla-central']
                     android.*: built-projects
                     default: []
+            geckoview-no-fission-ship:
+                by-test-platform:
+                    android-em-7.0-x86_64-qr/debug-isolated-process: []
+                    android-em.*: built-projects
+                    default: []
             async-event-dispatching:
                 by-test-platform:
-                    .*wayland.*: []
                     .*-32.*/.*: []
                     .*/debug: built-projects
                     default: []
-            default:
-                by-test-platform:
-                    .*wayland.*: []
-                    default: built-projects
+            default: built-projects
     tier:
         by-variant:
             no-fission:

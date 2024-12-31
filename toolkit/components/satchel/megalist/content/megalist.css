@@ -285,6 +285,10 @@ password-card,
   flex-direction: column;
 }
 
+login-form {
+  margin-block-start: var(--space-small);
+}
+
 .edit-button {
   justify-self: end;
 }
@@ -333,6 +337,7 @@ password-card,
   display: flex;
   justify-content: space-between;
   align-items: center;
+  margin-block-end: var(--space-small);
 }
 
 .selected::part(button) {

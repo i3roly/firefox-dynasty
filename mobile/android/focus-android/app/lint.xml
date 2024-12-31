@@ -26,12 +26,18 @@
     <issue id="IncorrectStraightDoubleQuote" severity="error">
         <ignore path="**/values-*/strings.xml" />
     </issue>
+    <issue id="Typos" severity="error">
+        <ignore path="**/values-*/strings.xml" />
+    </issue>
 
     <!-- Ignore support library lint bug: https://code.google.com/p/android/issues/detail?id=227098
          (Present in 25.3.1, despite claims of being fixed in 23) -->
     <issue id="InconsistentLayout">
         <ignore path="**/appcompat-v7/**/res/layout/notification_template_custom_big.xml"/>
     </issue>
+
+    <!-- Ignore due to baseline bloat and lack of actionability -->
+    <issue id="VectorPath" severity="ignore" />
 
     <issue id="InvalidPackage">
         <!-- Sentry: it uses one SDK for desktop apps and Android apps so I assume it's

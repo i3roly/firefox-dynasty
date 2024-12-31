@@ -532,9 +532,8 @@ CoderResult CodePackedTypeCode(Coder<mode>& coder,
   }
 }
 
-template <CoderMode mode>
-CoderResult CodeTypeDefRef(Coder<mode>& coder,
-                           CoderArg<mode, const TypeDef*> item) {
+template <CoderMode mode, typename T>
+CoderResult CodeTypeDefRef_Impl(Coder<mode>& coder, CoderArg<mode, T> item) {
   static constexpr uint32_t NullTypeIndex = UINT32_MAX;
   static_assert(NullTypeIndex > MaxTypes, "invariant");
 
@@ -551,6 +550,18 @@ CoderResult CodeTypeDefRef(Coder<mode>& coder,
     uint32_t typeIndex = !*item ? NullTypeIndex : coder.types_->indexOf(**item);
     return CodePod(coder, &typeIndex);
   }
+}
+
+template <CoderMode mode>
+CoderResult CodeTypeDefRef(Coder<mode>& coder,
+                           CoderArg<mode, const TypeDef*> item) {
+  return CodeTypeDefRef_Impl<mode, const TypeDef*>(coder, item);
+}
+
+template <CoderMode mode>
+CoderResult CodeTypeDefRef(Coder<mode>& coder,
+                           CoderArg<mode, SharedTypeDef> item) {
+  return CodeTypeDefRef_Impl<mode, SharedTypeDef>(coder, item);
 }
 
 template <CoderMode mode>
@@ -829,20 +840,16 @@ CoderResult CodeGlobalDesc(Coder<mode>& coder,
 
 template <CoderMode mode>
 CoderResult CodeTagType(Coder<mode>& coder, CoderArg<mode, TagType> item) {
-  WASM_VERIFY_SERIALIZATION_FOR_SIZE(wasm::TagType, 232);
+  WASM_VERIFY_SERIALIZATION_FOR_SIZE(wasm::TagType, 72);
   // We skip serializing/deserializing the size and argOffsets fields because
   // those are computed from the argTypes field when we deserialize.
+  MOZ_TRY(CodeTypeDefRef(coder, &item->type_));
   if constexpr (mode == MODE_DECODE) {
-    ValTypeVector argTypes;
-    MOZ_TRY((CodeVector<MODE_DECODE, ValType, &CodeValType<MODE_DECODE>>(
-        coder, &argTypes)));
-    if (!item->initialize(std::move(argTypes))) {
+    if (!item->initialize(item->type_)) {
       return Err(OutOfMemory());
     }
-  } else {
-    MOZ_TRY((CodeVector<mode, ValType, &CodeValType<mode>>(coder,
-                                                           &item->argTypes())));
   }
+
   return Ok();
 }
 
@@ -1159,7 +1166,7 @@ CoderResult CodeCodeMetadata(Coder<mode>& coder,
   // NOTE: keep the field sequence here in sync with the sequence in the
   // declaration of CodeMetadata.
 
-  WASM_VERIFY_SERIALIZATION_FOR_SIZE(wasm::CodeMetadata, 1120);
+  WASM_VERIFY_SERIALIZATION_FOR_SIZE(wasm::CodeMetadata, 1136);
   // Serialization doesn't handle asm.js or debug enabled modules
   MOZ_RELEASE_ASSERT(mode == MODE_SIZE || !item->isAsmJS());
 
@@ -1201,7 +1208,12 @@ CoderResult CodeCodeMetadata(Coder<mode>& coder,
 
   MOZ_TRY(CodePodVector(coder, &item->customSectionRanges));
 
-  MOZ_TRY((CodeMaybe<mode, SectionRange, &CodePod>(coder, &item->codeSection)));
+  MOZ_TRY((CodeMaybe<mode, BytecodeRange, &CodePod>(coder,
+                                                    &item->codeSectionRange)));
+  MOZ_TRY((CodeNullablePtr<
+           mode, SharedBytes,
+           &CodeRefPtr<mode, const ShareableBytes, CodeShareableBytes>>(
+      coder, &item->codeSectionBytecode)));
 
   MOZ_TRY((CodeMaybe<mode, uint32_t, &CodePod>(coder,
                                                &item->nameCustomSectionIndex)));
@@ -1215,10 +1227,6 @@ CoderResult CodeCodeMetadata(Coder<mode>& coder,
   MOZ_TRY(CodePodVector(coder, &item->funcDefRanges));
   MOZ_TRY(CodePodVector(coder, &item->funcDefFeatureUsages));
   MOZ_TRY(CodePodVector(coder, &item->funcDefCallRefs));
-  MOZ_TRY((CodeNullablePtr<
-           mode, SharedBytes,
-           &CodeRefPtr<mode, const ShareableBytes, CodeShareableBytes>>(
-      coder, &item->bytecode)));
 
   // Serialize stats, taking care not to be holding the lock when the actual
   // serialization/deserialization happens.
@@ -1364,7 +1372,7 @@ CoderResult CodeCodeBlock(Coder<mode>& coder,
 
 CoderResult CodeSharedCode(Coder<MODE_DECODE>& coder, wasm::SharedCode* item,
                            const wasm::CodeMetadata& codeMeta) {
-  WASM_VERIFY_SERIALIZATION_FOR_SIZE(wasm::Code, 816);
+  WASM_VERIFY_SERIALIZATION_FOR_SIZE(wasm::Code, 808);
 
   FuncImportVector funcImports;
   MOZ_TRY(CodePodVector(coder, &funcImports));
@@ -1407,7 +1415,7 @@ CoderResult CodeSharedCode(Coder<MODE_DECODE>& coder, wasm::SharedCode* item,
 template <CoderMode mode>
 CoderResult CodeSharedCode(Coder<mode>& coder,
                            CoderArg<mode, wasm::SharedCode> item) {
-  WASM_VERIFY_SERIALIZATION_FOR_SIZE(wasm::Code, 816);
+  WASM_VERIFY_SERIALIZATION_FOR_SIZE(wasm::Code, 808);
   STATIC_ASSERT_ENCODING_OR_SIZING;
   // Don't encode the CodeMetadata, that is handled by wasm::Module
   MOZ_TRY(CodePodVector(coder, &(*item)->funcImports()));
@@ -1487,6 +1495,7 @@ bool Module::canSerialize() const {
   // TODO(bug 1903131): JS string builtins don't support serialization
   // TODO(bug 1913109): lazy tiering doesn't support serialization
   return code_->mode() != CompileMode::LazyTiering &&
+         !codeMeta().isBuiltinModule() &&
          codeMeta().features().builtinModules.hasNone() &&
          !codeMeta().debugEnabled;
 }

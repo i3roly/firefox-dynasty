@@ -13,7 +13,7 @@ const PSSVC = Cc["@mozilla.org/gfx/printsettings-service;1"].getService(
 let mockCA = makeMockContentAnalysis();
 
 add_setup(async function test_setup() {
-  mockCA = mockContentAnalysisService(mockCA);
+  mockCA = await mockContentAnalysisService(mockCA);
 });
 
 let testPDFUrl;
@@ -233,6 +233,33 @@ add_task(
       testPDFUrl,
       true
     );
+  }
+);
+
+add_task(
+  async function testPrintThroughDialogWithContentAnalysisActiveAndBlockingButPrefOff() {
+    await SpecialPowers.pushPrefEnv({
+      set: [
+        ["browser.contentanalysis.interception_point.print.enabled", false],
+      ],
+    });
+    await PrintHelper.withTestPage(
+      async helper => {
+        mockCA.setupForTest(false);
+
+        await helper.startPrint();
+        let fileName = addUniqueSuffix(`printDialogTest`);
+        let file = helper.mockFilePicker(fileName);
+        info(`Printing to ${file.path}`);
+        await helper.assertPrintToFile(file, () => {
+          EventUtils.sendKey("return", helper.win);
+        });
+        is(mockCA.calls.length, 0, "Should be no calls to Content Analysis");
+      },
+      testPDFUrl,
+      true
+    );
+    await SpecialPowers.popPrefEnv();
   }
 );
 

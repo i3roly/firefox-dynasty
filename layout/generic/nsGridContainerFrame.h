@@ -10,6 +10,7 @@
 #define nsGridContainerFrame_h___
 
 #include "mozilla/CSSOrderAwareFrameIterator.h"
+#include "mozilla/IntrinsicISizesCache.h"
 #include "mozilla/MathAlgorithms.h"
 #include "mozilla/Maybe.h"
 #include "mozilla/HashTable.h"
@@ -149,8 +150,6 @@ class nsGridContainerFrame final : public nsContainerFrame,
                     const nsLineList::iterator* aPrevFrameLine,
                     nsFrameList&& aFrameList) override;
   void RemoveFrame(DestroyContext&, ChildListID, nsIFrame*) override;
-  mozilla::StyleAlignFlags CSSAlignmentForAbsPosChild(
-      const ReflowInput& aChildRI, LogicalAxis aLogicalAxis) const override;
 
 #ifdef DEBUG
   void SetInitialChildList(ChildListID aListID,
@@ -335,9 +334,7 @@ class nsGridContainerFrame final : public nsContainerFrame,
       mozilla::PresShell* aPresShell, ComputedStyle* aStyle);
   explicit nsGridContainerFrame(ComputedStyle* aStyle,
                                 nsPresContext* aPresContext)
-      : nsContainerFrame(aStyle, aPresContext, kClassID),
-        mCachedMinISize(NS_INTRINSIC_ISIZE_UNKNOWN),
-        mCachedPrefISize(NS_INTRINSIC_ISIZE_UNKNOWN) {
+      : nsContainerFrame(aStyle, aPresContext, kClassID) {
     for (auto& perAxisBaseline : mBaseline) {
       for (auto& baseline : perAxisBaseline) {
         baseline = NS_INTRINSIC_ISIZE_UNKNOWN;
@@ -534,11 +531,7 @@ class nsGridContainerFrame final : public nsContainerFrame,
   void AddImplicitNamedAreasInternal(LineNameList& aNameList,
                                      ImplicitNamedAreas*& aAreas);
 
-  /**
-   * Cached values to optimize IntrinsicISize().
-   */
-  nscoord mCachedMinISize;
-  nscoord mCachedPrefISize;
+  mozilla::IntrinsicISizesCache mCachedIntrinsicSizes;
 
   // Our baselines, one per BaselineSharingGroup per axis.
   PerLogicalAxis<PerBaseline<nscoord>> mBaseline;

@@ -44,6 +44,8 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
@@ -805,7 +807,11 @@ private fun ListItem(
                     color = if (enabled) descriptionTextColor else FirefoxTheme.colors.textDisabled,
                     overflow = TextOverflow.Ellipsis,
                     maxLines = maxDescriptionLines,
-                    style = FirefoxTheme.typography.body2,
+                    // Bug 1915867 - We must force the text direction to correctly truncate a LTR description that is
+                    // too long when the app in RTL mode - at least until this bug gets fixed in Compose. This isn't
+                    // the most optional solution but it should have less side-effects than forcing no letter spacing
+                    // (which would be the best approach here).
+                    style = FirefoxTheme.typography.body2.merge(TextStyle(textDirection = TextDirection.Content)),
                 )
             }
         }
@@ -981,7 +987,7 @@ private fun ImageListItemPreview() {
         Column(Modifier.background(FirefoxTheme.colors.layer1)) {
             ImageListItem(
                 label = "label",
-                iconPainter = painterResource(R.drawable.googleg_standard_color_18),
+                iconPainter = painterResource(R.drawable.mozac_ic_web_extension_default_icon),
                 enabled = true,
                 onClick = {},
                 afterListAction = {

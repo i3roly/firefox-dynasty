@@ -6,7 +6,7 @@ use euclid::{SideOffsets2D, Angle};
 use peek_poke::PeekPoke;
 use std::ops::Not;
 // local imports
-use crate::font;
+use crate::{font, SnapshotImageKey};
 use crate::{APZScrollGeneration, HasScrollLinkedEffect, PipelineId, PropertyBinding};
 use crate::serde::{Serialize, Deserialize};
 use crate::color::ColorF;
@@ -877,9 +877,16 @@ pub struct ReferenceFrame {
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Serialize, PeekPoke)]
+pub struct SnapshotInfo {
+    pub key: SnapshotImageKey,
+    pub area: LayoutRect,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Serialize, PeekPoke)]
 pub struct PushStackingContextDisplayItem {
     pub origin: LayoutPoint,
     pub spatial_id: SpatialId,
+    pub snapshot: Option<SnapshotInfo>,
     pub prim_flags: PrimitiveFlags,
     pub ref_frame_offset: LayoutVector2D,
     pub stacking_context: StackingContext,
@@ -1077,10 +1084,10 @@ pub struct FloodPrimitive {
 
 impl FloodPrimitive {
     pub fn sanitize(&mut self) {
-        self.color.r = self.color.r.min(1.0).max(0.0);
-        self.color.g = self.color.g.min(1.0).max(0.0);
-        self.color.b = self.color.b.min(1.0).max(0.0);
-        self.color.a = self.color.a.min(1.0).max(0.0);
+        self.color.r = self.color.r.clamp(0.0, 1.0);
+        self.color.g = self.color.g.clamp(0.0, 1.0);
+        self.color.b = self.color.b.clamp(0.0, 1.0);
+        self.color.a = self.color.a.clamp(0.0, 1.0);
     }
 }
 
@@ -1101,7 +1108,7 @@ pub struct OpacityPrimitive {
 
 impl OpacityPrimitive {
     pub fn sanitize(&mut self) {
-        self.opacity = self.opacity.min(1.0).max(0.0);
+        self.opacity = self.opacity.clamp(0.0, 1.0);
     }
 }
 

@@ -360,6 +360,14 @@ impl<'a> ErrorHelpers<'a> for ContextualParseError<'a> {
                             _ => None,
                         }
                     },
+                    ParseErrorKind::Custom(
+                        StyleParseErrorKind::PropertySyntaxField(_) |
+                        StyleParseErrorKind::PropertyInheritsField(_),
+                    ) => {
+                        // Keeps PEBadSelectorRSIgnored from being reported when a syntax descriptor
+                        // error or inherits descriptor error was already reported.
+                        return (None, cstr!(""), Action::Nothing);
+                    },
                     _ => None,
                 };
                 return (prefix, cstr!("PEBadSelectorRSIgnored"), Action::Nothing);
@@ -406,6 +414,9 @@ impl<'a> ErrorHelpers<'a> for ContextualParseError<'a> {
                     )) => (cstr!("PEColorNotColor"), Action::Nothing),
                     ParseErrorKind::Custom(StyleParseErrorKind::PropertySyntaxField(ref kind)) => {
                         let name = match kind {
+                            PropertySyntaxParseError::NoSyntax => {
+                                cstr!("PEPRSyntaxFieldMissing")
+                            },
                             PropertySyntaxParseError::EmptyInput => {
                                 cstr!("PEPRSyntaxFieldEmptyInput")
                             },
@@ -426,6 +437,19 @@ impl<'a> ErrorHelpers<'a> for ContextualParseError<'a> {
                             },
                             PropertySyntaxParseError::UnknownDataTypeName => {
                                 cstr!("PEPRSyntaxFieldUnknownDataTypeName")
+                            },
+                        };
+                        (name, Action::Nothing)
+                    },
+                    ParseErrorKind::Custom(StyleParseErrorKind::PropertyInheritsField(
+                        ref kind,
+                    )) => {
+                        let name = match kind {
+                            style_traits::PropertyInheritsParseError::NoInherits => {
+                                cstr!("PEPRInheritsFieldMissing")
+                            },
+                            style_traits::PropertyInheritsParseError::InvalidInherits => {
+                                cstr!("PEPRInheritsFieldInvalid")
                             },
                         };
                         (name, Action::Nothing)

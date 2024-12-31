@@ -52,12 +52,12 @@ void nsHtml5Highlighter::Rewind() {
   mCurrentRun = nullptr;
   mAmpersand = nullptr;
   mSlash = nullptr;
-  // Pop until we have three elements on the stack:
-  // html, body, and pre.
-  while (mStack.Length() > 3) {
+  mSeenBase = false;
+
+  // Pop until we have two elements on the stack: html and body.
+  while (mStack.Length() > 2) {
     Pop();
   }
-  mSeenBase = false;
 }
 
 void nsHtml5Highlighter::Start(const nsAutoString& aTitle) {
@@ -103,14 +103,8 @@ void nsHtml5Highlighter::Start(const nsAutoString& aTitle) {
   Push(nsGkAtoms::body, nsHtml5ViewSourceUtils::NewBodyAttributes(),
        NS_NewHTMLBodyElement);
 
-  nsHtml5HtmlAttributes* preAttrs = new nsHtml5HtmlAttributes(0);
-  nsHtml5String preId = nsHtml5Portability::newStringFromLiteral("line1");
-  preAttrs->addAttribute(nsHtml5AttributeName::ATTR_ID, preId, -1);
-  Push(nsGkAtoms::pre, preAttrs, NS_NewHTMLPreElement);
-
-  // Don't call StartCharacters here in order to be able to put it in
-  // a speculation.
-
+  // Don't call StartBodyContents here in order to be able to put it in a
+  // speculation.
   mOpQueue.AppendElement()->Init(mozilla::AsVariant(opStartLayout()));
 }
 
@@ -504,6 +498,12 @@ void nsHtml5Highlighter::EndSpanOrA() {
   --mInlinesOpen;
 }
 
+void nsHtml5Highlighter::StartBodyContents() {
+  MOZ_ASSERT(mLineNumber == 1);
+  PushCurrentLineContainer();
+  StartCharacters();
+}
+
 void nsHtml5Highlighter::StartCharacters() {
   MOZ_ASSERT(!mInCharacters, "Already in characters!");
   FlushChars();
@@ -561,13 +561,7 @@ void nsHtml5Highlighter::FlushChars() {
             AppendCharacters(buf, mCStart, len);
             mCStart = i;
           }
-          ++mLineNumber;
-          Push(nsGkAtoms::span, nullptr, NS_NewHTMLSpanElement);
-          nsHtml5TreeOperation* treeOp = mOpQueue.AppendElement();
-          NS_ASSERTION(treeOp, "Tree op allocation failed.");
-          opAddLineNumberId operation(CurrentNode(), mLineNumber);
-          treeOp->Init(mozilla::AsVariant(operation));
-          Pop();
+          NewLine();
           break;
         }
         default:
@@ -580,6 +574,43 @@ void nsHtml5Highlighter::FlushChars() {
       AppendCharacters(buf, mCStart, len);
       mCStart = mPos;
     }
+  }
+}
+
+void nsHtml5Highlighter::PushCurrentLineContainer() {
+  Push(nsGkAtoms::span, nullptr, NS_NewHTMLSpanElement);
+  mOpQueue.AppendElement()->Init(
+      mozilla::AsVariant(opAddLineNumberId(CurrentNode(), mLineNumber)));
+}
+
+// NOTE(emilio): It's important that nothing here ends up calling FlushChars(),
+// since we're in the middle of a flush.
+void nsHtml5Highlighter::NewLine() {
+  ++mLineNumber;
+  AutoTArray<nsIContent**, 8> handleStack;
+  const bool wasInCharacters = mInCharacters;
+  if (mInCharacters) {
+    Pop();
+    mInCharacters = false;
+  }
+  while (mInlinesOpen) {
+    handleStack.AppendElement(CurrentNode());
+    Pop();
+    mInlinesOpen--;
+  }
+  Pop();  // Pop the existing container.
+  PushCurrentLineContainer();
+  for (nsIContent** handle : Reversed(handleStack)) {
+    nsIContent** dest = AllocateContentHandle();
+    mOpQueue.AppendElement()->Init(mozilla::AsVariant(opShallowCloneInto(
+        handle, dest, CurrentNode(), mozilla::dom::FROM_PARSER_NETWORK)));
+    mStack.AppendElement(dest);
+    ++mInlinesOpen;
+  }
+  if (wasInCharacters) {
+    Push(nsGkAtoms::span, nullptr, NS_NewHTMLSpanElement);
+    mCurrentRun = CurrentNode();
+    mInCharacters = true;
   }
 }
 
@@ -651,14 +682,14 @@ nsIContent** nsHtml5Highlighter::CreateElement(
 }
 
 nsIContent** nsHtml5Highlighter::CurrentNode() {
-  MOZ_ASSERT(mStack.Length() >= 1, "Must have something on stack.");
-  return mStack[mStack.Length() - 1];
+  MOZ_ASSERT(!mStack.IsEmpty(), "Must have something on stack.");
+  return mStack.LastElement();
 }
 
 void nsHtml5Highlighter::Push(
     nsAtom* aName, nsHtml5HtmlAttributes* aAttributes,
     mozilla::dom::HTMLContentCreatorFunction aCreator) {
-  MOZ_ASSERT(mStack.Length() >= 1, "Pushing without root.");
+  MOZ_ASSERT(!mStack.IsEmpty(), "Pushing without root.");
   nsIContent** elt = CreateElement(aName, aAttributes, CurrentNode(),
                                    aCreator);  // Don't inline below!
   opAppend operation(elt, CurrentNode(), mozilla::dom::FROM_PARSER_NETWORK);

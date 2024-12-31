@@ -25,7 +25,6 @@ ChromeUtils.defineESModuleGetters(lazy, {
   UpdateLog: "resource://gre/modules/UpdateLog.sys.mjs",
   UpdateUtils: "resource://gre/modules/UpdateUtils.sys.mjs",
   WindowsRegistry: "resource://gre/modules/WindowsRegistry.sys.mjs",
-  ctypes: "resource://gre/modules/ctypes.sys.mjs",
   setTimeout: "resource://gre/modules/Timer.sys.mjs",
 });
 
@@ -53,6 +52,12 @@ XPCOMUtils.defineLazyServiceGetter(
   "@mozilla.org/updates/update-service-stub;1",
   "nsIApplicationUpdateServiceStub"
 );
+XPCOMUtils.defineLazyServiceGetter(
+  lazy,
+  "UpdateMutex",
+  "@mozilla.org/updates/update-mutex;1",
+  "nsIUpdateMutex"
+);
 
 const UPDATESERVICE_CID = Components.ID(
   "{B3C290A6-3943-4B89-8BBE-C01EB7B3B311}"
@@ -61,6 +66,8 @@ const UPDATESERVICE_CID = Components.ID(
 const PREF_APP_UPDATE_ALTUPDATEDIRPATH = "app.update.altUpdateDirPath";
 const PREF_APP_UPDATE_BACKGROUNDERRORS = "app.update.backgroundErrors";
 const PREF_APP_UPDATE_BACKGROUNDMAXERRORS = "app.update.backgroundMaxErrors";
+const PREF_APP_UPDATE_BACKGROUND_ALLOWDOWNLOADSWITHOUTBITS =
+  "app.update.background.allowDownloadsWithoutBITS";
 const PREF_APP_UPDATE_BITS_ENABLED = "app.update.BITS.enabled";
 const PREF_APP_UPDATE_CANCELATIONS = "app.update.cancelations";
 const PREF_APP_UPDATE_CANCELATIONS_OSX = "app.update.cancelations.osx";
@@ -283,7 +290,6 @@ const STAGING_POLLING_MAX_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const STAGING_POLLING_ATTEMPTS_PER_INTERVAL = 5;
 const STAGING_POLLING_MAX_DURATION_MS = 1 * 60 * 60 * 1000; // 1 hour
 
-var gUpdateMutexHandle = null;
 // This value will be set to true if it appears that BITS is being used by
 // another user to download updates. We don't really want two users using BITS
 // at once. Computers with many users (ex: a school computer), should not end
@@ -323,26 +329,34 @@ ChromeUtils.defineLazyGetter(
   }
 );
 
-/**
- * gIsBackgroundTaskMode will be true if Firefox is currently running as a
- * background task. Otherwise it will be false.
- */
-ChromeUtils.defineLazyGetter(
-  lazy,
-  "gIsBackgroundTaskMode",
-  function aus_gCurrentlyRunningAsBackgroundTask() {
-    if (!("@mozilla.org/backgroundtasks;1" in Cc)) {
-      return false;
+function resetIsBackgroundTaskMode() {
+  /**
+   * gIsBackgroundTaskMode will be true if Firefox is currently running as a
+   * background task. Otherwise it will be false.
+   */
+  ChromeUtils.defineLazyGetter(
+    lazy,
+    "gIsBackgroundTaskMode",
+    function aus_gCurrentlyRunningAsBackgroundTask() {
+      if (!("@mozilla.org/backgroundtasks;1" in Cc)) {
+        return false;
+      }
+      const bts = Cc["@mozilla.org/backgroundtasks;1"].getService(
+        Ci.nsIBackgroundTasks
+      );
+      if (!bts) {
+        return false;
+      }
+      return bts.isBackgroundTaskMode;
     }
-    const bts = Cc["@mozilla.org/backgroundtasks;1"].getService(
-      Ci.nsIBackgroundTasks
-    );
-    if (!bts) {
-      return false;
-    }
-    return bts.isBackgroundTaskMode;
-  }
-);
+  );
+}
+resetIsBackgroundTaskMode();
+
+// Exported for testing only.
+export function testResetIsBackgroundTaskMode() {
+  resetIsBackgroundTaskMode();
+}
 
 /**
  * Changes `nsIApplicationUpdateService.currentState` and causes
@@ -535,110 +549,14 @@ function testWriteAccess(updateTestFile, createDirectory) {
 }
 
 /**
- * Windows only function that closes a Win32 handle.
+ * Tests whether or not the current instance has the update mutex. Tries to
+ * acquire it if it is not held currently.
  *
- * @param handle The handle to close
- */
-function closeHandle(handle) {
-  if (handle) {
-    let lib = lazy.ctypes.open("kernel32.dll");
-    let CloseHandle = lib.declare(
-      "CloseHandle",
-      lazy.ctypes.winapi_abi,
-      lazy.ctypes.int32_t /* success */,
-      lazy.ctypes.void_t.ptr
-    ); /* handle */
-    CloseHandle(handle);
-    lib.close();
-  }
-}
-
-/**
- * Windows only function that creates a mutex.
- *
- * @param  aName
- *         The name for the mutex.
- * @param  aAllowExisting
- *         If false the function will close the handle and return null.
- * @return The Win32 handle to the mutex.
- */
-function createMutex(aName, aAllowExisting = true) {
-  if (AppConstants.platform != "win") {
-    throw Components.Exception("", Cr.NS_ERROR_NOT_IMPLEMENTED);
-  }
-
-  const INITIAL_OWN = 1;
-  const ERROR_ALREADY_EXISTS = 0xb7;
-  let lib = lazy.ctypes.open("kernel32.dll");
-  let CreateMutexW = lib.declare(
-    "CreateMutexW",
-    lazy.ctypes.winapi_abi,
-    lazy.ctypes.void_t.ptr /* return handle */,
-    lazy.ctypes.void_t.ptr /* security attributes */,
-    lazy.ctypes.int32_t /* initial owner */,
-    lazy.ctypes.char16_t.ptr
-  ); /* name */
-
-  let handle = CreateMutexW(null, INITIAL_OWN, aName);
-  let alreadyExists = lazy.ctypes.winLastError == ERROR_ALREADY_EXISTS;
-  if (handle && !handle.isNull() && !aAllowExisting && alreadyExists) {
-    closeHandle(handle);
-    handle = null;
-  }
-  lib.close();
-
-  if (handle && handle.isNull()) {
-    handle = null;
-  }
-
-  return handle;
-}
-
-/**
- * Windows only function that determines a unique mutex name for the
- * installation.
- *
- * @param aGlobal
- *        true if the function should return a global mutex. A global mutex is
- *        valid across different sessions.
- * @return Global mutex path
- */
-function getPerInstallationMutexName(aGlobal = true) {
-  if (AppConstants.platform != "win") {
-    throw Components.Exception("", Cr.NS_ERROR_NOT_IMPLEMENTED);
-  }
-
-  let hasher = Cc["@mozilla.org/security/hash;1"].createInstance(
-    Ci.nsICryptoHash
-  );
-  hasher.init(hasher.SHA1);
-
-  let exeFile = Services.dirsvc.get(KEY_EXECUTABLE, Ci.nsIFile);
-
-  var data = new TextEncoder().encode(exeFile.path.toLowerCase());
-
-  hasher.update(data, data.length);
-  return (
-    (aGlobal ? "Global\\" : "") + "MozillaUpdateMutex-" + hasher.finish(true)
-  );
-}
-
-/**
- * Whether or not the current instance has the update mutex. The update mutex
- * gives protection against 2 applications from the same installation updating:
- * 1) Running multiple profiles from the same installation path
- * 2) Two applications running in 2 different user sessions from the same path
- *
- * @return true if this instance holds the update mutex
+ * @return true if this instance now holds the update mutex or was already
+ *         holding
  */
 function hasUpdateMutex() {
-  if (AppConstants.platform != "win") {
-    return true;
-  }
-  if (!gUpdateMutexHandle) {
-    gUpdateMutexHandle = createMutex(getPerInstallationMutexName(true), false);
-  }
-  return !!gUpdateMutexHandle;
+  return lazy.UpdateMutex.tryLock();
 }
 
 /**
@@ -2717,12 +2635,11 @@ export class UpdateService {
       case "quit-application":
         Services.obs.removeObserver(this, topic);
 
-        if (AppConstants.platform == "win" && gUpdateMutexHandle) {
+        if (lazy.UpdateMutex.isLocked()) {
           // If we hold the update mutex, let it go!
           // The OS would clean this up sometime after shutdown,
           // but that would have no guarantee on timing.
-          closeHandle(gUpdateMutexHandle);
-          gUpdateMutexHandle = null;
+          lazy.UpdateMutex.unlock();
         }
         if (this._retryTimer) {
           this._retryTimer.cancel();
@@ -2747,12 +2664,11 @@ export class UpdateService {
         // In case any update checks are in progress.
         lazy.CheckSvc.stopAllChecks();
         break;
-      case "test-close-handle-update-mutex":
+      case "test-unlock-update-mutex":
         if (Cu.isInAutomation) {
-          if (AppConstants.platform == "win" && gUpdateMutexHandle) {
-            LOG("UpdateService:observe - closing mutex handle for testing");
-            closeHandle(gUpdateMutexHandle);
-            gUpdateMutexHandle = null;
+          if (lazy.UpdateMutex.isLocked()) {
+            LOG("UpdateService:observe - releasing update mutex for testing");
+            lazy.UpdateMutex.unlock();
           }
         }
         break;
@@ -4326,12 +4242,22 @@ export class UpdateService {
    *             to the `BitsRequest` that is returned.
    *           url
    *             The URL to download.
+   *           extraHeaders
+   *             String of extra headers to include, in the format accepted by
+   *             `IBackgroundCopyJobHttpOptions::SetCustomHeaders`: separated by
+   *             `\r\n`, terminated by an additional `\r\n`.
    * @return Promise<BitsRequest>
    *         Returns a request object
    * @throws BitsError
    *         On failure to connect to the BITS job.
    */
-  async makeBitsRequest({ activeListeners = false, bitsId, observer, url }) {
+  async makeBitsRequest({
+    activeListeners = false,
+    bitsId,
+    observer,
+    url,
+    extraHeaders,
+  }) {
     let noProgressTimeout = BITS_IDLE_NO_PROGRESS_TIMEOUT_SECS;
     let monitorInterval = BITS_IDLE_POLL_RATE_MS;
     // The monitor's timeout should be much greater than the longest monitor
@@ -4388,6 +4314,7 @@ export class UpdateService {
       Ci.nsIBits.PROXY_PRECONFIG,
       noProgressTimeout,
       monitorInterval,
+      extraHeaders,
       observer,
       null
     );
@@ -6141,6 +6068,63 @@ class Downloader {
   }
 
   /**
+   * Given a patch URL, return a URL possibly modified with extra query
+   * parameters and extra headers.  The extras help identify whether this update
+   * is driven by a regular browsing Firefox or by a background update task.
+   *
+   * @param {string} [patchURL] Unmodified patch URL.
+   * @return { url, extraHeaders }
+   */
+  _maybeWithExtras(patchURL) {
+    let shouldAddExtras = true;
+    if (AppConstants.MOZ_APP_NAME !== "firefox") {
+      shouldAddExtras = false;
+    }
+    if (Services.policies) {
+      let policies = Services.policies.getActivePolicies();
+      if (policies) {
+        if ("AppUpdateURL" in policies) {
+          shouldAddExtras = false;
+        }
+      }
+    }
+
+    if (!shouldAddExtras) {
+      LOG("Downloader:_maybeWithExtras - Not adding extras");
+      return { url: patchURL, extraHeaders: "\r\n" };
+    }
+
+    LOG("Downloader:_maybeWithExtras - Adding extras");
+
+    let modeStr = lazy.gIsBackgroundTaskMode ? "1" : "0";
+    let extraHeaders = `X-BackgroundTaskMode: ${modeStr}\r\n`;
+    let extraParameters = [["backgroundTaskMode", modeStr]];
+
+    if (lazy.gIsBackgroundTaskMode) {
+      const bts = Cc["@mozilla.org/backgroundtasks;1"].getService(
+        Ci.nsIBackgroundTasks
+      );
+      extraHeaders += `X-BackgroundTaskName: ${bts.backgroundTaskName()}\r\n`;
+      extraParameters.push(["backgroundTaskName", bts.backgroundTaskName()]);
+    }
+
+    extraHeaders += "\r\n";
+
+    let url = patchURL;
+    let parsedUrl = URL.parse(url);
+    if (parsedUrl) {
+      for (let [p, v] of extraParameters) {
+        parsedUrl.searchParams.set(p, v);
+      }
+      url = parsedUrl.href;
+    } else {
+      LOG("Downloader:_maybeWithExtras - Failed to parse patch URL!");
+    }
+
+    return { url, extraHeaders };
+  }
+
+  /**
    * Download and stage the given update.
    * @param   update
    *          A nsIUpdate object to download a patch for. Cannot be null.
@@ -6194,13 +6178,28 @@ class Downloader {
       canUseBits = this._canUseBits(this._patch);
     }
 
+    // When using Firefox and Mozilla's update server, add extra headers and
+    // extra query parameters identifying whether this request is on behalf of a
+    // regular browsing profile (0) or a background task (1).  This helps
+    // understand bandwidth usage of background updates in production.
+    let { url, extraHeaders } = this._maybeWithExtras(this._patch.URL);
+
     if (!canUseBits) {
       this._pendingRequest = null;
 
       let patchFile = updateDir.clone();
       patchFile.append(FILE_UPDATE_MAR);
 
-      if (lazy.gIsBackgroundTaskMode) {
+      // Background updates generally should not fall back to internal (Necko)
+      // downloads: on Windows, they should only use Windows BITS.  In
+      // automation, this pref allows Necko for testing.
+      let allowDownloadsWithoutBITS =
+        Cu.isInAutomation &&
+        Services.prefs.getBoolPref(
+          PREF_APP_UPDATE_BACKGROUND_ALLOWDOWNLOADSWITHOUTBITS,
+          false
+        );
+      if (lazy.gIsBackgroundTaskMode && !allowDownloadsWithoutBITS) {
         // We don't normally run a background update if we can't use BITS, but
         // this branch is possible because we do fall back from BITS failures by
         // attempting an internal download.
@@ -6236,18 +6235,25 @@ class Downloader {
       LOG(
         "Downloader:downloadUpdate - Starting nsIIncrementalDownload with " +
           "url: " +
-          this._patch.URL +
+          url +
           ", path: " +
           patchFile.path +
           ", interval: " +
           interval
       );
-      let uri = Services.io.newURI(this._patch.URL);
+      let uri = Services.io.newURI(url);
 
       this._request = Cc[
         "@mozilla.org/network/incremental-download;1"
       ].createInstance(Ci.nsIIncrementalDownload);
-      this._request.init(uri, patchFile, DOWNLOAD_CHUNK_SIZE, interval);
+
+      this._request.init(
+        uri,
+        patchFile,
+        DOWNLOAD_CHUNK_SIZE,
+        interval,
+        extraHeaders
+      );
       this._request.start(this, null);
     } else {
       this._bitsActiveNotifications = this.hasDownloadListeners;
@@ -6257,7 +6263,8 @@ class Downloader {
         activeListeners: this.hasDownloadListeners,
         bitsId: this._patch.getProperty("bitsId"),
         observer: this,
-        url: this._patch.URL,
+        url,
+        extraHeaders,
       });
 
       let request;

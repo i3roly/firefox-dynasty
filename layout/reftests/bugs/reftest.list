@@ -95,12 +95,6 @@ fuzzy-if(gtkWidget,0-6,0-26200) == 28811-2b.html 28811-2-ref.html  # Bug 1128229
 == 68061-2.xml 68061-2-ref.xml
 == 76331-1.html 76331-1-ref.html
 == 81947-1.html 81947-ref.html
-== 82711-1.html 82711-1-ref.html
-== 82711-2.html 82711-2-ref.html
-== 82711-3.html 82711-3-ref.html
-!= 82711-1-ref.html 82711-2-ref.html
-!= 82711-1-ref.html 82711-3-ref.html
-!= 82711-2-ref.html 82711-3-ref.html
 fuzzy-if(Android,0-4,0-3) == 84400-1.html 84400-1-ref.html
 fuzzy(0-2,0-13) == 84400-2.html 84400-2-ref.html
 == 97777-1.html 97777-1-ref.html
@@ -1173,7 +1167,6 @@ fuzzy(0-10,0-8) == 456219-2.html 456219-2-ref.html
 == 457398-2.html 457398-2-ref.html
 == 458296-1a.html 458296-1-ref.html
 == 458296-1b.html 458296-1-ref.html
-== 458296-1c.html 458296-1-ref.html
 == 458296-1d.html 458296-1-ref.html
 == 458487-1a.html 458487-1-ref.html
 == 458487-1b.html 458487-1-ref.html
@@ -2171,3 +2164,4 @@ fuzzy-if(!useDrawSnapshot,18-19,294-322) == 1840747-1.html about:blank
 fuzzy-if(!useDrawSnapshot&&!swgl,254-255,110-121) fuzzy-if(useDrawSnapshot,18-18,93-93) fuzzy-if(swgl,19-19,58-58) == 1841355-1.html about:blank
 skip-if(((AddressSanitizer||ThreadSanitizer)&&gtkWidget)||(isDebugBuild&&Android)) fuzzy(0-123,0-1425) == 1878294-1.html 1878294-1-ref.html
 == 1888941-text-transform-emergency-wrap.html 1888941-text-transform-emergency-wrap-ref.html
+== 1936259.html 1936259-ref.html

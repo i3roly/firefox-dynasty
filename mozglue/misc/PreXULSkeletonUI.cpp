@@ -1350,7 +1350,7 @@ ThemeColors GetTheme(ThemeMode themeId) {
       theme.tabOutlineColor = 0x1c1b22;
       // controlled by css variable --lwt-accent-color
       theme.titlebarColor = 0x1c1b22;
-      // controlled by --toolbar-non-lwt-textcolor in browser.css
+      // controlled by --toolbar-color in browser.css
       theme.chromeContentDividerColor = 0x0c0c0d;
       // controlled by css variable --toolbar-field-background-color
       theme.urlbarColor = 0x42414d;
@@ -1360,7 +1360,7 @@ ThemeColors GetTheme(ThemeMode themeId) {
     case ThemeMode::Light:
     case ThemeMode::Default:
     default:
-      // --toolbar-non-lwt-bgcolor in browser.css
+      // --toolbar-bgcolor in browser.css
       theme.backgroundColor = 0xf9f9fb;
       theme.tabColor = 0xf9f9fb;
       theme.toolbarForegroundColor = 0xdddde1;
@@ -1923,7 +1923,7 @@ static Result<Ok, PreXULSkeletonUIError> CreateAndStorePreXULSkeletonUIImpl(
                                                          sThemeRegSuffix)));
   ThemeMode themeMode = static_cast<ThemeMode>(theme);
   if (themeMode == ThemeMode::Default) {
-    if (IsSystemDarkThemeEnabled() == true) {
+    if (IsSystemDarkThemeEnabled()) {
       themeMode = ThemeMode::Dark;
     }
   }
@@ -1952,7 +1952,7 @@ static Result<Ok, PreXULSkeletonUIError> CreateAndStorePreXULSkeletonUIImpl(
   // mostly #FFFFFF. To avoid a bright flash when the window is first created,
   // cloak the window while showing it, and fill it with the appropriate
   // background color before uncloaking it.
-  if (sDwmGetWindowAttribute != nullptr) {
+  {
     constexpr static auto const CloakWindow = [](HWND hwnd, BOOL state) {
       sDwmSetWindowAttribute(sPreXULSkeletonUIWindow, DWMWA_CLOAK, &state,
                              sizeof(state));

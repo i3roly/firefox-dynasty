@@ -59,15 +59,6 @@ Maybe<uint32_t> BounceTrackingProtection::sLastRecordedModeTelemetry;
 
 static const char kBTPModePref[] = "privacy.bounceTrackingProtection.mode";
 
-static constexpr uint32_t TRACKER_PURGE_FLAGS =
-    nsIClearDataService::CLEAR_ALL_CACHES | nsIClearDataService::CLEAR_COOKIES |
-    nsIClearDataService::CLEAR_DOM_STORAGES |
-    nsIClearDataService::CLEAR_CLIENT_AUTH_REMEMBER_SERVICE |
-    nsIClearDataService::CLEAR_EME | nsIClearDataService::CLEAR_MEDIA_DEVICES |
-    nsIClearDataService::CLEAR_STORAGE_ACCESS |
-    nsIClearDataService::CLEAR_AUTH_TOKENS |
-    nsIClearDataService::CLEAR_AUTH_CACHE;
-
 // static
 already_AddRefed<BounceTrackingProtection>
 BounceTrackingProtection::GetSingleton() {
@@ -468,8 +459,10 @@ BounceTrackingProtection::Observe(nsISupports* aSubject, const char* aTopic,
           ("%s: aTopic: %s", __FUNCTION__, aTopic));
 
   if (!strcmp(aTopic, "idle-daily")) {
+#ifndef MOZ_WIDGET_ANDROID  // OHTTP is not supported on Android.
     // Submit custom telemetry ping.
     glean_pings::BounceTrackingProtection.Submit();
+#endif  // #ifndef MOZ_WIDGET_ANDROID
   }
   return NS_OK;
 }
@@ -1129,7 +1122,14 @@ nsresult BounceTrackingProtection::PurgeStateForHostAndOriginAttributes(
   NS_ENSURE_TRUE(pattern.ToJSON(oaPatternString), NS_ERROR_FAILURE);
 
   rv = clearDataService->DeleteDataFromSiteAndOriginAttributesPatternString(
-      hostToPurge, oaPatternString, false, TRACKER_PURGE_FLAGS, cb);
+      hostToPurge, oaPatternString, false,
+      // Exempt purging our own state for the given tracker since we already
+      // update it ourselves. Additionally a nested call to the
+      // BounceTrackingProtectionCleaner while iterating over the candidate set
+      // may lead to crashes.
+      nsIClearDataService::CLEAR_STATE_FOR_TRACKER_PURGING &
+          ~nsIClearDataService::CLEAR_BOUNCE_TRACKING_PROTECTION_STATE,
+      cb);
   NS_ENSURE_SUCCESS(rv, rv);
 
   clearPromise.forget(aClearPromise);

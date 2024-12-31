@@ -161,12 +161,6 @@ class Nursery {
   void* allocateBuffer(JS::Zone* zone, gc::Cell* owner, size_t nbytes,
                        arena_id_t arenaId);
 
-  // Allocate a buffer for a given Cell, always using the nursery if |owner| is
-  // in the nursery. The requested size must be less than or equal to
-  // MaxNurseryBufferSize.
-  void* allocateBufferSameLocation(gc::Cell* owner, size_t nbytes,
-                                   arena_id_t arenaId);
-
   // Allocate a zero-initialized buffer for a given zone, using the nursery if
   // possible. If the buffer isn't allocated in the nursery, the given arena is
   // used. Returns <buffer, isMalloced>. Returns false in |isMalloced| if the
@@ -333,15 +327,15 @@ class Nursery {
 
   bool enableProfiling() const { return enableProfiling_; }
 
-  bool addMapWithNurseryMemory(MapObject* obj) {
-    MOZ_ASSERT_IF(!mapsWithNurseryMemory_.empty(),
-                  mapsWithNurseryMemory_.back() != obj);
-    return mapsWithNurseryMemory_.append(obj);
+  bool addMapWithNurseryIterators(MapObject* obj) {
+    MOZ_ASSERT_IF(!mapsWithNurseryIterators_.empty(),
+                  mapsWithNurseryIterators_.back() != obj);
+    return mapsWithNurseryIterators_.append(obj);
   }
-  bool addSetWithNurseryMemory(SetObject* obj) {
-    MOZ_ASSERT_IF(!setsWithNurseryMemory_.empty(),
-                  setsWithNurseryMemory_.back() != obj);
-    return setsWithNurseryMemory_.append(obj);
+  bool addSetWithNurseryIterators(SetObject* obj) {
+    MOZ_ASSERT_IF(!setsWithNurseryIterators_.empty(),
+                  setsWithNurseryIterators_.back() != obj);
+    return setsWithNurseryIterators_.append(obj);
   }
 
   void joinDecommitTask();
@@ -521,7 +515,7 @@ class Nursery {
   // the nursery on debug & nightly builds.
   void clear();
 
-  void clearMapAndSetNurseryRanges();
+  void clearMapAndSetNurseryIterators();
   void sweepMapAndSetObjects();
 
   void sweepStringsWithBuffer();
@@ -728,12 +722,12 @@ class Nursery {
   using CellsWithUniqueIdVector = JS::GCVector<gc::Cell*, 8, SystemAllocPolicy>;
   CellsWithUniqueIdVector cellsWithUid_;
 
-  // Lists of map and set objects allocated in the nursery or with iterators
-  // allocated there. Such objects need to be swept after minor GC.
+  // Lists of map and set objects with iterators allocated in the nursery. Such
+  // objects need to be swept after minor GC.
   using MapObjectVector = Vector<MapObject*, 0, SystemAllocPolicy>;
-  MapObjectVector mapsWithNurseryMemory_;
+  MapObjectVector mapsWithNurseryIterators_;
   using SetObjectVector = Vector<SetObject*, 0, SystemAllocPolicy>;
-  SetObjectVector setsWithNurseryMemory_;
+  SetObjectVector setsWithNurseryIterators_;
 
   // List of strings with StringBuffers allocated in the nursery. References
   // to the buffers are dropped after minor GC. The list stores both the JS

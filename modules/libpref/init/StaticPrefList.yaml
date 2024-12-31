@@ -665,7 +665,7 @@
 
 -   name: apz.gtk.touchpad_hold.enabled
     type: RelaxedAtomicBool
-    value: false
+    value: true
     mirror: always
 #endif
 
@@ -821,6 +821,11 @@
   type: AtomicFloat
   value: 0.1f
   mirror: always
+
+- name: apz.touch_scroll.buffer_max_age
+  type: int32_t
+  value: 200  # milliseconds
+  mirror: once
 
 - name: apz.touch_start_tolerance
   type: AtomicFloat
@@ -1254,6 +1259,39 @@
 - name: browser.contentanalysis.bypass_for_same_tab_operations
   type: bool
   value: false
+  mirror: always
+
+# Should Firefox use content analysis for clipboard operations?
+# Note that this has no effect unless browser.contentanalysis.enabled
+# is true.
+- name: browser.contentanalysis.interception_point.clipboard.enabled
+  type: bool
+  value: true
+  mirror: always
+
+# Should Firefox use content analysis for drag and drop operations?
+# Note that this has no effect unless browser.contentanalysis.enabled
+# is true.
+- name: browser.contentanalysis.interception_point.drag_and_drop.enabled
+  type: bool
+  value: true
+  mirror: always
+
+# Should Firefox use content analysis for file upload operations through
+# a file dialog?
+# Note that this has no effect unless browser.contentanalysis.enabled
+# is true.
+- name: browser.contentanalysis.interception_point.file_upload.enabled
+  type: bool
+  value: true
+  mirror: always
+
+# Should Firefox use content analysis for print operations?
+# Note that this has no effect unless browser.contentanalysis.enabled
+# is true.
+- name: browser.contentanalysis.interception_point.print.enabled
+  type: bool
+  value: true
   mirror: always
 
 # Content blocking for Enhanced Tracking Protection
@@ -2303,7 +2341,7 @@
 # Enable experimental popup blocker changes.
 - name: dom.popup.experimental
   type: bool
-  value: @IS_NIGHTLY_BUILD@
+  value: true
   mirror: always
 
   # Enable CacheAPI in private browsing mode with encryption
@@ -2759,6 +2797,12 @@
   value: false
   mirror: always
 
+# Is support for HTMLElement.autocorrect enabled?
+- name: dom.forms.autocorrect
+  type: bool
+  value: @IS_NIGHTLY_BUILD@
+  mirror: always
+
 # Only trusted submit event could trigger form submission.
 - name: dom.forms.submit.trusted_event_only
   type: bool
@@ -2919,7 +2963,7 @@
 # [1]: https://github.com/w3c/csswg-drafts/issues/5260
 - name: dom.innerSize.rounding
   type: uint32_t
-  value: 2
+  value: 1
   mirror: always
 
 # Whether we conform to Input Events Level 1 or Input Events Level 2.
@@ -2979,7 +3023,7 @@
 #ifdef MOZ_ENABLE_FORKSERVER
 - name: dom.ipc.forkserver.enable
   type: bool
-#if defined(MOZ_CODE_COVERAGE) || defined(MOZ_ASAN) || defined(MOZ_TSAN) || defined(MOZ_MSAN) || defined(MOZ_UBSAN) || defined(MOZ_PROFILE_GENERATE)
+#if defined(MOZ_CODE_COVERAGE) || defined(MOZ_ASAN) || defined(MOZ_TSAN) || defined(MOZ_MSAN) || defined(MOZ_UBSAN)
   value: false
 #else
   value: @IS_NIGHTLY_BUILD@
@@ -3087,7 +3131,7 @@
 
 - name: dom.ipc.processPriorityManager.backgroundPerceivableGracePeriodMS
   type: uint32_t
-#if defined(MOZ_WIDGET_ANDROID) && defined(NIGHTLY_BUILD)
+#if defined(MOZ_WIDGET_ANDROID)
   value: 3000
 #else
   value: 0
@@ -3096,7 +3140,7 @@
 
 - name: dom.ipc.processPriorityManager.backgroundGracePeriodMS
   type: uint32_t
-#if defined(MOZ_WIDGET_ANDROID) && defined(NIGHTLY_BUILD)
+#if defined(MOZ_WIDGET_ANDROID)
   value: 3000
 #else
   value: 0
@@ -3487,6 +3531,15 @@
 - name: dom.push.enabled
   type: RelaxedAtomicBool
   value: true
+  mirror: always
+
+# Indicate the deprecated aesgcm support in PushManager.supportedContentEncodings.
+#
+# This does not affect actual aesgcm support, any new and existing subscriptions
+# can still use aesgcm regardless of this pref.
+- name: dom.push.indicate_aesgcm_support.enabled
+  type: RelaxedAtomicBool
+  value: false
   mirror: always
 
 # Preference that is primarily used for testing of problematic file paths.
@@ -4034,7 +4087,7 @@
 
 # If true, will add a special temporary HTTPS-First exception for a site when a
 # HTTPS-First upgrade fails.
-- name: dom.security.https_first_add_exception_on_failiure
+- name: dom.security.https_first_add_exception_on_failure
   type: RelaxedAtomicBool
   value: true
   mirror: always
@@ -4945,8 +4998,8 @@
   value: false
   mirror: always
 
-# Are WebGPU indirect draws/dispatches enabled?
-- name: dom.webgpu.indirect-dispatch.enabled
+# Are WebGPU indirect draws enabled?
+- name: dom.webgpu.indirect-draw.enabled
   type: RelaxedAtomicBool
   value: false
   mirror: always
@@ -8146,11 +8199,25 @@
   set_spidermonkey_pref: startup
 
 # Experimental support for Uint8Array base64/hex in JavaScript.
--   name: javascript.options.experimental.uint8array_base64
-    type: bool
-    value: true
-    mirror: always
-    set_spidermonkey_pref: startup
+- name: javascript.options.experimental.uint8array_base64
+  type: bool
+  value: true
+  mirror: always
+  set_spidermonkey_pref: startup
+
+# Experimental support for Promise.try in JavaScript.
+- name: javascript.options.experimental.promise_try
+  type: bool
+  value: true
+  mirror: always
+  set_spidermonkey_pref: startup
+
+# Experimental support for RegExp.escape in JavaScript.
+- name: javascript.options.experimental.regexp_escape
+  type: bool
+  value: true
+  mirror: always
+  set_spidermonkey_pref: startup
 
 #ifdef NIGHTLY_BUILD
   # Experimental support for Async Iterator Helpers in JavaScript.
@@ -8172,20 +8239,6 @@
     type: bool
     value: false
     mirror: always
-
-  # Experimental support for RegExp.escape in JavaScript.
--   name: javascript.options.experimental.regexp_escape
-    type: bool
-    value: false
-    mirror: always
-    set_spidermonkey_pref: startup
-
-  # Experimental support for Promise.try in JavaScript.
--   name: javascript.options.experimental.promise_try
-    type: bool
-    value: false
-    mirror: always
-    set_spidermonkey_pref: startup
 
   # Experimental support for Error.isError in JavaScript.
 -   name: javascript.options.experimental.error_iserror
@@ -8229,8 +8282,16 @@
     mirror: always
     set_spidermonkey_pref: startup
 
-
 #endif  // NIGHTLY_BUILD
+
+#ifdef ENABLE_EXPLICIT_RESOURCE_MANAGEMENT
+  # Experimental support for Explicit Resource Management in JavaScript.
+-   name: javascript.options.experimental.explicit_resource_management
+    type: bool
+    value: false
+    mirror: always
+    set_spidermonkey_pref: always
+#endif  // ENABLE_EXPLICIT_RESOURCE_MANAGEMENT
 
 -   name: javascript.options.experimental.json_parse_with_source
     type: bool
@@ -8320,6 +8381,12 @@
 #endif
   mirror: always
 
+- name: javascript.options.wasm_disable_huge_memory
+  type: bool
+  value: false
+  mirror: always
+  set_spidermonkey_pref: startup
+
 - name: javascript.options.wasm_optimizingjit
   type: bool
   value: true
@@ -8392,7 +8459,7 @@
 -   name: javascript.options.wasm_memory64
     type: bool
 #if defined(ENABLE_WASM_MEMORY64)
-    value: @IS_NIGHTLY_BUILD@
+    value: true
 #else
     value: false
 #endif
@@ -8411,7 +8478,7 @@
 
 -   name: javascript.options.wasm_js_string_builtins
     type: bool
-    value: false
+    value: true
     mirror: always
     set_spidermonkey_pref: always
 
@@ -8596,7 +8663,11 @@
 # anyway.
 - name: javascript.options.use_fdlibm_for_sin_cos_tan
   type: bool
-  value: @IS_EARLY_BETA_OR_EARLIER@
+#if defined(XP_WIN)
+  value: false
+#else
+  value: true
+#endif
   mirror: always
   set_spidermonkey_pref: always
 
@@ -8715,7 +8786,7 @@
 #if defined(XP_WIN) || defined(MOZ_WIDGET_ANDROID)
   value: true
 #elif defined(MOZ_X11)
-  value: @IS_NIGHTLY_BUILD@
+  value: false  # we'd like this to be @IS_NIGHTLY_BUILD@, see Bug 1927058
 #else
   value: false
 #endif
@@ -9040,13 +9111,6 @@
 #
 # Only for testing purposes.
 - name: layout.css.moz-control-character-visibility.enabled
-  type: RelaxedAtomicBool
-  value: false
-  mirror: always
-  rust: true
-
-# Whether the `-moz-user-modify` property is exposed to content.
-- name: layout.css.moz-user-modify.enabled
   type: RelaxedAtomicBool
   value: false
   mirror: always
@@ -10030,6 +10094,13 @@
   value: false
   mirror: always
 
+# Does webkit-line-clamp skip painting clamped lines?
+# See bug 1934547.
+- name: layout.css.webkit-line-clamp.skip-paint
+  type: bool
+  value: false
+  mirror: always
+
 # Is 'content:none' supported on (non-pseudo) elements?
 - name: layout.css.element-content-none.enabled
   type: RelaxedAtomicBool
@@ -10235,11 +10306,7 @@
 # macos still has the deprecated STIXGeneral font pre-installed.
 - name: mathml.stixgeneral_operator_stretching.disabled
   type: bool
-#if defined(XP_MACOSX)
-  value: @IS_NIGHTLY_BUILD@
-#else
   value: true
-#endif
   mirror: always
 
 # Whether to disable fallback for mathvariant=italic/bold/bold-italic via
@@ -10925,6 +10992,12 @@
   value: true
   mirror: always
 
+# Disable falling back to software decoders in case of frame drop
+- name: media.ffmpeg.disable-software-fallback
+  type: RelaxedAtomicBool
+  value: false
+  mirror: always
+
 #ifdef MOZ_FFMPEG
 -   name: media.ffmpeg.enabled
     type: RelaxedAtomicBool
@@ -11146,11 +11219,7 @@
 # 2 : enable for media engine only
 -   name: media.wmf.hevc.enabled
     type: RelaxedAtomicUint32
-#if defined(NIGHTLY_BUILD)
     value: 1
-#else
-    value: 2
-#endif
     mirror: always
 
 # Enable Widevine experiment DRM for EME
@@ -11296,6 +11365,12 @@
 - name: media.webrtc.net.force_disable_rtcp_reception
   type: ReleaseAcquireAtomicBool
   value: false
+  mirror: always
+
+# This pref disables using PQ crypto for WebRTC DTLS code.
+- name: media.webrtc.enable_pq_dtls
+  type: RelaxedAtomicBool
+  value: @IS_EARLY_BETA_OR_EARLIER@
   mirror: always
 
 # This pref controls whether dispatch testing-only events.
@@ -11928,6 +12003,11 @@
 #endif
   mirror: always
 
+- name: media.webrtc.simulcast.vp9.enabled
+  type: RelaxedAtomicBool
+  value: false
+  mirror: always
+
 - name: media.webrtc.tls_tunnel_for_all_proxy
   type: bool
   value: true
@@ -12326,10 +12406,31 @@
   value: @IS_NIGHTLY_BUILD@
   mirror: always
 
+# Whether to block third-party tracker cookie and storage access when
+# cookieBehavior=5.
+- name: network.cookie.cookieBehavior.trackerCookieBlocking
+  type: bool
+  value: true
+  mirror: always
+
 # Whether to support CHIPS(Cookies Having Independent Partitioned State).
 - name: network.cookie.CHIPS.enabled
   type: RelaxedAtomicBool
   value: @IS_NIGHTLY_BUILD@
+  mirror: always
+
+# Updated to match the target count when we migrate the unpartitioned CHIPS
+# cookies to their first-party partition.
+- name: network.cookie.CHIPS.lastMigrateDatabase
+  type: RelaxedAtomicUint32
+  value: 0
+  mirror: always
+
+# Used to increase the number of times we want to have migrated the database.
+# This lets us remotely perform a database migration with Nimbus.
+- name: network.cookie.CHIPS.migrateDatabaseTarget
+  type: RelaxedAtomicUint32
+  value: 1
   mirror: always
 
 # Stale threshold for cookies in seconds.
@@ -12458,6 +12559,13 @@
 - name: network.http.rcwn.max_wait_before_racing_ms
   type: uint32_t
   value: 500
+  mirror: always
+
+  # Whether to send the Referer header in response to a meta refresh, or
+  # in response to a Refresh header.
+- name: network.http.referer.sendFromRefresh
+  type: bool
+  value: false
   mirror: always
 
 # false=real referer, true=spoof referer (use target URI as referer).
@@ -12946,7 +13054,7 @@
   mirror: always
 - name: network.fetchpriority.adjustments.link-preload-font.high
   type: int32_t
-  value: 0
+  value: -10
   mirror: always
 - name: network.fetchpriority.adjustments.link-preload-font.auto
   type: int32_t
@@ -13977,13 +14085,7 @@
 # Use NSPR for HTTP3 UDP IO
 - name: network.http.http3.use_nspr_for_io
   type: RelaxedAtomicBool
-# Always use NSPR on Android x86 until
-# https://bugzilla.mozilla.org/show_bug.cgi?id=1916412 is fixed.
-#if defined(ANDROID) && !defined(HAVE_64BIT_BUILD)
-  value: true
-#else
   value: @IS_NOT_NIGHTLY_BUILD@
-#endif
   mirror: always
 
 # Send and receive IP ECN marks. Noop if network.http.http3.use_nspr_for_io is
@@ -14092,7 +14194,11 @@
 # Has no effect unless security.tls.enable_kyber is true.
 - name: network.http.http3.enable_kyber
   type: RelaxedAtomicBool
+#ifdef EARLY_BETA_OR_EARLIER
+  value: @IS_NOT_ANDROID@
+#else
   value: false
+#endif
   mirror: always
   rust: true
 
@@ -14105,6 +14211,13 @@
 # Only used for testing purposes. In automation, this value is used to override
 # the result of third party roots check.
 - name: network.http.http3.has_third_party_roots_found_in_automation
+  type: RelaxedAtomicBool
+  value: false
+  mirror: always
+
+# When network.http.http3.alt-svc-mapping-for-testing is set, only use
+# HTTP/3 to connect.
+- name: network.http.http3.force-use-alt-svc-mapping-for-testing
   type: RelaxedAtomicBool
   value: false
   mirror: always
@@ -14195,7 +14308,7 @@
 # If not, the record will not be used.
 - name: network.dns.https_rr.check_record_with_cname
   type: RelaxedAtomicBool
-  value: false
+  value: @IS_EARLY_BETA_OR_EARLIER@
   mirror: always
 
 # This preference can be used to turn off IPv6 name lookups. See bug 68796.
@@ -14215,6 +14328,13 @@
   type: String
   value: ""
   mirror: never
+
+# This is only used for testing. When true, nsHttpChannel::mPeerAddr will be
+# overridden with the address provided by DNS prefetch.
+- name: network.dns.use_override_as_peer_address
+  type: RelaxedAtomicBool
+  value: false
+  mirror: always
 
 # Whether to add additional record IPs to the cache
 - name: network.trr.add_additional_records
@@ -14911,13 +15031,6 @@
   value: false
   mirror: always
 
-# Whether canvas extraction should result in random data. If false, canvas
-# extraction results in all-white, opaque pixel data.
-- name: privacy.resistFingerprinting.randomDataOnCanvasExtract
-  type: RelaxedAtomicBool
-  value: true
-  mirror: always
-
 # The log level for browser console messages logged in RFPHelper.sys.mjs. Change to
 # 'All' and restart to see the messages.
 - name: privacy.resistFingerprinting.jsmloglevel
@@ -14955,6 +15068,11 @@
   value: false
   mirror: always
 
+# Control whether we use the SipHash to generate the canvas random key.
+- name:  privacy.resistFingerprinting.randomization.canvas.use_siphash
+  type: RelaxedAtomicBool
+  value: false
+  mirror: always
 
 # Anti-tracking permission expiration.
 - name: privacy.restrict3rdpartystorage.expiration
@@ -15228,6 +15346,13 @@
 # Whether the migration ran to import user activation flags into the BTP user
 # activation store. Set to false to trigger a new migration.
 - name: privacy.bounceTrackingProtection.hasMigratedUserActivationData
+  type: bool
+  value: false
+  mirror: always
+
+# To be used in automated test environments to enable event telemetry
+# collection.
+- name: privacy.imageInputTelemetry.enableTestMode
   type: bool
   value: false
   mirror: always
@@ -15779,6 +15904,25 @@
 #endif
   mirror: always
 
+# A comma-separated list of host names to not enforce certificate transparency
+# for. Entries of the form 'example.com' apply to the host 'example.com' and
+# all subdomains (e.g. 'sub.example.com', 'sub.www.example.com', etc.).
+# Entries of the form '.example.com' only apply to the host 'example.com'.
+# Entries may also be IP addresses.
+- name: security.pki.certificate_transparency.disable_for_hosts
+  type: String
+  value: ""
+  mirror: never
+
+# A comma-separated list of base64-encoded sha256 hashes of subject public key
+# infos to not enforce certificate transparency for. If a verified certificate
+# chain contains a certificate with a SPKI hash in this list, certificate
+# transparency will not be enforced for that connection.
+- name: security.pki.certificate_transparency.disable_for_spki_hashes
+  type: String
+  value: ""
+  mirror: never
+
 # 0: Disable CRLite entirely.
 # 1: Consult CRLite but only collect telemetry.
 # 2: Consult CRLite and enforce both "Revoked" and "Not Revoked" results.
@@ -15789,12 +15933,13 @@
   mirror: always
 
 # The CRLite filter channel to which the user is subscribed.
-# - "all" => bloom-filter cascades that contain all revocations,
-# - "experimental" => clubcards that contain all revocations.
+# - "all" => bloom-filter cascades that contain all revocations. Stash based delta updates.
+# - "experimental" => clubcards that contain all revocations. Stash based delta updates.
+# - "experimental+deltas" => clubcards that contain all revocations. Clubcard based delta updates.
 - name: security.pki.crlite_channel
   type: String
 #ifdef NIGHTLY_BUILD
-  value: "experimental"
+  value: "experimental+deltas"
 #else
   value: "all"
 #endif
@@ -16706,18 +16851,6 @@
   value: false
   mirror: always
 
-#ifdef XP_MACOSX
-# This will automatically enable text substitution for editable elements in HTML.
-# This value is like layout.spellCheckDefault.
-# 0 ... Disabled
-# 1 ... textarea, contenteditable and design mode
-# 2 ... text, textarea, contenteditable and design mode
-- name: ui.autocorrectDefault
-  type: uint32_t
-  value: 1
-  mirror: always
-#endif
-
 #---------------------------------------------------------------------------
 # Prefs starting with "urlclassifier."
 #---------------------------------------------------------------------------
@@ -17596,6 +17729,17 @@
   value: true
   mirror: always
 
+# Whether this device is capable of entering tablet mode. (Win11+ only.)
+#
+# Valid values:
+#  * -1: assume this device is tablet-mode-incapable
+#  *  0: rely on heuristics
+#  *  1: assume this device is tablet-mode-capable
+- name: widget.windows.tablet_detection_override
+  type: RelaxedAtomicInt32
+  value: 0
+  mirror: always
+
 # Whether to give explorer.exe a delated nudge to recalculate the fullscreenness
 # of a window after maximizing it.
 - name: widget.windows.fullscreen_remind_taskbar
@@ -17653,6 +17797,14 @@
 - name: widget.windows.apply-dwm-resize-hack
   type: RelaxedAtomicInt32
   value: 2
+  mirror: always
+
+# Whether to apply a very old hack (reposting and reprocessing scroll-wheel
+# messages under custom message IDs) originally intended to work around
+# plugin-process deadlocks. (See bug 658194.)
+- name: widget.windows.old-scrollwheel-message-hack
+  type: bool
+  value: false
   mirror: always
 
 # Whether we use the mica backdrop. Off by default for now.
@@ -17723,7 +17875,7 @@
 # text replacement features.
 - name: widget.macos.automatic.text_replacement
   type: bool
-  value: false
+  value: true
   mirror: always
 
 # Whether the smart dash feature is enabled

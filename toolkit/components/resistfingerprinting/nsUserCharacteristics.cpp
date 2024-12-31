@@ -6,6 +6,7 @@
 #include "nsUserCharacteristics.h"
 
 #include "nsID.h"
+#include "nsIGfxInfo.h"
 #include "nsIUUIDGenerator.h"
 #include "nsIUserCharacteristicsPageService.h"
 #include "nsServiceManagerUtils.h"
@@ -608,6 +609,13 @@ void PopulateProcessorCount() {
 void PopulateMisc(bool worksInGtest) {
   if (worksInGtest) {
     glean::characteristics::max_touch_points.Set(testing::MaxTouchPoints());
+    nsCOMPtr<nsIGfxInfo> gfxInfo = components::GfxInfo::Service();
+    if (gfxInfo) {
+      bool isUsingAcceleratedCanvas = false;
+      gfxInfo->GetUsingAcceleratedCanvas(&isUsingAcceleratedCanvas);
+      glean::characteristics::using_accelerated_canvas.Set(
+          isUsingAcceleratedCanvas);
+    }
   } else {
     // System Locale
     nsAutoCString locale;
@@ -667,7 +675,7 @@ const RefPtr<PopulatePromise>& TimoutPromise(
 // metric is set, this variable should be incremented. It'll be a lot. It's
 // okay. We're going to need it to know (including during development) what is
 // the source of the data we are looking at.
-const int kSubmissionSchema = 7;
+const int kSubmissionSchema = 11;
 
 const auto* const kUUIDPref =
     "toolkit.telemetry.user_characteristics_ping.uuid";

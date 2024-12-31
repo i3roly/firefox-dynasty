@@ -608,7 +608,7 @@ void gfxMacPlatformFontList::InitSharedFontListForPlatform() {
     nsTArray<fontlist::Family::InitData> families;
     families.SetCapacity(CFArrayGetCount(familyNames)
 #if USE_DEPRECATED_FONT_FAMILY_NAMES
-                         + ArrayLength(kDeprecatedFontFamilies)
+                         + std::size(kDeprecatedFontFamilies)
 #endif
     );
     for (NSString* familyName in (NSArray*)(CFArrayRef)familyNames) {

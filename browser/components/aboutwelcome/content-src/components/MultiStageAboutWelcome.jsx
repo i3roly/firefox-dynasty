@@ -59,6 +59,23 @@ export const MultiStageAboutWelcome = props => {
 
       didFilter.current = true;
 
+      // After completing screen filtering, trigger any unhandled campaign
+      // action present in the attribution campaign data. This updates the
+      // "trailhead.firstrun.didHandleCampaignAction" preference, marking the
+      // actions as complete to prevent them from being handled on subsequent
+      // visits to about:welcome. Do not await getting the action to avoid
+      // blocking the thread.
+      window
+        .AWGetUnhandledCampaignAction?.()
+        .then(action => {
+          if (typeof action === "string") {
+            AboutWelcomeUtils.handleCampaignAction(action, props.message_id);
+          }
+        })
+        .catch(error => {
+          console.error("Failed to get unhandled campaign action:", error);
+        });
+
       const screenInitials = filteredScreens
         .map(({ id }) => id?.split("_")[1]?.[0])
         .join("");
@@ -463,13 +480,15 @@ export class WelcomeScreen extends React.PureComponent {
 
     let actionResult;
     if (["OPEN_URL", "SHOW_FIREFOX_ACCOUNTS"].includes(action.type)) {
-      actionResult = await this.handleOpenURL(
+      actionResult = this.handleOpenURL(
         action,
         props.flowParams,
         props.UTMTerm
       );
     } else if (action.type) {
-      actionResult = await AboutWelcomeUtils.handleUserAction(action);
+      actionResult = action.needsAwait
+        ? await AboutWelcomeUtils.handleUserAction(action)
+        : AboutWelcomeUtils.handleUserAction(action);
       if (action.type === "FXA_SIGNIN_FLOW") {
         AboutWelcomeUtils.sendActionTelemetry(
           props.messageId,
@@ -503,7 +522,7 @@ export class WelcomeScreen extends React.PureComponent {
           } else {
             wpAction.data.pref.value = `light-${theme}`;
           }
-          await AboutWelcomeUtils.handleUserAction(actionWallpaper);
+          AboutWelcomeUtils.handleUserAction(actionWallpaper);
         });
       } else {
         window.AWSelectTheme(themeToUse);
@@ -528,8 +547,20 @@ export class WelcomeScreen extends React.PureComponent {
     // `navigate` and `dismiss` can be true/false/undefined, or they can be a
     // string "actionResult" in which case we should use the actionResult
     // (boolean resolved by handleUserAction)
-    const shouldDoBehavior = behavior =>
-      behavior === "actionResult" ? actionResult : behavior;
+    const shouldDoBehavior = behavior => {
+      if (behavior !== "actionResult") {
+        return behavior;
+      }
+
+      if (action.needsAwait) {
+        return actionResult;
+      }
+
+      console.error(
+        "actionResult is only supported for actions with needsAwait"
+      );
+      return false;
+    };
 
     if (shouldDoBehavior(action.navigate)) {
       props.navigate();

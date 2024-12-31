@@ -9,6 +9,7 @@
 #include "DNSLogging.h"
 #include "mozilla/StaticPrefs_network.h"
 #include "mozilla/Telemetry.h"
+#include "mozilla/ThreadSafety.h"
 #include "TRRService.h"
 
 //----------------------------------------------------------------------------
@@ -39,6 +40,15 @@ nsHostKey::nsHostKey(const nsACString& aHost, const nsACString& aTrrServer,
       af(aAf),
       pb(aPb),
       originSuffix(aOriginsuffix) {}
+
+nsHostKey::nsHostKey(const nsHostKey& other)
+    : host(other.host),
+      mTrrServer(other.mTrrServer),
+      type(other.type),
+      flags(other.flags),
+      af(other.af),
+      pb(other.pb),
+      originSuffix(other.originSuffix) {}
 
 bool nsHostKey::operator==(const nsHostKey& other) const {
   return host == other.host && mTrrServer == other.mTrrServer &&
@@ -440,7 +450,10 @@ bool TypeHostRecord::HasUsableResultInternal(
     return true;
   }
 
+  MOZ_PUSH_IGNORE_THREAD_SAFETY
+  // To avoid locking in a const method
   return !mResults.is<Nothing>();
+  MOZ_POP_THREAD_SAFETY
 }
 
 bool TypeHostRecord::RefreshForNegativeResponse() const { return false; }

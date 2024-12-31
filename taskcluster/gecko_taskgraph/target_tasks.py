@@ -11,8 +11,7 @@ from datetime import datetime, timedelta
 
 import requests
 from redo import retry
-from taskgraph.parameters import Parameters
-from taskgraph.target_tasks import get_method, register_target_task
+from taskgraph.target_tasks import register_target_task
 from taskgraph.util.taskcluster import find_task_id, parse_time
 
 from gecko_taskgraph import GECKO, try_option_syntax
@@ -477,69 +476,6 @@ def target_tasks_try(full_task_graph, parameters, graph_config):
     return []
 
 
-@register_target_task("try_select_tasks")
-def target_tasks_try_select(full_task_graph, parameters, graph_config):
-    tasks = target_tasks_try_select_uncommon(full_task_graph, parameters, graph_config)
-    return [l for l in tasks if filter_by_uncommon_try_tasks(l)]
-
-
-@register_target_task("try_select_tasks_uncommon")
-def target_tasks_try_select_uncommon(full_task_graph, parameters, graph_config):
-    from gecko_taskgraph.decision import PER_PROJECT_PARAMETERS
-
-    projects = ("autoland", "mozilla-central")
-    if parameters["project"] not in projects:
-        projects = (parameters["project"],)
-
-    tasks = set()
-    for project in projects:
-        params = dict(parameters)
-        params["project"] = project
-        parameters = Parameters(**params)
-
-        try:
-            target_tasks_method = PER_PROJECT_PARAMETERS[project]["target_tasks_method"]
-        except KeyError:
-            target_tasks_method = "default"
-
-        tasks.update(
-            get_method(target_tasks_method)(full_task_graph, parameters, graph_config)
-        )
-
-    return sorted(tasks)
-
-
-@register_target_task("try_auto")
-def target_tasks_try_auto(full_task_graph, parameters, graph_config):
-    """Target the tasks which have indicated they should be run on autoland
-    (rather than try) via the `run_on_projects` attributes.
-
-    Should do the same thing as the `default` target tasks method.
-    """
-    params = dict(parameters)
-    params["project"] = "autoland"
-    parameters = Parameters(**params)
-
-    regex_filters = parameters["try_task_config"].get("tasks-regex")
-    include_regexes = exclude_regexes = []
-    if regex_filters:
-        include_regexes = [re.compile(r) for r in regex_filters.get("include", [])]
-        exclude_regexes = [re.compile(r) for r in regex_filters.get("exclude", [])]
-
-    return [
-        l
-        for l, t in full_task_graph.tasks.items()
-        if standard_filter(t, parameters)
-        and filter_out_shipping_phase(t, parameters)
-        and filter_out_devedition(t, parameters)
-        and filter_by_uncommon_try_tasks(t.label)
-        and filter_by_regex(t.label, include_regexes, mode="include")
-        and filter_by_regex(t.label, exclude_regexes, mode="exclude")
-        and filter_unsupported_artifact_builds(t, parameters)
-        and filter_out_shippable(t)
-    ]
-
-
 @register_target_task("default")
 def target_tasks_default(full_task_graph, parameters, graph_config):
     """Target the tasks which have indicated they should be run on this project
@@ -937,6 +873,8 @@ def target_tasks_general_perf_testing(full_task_graph, parameters, graph_config)
                 return False
             if "chrome-m" in try_name and "essential" in try_name:
                 return True
+            if "chrome-m" in try_name and "-nofis" not in try_name:
+                return False
             if "chrome-m" in try_name and (
                 ("ebay" in try_name and "live" not in try_name)
                 or (
@@ -953,16 +891,10 @@ def target_tasks_general_perf_testing(full_task_graph, parameters, graph_config)
                 return True
             # Select fenix resource usage tests
             if "fenix" in try_name:
-                # Bug 1816421 disable fission perf tests
-                if "-fis" in try_name:
-                    return False
                 if "-power" in try_name:
                     return True
             # Select geckoview resource usage tests
             if "geckoview" in try_name:
-                # Bug 1816421 disable fission perf tests
-                if "-fis" in try_name:
-                    return False
                 # Run cpu+memory, and power tests
                 cpu_n_memory_task = "-cpu" in try_name and "-memory" in try_name
                 power_task = "-power" in try_name
@@ -1783,9 +1715,22 @@ def target_tasks_android_l10n_sync(full_task_graph, parameters, graph_config):
 
 @register_target_task("os-integration")
 def target_tasks_os_integration(full_task_graph, parameters, graph_config):
-    return [
-        l
-        for l, t in full_task_graph.tasks.items()
-        if t.attributes.get("unittest_variant") == "os-integration"
-        and standard_filter(t, parameters)
-    ]
+    labels = []
+
+    for label, task in full_task_graph.tasks.items():
+        if task.attributes.get("unittest_variant") != "os-integration":
+            continue
+
+        index = label.index("-osint")
+        base_label = label[:index]
+        if base_label not in full_task_graph.tasks:
+            base_label += "-1"
+        base_task = full_task_graph.tasks[base_label]
+
+        if (
+            filter_for_project(base_task, parameters)
+            and filter_for_hg_branch(base_task, parameters)
+            and filter_tests_without_manifests(base_task, parameters)
+        ):
+            labels.append(label)
+    return labels

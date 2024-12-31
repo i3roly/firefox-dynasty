@@ -430,10 +430,10 @@ AbortReasonOr<WarpScriptSnapshot*> WarpScriptOracle::createScriptSnapshot() {
       }
 
       case JSOp::BindUnqualifiedGName: {
-        Rooted<GlobalObject*> global(cx_, &script_->global());
-        Rooted<PropertyName*> name(cx_, loc.getPropertyName(script_));
+        GlobalObject* global = &script_->global();
+        PropertyName* name = loc.getPropertyName(script_);
         if (JSObject* env =
-                MaybeOptimizeBindUnqualifiedGlobalName(cx_, global, name)) {
+                MaybeOptimizeBindUnqualifiedGlobalName(global, name)) {
           MOZ_ASSERT(env->isTenured());
           if (!AddOpSnapshot<WarpBindUnqualifiedGName>(alloc_, opSnapshots,
                                                        offset, env)) {
@@ -1098,7 +1098,7 @@ AbortReasonOr<bool> WarpScriptOracle::maybeInlineCall(
         // We should only unlink the stub once.
         ICEntry* entry = icScript_->icEntryForStub(fallbackStub);
         MOZ_ASSERT_IF(entry->firstStub() != stub,
-                      !isTrialInlined && entry->firstStub() == stub->next());
+                      entry->firstStub() == stub->next());
         if (entry->firstStub() == stub) {
           fallbackStub->unlinkStub(cx_->zone(), entry, /*prev=*/nullptr, stub);
         }

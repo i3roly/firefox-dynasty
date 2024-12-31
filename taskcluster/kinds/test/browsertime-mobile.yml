@@ -154,12 +154,11 @@ browsertime-tp6m:
                         by-test-platform:
                             android-hw-a55.*shippable.*: [trunk-only]
                             default: []
-                    default: []
+                    default: [mozilla-central]
             default: []
 
 browsertime-tp6m-essential:
     <<: *tp6m-defaults
-    run-without-variant: false
     raptor:
         apps: [geckoview, fenix, chrome-m, refbrow, cstm-car-m]
         run-visual-metrics: true
@@ -200,7 +199,6 @@ browsertime-tp6m-webextensions:
     <<: *tp6m-defaults
     description: Raptor (browsertime) tp6 page-load tests with webextensions installed on android
     treeherder-symbol: Btime-webext(tp6m)
-    run-without-variant: false
     mozharness:
         extra-options:
             - --chimera
@@ -229,7 +227,6 @@ browsertime-tp6m-webextensions:
 browsertime-youtube-playback-mobile:
     description: Browsertime YouTube Playback on Android
     treeherder-symbol: Btime(ytp)
-    run-without-variant: false
     raptor:
         apps: [fenix, geckoview, refbrow]
         subtests:
@@ -287,7 +284,6 @@ browsertime-youtube-playback-mobile:
 
 browsertime-tp6m-live:
     <<: *tp6m-defaults
-    run-without-variant: false
     raptor:
         apps: [chrome-m, fenix, geckoview]
         run-visual-metrics: true
@@ -352,7 +348,6 @@ browsertime-tp6m-live:
 
 browsertime-tp6m-profiling:
     description: Raptor (browsertime) tp6 page-load tests on android with Gecko profiling
-    run-without-variant: false
     raptor:
         apps: [geckoview]
         test: tp6m
@@ -374,7 +369,6 @@ browsertime-video-playback-latency-mobile:
     <<: *tp6m-defaults
     description: Browsertime Video Playback Latency on Android
     treeherder-symbol: Btime(vpl)
-    run-without-variant: false
     raptor:
         apps: [chrome-m, fenix, geckoview]
         run-visual-metrics: true
@@ -399,7 +393,6 @@ browsertime-video-playback-latency-mobile:
 
 browsertime-benchmark-speedometer-mobile:
     description: Browsertime Speedometer on Android
-    run-without-variant: false
     raptor:
         apps: [geckoview, fenix, chrome-m, cstm-car-m]
     tier:
@@ -418,8 +411,8 @@ browsertime-benchmark-speedometer-mobile:
                     default: []
             cstm-car-m:
                 by-test-platform:
-                    android-hw-p6.*shippable-qr.*: []
-                    android-hw-s24.*shippable-qr.*: []
+                    android-hw-p6.*shippable.*: []
+                    android-hw-s24.*shippable.*: []
                     default: [mozilla-central]
             default: []
     treeherder-symbol: Btime(sp)
@@ -429,7 +422,7 @@ browsertime-benchmark-speedometer-mobile:
 
 browsertime-benchmark-speedometer3-mobile:
     description: Browsertime Speedometer 3 on Android
-    run-without-variant: false
+
     raptor:
         apps: [geckoview, fenix, chrome-m, cstm-car-m]
     tier:
@@ -443,20 +436,20 @@ browsertime-benchmark-speedometer3-mobile:
             fenix:
                 by-test-platform:
                     android-hw-a55.*shippable.*: [trunk-only]
-                    android-hw-p6.*shippable-qr.*: [mozilla-central]
-                    android-hw-s24.*shippable-qr.*: [mozilla-central]
+                    android-hw-p6.*shippable.*: [mozilla-central]
+                    android-hw-s24.*shippable.*: [mozilla-central]
                     default: []
             geckoview:
                 by-test-platform:
                     android-hw-a55.*shippable.*: [trunk-only]
-                    android-hw-p6.*shippable-qr.*: [mozilla-central]
-                    android-hw-s24.*shippable-qr.*: [mozilla-central]
+                    android-hw-p6.*shippable.*: [mozilla-central]
+                    android-hw-s24.*shippable.*: [mozilla-central]
                     default: []
             cstm-car-m: [mozilla-central]
             chrome-m:
                 by-test-platform:
-                    android-hw-p6.*shippable-qr.*: [mozilla-central]
-                    android-hw-s24.*shippable-qr.*: [mozilla-central]
+                    android-hw-p6.*shippable.*: [mozilla-central]
+                    android-hw-s24.*shippable.*: [mozilla-central]
                     default: []
             default: []
     treeherder-symbol: Btime(sp3)
@@ -466,7 +459,6 @@ browsertime-benchmark-speedometer3-mobile:
 
 browsertime-benchmark-motionmark-1-3:
     description: Raptor (browsertime) Motionmark 1.3 benchmark tests
-    run-without-variant: false
     raptor:
         apps: [geckoview, fenix, chrome-m, cstm-car-m]
         subtests:
@@ -486,9 +478,28 @@ browsertime-benchmark-motionmark-1-3:
             geckoview: 2
             default: 3
 
+browsertime-benchmark-jetstream2:
+    description: Raptor (browsertime) jetstream 2 benchmark test
+    run-without-variant: false
+    raptor:
+        apps: [fenix, chrome-m, cstm-car-m]
+        subtests:
+            - [jetstream2, js]
+    run-on-projects:
+        by-test-platform:
+            android-hw-a55.*shippable.*:
+                by-app:
+                    fenix: [mozilla-central]
+                    default: []
+            default: []
+    treeherder-symbol: Btime()
+    tier:
+        by-app:
+            fenix: 2
+            default: 3
+
 browsertime-benchmark-unity-webgl-mobile:
     description: Browsertime Unity WebGL on Android
-    run-without-variant: false
     raptor:
         apps: [geckoview, refbrow, fenix, chrome-m]
     tier:
@@ -515,7 +526,6 @@ browsertime-benchmark-unity-webgl-mobile:
 
 browsertime-power:
     description: Browsertime Power Usage Tests on Android
-    run-without-variant: false
     raptor:
         apps: [geckoview, fenix, refbrow]
         subtests:

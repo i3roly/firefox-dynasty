@@ -358,10 +358,16 @@ features:
           additional Search settings.
         type: Boolean
         default: false
+      boost-amp-wiki:
+        description: >
+          The feature boost wiki and AMP suggestions to the top of its group.
+        type: Boolean
+        default: false
     defaults:
       - channel: developer
         value:
           enabled: true
+          boost-amp-wiki: true
       - channel: nightly
         value:
           enabled: true
@@ -541,6 +547,14 @@ features:
         description: If true, the new menu redesign is available.
         type: Boolean
         default: false
+      report-site-issue:
+        description: If true, report site issue menu item and preview is available.
+        type: Boolean
+        default: true
+    defaults:
+      - channel: release
+        value:
+          report-site-issue: false
 
   microsurveys:
     description: Feature for microsurveys.
@@ -602,6 +616,15 @@ features:
           Enables or disables network.fetchpriority.enabled preference.
         type: Boolean
         default: true
+
+  javascript:
+    description: Enables Javascript Engine (Spidermonkey) features
+    variables:
+      parallelMarkingEnabled:
+        description: >
+          Enables or disables javascript.options.mem.gc_parallel_marking preference.
+        type: Boolean
+        default: false
 
 types:
   objects: {}

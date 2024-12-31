@@ -85,19 +85,25 @@ void RestyleManager::ContentInserted(nsIContent* aChild) {
 }
 
 void RestyleManager::ContentAppended(nsIContent* aFirstNewContent) {
-  auto* container = aFirstNewContent->GetParentNode();
-  MOZ_ASSERT(container);
+  MOZ_ASSERT(aFirstNewContent->GetParentNode());
 
 #ifdef DEBUG
-  {
-    for (nsIContent* cur = aFirstNewContent; cur; cur = cur->GetNextSibling()) {
-      NS_ASSERTION(!cur->IsRootOfNativeAnonymousSubtree(),
-                   "anonymous nodes should not be in child lists");
-    }
+  for (nsIContent* cur = aFirstNewContent; cur; cur = cur->GetNextSibling()) {
+    NS_ASSERTION(cur->IsRootOfNativeAnonymousSubtree() ==
+                     aFirstNewContent->IsRootOfNativeAnonymousSubtree(),
+                 "anonymous nodes should not be in child lists");
   }
 #endif
+
+  // We get called explicitly with NAC by editor and view transitions code, but
+  // in those cases we don't need to do any invalidation.
+  if (MOZ_UNLIKELY(aFirstNewContent->IsRootOfNativeAnonymousSubtree())) {
+    return;
+  }
+
   StyleSet()->MaybeInvalidateForElementAppend(*aFirstNewContent);
 
+  auto* container = aFirstNewContent->GetParentNode();
   const auto selectorFlags = container->GetSelectorFlags() &
                              NodeSelectorFlags::AllSimpleRestyleFlagsForAppend;
   if (!selectorFlags) {
@@ -441,6 +447,17 @@ void RestyleManager::ContentRemoved(nsIContent* aOldChild,
     // invalidated.
     IncrementUndisplayedRestyleGeneration();
   }
+
+  // This is called with anonymous nodes explicitly by editor and view
+  // transitions code, which manage anon content manually.
+  // See similar code in ContentAppended.
+  if (MOZ_UNLIKELY(aOldChild->IsRootOfNativeAnonymousSubtree())) {
+    MOZ_ASSERT(!aFollowingSibling, "NAC doesn't have siblings");
+    MOZ_ASSERT(aOldChild->GetProperty(nsGkAtoms::restylableAnonymousNode),
+               "anonymous nodes should not be in child lists (bug 439258)");
+    return;
+  }
+
   if (aOldChild->IsElement()) {
     StyleSet()->MaybeInvalidateForElementRemove(*aOldChild->AsElement(),
                                                 aFollowingSibling);
@@ -450,14 +467,6 @@ void RestyleManager::ContentRemoved(nsIContent* aOldChild,
       container->GetSelectorFlags() & NodeSelectorFlags::AllSimpleRestyleFlags;
   if (!selectorFlags) {
     return;
-  }
-
-  if (aOldChild->IsRootOfNativeAnonymousSubtree()) {
-    // This should be an assert, but this is called incorrectly in
-    // HTMLEditor::DeleteRefToAnonymousNode and the assertions were clogging
-    // up the logs.  Make it an assert again when that's fixed.
-    MOZ_ASSERT(aOldChild->GetProperty(nsGkAtoms::restylableAnonymousNode),
-               "anonymous nodes should not be in child lists (bug 439258)");
   }
 
   // The container cannot be a document.
@@ -694,12 +703,11 @@ nsCString RestyleManager::ChangeHintToString(nsChangeHint aHint) {
                          "UpdateTableCellSpans",
                          "VisibilityChange"};
   static_assert(nsChangeHint_AllHints ==
-                    static_cast<uint32_t>((1ull << ArrayLength(names)) - 1),
+                    static_cast<uint32_t>((1ull << std::size(names)) - 1),
                 "Name list doesn't match change hints.");
-  uint32_t hint =
-      aHint & static_cast<uint32_t>((1ull << ArrayLength(names)) - 1);
+  uint32_t hint = aHint & static_cast<uint32_t>((1ull << std::size(names)) - 1);
   uint32_t rest =
-      aHint & ~static_cast<uint32_t>((1ull << ArrayLength(names)) - 1);
+      aHint & ~static_cast<uint32_t>((1ull << std::size(names)) - 1);
   if ((hint & NS_STYLE_HINT_REFLOW) == NS_STYLE_HINT_REFLOW) {
     result.AppendLiteral("NS_STYLE_HINT_REFLOW");
     hint = hint & ~NS_STYLE_HINT_REFLOW;
@@ -714,7 +722,7 @@ nsCString RestyleManager::ChangeHintToString(nsChangeHint aHint) {
     hint = hint & ~NS_STYLE_HINT_VISUAL;
     any = true;
   }
-  for (uint32_t i = 0; i < ArrayLength(names); i++) {
+  for (uint32_t i = 0; i < std::size(names); i++) {
     if (hint & (1u << i)) {
       if (any) {
         result.AppendLiteral(" | ");
@@ -1370,7 +1378,9 @@ static void StyleChangeReflow(nsIFrame* aFrame, nsChangeHint aHint) {
 
   // If we're not going to clear any intrinsic sizes on the frames, and
   // there are no dirty bits to set, then there's nothing to do.
-  if (dirtyType == IntrinsicDirty::None && !dirtyBits) return;
+  if (dirtyType == IntrinsicDirty::None && !dirtyBits) {
+    return;
+  }
 
   ReflowRootHandling rootHandling;
   if (aHint & nsChangeHint_ReflowChangesSizeOrPosition) {
@@ -2602,7 +2612,7 @@ struct RestyleManager::TextPostTraversalState {
 static void UpdateBackdropIfNeeded(nsIFrame* aFrame, ServoStyleSet& aStyleSet,
                                    nsStyleChangeList& aChangeList) {
   const nsStyleDisplay* display = aFrame->Style()->StyleDisplay();
-  if (display->mTopLayer != StyleTopLayer::Top) {
+  if (display->mTopLayer != StyleTopLayer::Auto) {
     return;
   }
 

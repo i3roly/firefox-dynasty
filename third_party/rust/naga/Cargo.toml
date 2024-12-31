@@ -13,14 +13,14 @@
 edition = "2021"
 rust-version = "1.73"
 name = "naga"
-version = "22.0.0"
+version = "23.0.0"
 authors = ["gfx-rs developers"]
 build = "build.rs"
 exclude = [
-"bin/**/*",
-"tests/**/*",
-"Cargo.lock",
-"target/**/*",
+    "bin/**/*",
+    "tests/**/*",
+    "Cargo.lock",
+    "target/**/*",
 ]
 autobins = false
 autoexamples = false
@@ -29,10 +29,10 @@ autobenches = false
 description = "Shader translation infrastructure"
 readme = "README.md"
 keywords = [
-"shader",
-"SPIR-V",
-"GLSL",
-"MSL",
+    "shader",
+    "SPIR-V",
+    "GLSL",
+    "MSL",
 ]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/gfx-rs/wgpu/tree/trunk/naga"
@@ -84,7 +84,7 @@ optional = true
 version = "1.1.0"
 
 [dependencies.serde]
-version = "1.0.210"
+version = "1.0.214"
 features = ["derive"]
 optional = true
 
@@ -96,7 +96,7 @@ optional = true
 version = "1.4.1"
 
 [dependencies.thiserror]
-version = "1.0.64"
+version = "1.0.67"
 
 [dependencies.unicode-xid]
 version = "0.2.6"
@@ -128,21 +128,25 @@ features = ["derive"]
 version = "0.3"
 features = ["deserialize"]
 
+[dev-dependencies.strum]
+version = "0.25.0"
+features = ["derive"]
+
 [build-dependencies.cfg_aliases]
 version = "0.1"
 
 [features]
 arbitrary = [
-"dep:arbitrary",
-"bitflags/arbitrary",
-"indexmap/arbitrary",
+    "dep:arbitrary",
+    "bitflags/arbitrary",
+    "indexmap/arbitrary",
 ]
 compact = []
 default = []
 deserialize = [
-"dep:serde",
-"bitflags/serde",
-"indexmap/serde",
+    "dep:serde",
+    "bitflags/serde",
+    "indexmap/serde",
 ]
 dot-out = []
 glsl-in = ["dep:pp-rs"]
@@ -152,18 +156,18 @@ hlsl-out-if-target-windows = []
 msl-out = []
 msl-out-if-target-apple = []
 serialize = [
-"dep:serde",
-"bitflags/serde",
-"indexmap/serde",
+    "dep:serde",
+    "bitflags/serde",
+    "indexmap/serde",
 ]
 spv-in = [
-"dep:petgraph",
-"dep:spirv",
+    "dep:petgraph",
+    "dep:spirv",
 ]
 spv-out = ["dep:spirv"]
 wgsl-in = [
-"dep:hexf-parse",
-"dep:unicode-xid",
-"compact",
+    "dep:hexf-parse",
+    "dep:unicode-xid",
+    "compact",
 ]
 wgsl-out = []

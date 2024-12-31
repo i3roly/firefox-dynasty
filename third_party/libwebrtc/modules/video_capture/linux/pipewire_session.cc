@@ -76,7 +76,7 @@ PipeWireNode::PipeWireNode(PipeWireSession* session,
     : session_(session),
       id_(id),
       display_name_(spa_dict_lookup(props, PW_KEY_NODE_DESCRIPTION)),
-      unique_id_(rtc::ToString(id)) {
+      unique_id_(spa_dict_lookup(props, PW_KEY_NODE_NAME)) {
   RTC_LOG(LS_VERBOSE) << "Found Camera: " << display_name_;
 
   proxy_ = static_cast<pw_proxy*>(pw_registry_bind(
@@ -99,13 +99,13 @@ void PipeWireNode::OnNodeInfo(void* data, const pw_node_info* info) {
   if (info->change_mask & PW_NODE_CHANGE_MASK_PROPS) {
     const char* vid_str;
     const char* pid_str;
-    absl::optional<int> vid;
-    absl::optional<int> pid;
+    std::optional<int> vid;
+    std::optional<int> pid;
 
     vid_str = spa_dict_lookup(info->props, SPA_KEY_DEVICE_VENDOR_ID);
     pid_str = spa_dict_lookup(info->props, SPA_KEY_DEVICE_PRODUCT_ID);
-    vid = vid_str ? rtc::StringToNumber<int>(vid_str) : absl::nullopt;
-    pid = pid_str ? rtc::StringToNumber<int>(pid_str) : absl::nullopt;
+    vid = vid_str ? rtc::StringToNumber<int>(vid_str) : std::nullopt;
+    pid = pid_str ? rtc::StringToNumber<int>(pid_str) : std::nullopt;
 
     if (vid && pid) {
       char model_str[10];

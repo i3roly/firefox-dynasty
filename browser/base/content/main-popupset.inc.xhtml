@@ -32,6 +32,9 @@
     <menuitem id="context_playSelectedTabs" data-lazy-l10n-id="tab-context-play-tabs" hidden="true"/>
     <menuitem id="context_toggleMuteTab" />
     <menuitem id="context_toggleMuteSelectedTabs" hidden="true"/>
+    <menuitem id="context_unloadTab"
+              data-lazy-l10n-id="tab-context-unload-n-tabs"
+              data-l10n-args='{"tabCount": 1}'/>
     <menuitem id="context_pinTab" data-lazy-l10n-id="pin-tab"/>
     <menuitem id="context_unpinTab" data-lazy-l10n-id="unpin-tab" hidden="true"/>
     <menuitem id="context_pinSelectedTabs" data-lazy-l10n-id="pin-selected-tabs" hidden="true"/>
@@ -130,9 +133,8 @@
          hidden="true" />
 
   <panel id="searchmode-switcher-popup"
-         class="panel-no-padding"
+         class="panel-no-padding toolbar-menupopup"
          orient="vertical"
-         type="autocomplete-richlistbox"
          role="menu"
          consumeoutsideclicks="false"
          aria-labelledby="searchmode-switcher-popup-description">

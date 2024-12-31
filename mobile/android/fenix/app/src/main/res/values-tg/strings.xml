@@ -9,11 +9,11 @@
     <!-- Content description (not visible, for screen readers etc.): "Three dot" menu button. -->
     <string name="content_description_menu">Имконоти бештар</string>
     <!-- Content description (not visible, for screen readers etc.): "Private Browsing" menu button. -->
-    <string name="content_description_private_browsing_button">Фаъол кардани тамошокунии хусусӣ</string>
+    <string name="content_description_private_browsing_button">Фаъол кардани тамошобинии хусусӣ</string>
     <!-- Content description (not visible, for screen readers etc.): "Private Browsing" menu button. -->
-    <string name="content_description_disable_private_browsing_button">Ғайрифаъол кардани тамошокунии хусусӣ</string>
+    <string name="content_description_disable_private_browsing_button">Ғайрифаъол кардани тамошобинии хусусӣ</string>
     <!-- Content description (not visible, for screen readers etc.): "Private Browsing" menu button. -->
-    <string name="content_description_private_browsing">Тамошокунии махфӣ</string>
+    <string name="content_description_private_browsing">Тамошобинии махфӣ</string>
     <!-- Placeholder text shown in the search bar before a user enters text for the default engine -->
     <string name="search_hint">Нишониеро ҷустуҷӯ кунед ё ворид намоед</string>
     <!-- Placeholder text shown in the search bar before a user enters text for a general engine -->
@@ -63,9 +63,9 @@
     <!-- Explanation for private browsing displayed to users on home view when they first enable private mode
         The first parameter is the name of the app defined in app_name (for example: Fenix) -->
     <string name="private_browsing_placeholder_description_2">
-        %1$s таърихи тамошокунӣ ва ҷустуҷӯи шуморо аз варақаҳои хусусие, ки шумо мепӯшед ё вақте ки шумо барномаро хомӯш мекунед, пок мекунад. Ин амал шуморо аз сомонаҳо ё провайдери хизматрасонии интернет пинҳон намекунад, аммо аз корбарони дигаре, ки ин дастгоҳро истифода мебаранд, фаъолияти онлайни шуморо ба осонӣ шахсӣ карда, нигоҳ медорад.</string>
+        %1$s таърихи тамошобинӣ ва ҷустуҷӯи шуморо аз варақаҳои хусусие, ки шумо мепӯшед ё вақте ки шумо барномаро хомӯш мекунед, пок мекунад. Ин амал шуморо аз сомонаҳо ё провайдери хизматрасонии интернет пинҳон намекунад, аммо аз корбарони дигаре, ки ин дастгоҳро истифода мебаранд, фаъолияти онлайни шуморо ба осонӣ шахсӣ карда, нигоҳ медорад.</string>
     <string name="private_browsing_common_myths">
-       Асотири маълум дар бораи тамошокунии хусусӣ
+       Асотири маълум дар бораи тамошобинии хусусӣ
     </string>
 
     <!-- True Private Browsing Mode -->
@@ -97,12 +97,6 @@
     <!-- Text for the negative action button -->
     <string name="open_in_app_cfr_negative_button_text">Нодида гузарондан</string>
 
-    <!-- Total cookie protection "contextual feature recommendation" (CFR) -->
-    <!-- Text for the message displayed in the contextual feature recommendation popup promoting the total cookie protection feature. -->
-    <string name="tcp_cfr_message" moz:removedIn="132" tools:ignore="UnusedResources">Пуриқтидортарин хусусияти мо барои махфияти шумо, инчунин, васоити пайгирии байнисомонавиро ҷудо мекунанд.</string>
-    <!-- Text displayed that links to website containing documentation about the "Total cookie protection" feature. -->
-    <string name="tcp_cfr_learn_more" moz:removedIn="132" tools:ignore="UnusedResources">Маълумот дар бораи «Муҳофизати пурра аз кукиҳо»</string>
-
 
     <!-- Private browsing erase action "contextual feature recommendation" (CFR) -->
     <!-- Text for the message displayed in the contextual feature recommendation popup promoting the erase private browsing feature. -->
@@ -118,11 +112,11 @@
     <!-- Text for the message displayed for the popup promoting the long press of navigation in the navigation bar. -->
     <string name="navbar_navigation_buttons_cfr_message">Барои гузариш аз саҳифа ба саҳифа дар таърихи ин варақа, ақрабақҳоро зер карда, доред.</string>
 
-    <!-- Tablet navigation bar "contextual feature recommendation" (CFR) -->
-    <!-- Text for the title displayed in the contextual feature recommendation popup promoting the tablet navigation bar. -->
-    <string name="tablet_nav_bar_cfr_title" moz:removedIn="132" tools:ignore="UnusedResources">Нав: ақрабақҳои ба пеш ва ба қафо бо як расиш</string>
-    <!-- Text for the message displayed in the contextual feature recommendation popup promoting the tablet navigation bar. -->
-    <string name="tablet_nav_bar_cfr_message" moz:removedIn="132" tools:ignore="UnusedResources">Аз паймоиши тезкоре, ки ҳамеша дар зери ангуштони шумо мебошад, баҳра баред.</string>
+    <!-- Address bar swipe "contextual feature recommendation" (CFR) -->
+    <!-- Text for the title displayed in the contextual feature recommendation popup promoting swipe of address bar. -->
+    <string name="address_bar_swipe_cfr_title">Барои иваз кардани варақаҳо, навори абзорҳоро бо ангуш молед</string>
+    <!-- Text for the message displayed in the contextual feature recommendation popup promoting swipe of address bar. -->
+    <string name="address_bar_swipe_cfr_message">Барои гузариш, бо ангушт ба тарафи чап ё рост молед. Барои кушодани варақаи нав, варақаи охиринро бо ангушт ба тарафи чап молед.</string>
 
     <!-- Text for the info dialog when camera permissions have been denied but user tries to access a camera feature. -->
     <string name="camera_permissions_needed_message">Дастрасии камера лозим аст. Ба «Танзимоти Android» гузаред, ба «Иҷозатҳо» зарба занед, пас ба «Иҷозат додан» зарба занед.</string>
@@ -213,7 +207,7 @@
     <string name="browser_menu_disabled_extensions_banner_onboarding_header">Шумо васеъшавиҳоро насб кардед, вале онҳо фаъол намебошанд</string>
     <!-- Browser menu banner body text for extensions onboarding.
         The first parameter is the name of the app defined in app_name (for example: Fenix). -->
-    <string name="browser_menu_extensions_banner_onboarding_body">Васеъшавиҳо аз иваз кардани намуди зоҳирӣ ва кори самараноки «%s» то дастгирӣ кардани махфият ва бехатарии шумо дар Интернет таҷрибаи тамошокунии шуморо ба сатҳи баланд мебардоранд.</string>
+    <string name="browser_menu_extensions_banner_onboarding_body">Васеъшавиҳо аз иваз кардани намуди зоҳирӣ ва кори самараноки «%s» то дастгирӣ кардани махфият ва бехатарии шумо дар Интернет таҷрибаи тамошобинии шуморо ба сатҳи баланд мебардоранд.</string>
     <!-- Browser menu banner body text for extensions onboarding when all installed extensions have been disabled.
      The first parameter is the name of the button that opens extension manager (for example "Manage extensions"). -->
     <string name="browser_menu_disabled_extensions_banner_onboarding_body">Барои истифода кардани васеъшавиҳо, онҳоро дар танзимот ё бо интихоб кардани «%s» дар зер фаъол созед.</string>
@@ -249,8 +243,12 @@
     <string name="browser_menu_open_in_regular_tab">Кушодан дар варақаи одӣ</string>
     <!-- Browser menu toggle that adds a shortcut to the site on the device home screen. -->
     <string name="browser_menu_add_to_homescreen">Илова кардан ба экрани асосӣ</string>
+    <!-- Browser menu toggle that adds a PWA of the site on the device home screen. -->
+    <string name="browser_menu_add_app_to_homescreen">Илова кардани барнома ба экрани асосӣ</string>
     <!-- Browser menu toggle that adds a shortcut to the site on the device home screen. -->
     <string name="browser_menu_add_to_homescreen_2">Илова кардан ба экрани асосӣ…</string>
+    <!-- Browser menu toggle that adds a PWA of the site on the device home screen. -->
+    <string name="browser_menu_add_app_to_homescreen_2">Илова кардани барнома ба экрани асосӣ…</string>
     <!-- Text for notifying users that Xiaomi devices require additional permissions to add to home screen -->
     <string name="browser_menu_add_to_homescreen_xiaomi">Дастгоҳҳои «Xiaomi» метавонанд барои илова кардани миёнабурҳо ба экрани асосӣ иҷозатҳои иловагиро талаб кунанд. Лутфан, танзимоти худро санҷед.</string>
     <!-- Content description (not visible, for screen readers etc.) for the Resync tabs button -->
@@ -339,9 +337,23 @@
     <!-- Content description (not visible, for screen readers etc.) for bottom sheet handlebar custom tab menu. -->
     <string name="browser_custom_tab_menu_handlebar_content_description">Варақи менюи варақаи фармоиширо мепӯшад</string>
     <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
-    <string name="browser_menu_tools_description_with_translate">Реҷаи хониш, Тарҷума, Чоп, Мубодила, Кушодани барнома</string>
+    <string name="browser_menu_tools_description_with_translate" moz:removedIn="134" tools:ignore="UnusedResources">Реҷаи хониш, Тарҷума, Чоп, Мубодила, Кушодани барнома</string>
     <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
-    <string name="browser_menu_tools_description">Реҷаи хониш, Чоп, Мубодила, Кушодани барнома</string>
+    <string name="browser_menu_tools_description" moz:removedIn="134" tools:ignore="UnusedResources">Реҷаи хониш, Чоп, Мубодила, Кушодани барнома</string>
+    <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu
+         The first parameter is the label of the report site issue (for example: Report Site issue) -->
+    <string name="browser_menu_tools_description_with_translate_with_report_site" moz:removedIn="135" tools:ignore="UnusedResources">Реҷаи хониш, Тарҷума, %s, Чоп, Мубодила, Кушодани барнома</string>
+    <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu when the "Report broken site" feature is available-->
+    <string name="browser_menu_tools_description_with_translate_with_report_site_2">Реҷаи хониш, Тарҷума, Гузориш дар бораи сомонаи вайроншуда, Чоп, Мубодила, Кушодани барнома</string>
+    <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
+    <string name="browser_menu_tools_description_with_translate_without_report_site">Реҷаи хониш, Тарҷума, Чоп, Мубодила, Кушодани барнома</string>
+    <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu
+         The first parameter is the label of the report site issue (for example: Report Site issue) -->
+    <string name="browser_menu_tools_description_with_report_site" moz:removedIn="135" tools:ignore="UnusedResources">Реҷаи хониш, %s, Чоп, Мубодила, Кушодани барнома</string>
+    <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu when the "Report broken site" feature is available-->
+    <string name="browser_menu_tools_description_with_report_site_2">Реҷаи хониш, Гузориш дар бораи сомонаи вайроншуда, Чоп, Мубодила, Кушодани барнома</string>
+    <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
+    <string name="browser_menu_tools_description_without_report_site">Реҷаи хониш, Чоп, Мубодила, Кушодани барнома</string>
     <!-- Browser menu label that navigates to the save sub-menu, which contains various save related menu items such as
          bookmarking a page, saving to collection, shortcut or as a PDF, and adding to home screen -->
     <string name="browser_menu_save">Нигоҳ доштан</string>
@@ -358,9 +370,13 @@
     <string name="browser_menu_turn_on_reader_view">Фаъол кардани намоиши хонанда</string>
     <!-- Browser menu label for turning OFF reader view of the current visited page -->
     <string name="browser_menu_turn_off_reader_view">Хомӯш кардани намоиши хонанда</string>
+    <!-- Browser menu button that reopens a private tab as a regular tab -->
+    <string name="browser_menu_open_in_normal_tab">Гузариш ба варақаи ғайрихусусӣ</string>dsa
     <!-- Browser menu label for navigating to the translation feature, which provides language translation options the current visited page -->
     <string name="browser_menu_translate_page">Тарҷума кардани саҳифа…</string>
 
+    <!-- Browser menu label for navigating to the Web Compat Reporter feature, which provides users the ability to send bug reports for broken sites. -->
+    <string name="browser_menu_webcompat_reporter">Гузориш дар бораи сомонаи вайроншуда…</string>
     <!-- Browser menu label that is displayed when the current page has been translated by the translation feature.
          The first parameter is the name of the language that page was translated to (e.g. English). -->
     <string name="browser_menu_translated_to">Ба забони %1$s тарҷума шуд</string>
@@ -376,7 +392,7 @@
     <string name="menu_cfr_title">Нав: менюи беҳтаршуда</string>
 
     <!-- Text for the message in the contextual feature recommendation popup promoting the menu feature. -->
-    <string name="menu_cfr_body">Он чизеро, ки ба шумо лозим аст, аз тамошокунии хусусӣ то амалҳои нигоҳдорӣ, зудтар пайдо кунед.</string>
+    <string name="menu_cfr_body">Он чизеро, ки ба шумо лозим аст, аз тамошобинии хусусӣ то амалҳои нигоҳдорӣ, зудтар пайдо кунед.</string>
 
     <!-- Extensions management fragment -->
     <!-- Text displayed when there are no extensions to be shown -->
@@ -442,8 +458,6 @@
     <string name="search_engine_icon_content_description_1">Низоми ҷустуҷӯӣ: %s</string>
 
     <!-- Home onboarding -->
-    <!-- Onboarding home screen popup dialog, shown on top of the Jump back in section. -->
-    <string name="onboarding_home_screen_jump_back_contextual_hint_2" moz:removedIn="132">Бо саҳифаи асосии шахсии худ шинос шавед. Варақаҳо, хатбаракҳо ва натиҷаҳои ҷустуҷӯи охирин дар ин ҷо пайдо мешаванд.</string>
     <!-- Home onboarding dialog welcome screen title text. -->
     <string name="onboarding_home_welcome_title_2">Хуш омадед ба Интернети хусуситар</string>
     <!-- Home onboarding dialog welcome screen description text. -->
@@ -474,7 +488,7 @@
         Note: The word "Firefox" should NOT be translated -->
     <string name="juno_onboarding_default_browser_title_nimbus_3" tools:ignore="BrandUsage,UnusedResources">Бифаҳмед, ки чаро миллионҳо одамон браузери «Firefox»-ро дӯст медоранд</string>
     <!-- Title for set firefox as default browser screen used by Nimbus experiments. -->
-    <string name="juno_onboarding_default_browser_title_nimbus_4" tools:ignore="UnusedResources">Тамошокунии бехатар бо интихобҳои бештар</string>
+    <string name="juno_onboarding_default_browser_title_nimbus_4" tools:ignore="UnusedResources">Тамошобинии бехатар бо интихобҳои бештар</string>
     <!-- Description for set firefox as default browser screen used by Nimbus experiments. -->
     <string name="juno_onboarding_default_browser_description_nimbus_3">Браузери мо, ки аз ҷониби ташкилоти ғайритиҷоратӣ дастгирӣ мешавад, маъракаҳоеро, ки шуморо дар атрофи Интернет пинҳонӣ пайгирӣ мекунанд, қатъ мекунад.</string>
     <!-- Description for set firefox as default browser screen used by Nimbus experiments. -->
@@ -562,6 +576,86 @@
     <!-- Content description for the star rating group. -->
     <string name="onboarding_add_on_star_rating_content_description">Баҳои %1$s аз 5</string>
 
+    <!-- Title for the privacy preferences dialog shown during onboarding. Note: The word "Firefox" should NOT be translated. -->
+    <string name="onboarding_preferences_dialog_title" tools:ignore="BrandUsage,UnusedResources">Ба мо барои беҳтар кардани браузери «Firefox» кумак расонед</string>
+    <!-- Title for the crash reporting option in the privacy preferences dialog shown during onboarding. -->
+    <string name="onboarding_preferences_dialog_crash_reporting_title" tools:ignore="UnusedResources">Ба таври худкор фиристодани гузоришҳо дар бораи вайронӣ</string>
+    <!-- Description for the crash reporting option in the privacy preferences dialog shown during onboarding. -->
+    <string name="onboarding_preferences_dialog_crash_reporting_description" tools:ignore="UnusedResources">Гузоришҳо дар бораи вайронӣ ба мо барои ташхис ва ислоҳ кардани хатоҳои браузер имкон медиҳанд. Гузоришҳо метавонанд маълумоти шахсӣ ва махфиро дар бар гиранд.</string>
+
+    <!-- Learn more link for the crash reporting option in the privacy preferences dialog shown during onboarding. -->
+    <string name="onboarding_preferences_dialog_crash_reporting_learn_more" tools:ignore="UnusedResources">Маълумоти бештар дар бораи гузоришҳо дар бораи вайронӣ</string>
+    <!-- Title for the usage data option in the privacy preferences dialog shown during onboarding. Note: The word "Mozilla" should NOT be translated. -->
+    <string name="onboarding_preferences_dialog_usage_data_title" tools:ignore="UnusedResources">Фиристодани маълумоти техникӣ ва ҳамкорӣ ба «Mozilla»</string>
+    <!-- Description for the usage data option in the privacy preferences dialog shown during onboarding. Note: The word "Firefox" should NOT be translated. -->
+    <string name="onboarding_preferences_dialog_usage_data_description" tools:ignore="BrandUsage,UnusedResources">Маълумот дар бораи дастгоҳи шумо, танзимоти сахтафзор ва тарзи истифодаи «Firefox» барои беҳтар кардани хусусиятҳо, самаранокӣ ва устуворӣ барои ҳамаи корбарони браузер новобаста аз ҷойгиршавӣ кумак мекунад.</string>
+    <!-- Learn more link for the usage data option in the privacy preferences dialog shown during onboarding. -->
+    <string name="onboarding_preferences_dialog_usage_data_learn_more" tools:ignore="UnusedResources">Маълумоти бештар дар бораи истифодаи маълумот</string>
+    <!-- Positive button label for the privacy preferences dialog shown during onboarding. -->
+    <string name="onboarding_preferences_dialog_positive_button" tools:ignore="UnusedResources">Тайёр</string>
+    <!-- Negative button label for the privacy preferences dialog shown during onboarding. -->
+    <string name="onboarding_preferences_dialog_negative_button" tools:ignore="UnusedResources">Бекор кардан</string>
+
+    <!-- Terms of service onboarding title card label. 'Firefox' intentionally hardcoded here-->
+    <string name="onboarding_welcome_to_firefox" tools:ignore="UnusedResources,BrandUsage">Хуш омадед ба «Firefox»</string>
+    <!-- Terms of service onboarding page continue button label. -->
+    <string name="onboarding_term_of_service_agree_and_continue_button_label" tools:ignore="UnusedResources">Розӣ шавед ва идома диҳед</string>
+    <!-- Line one of the terms of service onboarding page. 'Firefox' is intentionally hardcoded. %1$s is replaced by an active link, using onboarding_term_of_service_line_one_link_text as text (“Terms of Service”). -->
+    <string name="onboarding_term_of_service_line_one" tools:ignore="UnusedResources,BrandUsage">Бо идома додан, шумо бо %1$s барои «Firefox» розӣ мешавед.</string>
+    <!-- Used as text for the link in onboarding_term_of_service_line_one. -->
+    <string name="onboarding_term_of_service_line_one_link_text" tools:ignore="UnusedResources,BrandUsage">Шартҳои хизматрасонӣ</string>
+    <!-- Line two of the terms of service onboarding page. 'Firefox' is intentionally hardcoded. %1$s is replaced by an active link, using onboarding_term_of_service_line_two_link_text as text (Privacy Notice”). -->
+    <string name="onboarding_term_of_service_line_two" tools:ignore="UnusedResources,BrandUsage">Браузери «Firefox» ба махфияти шумо ғамхорӣ мекунад. Маълумоти бештар дар «%1$s» хонед.</string>
+    <!-- Used as text for the link in onboarding_term_of_service_line_two. -->
+    <string name="onboarding_term_of_service_line_two_link_text" tools:ignore="UnusedResources,BrandUsage">Огоҳномаи махфият</string>
+    <!-- Line three of the terms of service onboarding page. 'Firefox' and 'Mozilla' are intentionally hardcoded. %1$S is replaced by an active link, using onboarding_term_of_service_line_three_link_text as text (Manage”). -->
+    <string name="onboarding_term_of_service_line_three" tools:ignore="UnusedResources,BrandUsage">Барои беҳтар кардани браузер, «Firefox» маълумоти ташхис ва якҷояамалкуниро ба «Mozilla» ирсол мекунад. %1$s</string>
+    <!-- Used as text for the link in onboarding_term_of_service_line_three. -->
+    <string name="onboarding_term_of_service_line_three_link_text" tools:ignore="UnusedResources,BrandUsage">Идоракунӣ</string>
+    <!-- Onboarding header for the toolbar selection card, used by Nimbus experiments. -->
+    <string name="onboarding_customize_toolbar_title" tools:ignore="UnusedResources">Ҷойгиркунии навори абзорҳоро интихоб кунед</string>
+    <!-- Onboarding sub header for toolbar selection card, used by Nimbus experiments. -->
+    <string name="onboarding_customize_toolbar_description" tools:ignore="UnusedResources">Ҷустуҷӯҳои худро дар фазои дастрас нигоҳ доред.</string>
+    <!-- Onboarding label for 'Save and continue' button, used by Nimbus experiments. -->
+    <string name="onboarding_save_and_continue_button">Нигоҳ доред ва идома диҳед</string>
+    <!-- Onboarding toolbar selection card label for 'skip' button, used by Nimbus experiments. -->
+    <string name="onboarding_customize_toolbar_skip_button">Нодида гузарондан</string>
+    <!-- Onboarding toolbar selection card label for 'top' option, used by Nimbus experiments. -->
+    <string name="onboarding_customize_toolbar_top_option">Боло</string>
+    <!-- Onboarding toolbar selection card label for 'bottom' option, used by Nimbus experiments. -->
+    <string name="onboarding_customize_toolbar_bottom_option">Поён</string>
+
+    <!-- Onboarding toolbar selection card content description for the main image. -->
+    <string name="onboarding_customize_toolbar_main_image_content_description">Тасвири калон дар сарлавҳаи намуди интихоби навори абзорҳо, ки тасвири навори абзорҳои тавсифшударо нишон медиҳад.</string>
+
+    <!-- Onboarding toolbar selection card content description for the toolbar placement image. %1$s is placeholder for either 'top' or 'bottom'. -->
+    <string name="onboarding_customize_toolbar_placement_content_description" moz:removedIn="135" tools:ignore="UnusedResources">Тасвири навори абзорҳои %1$s</string>
+
+    <!-- Onboarding toolbar selection card content description for the toolbar placement image. -->
+    <string name="onboarding_customize_toolbar_placement_bottom_content_description">Тасвири навори абзорҳои поён</string>
+    <string name="onboarding_customize_toolbar_placement_top_content_description">Тасвири навори абзорҳои боло</string>
+
+    <!-- Onboarding header for the theme selection card, used by Nimbus experiments. -->
+    <string name="onboarding_customize_theme_title" tools:ignore="UnusedResources">Мавзуеро интихоб намоед</string>
+
+    <!-- Onboarding sub header for theme selection card, used by Nimbus experiments. -->
+    <string name="onboarding_customize_theme_description" tools:ignore="UnusedResources">Ба Интернет аз тарафи тобон нигаред.</string>
+
+    <!-- Onboarding label for 'Save and start browsing' button, used by Nimbus experiments. -->
+    <string name="onboarding_save_and_start_button">Нигоҳ доред ва тамошоро оғоз намоед</string>
+    <!-- Onboarding theme selection card label for 'skip' button, used by Nimbus experiments. -->
+    <string name="onboarding_customize_theme_skip_button">Нодида гузарондан</string>
+    <!-- Onboarding theme selection card label for 'dark' option, used by Nimbus experiments. -->
+    <string name="onboarding_customize_theme_dark_option">Торик</string>
+    <!-- Onboarding theme selection card label for 'light' option, used by Nimbus experiments. -->
+    <string name="onboarding_customize_theme_light_option">Равшан</string>
+    <!-- Onboarding theme selection card label for 'System auto' option, used by Nimbus experiments. -->
+    <string name="onboarding_customize_theme_system_option">Ба таври худкор аз рӯйи низом</string>
+    <!-- Onboarding theme selection card content description for the main image. -->
+    <string name="onboarding_customize_theme_main_image_content_description">Тасвири калон дар сарлавҳаи намуди интихоби мавзуъ, ки тасвири абзорҳои рассом ва созандаи тавсифшударо нишон медиҳад.</string>
+    <!-- Onboarding theme selection card content description for the theme selection image. %1$s is placeholder for either 'system', 'light' or 'dark'. -->
+    <string name="onboarding_customize_theme_content_description">Тасвири мавзуи «%1$s»</string>
+
     <!-- Search Widget -->
     <!-- Content description for searching with a widget. The first parameter is the name of the application.-->
     <string name="search_widget_content_description_2">Кушодани варақаи нави %1$s</string>
@@ -618,22 +712,22 @@
     <!-- Preference for advanced site settings -->
     <string name="preferences_site_settings">Танзимоти сомона</string>
     <!-- Preference for private browsing options -->
-    <string name="preferences_private_browsing_options">Тамошокунии хусусӣ</string>
+    <string name="preferences_private_browsing_options">Тамошобинии хусусӣ</string>
     <!-- Preference for opening links in a private tab-->
     <string name="preferences_open_links_in_a_private_tab">Кушодани пайвандҳо дар варақаи хусусӣ</string>
     <!-- Preference for allowing screenshots to be taken while in a private tab-->
-    <string name="preferences_allow_screenshots_in_private_mode">Иҷозат додани аксҳои экран ҳангоми тамошокунии хусусӣ</string>
+    <string name="preferences_allow_screenshots_in_private_mode">Иҷозат додани аксҳои экран ҳангоми тамошобинии хусусӣ</string>
     <!-- Will inform the user of the risk of activating Allow screenshots in private browsing option -->
     <string name="preferences_screenshots_in_private_mode_disclaimer">Агар иҷозат дода шавад, варақаҳои хусусӣ низ ҳангоми кушода будани якчанд барнома намоён мешаванд</string>
     <!-- Preference for adding private browsing shortcut -->
-    <string name="preferences_add_private_browsing_shortcut">Илова кардани миёнбури тамошокунии хусусӣ</string>
+    <string name="preferences_add_private_browsing_shortcut">Илова кардани миёнбури тамошобинии хусусӣ</string>
     <!-- Preference for enabling "HTTPS-Only" mode -->
     <string name="preferences_https_only_title">Реҷаи «Танҳо HTTPS»</string>
 
     <!-- Label for cookie banner section in quick settings panel. -->
     <string name="cookie_banner_blocker">Манъкунандаи баннери куки</string>
     <!-- Preference for removing cookie/consent banners from sites automatically in private mode. See reduce_cookie_banner_summary for additional context. -->
-    <string name="preferences_cookie_banner_reduction_private_mode">Манъкунандаи баннери куки дар тамошокунии хусусӣ</string>
+    <string name="preferences_cookie_banner_reduction_private_mode">Манъкунандаи баннери куки дар тамошобинии хусусӣ</string>
 
     <!-- Text for indicating cookie banner handling is off this site, this is shown as part of the protections panel with the tracking protection toggle -->
     <string name="reduce_cookie_banner_off_for_site">Барои ин сомона хомӯш аст</string>
@@ -957,17 +1051,30 @@
     <string name="exceptions_empty_message_learn_more_link">Маълумоти бештар</string>
 
     <!-- Preference switch for usage and technical data collection -->
-    <string name="preference_usage_data">Истифодабарӣ ва маълумоти техникӣ</string>
+    <string name="preference_usage_data" moz:removedIn="134" tools:ignore="UnusedResources">Истифодабарӣ ва маълумоти техникӣ</string>
+    <!-- Preference switch for usage and technical data collection -->
+    <string name="preference_usage_data_1">Маълумоти техникӣ ва ҳамкорӣ</string>
+    <!-- Preference switch for usage and technical learn more link -->
+    <string name="preference_usage_data_learn_more" tools:ignore="UnusedResources">Маълумоти бештар</string>
     <!-- Preference description for usage and technical data collection -->
     <string name="preferences_usage_data_description">Барои беҳтар кардани %1$s маълумоти самаранокӣ, истифодабарӣ, сахтафзор ва танзимоти фармоишӣ дар бораи браузери шумо бо Mozilla мубодила карда шавад</string>
     <!-- Preference switch for marketing data collection -->
     <string name="preferences_marketing_data">Маълумоти маркетингӣ</string>
     <!-- Preference description for marketing data collection -->
-    <string name="preferences_marketing_data_description2">Маълумоти асосии истифодабариро бо «Adjust», фурӯшандаи маркетингии мобилии мо, мубодила мекунад</string>
+    <string name="preferences_marketing_data_description2" moz:removedIn="134" tools:ignore="UnusedResources">Маълумоти асосии истифодабариро бо «Adjust», фурӯшандаи маркетингии мобилии мо, мубодила мекунад</string>
+    <!-- Preference description for marketing data collection. Note: The words "Firefox" and "Mozilla" should NOT be translated -->
+    <string name="preferences_marketing_data_description_3" tools:ignore="BrandUsage">Маълумотро дар бораи он, ки шумо чӣ тавр браузери «Firefox»-ро кашф кардаед, бо шарикони бозоршиносии «Mozilla» мубодила кунед. Ин ба мо кумак мекунад, ки сифати браузери «Firefox»-ро боз ҳам баланд бардорем ва Интернети беҳтарро созем</string>
+    <!-- Learn more link for marketing data preference -->
+    <string name="preferences_marketing_data_learn_more">Маълумоти бештар дар бораи иттилооти бозоршиносӣ</string>
+
     <!-- Preference switch title for automatically submitting crash reports -->
-    <string name="preferences_automatically_submit_crashes_title">Ба таври худкор пешниҳод кардани гузоришҳо дар бораи вайронӣ</string>
+    <string name="preferences_automatically_send_crashes_title">Ба таври худкор фиристодани гузоришҳо дар бораи вайронӣ</string>
+    <string name="preferences_automatically_submit_crashes_title" moz:removedIn="136" tools:ignore="UnusedResources">Ба таври худкор пешниҳод кардани гузоришҳо дар бораи вайронӣ</string>
+
     <!-- Preference switch description for automatically submitting crash reports -->
-    <string name="preferences_automatically_submit_crashes_description">Пас аз он ки садамаҳо ба вуҷуд меоянд, маълумот дар бораи садама ба таври худкор бо «Mozilla» ҳангоми оғози кор мубодила карда мешавад</string>
+    <string name="preferences_automatically_send_crashes_description">Ин ба мо барои ташхис ва ислоҳ кардани хатоҳои браузер кумак мекунад. Гузоришҳо метавонанд маълумоти шахсӣ ва махфиро дар бар гиранд.</string>
+    <string name="preferences_automatically_submit_crashes_description" moz:removedIn="136" tools:ignore="UnusedResources">Пас аз он ки садамаҳо ба вуҷуд меоянд, маълумот дар бораи садама ба таври худкор бо «Mozilla» ҳангоми оғози кор мубодила карда мешавад</string>
+
     <!-- Title for studies preferences -->
     <string name="preference_experiments_2">Таҳқиқҳо</string>
     <!-- Summary for studies preferences -->
@@ -1137,14 +1244,14 @@
     <string name="studies_learn_more">Маълумоти бештар</string>
 
     <!-- Dialog message shown after removing a study -->
-    <string name="studies_restart_app">Барои татбиқ кардани тағйирот барнома пӯшида мешавад</string>
+    <string name="studies_restart_app" moz:removedIn="135">Барои татбиқ кардани тағйирот барнома пӯшида мешавад</string>
     <!-- Dialog button to confirm the removing a study. -->
-    <string name="studies_restart_dialog_ok">ХУБ</string>
+    <string name="studies_restart_dialog_ok" moz:removedIn="135">ХУБ</string>
     <!-- Dialog button text for canceling removing a study. -->
-    <string name="studies_restart_dialog_cancel">Бекор кардан</string>
+    <string name="studies_restart_dialog_cancel" moz:removedIn="135">Бекор кардан</string>
 
     <!-- Toast shown after turning on/off studies preferences -->
-    <string name="studies_toast_quit_application" tools:ignore="UnusedResources">Барои татбиқ кардани тағйирот барнома хомӯш мешавад…</string>
+    <string name="studies_toast_quit_application" moz:removedIn="135" tools:ignore="UnusedResources">Барои татбиқ кардани тағйирот барнома хомӯш мешавад…</string>
 
     <!-- Sessions -->
     <!-- Title for the list of tabs -->
@@ -1254,6 +1361,29 @@
 
     <!-- WebCompat Reporter -->
 
+    <!-- WebCompat Reporter -->
+    <!-- The title of the Web Compat Reporter feature. This is displayed in the top app bar. -->
+    <string name="webcompat_reporter_screen_title">Гузориш дар бораи сомонаи вайроншуда</string>
+    <!-- The description of the Web Compat Reporter feature. This first parameter is the name of the application (For example: Fenix) -->
+    <string name="webcompat_reporter_description">Кумак кунед, ки «%1$s» барои ҳамаи мо беҳтар шавад. Кормандони «Mozilla» маълумотеро, ки шумо ирсол мекунед, барои ислоҳ кардани мушкилиҳои сомона истифода мебаранд.</string>
+    <!-- The text field label of the URL text field. This is displayed above the user-inputted URL. -->
+    <string name="webcompat_reporter_label_url">Нишонии URL</string>
+    <!-- The error message of the URL text field when an invalid URL has been entered. -->
+    <string name="webcompat_reporter_url_error_invalid">Лутфан, нишонии URL-и эътиборро ворид намоед</string>
+    <!-- The label/title of an optional field in the Web Compat Reporter feature for explaining a high-level reason why the site is broken. -->
+    <string name="webcompat_reporter_label_whats_broken">Чӣ вайрон шудааст? (интихобӣ)</string>
+    <!-- The placeholder text for the dropdown where a user can select a high-level reason why the site is broken. -->
+    <string name="webcompat_reporter_choose_reason">Сабаберо интихоб намоед</string>
+    <!-- The label/title of an optional field in the Web Compat Reporter feature for adding additional information. -->
+    <string name="webcompat_reporter_label_description">Мушкилиро тавзеҳ кунед (ихтиёрӣ)</string>
+    <!-- The button text for navigating away from the feature to provide more information on the broken site's bug report. -->
+    <string name="webcompat_reporter_send_more_info">Фиристодани маълумоти бештар</string>
+    <!-- The button text for the cancel button to leave the Web Compat Reporter feature. -->
+    <string name="webcompat_reporter_cancel">Бекор кардан</string>
+    <!-- The button text for the send button to submit the provided form data. -->
+    <string name="webcompat_reporter_send">Фиристодан</string>
+
+
     <!-- These reason strings are dropdown options on a WebCompat reporter form, indicating what is broken on the site. -->
     <!-- Broken site reason text for site slow or not working -->
     <string name="webcompat_reporter_reason_slow">Сомона суст аст ё кор намекунад</string>
@@ -1300,8 +1430,6 @@
     <string name="bookmark_delete_negative">Бекор кардан</string>
     <!-- Screen title for adding a bookmarks folder -->
     <string name="bookmark_add_folder">Илова кардани ҷузвдон</string>
-    <!-- Snackbar title shown after a bookmark has been created. -->
-    <string name="bookmark_saved_snackbar" moz:removedIn="132" tools:ignore="UnusedResources">Хатбарак нигоҳ дошта шуд!</string>
     <!-- Snackbar title that confirms a bookmark was saved into a folder. Parameter will be replaced by the name of the folder the bookmark was saved into. -->
     <string name="bookmark_saved_in_folder_snackbar">Дар «%s» нигоҳ дошта шуд</string>
     <!-- Snackbar edit button shown after a bookmark has been created. -->
@@ -1617,17 +1745,17 @@
     The app name is in the text, due to limitations with localizing Nimbus experiments -->
     <string name="nimbus_notification_default_browser_text" tools:ignore="BrandUsage,UnusedResources">Гузоштани «Firefox» ҳамчун браузери пешфарз</string>
     <!-- Title shown in the notification that pops up to re-engage the user -->
-    <string name="notification_re_engagement_title">Тамошокунии хусусиро озмоед</string>
+    <string name="notification_re_engagement_title">Тамошобинии хусусиро озмоед</string>
     <!-- Text shown in the notification that pops up to re-engage the user.
     %1$s is a placeholder that will be replaced by the app name. -->
     <string name="notification_re_engagement_text">Сомонаҳоро бе ягон куки ё таърихи нигоҳдошташуда дар «%1$s» тамошо кунед</string>
 
     <!-- Title A shown in the notification that pops up to re-engage the user -->
-    <string name="notification_re_engagement_A_title">Тамошокунӣ дар Интернет бе пайгирӣ</string>
+    <string name="notification_re_engagement_A_title">Тамошобинӣ дар Интернет бе пайгирӣ</string>
 
     <!-- Text A shown in the notification that pops up to re-engage the user.
     %1$s is a placeholder that will be replaced by the app name. -->
-    <string name="notification_re_engagement_A_text">Тамошокунии хусусӣ дар «%1$s» маълумоти шуморо нигоҳ намедорад.</string>
+    <string name="notification_re_engagement_A_text">Тамошобинии хусусӣ дар «%1$s» маълумоти шуморо нигоҳ намедорад.</string>
     <!-- Title B shown in the notification that pops up to re-engage the user -->
     <string name="notification_re_engagement_B_title">Ҷустуҷӯи аввалини худро оғоз кунед</string>
 
@@ -1654,8 +1782,6 @@
     <string name="snackbar_tabs_closed">Варақаҳо пӯшида шуданд</string>
     <!-- Text shown in snackbar when user closes multiple inactive tabs. %1$s will be replaced with the number of tabs closed. -->
     <string name="snackbar_num_tabs_closed">Шумораи варақаҳои пӯшида: %1$s</string>
-    <!-- Text shown in snackbar when user bookmarks a list of tabs -->
-    <string name="snackbar_message_bookmarks_saved" moz:removedIn="132" tools:ignore="UnusedResources">Хатбаракҳо нигоҳ дошта шуданд!</string>
     <!-- Text shown in snackbar when user bookmarks a list of tabs. Parameter will be replaced by the name of the folder the bookmark was saved into.-->
     <string name="snackbar_message_bookmarks_saved_in">Хатбаракҳо дар «%s» нигоҳ дошта шудаанд!</string>
     <!-- Text shown in snackbar when user adds a site to shortcuts -->
@@ -1665,7 +1791,7 @@
     <!-- Text shown in snackbar when user closes all private tabs -->
     <string name="snackbar_private_tabs_closed">Варақаҳои хусусӣ пӯшида шуданд</string>
     <!-- Text shown in snackbar when user erases their private browsing data -->
-    <string name="snackbar_private_data_deleted">Маълумоти тамошокунии хусусӣ нест карда шуд</string>
+    <string name="snackbar_private_data_deleted">Маълумоти тамошобинии хусусӣ нест карда шуд</string>
     <!-- Text shown in snackbar to undo deleting a tab, top site or collection -->
     <string name="snackbar_deleted_undo">БОТИЛ КАРДАН</string>
     <!-- Text shown in snackbar when user removes a top site -->
@@ -1701,7 +1827,7 @@
     <string name="preference_accessibility_auto_size_summary">Андозаи ҳарф ба танзимоти Android-и шумо мувофиқат мекунад. Барои идора кардани андозаи ҳарфҳо дар ин ҷо, имкони ҷориро хомӯш кунед.</string>
 
     <!-- Title for the Delete browsing data preference -->
-    <string name="preferences_delete_browsing_data">Нест кардани маълумоти тамошокунӣ</string>
+    <string name="preferences_delete_browsing_data">Нест кардани маълумоти тамошобинӣ</string>
     <!-- Title for the tabs item in Delete browsing data -->
     <string name="preferences_delete_browsing_data_tabs_title_2">Варақаҳои кушодашуда</string>
     <!-- Subtitle for the tabs item in Delete browsing data, parameter will be replaced with the number of open tabs -->
@@ -1726,12 +1852,12 @@
     <!-- Title for the downloads item in Delete browsing data -->
     <string name="preferences_delete_browsing_data_downloads">Боргириҳо</string>
     <!-- Text for the button to delete browsing data -->
-    <string name="preferences_delete_browsing_data_button">Нест кардани маълумоти тамошокунӣ</string>
+    <string name="preferences_delete_browsing_data_button">Нест кардани маълумоти тамошобинӣ</string>
     <!-- Title for the Delete browsing data on quit preference -->
-    <string name="preferences_delete_browsing_data_on_quit">Нест кардани маълумоти тамошокунӣ ҳангоми баромад</string>
+    <string name="preferences_delete_browsing_data_on_quit">Нест кардани маълумоти тамошобинӣ ҳангоми баромад</string>
 
     <!-- Summary for the Delete browsing data on quit preference. "Quit" translation should match delete_browsing_data_on_quit_action translation. -->
-    <string name="preference_summary_delete_browsing_data_on_quit_2">Вақте ки шумо аз менюи асосӣ имкони \&quot;Хомӯш кардан\&quot;-ро интихоб мекунед, маълумоти тамошокунӣ ба таври худкор нест карда мешавад</string>
+    <string name="preference_summary_delete_browsing_data_on_quit_2">Вақте ки шумо аз менюи асосӣ имкони \&quot;Хомӯш кардан\&quot;-ро интихоб мекунед, маълумоти тамошобинӣ ба таври худкор нест карда мешавад</string>
     <!-- Action item in menu for the Delete browsing data on quit feature -->
     <string name="delete_browsing_data_on_quit_action">Баромадан</string>
 
@@ -1748,16 +1874,16 @@
     <string name="delete_history_prompt_button_everything">Комилан</string>
 
     <!-- Dialog message to the user asking to delete browsing data. Parameter will be replaced by app name. -->
-    <string name="delete_browsing_data_prompt_message_3">%s маълумоти тамошокунии интихобшударо нест мекунад.</string>
+    <string name="delete_browsing_data_prompt_message_3">%s маълумоти тамошобинии интихобшударо нест мекунад.</string>
     <!-- Text for the cancel button for the data deletion dialog -->
     <string name="delete_browsing_data_prompt_cancel">Бекор кардан</string>
     <!-- Text for the allow button for the data deletion dialog -->
     <string name="delete_browsing_data_prompt_allow">Нест кардан</string>
 
     <!-- Text for the snackbar confirmation that the data was deleted -->
-    <string name="preferences_delete_browsing_data_snackbar">Маълумоти тамошокунӣ нест карда шуд</string>
+    <string name="preferences_delete_browsing_data_snackbar">Маълумоти тамошобинӣ нест карда шуд</string>
     <!-- Text for the snackbar to show the user that the deletion of browsing data is in progress -->
-    <string name="deleting_browsing_data_in_progress">Несткунии маълумоти тамошокунӣ…</string>
+    <string name="deleting_browsing_data_in_progress">Несткунии маълумоти тамошобинӣ…</string>
 
     <!-- Dialog message to the user asking to delete all history items inside the opened group. Parameter will be replaced by a history group name. -->
     <string name="delete_all_history_group_prompt_message">Нест кардани ҳамаи сомонаҳо аз «%s»</string>
@@ -1794,7 +1920,7 @@
     <!-- Text shown for settings option for create new account text.'Firefox' intentionally hardcoded here.-->
     <string name="sign_in_create_account_text" tools:ignore="BrandUsage"><![CDATA[Ҳисоб надоред? Барои ҳамоҳангсозӣ кардани Firefox байни дастгоҳҳо, <u>ҳисоберо эҷод намоед</u>.]]></string>
     <!-- Text shown in confirmation dialog to sign out of account. The first parameter is the name of the app (e.g. Firefox Preview) -->
-    <string name="sign_out_confirmation_message_2">%s ҳамоҳангсозиро бо ҳисоби шумо қатъ мекунад, аммо ягон маълумоти тамошокунии шуморо дар ин дастгоҳ нест намекунад.</string>
+    <string name="sign_out_confirmation_message_2">%s ҳамоҳангсозиро бо ҳисоби шумо қатъ мекунад, аммо ягон маълумоти тамошобинии шуморо дар ин дастгоҳ нест намекунад.</string>
     <!-- Option to continue signing out of account shown in confirmation dialog to sign out of account -->
     <string name="sign_out_disconnect">Қатъ кардани пайваст</string>
     <!-- Option to cancel signing out shown in confirmation dialog to sign out of account -->
@@ -1865,13 +1991,13 @@
     <!-- Category of trackers (social media trackers) that can be blocked by Enhanced Tracking Protection -->
     <string name="etp_social_media_trackers_title">Васоити пайгирии шабакаҳои иҷтимоӣ</string>
     <!-- Description of social media trackers that can be blocked by Enhanced Tracking Protection -->
-    <string name="etp_social_media_trackers_description">Имконияти шабакаҳои иҷтимоиро барои пайгирии фаъолияти тамошокунии шумо дар Интернет маҳдуд мекунад.</string>
+    <string name="etp_social_media_trackers_description">Имконияти шабакаҳои иҷтимоиро барои пайгирии фаъолияти тамошобинии шумо дар Интернет маҳдуд мекунад.</string>
     <!-- Category of trackers (cross-site tracking cookies) that can be blocked by Enhanced Tracking Protection -->
     <string name="etp_cookies_title">Кукиҳои васоити пайгирӣ байни сомонаҳо</string>
     <!-- Category of trackers (cross-site tracking cookies) that can be blocked by Enhanced Tracking Protection -->
     <string name="etp_cookies_title_2">Кукиҳои байнисомонавӣ</string>
     <!-- Description of cross-site tracking cookies that can be blocked by Enhanced Tracking Protection -->
-    <string name="etp_cookies_description">Кукиҳоеро, ки шабакаҳои рекламавӣ ва ширкатҳои таҳлилӣ барои ҷамъоварии маълумоти тамошокунии шумо дар бисёр сомонаҳо истифода мебаранд, манъ мекунад.</string>
+    <string name="etp_cookies_description">Кукиҳоеро, ки шабакаҳои рекламавӣ ва ширкатҳои таҳлилӣ барои ҷамъоварии маълумоти тамошобинии шумо дар бисёр сомонаҳо истифода мебаранд, манъ мекунад.</string>
     <!-- Description of cross-site tracking cookies that can be blocked by Enhanced Tracking Protection -->
     <string name="etp_cookies_description_2">«Муҳофизати пурра аз кукиҳо» ҳамаи кукиҳоро аз сомонаи ҷорие, ки шумо тамошо карда истодаед, ҷудо мекунад, то ки васоити пайгирӣ шуморо байни сомонаҳо назорат карда натавонанд.</string>
     <!-- Category of trackers (cryptominers) that can be blocked by Enhanced Tracking Protection -->
@@ -2562,14 +2688,6 @@
     <string name="review_quality_check_contextual_onboarding_primary_button_text">Ҳа, озмоед</string>
     <!-- Text for opt-out button from the review quality check contextual onboarding card. -->
     <string name="review_quality_check_contextual_onboarding_secondary_button_text">Ҳоло не</string>
-    <!-- Text for the first CFR presenting the review quality check feature. -->
-    <string name="review_quality_check_first_cfr_message" moz:removedIn="132" tools:ignore="UnusedResources">Пеш аз хариди ин маҳсул — муайян кунед, агар шумо тавонед ба тақризҳои ин масҳсул бовар кунед.</string>
-    <!-- Text displayed in the first CFR presenting the review quality check feature that opens the review checker when clicked. -->
-    <string name="review_quality_check_first_cfr_action" moz:removedIn="132" tools:ignore="UnusedResources">Озмудани абзори тафтиши тақризҳо</string>
-    <!-- Text for the second CFR presenting the review quality check feature. -->
-    <string name="review_quality_check_second_cfr_message" moz:removedIn="132" tools:ignore="UnusedResources">Оё ин тақризҳо боэътимоданд? Барои дидани баҳодиҳии санҷида дурустшуда ин масъаларо ҳозир озмоед.</string>
-    <!-- Text displayed in the second CFR presenting the review quality check feature that opens the review checker when clicked. -->
-    <string name="review_quality_check_second_cfr_action" moz:removedIn="132" tools:ignore="UnusedResources">Кушодани абзори тафтиши тақризҳо</string>
     <!-- Content description (not visible, for screen readers etc.) for opening browser menu button to open review quality check bottom sheet. -->
     <string name="review_quality_check_open_handle_content_description">Кушодани абзори тафтиши тақризҳо</string>
     <!-- Content description (not visible, for screen readers etc.) for closing browser menu button to open review quality check bottom sheet. -->
@@ -2835,6 +2953,30 @@
     <!-- Button text on the data saving mode warning dialog used by the translations feature to allow users to cancel the action and not perform a download of the language file. -->
     <string name="download_language_file_dialog_negative_button_text">Бекор кардан</string>
 
+    <!-- Unified Trust Panel -->
+    <!-- Title text for the protection panel banner when the site is not secure. -->
+    <string name="protection_panel_banner_not_secure_title">Дар ин сомона эҳтиёт шавед</string>
+    <!-- Description text for the protection panel banner when the site is not secure. -->
+    <string name="protection_panel_banner_not_secure_description">Пайвасти шумо бехатар нест.</string>
+
+    <!-- Title text for the protection panel banner when tracking protection is disabled. -->
+    <string name="protection_panel_banner_not_protected_title">Шумо воситаҳои муҳофизатро хомӯш кардед</string>
+    <!-- Description text for the protection panel banner when tracking protection is disabled.
+        The first parameter is the name of the app defined in app_name (for example: Fenix) -->
+    <string name="protection_panel_banner_not_protected_description">«%s» хомӯш аст. Мо тавсия медиҳем, ки шумо муҳофизатҳоро аз нав фаъол созед.</string>
+    <!-- Title text for the protection panel banner when tracking protection is enabled.
+        The first parameter is the name of the app defined in app_name (for example: Fenix) -->
+    <string name="protection_panel_banner_protected_title">Муҳофизати «%s» фаъол аст</string>
+    <!-- Description text for the protection panel banner when tracking protection is enabled. -->
+    <string name="protection_panel_banner_protected_description">Мо шуморо муҳофизат кардем. Агар ягон чизеро пайдо кунем, мо ба шумо хабар медиҳем.</string>
+    <!-- Label text for the Enhanced Tracking Protection toggle. -->
+    <string name="protection_panel_etp_toggle_label">Муҳофизати такмилёфта аз пайгирӣ</string>
+
+    <!-- Description text for the Enhanced Tracking Protection toggle when tracking protection is enabled. -->
+    <string name="protection_panel_etp_toggle_enabled_description">Агар ягон чиз дар ин сомона вайрон бошад, кӯшиш кунед, ки воситаи муҳофизатро хомӯш намоед.</string>
+    <!-- Description text for the Enhanced Tracking Protection toggle when tracking protection is disabled. -->
+    <string name="protection_panel_etp_toggle_disabled_description">Воситаи муҳофизат ХОМӮШ АСТ. Мо тавсия медиҳем, ки шумо онро аз нав фаъол созед.</string>
+
     <!-- Debug drawer -->
     <!-- The user-facing title of the Debug Drawer feature. -->
     <string name="debug_drawer_title">Абзорҳои ислоҳи хатоҳо</string>
@@ -2952,6 +3094,13 @@
     <!-- Content description for delete button where parameter will be the username of the login -->
     <string name="debug_drawer_logins_delete_login_button_content_description">Нест кардани воридшавӣ бо номи корбари «%s»</string>
 
+    <!-- Debug drawer addresses -->
+    <!-- The title of the Addresses feature in the Debug Drawer. -->
+    <string name="debug_drawer_addresses_title">Нишониҳо</string>
+
+    <!-- The title of the section header for the list of debug locales that can be enabled and disabled. -->
+    <string name="debug_drawer_addresses_debug_locales_header">Забонҳои ислоҳи хатоҳо барои фаъолсозӣ</string>
+
     <!-- Debug drawer "contextual feature recommendation" (CFR) tools -->
     <!-- The title of the CFR Tools feature in the Debug Drawer -->
     <string name="debug_drawer_cfr_tools_title">Абзорҳои «CFR»</string>
@@ -2963,11 +3112,6 @@
     <string name="glean_debug_tools_title">Абзорҳои ислоҳи хатоҳои «Glean»</string>
 
     <!-- Messages explaining how to exit fullscreen mode -->
-    <!-- Message shown to explain how to exit fullscreen mode when gesture navigation is enabled -->
-    <string name="exit_fullscreen_with_gesture" moz:removedIn="132" tools:ignore="UnusedResources">Барои баромадан аз экрани пурра, аз боло кашед ва ишораи бозгаштро истифода баред</string>
-    <!-- Message shown to explain how to exit fullscreen mode when using back button navigation -->
-    <string name="exit_fullscreen_with_back_button" moz:removedIn="132" tools:ignore="UnusedResources">Барои баромадан аз экрани пурра, аз боло кашед ва тугмаи бозгаштро пахш кунед</string>
-
     <!-- Message shown to explain how to exit fullscreen mode when gesture navigation is enabled. -->
     <!-- Localisation note: this text should be as short as possible, max 68 chars -->
     <string name="exit_fullscreen_with_gesture_short">Аз боло кашед ва барои баромад ишораи бозгаштро истифода баред</string>
@@ -2978,4 +3122,35 @@
     <!-- Beta Label Component !-->
     <!-- Text shown as a label or tag to indicate a feature or area is still undergoing active development. Note that here "Beta" should not be translated, as it is used as an icon styled element. -->
     <string name="beta_feature">BETA</string>
+
+    <!-- Root certificate expiration warnings -->
+    <!-- These strings for homepage cards and push notifications to be pushed to users running outdated versions of Firefox. We want to encourage these users to update to the latest version so their extensions and other features don't stop working when Firefox's old root certificate expires on 2025-03-14. For more information, see this SUMO article: https://support.mozilla.org/kb/root-certificate-expiration !-->
+    <!-- Homepage card button to open Google Play Store. "Update" is a verb. -->
+    <string name="certificate_warning_homepage_card_update_now_button" tools:ignore="UnusedResources">Ҳозир навсозӣ кунед</string>
+    <!-- Homepage card title about old Firefox version. "Update" is a verb. Note: The word "Firefox" should NOT be translated. -->
+    <string name="certificate_warning_homepage_card_hca1_title" tools:ignore="BrandUsage,UnusedResources">Браузери «Firefox»-и худро навсозӣ кунед</string>
+    <!-- Homepage card message about old Firefox version -->
+    <string name="certificate_warning_homepage_card_hca1_message" tools:ignore="UnusedResources">Дар санаи 14 март, муҳлати гувоҳиномаи решагӣ ба анҷом мерасад ва боиси он мегардад, ки кори баъзе хусусиятҳо қатъ карда мешавад.</string>
+    <!-- Homepage card title about old Firefox version. "Update" is a verb. -->
+    <string name="certificate_warning_homepage_card_hcr1_title" tools:ignore="UnusedResources">То санаи 14 матр браузерро навсозӣ кунед</string>
+    <!-- Homepage card message about old Firefox version. Note: The word "Firefox" should NOT be translated. -->
+    <string name="certificate_warning_homepage_card_hcr1_message" tools:ignore="BrandUsage,UnusedResources">Дар санаи 14 март, муҳлати гувоҳиномаи решагӣ ба анҷом мерасад ва боиси он мегардад, ки версияи ҷории «Firefox»-и шумо ба таври дуруст кор намекунад.</string>
+    <!-- Homepage card title about old Firefox version -->
+    <string name="certificate_warning_homepage_card_hcw2_title" tools:ignore="UnusedResources">Барои навсозӣ камтар аз 7 рӯз мондааст</string>
+    <!-- Homepage card message about old Firefox version. Note: The word "Firefox" should NOT be translated. -->
+    <string name="certificate_warning_homepage_card_hcw2_message" tools:ignore="BrandUsage,UnusedResources">Дар санаи 14 март, баъзе ҷузъҳои иловагӣ ва хусусиятҳои дигари «Firefox» дигар кор намекунанд, зеро ки гувоҳиномаи решагӣ ба анҷом мерасад.</string>
+    <!-- Homepage card title about old Firefox version. Note: The word "Firefox" should NOT be translated. -->
+    <string name="certificate_warning_homepage_card_hcw3_title" tools:ignore="BrandUsage,UnusedResources">Имконияти охирин барои нигоҳ доштани «Firefox»</string>
+    <!-- Homepage card message about old Firefox version. Note: The word "Firefox" should NOT be translated. -->
+    <string name="certificate_warning_homepage_card_hcw3_message" tools:ignore="BrandUsage,UnusedResources">Дар санаи 14 март, версияи ҷории «Firefox»-и шумо ба таври дуруст кор намекунад, зеро ки муҳлати гувоҳиномаи решагӣ ба анҷом мерасад.</string>
+    <!-- Push notification title about old Firefox version. "Update" is a noun. -->
+    <string name="certificate_warning_push_notification_update_recommended_title" tools:ignore="UnusedResources">Навсозӣ тавсия дода мешавад</string>
+    <!-- Push notification message about old Firefox version -->
+    <string name="certificate_warning_push_notification_pnr1_message" tools:ignore="UnusedResources">Санаи 14 март ҷузъҳои иловагӣ ва баъзе хусусиятҳо дигар кор намекунанд.</string>
+    <!-- Push notification title about old Firefox version. Note: The word "Firefox" should NOT be translated. -->
+    <string name="certificate_warning_push_notification_pnw2_title" tools:ignore="BrandUsage,UnusedResources">Шумо аз версияи куҳнаи «Firefox» истифода мебаред</string>
+    <!-- Push notification message about old Firefox version. "Update" is a verb. -->
+    <string name="certificate_warning_push_notification_pnw2_message" tools:ignore="UnusedResources">Барои идомаи истифодабарии ҷузъҳои иловагӣ ва хусусиятҳои дигар, браузерро то санаи 14 март навсозӣ кунед.</string>
+    <!-- Push notification message about old Firefox version -->
+    <string name="certificate_warning_push_notification_pnw3_message" tools:ignore="UnusedResources">Фардо баъзе хусусиятҳо дигар кор намекунанд.</string>
 </resources>

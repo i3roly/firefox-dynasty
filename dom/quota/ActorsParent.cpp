@@ -3253,6 +3253,10 @@ QuotaManager::GetOrCreateTemporaryOriginDirectory(
   MOZ_ASSERT(IsTemporaryGroupInitializedInternal(aOriginMetadata));
   MOZ_ASSERT(IsTemporaryOriginInitializedInternal(aOriginMetadata));
 
+  ScopedLogExtraInfo scope{
+      ScopedLogExtraInfo::kTagContextTainted,
+      "dom::quota::QuotaManager::GetOrCreateTemporaryOriginDirectory"_ns};
+
   // XXX Temporary band-aid fix until the root cause of uninitialized origins
   // after obtaining a client directory lock via OpenClientDirectory is
   // identified.
@@ -3660,6 +3664,8 @@ nsresult QuotaManager::InitializeRepository(PersistenceType aPersistenceType,
 
   Unused << created;
 
+  uint64_t iterations = 0;
+
   // A keeper to defer the return only in Nightly, so that the telemetry data
   // for whole profile can be collected
 #ifdef NIGHTLY_BUILD
@@ -3688,7 +3694,7 @@ nsresult QuotaManager::InitializeRepository(PersistenceType aPersistenceType,
               }
 
               QM_TRY(
-                  ([this, &childDirectory, &renameAndInitInfos,
+                  ([this, &iterations, &childDirectory, &renameAndInitInfos,
                     aPersistenceType, &aOriginFunc]() -> Result<Ok, nsresult> {
                     QM_TRY_INSPECT(
                         const auto& leafName,
@@ -3813,6 +3819,8 @@ nsresult QuotaManager::InitializeRepository(PersistenceType aPersistenceType,
                         break;
                     }
 
+                    iterations++;
+
                     return Ok{};
                   }()),
                   OK_IN_NIGHTLY_PROPAGATE_IN_OTHERS, statusKeeperFunc);
@@ -3876,6 +3884,10 @@ nsresult QuotaManager::InitializeRepository(PersistenceType aPersistenceType,
     return statusKeeper;
   }
 #endif
+
+  glean::quotamanager_initialize_repository::number_of_iterations
+      .Get(PersistenceTypeToString(aPersistenceType))
+      .AccumulateSingleSample(iterations);
 
   return NS_OK;
 }

@@ -197,7 +197,7 @@ class RaptorGatherer(FrameworkGatherer):
 
     def _get_ci_tasks(self):
         for task in self._taskgraph.keys():
-            if type(self._taskgraph[task]) == dict:
+            if type(self._taskgraph[task]) is dict:
                 command = self._taskgraph[task]["task"]["payload"].get("command", [])
                 run_on_projects = self._taskgraph[task]["attributes"]["run_on_projects"]
             else:
@@ -408,9 +408,11 @@ class RaptorGatherer(FrameworkGatherer):
                     for task in self._task_list[title][platform]:
                         values = [task["test_name"]]
                         values += [
-                            "\u2705"
-                            if match_run_on_projects(x, task["run_on_projects"])
-                            else "\u274C"
+                            (
+                                "\u2705"
+                                if match_run_on_projects(x, task["run_on_projects"])
+                                else "\u274C"
+                            )
                             for x in BRANCHES
                         ]
                         table.add_row(values)
@@ -475,7 +477,7 @@ class MozperftestGatherer(FrameworkGatherer):
             }
         """
         for path in list(pathlib.Path(self.workspace_dir).rglob("perftest.toml")):
-            if "obj-" in str(path):
+            if "obj-" in str(path) or "objdir-" in str(path):
                 continue
             suite_name = str(path.parent).replace(str(self.workspace_dir), "")
 
@@ -493,9 +495,9 @@ class MozperftestGatherer(FrameworkGatherer):
             test_list = test_manifest.active_tests(exists=False, disabled=True)
             for test in test_list:
                 si = ScriptInfo(test["path"])
-                self.script_infos[si["name"]] = si
+                self.script_infos[si["name"].replace(".", "")] = si
                 self._test_list.setdefault(suite_name.replace("\\", "/"), {}).update(
-                    {si["name"]: {"path": str(path)}}
+                    {si["name"].replace(".", ""): {"path": str(path)}}
                 )
 
         return self._test_list
@@ -519,7 +521,7 @@ class TalosGatherer(FrameworkGatherer):
         for task_name in self._taskgraph.keys():
             task = self._taskgraph[task_name]
 
-            if type(task) == dict:
+            if type(task) is dict:
                 is_talos = task["task"]["extra"].get("suite", [])
                 command = task["task"]["payload"].get("command", [])
                 run_on_projects = task["attributes"]["run_on_projects"]
@@ -619,9 +621,11 @@ class TalosGatherer(FrameworkGatherer):
                 for task in self._task_list[title][platform]:
                     values = [task["test_name"]]
                     values += [
-                        "\u2705"
-                        if match_run_on_projects(x, task["run_on_projects"])
-                        else "\u274C"
+                        (
+                            "\u2705"
+                            if match_run_on_projects(x, task["run_on_projects"])
+                            else "\u274C"
+                        )
                         for x in BRANCHES
                     ]
                     table.add_row(values)
@@ -642,7 +646,7 @@ class AwsyGatherer(FrameworkGatherer):
         for task_name in self._taskgraph.keys():
             task = self._taskgraph[task_name]
 
-            if type(task) == dict:
+            if type(task) is dict:
                 awsy_test = task["task"]["extra"].get("suite", [])
                 run_on_projects = task["attributes"]["run_on_projects"]
             else:

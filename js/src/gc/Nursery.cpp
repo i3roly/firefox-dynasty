@@ -766,20 +766,6 @@ void* js::Nursery::allocateBuffer(Zone* zone, Cell* owner, size_t nbytes,
   return buffer;
 }
 
-void* js::Nursery::allocateBufferSameLocation(Cell* owner, size_t nbytes,
-                                              arena_id_t arenaId) {
-  MOZ_ASSERT(owner);
-  MOZ_ASSERT(nbytes > 0);
-  MOZ_ASSERT(nbytes <= MaxNurseryBufferSize);
-
-  if (!IsInsideNursery(owner)) {
-    return owner->asTenured().zone()->pod_arena_malloc<uint8_t>(arenaId,
-                                                                nbytes);
-  }
-
-  return allocate(nbytes);
-}
-
 std::tuple<void*, bool> js::Nursery::allocateZeroedBuffer(Zone* zone,
                                                           size_t nbytes,
                                                           arena_id_t arena) {
@@ -1525,7 +1511,7 @@ js::Nursery::CollectionResult js::Nursery::doCollection(AutoGCSession& session,
     poisonAndInitCurrentChunk();
   }
 
-  clearMapAndSetNurseryRanges();
+  clearMapAndSetNurseryIterators();
 
   // Move objects pointed to by roots from the nursery to the major heap.
   tenuredEverything = shouldTenureEverything(reason);
@@ -2115,13 +2101,14 @@ bool js::Nursery::allocateNextChunk(AutoLockGCBgAlloc& lock) {
     return false;
   }
 
-  ArenaChunk* toSpaceChunk = gc->takeOrAllocChunk(lock);
+  ArenaChunk* toSpaceChunk = gc->takeOrAllocChunk(StallAndRetry::No, lock);
   if (!toSpaceChunk) {
     return false;
   }
 
   ArenaChunk* fromSpaceChunk = nullptr;
-  if (semispaceEnabled_ && !(fromSpaceChunk = gc->takeOrAllocChunk(lock))) {
+  if (semispaceEnabled_ &&
+      !(fromSpaceChunk = gc->takeOrAllocChunk(StallAndRetry::No, lock))) {
     gc->recycleChunk(toSpaceChunk, lock);
     return false;
   }
@@ -2162,8 +2149,8 @@ void js::Nursery::maybeResizeNursery(JS::GCOptions options,
 
   decommitTask->join();
 
-  size_t newCapacity = mozilla::Clamp(targetSize(options, reason),
-                                      minSpaceSize(), maxSpaceSize());
+  size_t newCapacity =
+      std::clamp(targetSize(options, reason), minSpaceSize(), maxSpaceSize());
 
   MOZ_ASSERT(roundSize(newCapacity) == newCapacity);
   MOZ_ASSERT(newCapacity >= SystemPageSize());
@@ -2491,51 +2478,50 @@ bool js::Nursery::isSubChunkMode() const {
   return capacity() <= NurseryChunkUsableSize;
 }
 
-void js::Nursery::clearMapAndSetNurseryRanges() {
-  // Clears the lists of nursery ranges used by map and set iterators. These
-  // lists are cleared at the start of minor GC and rebuilt when iterators are
+void js::Nursery::clearMapAndSetNurseryIterators() {
+  // Clears the lists of nursery iterators for all Map/Set objects. These lists
+  // are cleared at the start of minor GC and rebuilt when iterators are
   // promoted during minor GC.
-  for (auto* map : mapsWithNurseryMemory_) {
-    map->clearNurseryRangesBeforeMinorGC();
+  for (auto* map : mapsWithNurseryIterators_) {
+    map->clearNurseryIteratorsBeforeMinorGC();
   }
-  for (auto* set : setsWithNurseryMemory_) {
-    set->clearNurseryRangesBeforeMinorGC();
+  for (auto* set : setsWithNurseryIterators_) {
+    set->clearNurseryIteratorsBeforeMinorGC();
   }
 }
 
 void js::Nursery::sweepMapAndSetObjects() {
   // This processes all Map and Set objects that are known to have associated
-  // nursery memory (either they are nursery allocated themselves or they have
-  // iterator objects that are nursery allocated).
+  // iterator objects that are nursery allocated.
   //
   // These objects may die and be finalized or if not their internal state and
   // memory tracking are updated.
   //
   // Finally the lists themselves are rebuilt so as to remove objects that are
-  // no longer associated with nursery memory (either because they died or
-  // because the nursery object was promoted to the tenured heap).
+  // no longer associated with nursery iterators (because all iterators died or
+  // were promoted to the tenured heap).
 
   auto* gcx = runtime()->gcContext();
 
   AutoEnterOOMUnsafeRegion oomUnsafe;
 
   MapObjectVector maps;
-  std::swap(mapsWithNurseryMemory_, maps);
+  std::swap(mapsWithNurseryIterators_, maps);
   for (auto* mapobj : maps) {
     mapobj = MapObject::sweepAfterMinorGC(gcx, mapobj);
     if (mapobj) {
-      if (!mapsWithNurseryMemory_.append(mapobj)) {
+      if (!mapsWithNurseryIterators_.append(mapobj)) {
         oomUnsafe.crash("sweepAfterMinorGC");
       }
     }
   }
 
   SetObjectVector sets;
-  std::swap(setsWithNurseryMemory_, sets);
+  std::swap(setsWithNurseryIterators_, sets);
   for (auto* setobj : sets) {
     setobj = SetObject::sweepAfterMinorGC(gcx, setobj);
     if (setobj) {
-      if (!setsWithNurseryMemory_.append(setobj)) {
+      if (!setsWithNurseryIterators_.append(setobj)) {
         oomUnsafe.crash("sweepAfterMinorGC");
       }
     }
@@ -2543,27 +2529,3 @@ void js::Nursery::sweepMapAndSetObjects() {
 }
 
 void js::Nursery::joinDecommitTask() { decommitTask->join(); }
-
-JS_PUBLIC_API void JS::EnableNurseryStrings(JSContext* cx) {
-  AutoEmptyNursery empty(cx);
-  ReleaseAllJITCode(cx->gcContext());
-  cx->runtime()->gc.nursery().enableStrings();
-}
-
-JS_PUBLIC_API void JS::DisableNurseryStrings(JSContext* cx) {
-  AutoEmptyNursery empty(cx);
-  ReleaseAllJITCode(cx->gcContext());
-  cx->runtime()->gc.nursery().disableStrings();
-}
-
-JS_PUBLIC_API void JS::EnableNurseryBigInts(JSContext* cx) {
-  AutoEmptyNursery empty(cx);
-  ReleaseAllJITCode(cx->gcContext());
-  cx->runtime()->gc.nursery().enableBigInts();
-}
-
-JS_PUBLIC_API void JS::DisableNurseryBigInts(JSContext* cx) {
-  AutoEmptyNursery empty(cx);
-  ReleaseAllJITCode(cx->gcContext());
-  cx->runtime()->gc.nursery().disableBigInts();
-}

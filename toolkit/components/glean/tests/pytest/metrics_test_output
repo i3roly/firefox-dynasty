@@ -450,7 +450,7 @@ pub mod test_nested {
 
         pub type AnObjectObject = Vec<AnObjectObjectItem>;
 
-        #[derive(Debug, Hash, Eq, PartialEq, ::glean::traits::__serde::Serialize, ::glean::traits::__serde::Deserialize)]
+        #[derive(Debug, Hash, Eq, PartialEq, Clone, ::glean::traits::__serde::Serialize, ::glean::traits::__serde::Deserialize)]
     #[allow(non_snake_case)]
     #[serde(deny_unknown_fields)]
     pub struct AnObjectObjectItem {
@@ -659,6 +659,7 @@ pub mod test_nested {
 #[allow(dead_code)]
 pub(crate) mod __glean_metric_maps {
     use std::collections::HashMap;
+    use std::sync::Arc;
 
     use crate::metrics::extra_keys_len;
     use crate::private::*;
@@ -946,33 +947,11 @@ pub(crate) mod __glean_metric_maps {
     ///
     /// Panics if no labeled_boolean by the given metric ID could be found.
     #[allow(unused_variables)]
-    pub(crate) fn labeled_boolean_get(metric_id: u32, label: &str) -> LabeledBooleanMetric {
+    pub(crate) fn labeled_boolean_get(metric_id: u32, label: &str) -> Arc<LabeledBooleanMetric> {
         match metric_id {
             4 => super::test::labeled_boolean_metric.get(label),
             5 => super::test::labeled_boolean_metric_labels.get(label),
             17 => super::test::unordered_labeled_boolean_metric.get(label),
-            _ => panic!("No labeled_boolean for metric id {}", metric_id),
-        }
-    }
-
-    /// Gets the submetric from the specified labeled_boolean metric, by enum.
-    ///
-    /// # Arguments
-    ///
-    /// * `metric_id` - The metric's ID to look up
-    /// * `label_enum` - The label enum identifying the boolean submetric.
-    ///
-    /// # Returns
-    ///
-    /// Returns the boolean submetric.
-    ///
-    /// # Panics
-    ///
-    /// Panics if no labeled_boolean by the given metric ID could be found.
-    #[allow(unused_variables)]
-    pub(crate) fn labeled_boolean_enum_get(metric_id: u32, label_enum: u16) -> LabeledBooleanMetric {
-        match metric_id {
-            5 => super::test::labeled_boolean_metric_labels.get(labeled_enum_to_str(metric_id, label_enum)),
             _ => panic!("No labeled_boolean for metric id {}", metric_id),
         }
     }
@@ -991,32 +970,10 @@ pub(crate) mod __glean_metric_maps {
     ///
     /// Panics if no labeled_counter by the given metric ID could be found.
     #[allow(unused_variables)]
-    pub(crate) fn labeled_counter_get(metric_id: u32, label: &str) -> LabeledCounterMetric {
+    pub(crate) fn labeled_counter_get(metric_id: u32, label: &str) -> Arc<LabeledCounterMetric> {
         match metric_id {
             6 => super::test::labeled_counter_metric.get(label),
             7 => super::test::labeled_counter_metric_labels.get(label),
-            _ => panic!("No labeled_counter for metric id {}", metric_id),
-        }
-    }
-
-    /// Gets the submetric from the specified labeled_counter metric, by enum.
-    ///
-    /// # Arguments
-    ///
-    /// * `metric_id` - The metric's ID to look up
-    /// * `label_enum` - The label enum identifying the counter submetric.
-    ///
-    /// # Returns
-    ///
-    /// Returns the counter submetric.
-    ///
-    /// # Panics
-    ///
-    /// Panics if no labeled_counter by the given metric ID could be found.
-    #[allow(unused_variables)]
-    pub(crate) fn labeled_counter_enum_get(metric_id: u32, label_enum: u16) -> LabeledCounterMetric {
-        match metric_id {
-            7 => super::test::labeled_counter_metric_labels.get(labeled_enum_to_str(metric_id, label_enum)),
             _ => panic!("No labeled_counter for metric id {}", metric_id),
         }
     }
@@ -1035,32 +992,10 @@ pub(crate) mod __glean_metric_maps {
     ///
     /// Panics if no labeled_string by the given metric ID could be found.
     #[allow(unused_variables)]
-    pub(crate) fn labeled_string_get(metric_id: u32, label: &str) -> LabeledStringMetric {
+    pub(crate) fn labeled_string_get(metric_id: u32, label: &str) -> Arc<LabeledStringMetric> {
         match metric_id {
             8 => super::test::labeled_string_metric.get(label),
             9 => super::test::labeled_string_metric_labels.get(label),
-            _ => panic!("No labeled_string for metric id {}", metric_id),
-        }
-    }
-
-    /// Gets the submetric from the specified labeled_string metric, by enum.
-    ///
-    /// # Arguments
-    ///
-    /// * `metric_id` - The metric's ID to look up
-    /// * `label_enum` - The label enum identifying the string submetric.
-    ///
-    /// # Returns
-    ///
-    /// Returns the string submetric.
-    ///
-    /// # Panics
-    ///
-    /// Panics if no labeled_string by the given metric ID could be found.
-    #[allow(unused_variables)]
-    pub(crate) fn labeled_string_enum_get(metric_id: u32, label_enum: u16) -> LabeledStringMetric {
-        match metric_id {
-            9 => super::test::labeled_string_metric_labels.get(labeled_enum_to_str(metric_id, label_enum)),
             _ => panic!("No labeled_string for metric id {}", metric_id),
         }
     }
@@ -1074,9 +1009,23 @@ pub(crate) mod __glean_metric_maps {
         }
     }
 
+    pub(crate) fn labeled_submetric_id_get(metric_id: u32, label: &str) -> u32 {
+        match metric_id {
+            4 => super::test::labeled_boolean_metric.get_submetric_id(label),
+            5 => super::test::labeled_boolean_metric_labels.get_submetric_id(label),
+            6 => super::test::labeled_counter_metric.get_submetric_id(label),
+            7 => super::test::labeled_counter_metric_labels.get_submetric_id(label),
+            8 => super::test::labeled_string_metric.get_submetric_id(label),
+            9 => super::test::labeled_string_metric_labels.get_submetric_id(label),
+            17 => super::test::unordered_labeled_boolean_metric.get_submetric_id(label),
+            _ => panic!("No labeled metric for id {}", metric_id),
+        }
+    }
+
     pub(crate) mod submetric_maps {
         use std::sync::{
           atomic::AtomicU32,
+          Arc,
           RwLock,
         };
         use super::*;
@@ -1090,22 +1039,25 @@ pub(crate) mod __glean_metric_maps {
             RwLock::new(HashMap::new())
         );
 
-        pub static BOOLEAN_MAP: Lazy<RwLock<HashMap<MetricId, LabeledBooleanMetric>>> = Lazy::new(||
+        pub static BOOLEAN_MAP: Lazy<RwLock<HashMap<MetricId, Arc<LabeledBooleanMetric>>>> = Lazy::new(||
             RwLock::new(HashMap::new())
         );
-        pub static COUNTER_MAP: Lazy<RwLock<HashMap<MetricId, LabeledCounterMetric>>> = Lazy::new(||
+        pub static COUNTER_MAP: Lazy<RwLock<HashMap<MetricId, Arc<LabeledCounterMetric>>>> = Lazy::new(||
             RwLock::new(HashMap::new())
         );
-        pub static CUSTOM_DISTRIBUTION_MAP: Lazy<RwLock<HashMap<MetricId, LabeledCustomDistributionMetric>>> = Lazy::new(||
+        pub static CUSTOM_DISTRIBUTION_MAP: Lazy<RwLock<HashMap<MetricId, Arc<LabeledCustomDistributionMetric>>>> = Lazy::new(||
             RwLock::new(HashMap::new())
         );
-        pub static MEMORY_DISTRIBUTION_MAP: Lazy<RwLock<HashMap<MetricId, LabeledMemoryDistributionMetric>>> = Lazy::new(||
+        pub static MEMORY_DISTRIBUTION_MAP: Lazy<RwLock<HashMap<MetricId, Arc<LabeledMemoryDistributionMetric>>>> = Lazy::new(||
             RwLock::new(HashMap::new())
         );
-        pub static STRING_MAP: Lazy<RwLock<HashMap<MetricId, LabeledStringMetric>>> = Lazy::new(||
+        pub static STRING_MAP: Lazy<RwLock<HashMap<MetricId, Arc<LabeledStringMetric>>>> = Lazy::new(||
             RwLock::new(HashMap::new())
         );
-        pub static TIMING_DISTRIBUTION_MAP: Lazy<RwLock<HashMap<MetricId, LabeledTimingDistributionMetric>>> = Lazy::new(||
+        pub static TIMING_DISTRIBUTION_MAP: Lazy<RwLock<HashMap<MetricId, Arc<LabeledTimingDistributionMetric>>>> = Lazy::new(||
+            RwLock::new(HashMap::new())
+        );
+        pub static QUANTITY_MAP: Lazy<RwLock<HashMap<MetricId, Arc<LabeledQuantityMetric>>>> = Lazy::new(||
             RwLock::new(HashMap::new())
         );
     }

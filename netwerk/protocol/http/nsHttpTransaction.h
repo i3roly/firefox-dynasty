@@ -214,16 +214,14 @@ class nsHttpTransaction final : public nsAHttpTransaction,
                                        uint32_t* contentRead,
                                        uint32_t* contentRemaining);
   [[nodiscard]] nsresult ProcessData(char*, uint32_t, uint32_t*);
+  void ReportResponseHeader(uint32_t aSubType);
   void DeleteSelfOnConsumerThread();
   void ReleaseBlockingTransaction();
-
   [[nodiscard]] static nsresult ReadRequestSegment(nsIInputStream*, void*,
                                                    const char*, uint32_t,
                                                    uint32_t, uint32_t*);
   [[nodiscard]] static nsresult WritePipeSegment(nsIOutputStream*, void*, char*,
                                                  uint32_t, uint32_t, uint32_t*);
-
-  bool TimingEnabled() const { return mCaps & NS_HTTP_TIMING_ENABLED; }
 
   bool ResponseTimeoutEnabled() const final;
 

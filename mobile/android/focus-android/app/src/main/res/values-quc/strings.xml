@@ -608,6 +608,9 @@
     <!-- Label for a button in the "tabs tray" to erase the browsing history (closes all tabs and removes associated data). -->
     <string name="tabs_tray_action_erase">Uchupik b\'antal kanoq rech nik\'onel</string>
 
+    <!-- Label for the option in the Focus "tabs tray" to clos the other tabs except the current tab. -->
+    <string name="tabs_tray_action_erase_other">Chacha\' nik\'aj chi taq q\'etb\'al</string>
+
     <!-- If the user decides to open the current page in another browser and if Firefox is not installed then we show this
       item in the list of browsers. Clicking it will open the app store installed on the device (usually that's Google Play). -->
     <string name="download_firefox" tools:ignore="BrandUsage">Chaqasaj Firefox</string>
@@ -847,18 +850,165 @@
     <!-- Title of the completed section on the studies list -->
     <string name="studies_completed">Xtz\'aqatik</string>
 
+    <!-- Preference to enable remote debugging of the app via USB or Wi-Fi -->
+    <string name="preference_remote_debugging">Ujosq\'ixik chi najal chi rumal USB/Wi-Fi</string>
+
+    <!-- Text Button for show biometric prompt -->
+    <string name="show_biometric_button_text">Utzoqopixik</string>
+
+    <!-- Title text for biometric prompt pop-up -->
+    <string name="biometric_prompt_title">Usuk\'ub\'axik ub\'ixik uya\'ik uwi\' q\'ab\'aj</string>
+
+    <!-- Subtitle text for biometric prompt pop-up -->
+    <string name="biometric_prompt_subtitle">Utz kaya\' le uwi\' aq\'ab\' chech k\'olem na pa le kojkemchak.</string>
+
+    <!-- Button for the fingerprint authentication dialog box that is shown to the user when sharing a link to the app
+    while the user has biometric authentication enabled. When pressed, the user's previous session is cleared, and the shared link is opened. -->
+    <string name="biometric_auth_open_link_new_session">Ujaqik kemwiqb\'al pa jun chi kemchak </string>
+
+    <!-- Description for the fingerprint authentication image. Used for accessibility purposes. -->
+    <string name="biometric_auth_image_description">Retno\'jib\'al rech uwi\' q\'ab\'aj</string>
+
+    <!-- Error text displayed when the user's fingerprint cannot be recognized upon re-entering the app.
+     This is displayed during the authentication flow as the app launches. -->
+    <string name="biometric_auth_not_recognized_error">Man kch\'ob\' ta uwach le uwi\' q\'ab\'aj. Chaya\' chi jumul.</string>
+
+    <!-- Error text displayed when the user's fingerprint moved too quickly upon re-entering the app
+    This is displayed during the authentication flow as the app launches.-->
+    <string name="biometric_auth_moved_too_quickly">Sib\'alaj aninaq xsilab\'ax le uwi\' q\'ab\'aj. Chaya\' chi jumul.</string>
+
+    <!-- Title for the prompt to enable search suggestions -->
+    <string name="enable_search_suggestion_title2">Uk\'utunisaxik taq no\'jib\'al rech tzukunem?</string>
+
+    <!-- Description for the prompt to enable search suggestions
+        %1$s will be replaced by the app name (e.g. Firefox Focus) -->
+    <string name="enable_search_suggestion_description">Chech uriqik taq no\'jib\'al %1$s rajawaxik kataq le ktzib\'ax pa le q\'etb\'al rech kemriqonib\'al chech le ch\'ich\' rech tzukunem.</string>
+
     <!-- Label used for the "NO button" for the prompt to enable search suggestions -->
     <string name="enable_search_suggestions_no">Ja\'i\'</string>
 
     <!-- Label used for the "YES button" for the prompt to enable search suggestions -->
     <string name="enable_search_suggestions_yes">Je\'</string>
 
+    <!-- Message displayed when using a search engine that doesn't provide suggestions -->
+    <string name="no_suggestions_message">Jujun taq ch\'ich\' rech tzukunem man kuk\'ut ta taq no\'jib\'al.</string>
+
     <!-- Button to dismiss the message displayed  when using a search engine that doesn't provide suggestions-->
     <string name="dismiss_no_suggestions_prompt_button">Relesaxik</string>
 
     <!-- Tips displayed on the home view -->
 
+    <!-- Tip displayed on home view explaining how to disable tracking protection
+    The new line here must be kept as the second half of the string is clickable for the user. -->
+    <string name="tip_disable_tracking_protection">La man eyetal ta le ktajin kub\'an le K\'olib\'al?\n
+    Chak\'amb\'ejaj uchupik le chajib\'al rech uterne\'xik</string>
+
+    <!-- Tip displayed on home view explaining how to add sites to homescreen
+    Argument 1 will be replaced with a line break in the application.-->
+    <string name="tip_add_to_homescreen"><![CDATA[Chariqa\' okem ruk\' jun pitz\'onik pa taq k\'olib\'al web\' le qas kakojo %1$s  Cholokib\'al> Chaya\' pa Majib\'al]]></string>
+
+    <!-- Tip displayed on home view explaining how to make Focus the default browser
+    Argument 1 is the app name (Firefox Focus/Firefox Klar/etc).
+    The new line here must be kept as the second half of the string is clickable for the user. -->
+    <string name="tip_set_default_browser">Chajaqa\' chi jujunal taq kemwiqb\'al pa%1$s Chajeqeb\'a\' %1$s pacha\' ya\'om chi uloq</string>
+
+    <!-- Tip displayed on home view explaining how to add a custom autocomplete URL
+    The new line here must be kept as the second half of the string is clickable for the user. -->
+    <string name="tip_autocomplete_url">Utz\'aqatisaxik pa utukelam taq URLS chech taq k\'olib\'al web\' le qas kakojo\n Naj-upitz\'ik apachike URL pa le q\'e\'tb\'al rech kemriqonib\'al</string>
+
+    <!-- Tip displayed on home view explaining how to add a custom autocomplete URL
+    The new line here must be kept as the second half of the string is clickable for the user. -->
+    <string name="tip_open_in_new_tab">Chajaqa\' jun kemwiqb\'al pa jun k\'ak\' k\'utjaqb\'al\n Naj-upitz\'ik apachike kemwiqb\'al pa jun uxaq web\'</string>
+
+    <!-- Tip displayed on home view explaining how to add a custom autocomplete URL -->
+    <string name="tip_disable_tips2">Chachupu\' taq no\'jib\'al pa le umajib\'al kemwach</string>
+
+    <!-- Label for the snackbar when a user opens a new tab -->
+    <string name="new_tab_opened_snackbar">Jaqatal K\'ak\' k\'utjaqb\'al </string>
+
+    <!-- Label for the button in the snackbar that switches to the newly opened tab -->
+    <string name="open_new_tab_snackbar">Uk\'exik</string>
+
+    <!-- Preference for switching to a new tab immediately after opening -->
+    <string name="preference_open_new_tab">Aninaqil chak\'exa\' pa kemwiqb\'al pa jun k\'ak\' k\'utjaqb\'al </string>
+
+    <!-- Preference title for safe browsing which when enabled, blocks dangerous or deceptive webpages that may include phishing or malware -->
+    <string name="preference_safe_browsing_title">Chaq\'atej nim uchuq\'ab\'il k\'axk\'olil chi\'l taq uk\'olib\'al web\' rech k\'axk\'olil</string>
+    <!-- Preference summary for safe browsing which when enabled, blocks dangerous or deceptive webpages that may include phishing or malware -->
+    <string name="preference_safe_browsing_summary">Chaq\'atej taq uk\'olib\'al web\' le kkiq\'ol winaq xuquje\' kkib\'an k\'ax, uk\'olib\'al malware xuquje\' uk\'olib\'al software le b\'italik chi man ajawatal taj.</string>
+    <!-- Title of the preference to enable "HTTPS-Only" mode -->
+    <string name="preference_https_only_title">Xew kemub\'antajik HTTPS</string>
+
+    <!-- Description of the preference to enable "HTTPS-Only" mode. -->
+    <string name="preference_https_only_summary3">Kutij uq\'ij utiqik pa utukelam pa taq uk\'olib\'al web\' le kkikoj b\'olq\'otib\'al HTTPS chech nim ucholajil. chajinem.</string>
+
+    <!-- Preference for exceptions tracking protection -->
+    <string name="preference_exceptions">Man rachi\'l taj</string>
+    <!-- Description for the exceptions preference screen-->
+    <string name="preference_exceptions_description">Achupun le q\'ateb\'al rech upam chak chech taq we k\'olib\'al web\'.</string>
+    <!-- Menu item to remove existing exceptions. -->
+    <string name="preference_exceptions_menu_remove">Relesaxik</string>
+
+    <!-- Button to remove all websites from the exception list -->
+    <string name="preference_exceptions_remove_all_button_label">Che\'awelesaj ronojel taq uk\'olib\'al web\'</string>
+
+    <!-- Title for Preference screen for cookie blocking for exceptions tracking protection -->
+    <string name="preference_block_cookies_title">Uq\'atexik cookies</string>
+
+    <!-- Message for Preference screen for cookie blocking for exceptions tracking protection -->
+    <string name="preference_category_block_cookies">La kawaj ke\'aq\'atej cookies?</string>
+
+    <!-- Title for the tab crash report screen-->
+    <string name="tab_crash_report_title">Q\'atem k\'utjaqb\'al</string>
+    <!-- Headline for the tab crash report screen -->
+    <string name="tab_crash_report_headline">Chakuyu\'. K\'o uk\'axk\'olil qariqom ruk\' we k\'utjaqb\'al.</string>
+    <!-- Subtitle for the tab crash report screen -->
+    <string name="tab_crash_report_description">Pacha\' echeb\'alil tzukub\'al, man kqak\'ol taj xuquje\' man kojkopowin taj kqab\'an ub\'anik we k\'utjaqb\'al.</string>
+    <!-- Label for button to close the tab-->
+    <string name="tab_crash_report_close_tab_button_label">Chatz\'apij K\'utjaqb\'al</string>
+
+    <!-- Label for the checkbox to send the tab crash report to Mozilla -->
+    <string name="crash_report_send_crash_label">Utaqik uk\'axk\'olil chech Mozilla</string>
+
     <!-- Tracking protection bottom sheet -->
+
+     <!-- Label for the total number of trackers blocked. %s represents the app install date -->
+    <string name="trackers_count_note">Q\'atetal uterne\'xik rij majin loq %s</string>
+    <!-- Category of trackers (content) that can be blocked by Enhanced Tracking Protection -->
+    <string name="content">Upam chak</string>
+    <!-- Category of trackers (advertising) that can be blocked by Enhanced Tracking Protection -->
+    <string name="advertising">Nim ucholajil ub\'ixikil</string>
+    <!-- Category of trackers (social media) that can be blocked by Enhanced Tracking Protection -->
+    <string name="social">Komonil</string>
+
+     <!-- Category of trackers (analytics) that can be blocked by Enhanced Tracking Protection -->
+    <string name="analytics">Chomab\'al</string>
+    <!-- Preference title for enhanced tracking protection settings -->
+    <string name="enhanced_tracking_protection">Uchajixik k\'exsuk\'umam rech uterne\'xik </string>
+
+     <!-- Enhanced tracking protection preference description when the tracking protection is disabled for this site-->
+    <string name="enhanced_tracking_protection_state_off">Chupinaq le chajib\'al chech we k\'olib\'al web\'</string>
+    <!-- Enhanced tracking protection preference description when the tracking protection is enabled for this site-->
+    <string name="enhanced_tracking_protection_state_on">Tzijital le chajib\'al chech we k\'olib\'al web\'</string>
+    <!-- Label that indicates a site is using a secure connection -->
+    <string name="secure_connection">Uq\'alb\'al k\'u\'xaj le t\'iqonem</string>
+    <!-- Label that indicates a site is using a insecure connection -->
+    <string name="insecure_connection">Man uq\'alb\'al k\'uxaj ta le t\'iqonem</string>
+    <!-- Title for the list of trackers enhanced tracking ptotection can block-->
+    <string name="trackers_and_scripts">Terreneb\'al chi\'l taq tz\'ib\' chech q\'ateb\'al</string>
+
+    <!-- Content description (not visible, for screen readers etc.): Navigate back button description -->
+    <string name="go_back">B\'enam chi rij</string>
+
+    <!-- Top Sites -->
+    <!-- Text for the menu button to remove a top site -->
+    <string name="remove_top_site">Relesaxik</string>
+    <!-- Text for the menu item to remove a top site -->
+    <string name="rename_top_site_item">Ukojik chi jumul ub\'i\'</string>
+    <!-- Text for the dialog title for renaming a top site -->
+    <string name="rename_top_site">Ukojik chi jumul ub\'i\'</string>
+    <!-- Placeholder text for the input field of rename top site-->
+    <string name="placeholder_rename_top_site">Ub\'i\' suk\'um okib\'al</string>
 
      <!-- Promote SearchWidget Dialog -->
 

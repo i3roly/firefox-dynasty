@@ -68,6 +68,7 @@
 #include "mozilla/ProfilerLabels.h"
 #include "mozilla/ProfilerMarkers.h"
 #include "mozilla/RecursiveMutex.h"
+#include "mozilla/RDDProcessManager.h"
 #include "mozilla/ScopeExit.h"
 #include "mozilla/ScriptPreloader.h"
 #include "mozilla/Components.h"
@@ -113,7 +114,7 @@
 #include "mozilla/dom/MediaController.h"
 #include "mozilla/dom/MemoryReportRequest.h"
 #include "mozilla/dom/MediaStatusManager.h"
-#include "mozilla/dom/Notification.h"
+#include "mozilla/dom/notification/NotificationUtils.h"
 #include "mozilla/dom/PContentPermissionRequestParent.h"
 #include "mozilla/dom/PCycleCollectWithLogsParent.h"
 #include "mozilla/dom/ParentProcessMessageManager.h"
@@ -190,7 +191,6 @@
 #include "nsGlobalWindowOuter.h"
 #include "nsHashPropertyBag.h"
 #include "nsHyphenationManager.h"
-#include "nsIAlertsService.h"
 #include "nsIAppShell.h"
 #include "nsIAppWindow.h"
 #include "nsIAsyncInputStream.h"
@@ -369,7 +369,8 @@ namespace dom {
 
 LazyLogModule gProcessLog("Process");
 
-static std::map<RemoteDecodeIn, media::MediaCodecsSupported> sCodecsSupported;
+MOZ_RUNINIT static std::map<RemoteDecodeIn, media::MediaCodecsSupported>
+    sCodecsSupported;
 
 /* static */
 uint32_t ContentParent::sMaxContentProcesses = 0;
@@ -946,7 +947,7 @@ UniqueContentParentKeepAlive ContentParent::GetNewOrUsedLaunchingBrowserProcess(
   UniqueContentParentKeepAlive contentParent;
   if (aGroup) {
     if (RefPtr<ContentParent> candidate = aGroup->GetHostProcess(aRemoteType)) {
-      Unused << NS_WARN_IF(candidate->IsShuttingDown());
+      MOZ_DIAGNOSTIC_ASSERT(!candidate->IsShuttingDown());
       MOZ_LOG(ContentParent::GetLog(), LogLevel::Debug,
               ("GetNewOrUsedProcess: Existing host process %p (launching %d)",
                candidate.get(), candidate->IsLaunching()));
@@ -963,6 +964,7 @@ UniqueContentParentKeepAlive ContentParent::GetNewOrUsedLaunchingBrowserProcess(
     contentParent =
         GetUsedBrowserProcess(aRemoteType, contentParents, maxContentParents,
                               aPreferUsed, aPriority, aBrowserId);
+    MOZ_DIAGNOSTIC_ASSERT_IF(contentParent, !contentParent->IsShuttingDown());
   }
 
   if (!contentParent) {
@@ -1598,7 +1600,7 @@ void ContentParent::Init() {
 
   nsCOMPtr<nsIObserverService> obs = mozilla::services::GetObserverService();
   if (obs) {
-    size_t length = ArrayLength(sObserverTopics);
+    size_t length = std::size(sObserverTopics);
     for (size_t i = 0; i < length; ++i) {
       obs->AddObserver(this, sObserverTopics[i], false);
     }
@@ -1963,7 +1965,7 @@ void ContentParent::ActorDestroy(ActorDestroyReason why) {
 
   nsCOMPtr<nsIObserverService> obs = mozilla::services::GetObserverService();
   if (obs) {
-    size_t length = ArrayLength(sObserverTopics);
+    size_t length = std::size(sObserverTopics);
     for (size_t i = 0; i < length; ++i) {
       obs->RemoveObserver(static_cast<nsIObserver*>(this), sObserverTopics[i]);
     }
@@ -2963,6 +2965,12 @@ bool ContentParent::InitInternal(ProcessPriority aInitialPriority) {
 
   gpm->AddListener(this);
 
+  if (StaticPrefs::media_rdd_process_enabled()) {
+    // Ensure the RDD process has been started.
+    RDDProcessManager* rdd = RDDProcessManager::Get();
+    rdd->LaunchRDDProcess();
+  }
+
   nsStyleSheetService* sheetService = nsStyleSheetService::GetInstance();
   if (sheetService) {
     // This looks like a lot of work, but in a normal browser session we just
@@ -3828,17 +3836,6 @@ ContentParent::Observe(nsISupports* aSubject, const char* aTopic,
     if (!SendSetCaptivePortalState(state)) {
       return NS_ERROR_NOT_AVAILABLE;
     }
-  }
-  // listening for alert notifications
-  else if (!strcmp(aTopic, "alertfinished") ||
-           !strcmp(aTopic, "alertclickcallback") ||
-           !strcmp(aTopic, "alertshow") ||
-           !strcmp(aTopic, "alertdisablecallback") ||
-           !strcmp(aTopic, "alertsettingscallback")) {
-    if (!SendNotifyAlertsObserver(nsDependentCString(aTopic),
-                                  nsDependentString(aData))) {
-      return NS_ERROR_NOT_AVAILABLE;
-    }
   } else if (!strcmp(aTopic, "child-gc-request")) {
     Unused << SendGarbageCollect();
   } else if (!strcmp(aTopic, "child-cc-request")) {
@@ -4377,7 +4374,7 @@ void ContentParent::KillHard(const char* aReason) {
   }
 
   // EnsureProcessTerminated has responsibilty for closing otherProcessHandle.
-  XRE_GetIOMessageLoop()->PostTask(
+  XRE_GetAsyncIOEventTarget()->Dispatch(
       NewRunnableFunction("EnsureProcessTerminatedRunnable",
                           &ProcessWatcher::EnsureProcessTerminated,
                           otherProcessHandle, /*force=*/true));
@@ -4689,81 +4686,6 @@ mozilla::ipc::IPCResult ContentParent::RecvExtProtocolChannelConnectParent(
   // Yes, this is a bit of a hack, but I don't think it's necessary to invent
   // a new interface just to set this flag on the channel.
   parent->SetParentListener(nullptr);
-
-  return IPC_OK();
-}
-
-mozilla::ipc::IPCResult ContentParent::RecvShowAlert(
-    nsIAlertNotification* aAlert) {
-  if (!aAlert) {
-    return IPC_FAIL(this, "aAlert must not be null.");
-  }
-  nsCOMPtr<nsIAlertsService> sysAlerts(components::Alerts::Service());
-  if (sysAlerts) {
-    sysAlerts->ShowAlert(aAlert, this);
-  }
-  return IPC_OK();
-}
-
-mozilla::ipc::IPCResult ContentParent::RecvCloseAlert(const nsAString& aName,
-                                                      bool aContextClosed) {
-  nsCOMPtr<nsIAlertsService> sysAlerts(components::Alerts::Service());
-  if (sysAlerts) {
-    sysAlerts->CloseAlert(aName, aContextClosed);
-  }
-
-  return IPC_OK();
-}
-
-mozilla::ipc::IPCResult ContentParent::RecvDisableNotifications(
-    nsIPrincipal* aPrincipal) {
-  if (!aPrincipal) {
-    return IPC_FAIL(this, "No principal");
-  }
-
-  if (!ValidatePrincipal(aPrincipal)) {
-    LogAndAssertFailedPrincipalValidationInfo(aPrincipal, __func__);
-  }
-  Unused << Notification::RemovePermission(aPrincipal);
-  return IPC_OK();
-}
-
-mozilla::ipc::IPCResult ContentParent::RecvOpenNotificationSettings(
-    nsIPrincipal* aPrincipal) {
-  if (!aPrincipal) {
-    return IPC_FAIL(this, "No principal");
-  }
-
-  if (!ValidatePrincipal(aPrincipal)) {
-    LogAndAssertFailedPrincipalValidationInfo(aPrincipal, __func__);
-  }
-  Unused << Notification::OpenSettings(aPrincipal);
-  return IPC_OK();
-}
-
-mozilla::ipc::IPCResult ContentParent::RecvNotificationEvent(
-    const nsAString& aType, const NotificationEventData& aData) {
-  nsCOMPtr<nsIServiceWorkerManager> swm =
-      mozilla::components::ServiceWorkerManager::Service();
-  if (NS_WARN_IF(!swm)) {
-    // Probably shouldn't happen, but no need to crash the child process.
-    return IPC_OK();
-  }
-
-  if (aType.EqualsLiteral("click")) {
-    nsresult rv = swm->SendNotificationClickEvent(
-        aData.originSuffix(), aData.scope(), aData.ID(), aData.title(),
-        aData.dir(), aData.lang(), aData.body(), aData.tag(), aData.icon(),
-        aData.data(), aData.behavior());
-    Unused << NS_WARN_IF(NS_FAILED(rv));
-  } else {
-    MOZ_ASSERT(aType.EqualsLiteral("close"));
-    nsresult rv = swm->SendNotificationCloseEvent(
-        aData.originSuffix(), aData.scope(), aData.ID(), aData.title(),
-        aData.dir(), aData.lang(), aData.body(), aData.tag(), aData.icon(),
-        aData.data(), aData.behavior());
-    Unused << NS_WARN_IF(NS_FAILED(rv));
-  }
 
   return IPC_OK();
 }
@@ -6368,14 +6290,13 @@ mozilla::ipc::IPCResult ContentParent::RecvRecordPageLoadEvent(
 
   // Send the PageLoadPing after every 30 page loads, or on startup.
   if (++sPageLoadEventCounter >= 30) {
-    NS_SUCCEEDED(NS_DispatchToMainThreadQueue(
+    Unused << NS_WARN_IF(NS_FAILED(NS_DispatchToMainThreadQueue(
         NS_NewRunnableFunction(
             "PageLoadPingIdleTask",
             [] { mozilla::glean_pings::Pageload.Submit("threshold"_ns); }),
-        EventQueuePriority::Idle));
+        EventQueuePriority::Idle)));
     sPageLoadEventCounter = 0;
   }
-
   return IPC_OK();
 }
 

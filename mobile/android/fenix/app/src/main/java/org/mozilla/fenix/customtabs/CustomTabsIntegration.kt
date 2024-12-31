@@ -32,18 +32,19 @@ import mozilla.components.lib.state.ext.flow
 import mozilla.components.support.base.feature.LifecycleAwareFeature
 import mozilla.components.support.base.feature.UserInteractionHandler
 import mozilla.components.support.utils.ColorUtils.calculateAlphaFromPercentage
+import mozilla.telemetry.glean.private.NoExtras
+import org.mozilla.fenix.GleanMetrics.NavigationBar
 import org.mozilla.fenix.R
 import org.mozilla.fenix.browser.BrowserFragment.Companion.OPEN_IN_ACTION_WEIGHT
 import org.mozilla.fenix.components.AppStore
-import org.mozilla.fenix.components.appstate.OrientationMode
 import org.mozilla.fenix.components.menu.MenuAccessPoint
 import org.mozilla.fenix.components.toolbar.BrowserToolbarView
 import org.mozilla.fenix.components.toolbar.ToolbarMenu
 import org.mozilla.fenix.components.toolbar.interactor.BrowserToolbarInteractor
 import org.mozilla.fenix.components.toolbar.navbar.shouldAddNavigationBar
 import org.mozilla.fenix.ext.components
-import org.mozilla.fenix.ext.isLargeWindow
 import org.mozilla.fenix.ext.settings
+import org.mozilla.fenix.theme.AcornWindowSize
 import org.mozilla.fenix.utils.Settings
 
 @Suppress("LongParameterList")
@@ -57,7 +58,7 @@ class CustomTabsIntegration(
     private val activity: Activity,
     private val interactor: BrowserToolbarInteractor,
     shouldReverseItems: Boolean,
-    isSandboxCustomTab: Boolean,
+    private val isSandboxCustomTab: Boolean,
     private val isPrivate: Boolean,
     isMenuRedesignEnabled: Boolean,
     private val isNavBarEnabled: Boolean,
@@ -114,9 +115,13 @@ class CustomTabsIntegration(
         window = activity.window,
         customTabsToolbarListeners = CustomTabsToolbarListeners(
             menuListener = {
+                if (context.settings().navigationToolbarEnabled) {
+                    NavigationBar.customMenuTapped.record(NoExtras())
+                }
                 interactor.onMenuButtonClicked(
                     accessPoint = MenuAccessPoint.External,
                     customTabSessionId = sessionId,
+                    isSandboxCustomTab = isSandboxCustomTab,
                 )
             },
             shareListener = { interactor.onBrowserToolbarMenuItemTapped(ToolbarMenu.Item.Share) },
@@ -132,7 +137,7 @@ class CustomTabsIntegration(
         appNightMode = activity.settings().getAppNightMode(),
         forceActionButtonTinting = isPrivate,
         customTabsToolbarButtonConfig = CustomTabsToolbarButtonConfig(
-            showMenu = !isNavBarEnabled,
+            showMenu = !isNavBarVisible,
             showRefreshButton = isNavBarEnabled,
             allowCustomizingCloseButton = !isNavBarEnabled,
         ),
@@ -152,8 +157,8 @@ class CustomTabsIntegration(
     private fun getCustomTabsColorsConfig() = when (activity.settings().navigationToolbarEnabled) {
         true -> CustomTabsColorsConfig(
             updateStatusBarColor = false,
-            updateSystemNavigationBarColor = true,
-            updateToolbarsColor = !isPrivate,
+            updateSystemNavigationBarColor = false,
+            updateToolbarsColor = false,
         )
 
         false -> CustomTabsColorsConfig(
@@ -175,7 +180,7 @@ class CustomTabsIntegration(
                             context = context,
                             isNavBarEnabled = isNavBarEnabled,
                             isNavBarVisible = isNavBarVisible,
-                            orientation = it,
+                            isWindowSizeSmall = AcornWindowSize.getWindowSize(context) == AcornWindowSize.Small,
                         )
                     }
             }
@@ -194,13 +199,12 @@ class CustomTabsIntegration(
         context: Context,
         isNavBarEnabled: Boolean,
         isNavBarVisible: Boolean,
-        orientation: OrientationMode,
+        isWindowSizeSmall: Boolean,
     ) {
         if (isNavBarEnabled) {
             updateAddressBarNavigationActions(
                 context = context,
-                isLandscape = orientation == OrientationMode.Landscape,
-                isTablet = context.isLargeWindow(),
+                isWindowSizeSmall = isWindowSizeSmall,
             )
 
             browserToolbarView.updateMenuVisibility(
@@ -211,16 +215,17 @@ class CustomTabsIntegration(
                 isNavbarVisible = isNavBarVisible,
                 context = context,
             )
+
+            feature.updateMenuVisibility(isVisible = !isNavBarVisible)
         }
     }
 
     @VisibleForTesting
     internal fun updateAddressBarNavigationActions(
         context: Context,
-        isLandscape: Boolean,
-        isTablet: Boolean,
+        isWindowSizeSmall: Boolean,
     ) {
-        if (isLandscape || isTablet) {
+        if (!isWindowSizeSmall) {
             addNavigationActions(context)
             toolbar.invalidateActions()
         } else {
@@ -234,7 +239,16 @@ class CustomTabsIntegration(
         context: Context,
     ) {
         if (!isNavbarVisible) {
-            initOpenInAction(context)
+            val enableTint = feature.iconColor
+            val disableTint = ColorUtils.setAlphaComponent(
+                feature.iconColor,
+                calculateAlphaFromPercentage(DISABLED_STATE_OPACITY),
+            )
+            initOpenInAction(
+                context = context,
+                enableTint = enableTint,
+                disableTint = disableTint,
+            )
         } else {
             removeOpenInAction()
         }
@@ -293,11 +307,13 @@ class CustomTabsIntegration(
                 },
                 disableInSecondaryState = true,
                 longClickListener = {
+                    NavigationBar.customForwardLongTapped.record(NoExtras())
                     interactor.onBrowserToolbarMenuItemTapped(
                         ToolbarMenu.Item.Forward(viewHistory = true),
                     )
                 },
                 listener = {
+                    NavigationBar.customForwardTapped.record(NoExtras())
                     interactor.onBrowserToolbarMenuItemTapped(
                         ToolbarMenu.Item.Forward(viewHistory = false),
                     )
@@ -340,11 +356,13 @@ class CustomTabsIntegration(
                 },
                 disableInSecondaryState = true,
                 longClickListener = {
+                    NavigationBar.customBackLongTapped.record(NoExtras())
                     interactor.onBrowserToolbarMenuItemTapped(
                         ToolbarMenu.Item.Back(viewHistory = true),
                     )
                 },
                 listener = {
+                    NavigationBar.customBackTapped.record(NoExtras())
                     interactor.onBrowserToolbarMenuItemTapped(
                         ToolbarMenu.Item.Back(viewHistory = false),
                     )
@@ -369,23 +387,42 @@ class CustomTabsIntegration(
     }
 
     @VisibleForTesting
-    internal fun initOpenInAction(context: Context) {
+    internal fun initOpenInAction(
+        context: Context,
+        @ColorInt enableTint: Int,
+        @ColorInt disableTint: Int,
+    ) {
         if (openInAction == null) {
-            val imageDrawable = getDrawable(
+            val primaryDrawable = getDrawable(
                 context,
                 R.drawable.mozac_ic_open_in,
             )?.apply {
-                setTint(feature.iconColor)
+                setTint(enableTint)
             } ?: return
 
-            openInAction = BrowserToolbar.Button(
-                imageDrawable = imageDrawable,
-                contentDescription = context.getString(
+            val secondaryDrawable = getDrawable(
+                context,
+                R.drawable.mozac_ic_open_in,
+            )?.apply {
+                setTint(disableTint)
+            } ?: return
+
+            openInAction = BrowserToolbar.TwoStateButton(
+                primaryImage = primaryDrawable,
+                primaryContentDescription = context.getString(
                     R.string.browser_menu_open_in_fenix,
                     context.getString(R.string.app_name),
                 ),
+                secondaryImage = secondaryDrawable,
+                secondaryContentDescription = context.getString(
+                    R.string.browser_menu_open_in_fenix,
+                    context.getString(R.string.app_name),
+                ),
+                isInPrimaryState = { !isSandboxCustomTab },
+                disableInSecondaryState = true,
                 weight = { OPEN_IN_ACTION_WEIGHT },
                 listener = {
+                    NavigationBar.customOpenInFenixTapped.record(NoExtras())
                     interactor.onBrowserToolbarMenuItemTapped(
                         ToolbarMenu.Item.OpenInFenix,
                     )

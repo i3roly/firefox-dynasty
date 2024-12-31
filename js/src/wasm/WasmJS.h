@@ -321,7 +321,7 @@ class WasmMemoryObject : public NativeObject {
   wasm::Pages clampedMaxPages() const;
   mozilla::Maybe<wasm::Pages> sourceMaxPages() const;
 
-  wasm::IndexType indexType() const;
+  wasm::AddressType addressType() const;
   bool isShared() const;
   bool isHuge() const;
   bool movingGrowable() const;
@@ -409,7 +409,6 @@ class WasmTagObject : public NativeObject {
 
   const wasm::TagType* tagType() const;
   const wasm::ValTypeVector& valueTypes() const;
-  wasm::ResultType resultType() const;
 };
 
 // The class of WebAssembly.Exception. This class is used for

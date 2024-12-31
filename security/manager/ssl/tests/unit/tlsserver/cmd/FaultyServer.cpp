@@ -49,7 +49,7 @@ const char* kCertWildcard = "default-ee";
  * the "default-ee" cert has a SAN for *.example.com
  * the "no-san-ee" cert is signed by the test-ca, but it doesn't have any SANs.
  */
-const FaultyServerHost sFaultyServerHosts[]{
+MOZ_RUNINIT const FaultyServerHost sFaultyServerHosts[]{
     {kHostOk, kCertWildcard, None},
     {kHostUnknown, kCertWildcard, UnknownSNI},
     {kHostZeroRttAlertBadMac, kCertWildcard, ZeroRtt},
@@ -232,7 +232,7 @@ int32_t DoSNISocketConfig(PRFileDesc* aFd, const SECItem* aSrvNameArr,
     case Mlkem768x25519:
       SSL_SecretCallback(aFd, &SecretCallbackFailMlkem768x25519, (void*)host);
       SSL_NamedGroupConfig(aFd, mlkemTestNamedGroups,
-                           mozilla::ArrayLength(mlkemTestNamedGroups));
+                           std::size(mlkemTestNamedGroups));
       break;
     case None:
       break;

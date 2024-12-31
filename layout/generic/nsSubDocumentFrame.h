@@ -103,7 +103,7 @@ class nsSubDocumentFrame final : public nsAtomicContainerFrame,
   mozilla::PresShell* GetSubdocumentPresShellForPainting(uint32_t aFlags);
   nsRect GetDestRect();
   nsRect GetDestRect(const nsRect& aConstraintRect);
-  mozilla::ScreenIntSize GetSubdocumentSize();
+  mozilla::LayoutDeviceIntSize GetSubdocumentSize();
 
   bool ContentReactsToPointerEvents() const;
 
@@ -167,6 +167,7 @@ class nsSubDocumentFrame final : public nsAtomicContainerFrame,
 
   nsView* GetViewInternal() const override { return mOuterView; }
   void SetViewInternal(nsView* aView) override { mOuterView = aView; }
+  void CreateView();
 
   mutable RefPtr<nsFrameLoader> mFrameLoader;
 

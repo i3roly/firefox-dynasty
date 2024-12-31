@@ -162,74 +162,7 @@ add_task(async function showLessFrequentlyCapReached_manySearches() {
     QuickSuggestTestUtils.weatherRecord(),
   ]);
   UrlbarPrefs.clear("weather.minKeywordLength");
-});
-
-// Repeatedly clicks the "Show less frequently" result menu command after doing
-// a single search until the min keyword length cap is reached.
-add_task(async function showLessFrequentlyCapReached_oneSearch() {
-  // Set up a min keyword length and cap.
-  await QuickSuggestTestUtils.setRemoteSettingsRecords([
-    QuickSuggestTestUtils.weatherRecord({
-      min_keyword_length: 3,
-    }),
-    {
-      type: "configuration",
-      configuration: {
-        show_less_frequently_cap: 3,
-      },
-    },
-  ]);
-
-  // Trigger the suggestion.
-  await UrlbarTestUtils.promiseAutocompleteResultPopup({
-    window,
-    value: "wea",
-  });
-
-  let resultIndex = 1;
-  let details = await UrlbarTestUtils.getDetailsOfResultAt(window, resultIndex);
-  info("Weather suggestion should be present after 'wea' search");
-  assertIsWeatherResult(details.result, true);
-
-  let command = "show_less_frequently";
-
-  for (let i = 0; i < 3; i++) {
-    await UrlbarTestUtils.openResultMenuAndClickItem(window, command, {
-      resultIndex,
-      openByMouse: true,
-    });
-
-    Assert.ok(
-      gURLBar.view.isOpen,
-      "The view should remain open clicking the command"
-    );
-    Assert.ok(
-      details.element.row.hasAttribute("feedback-acknowledgment"),
-      "Row should have feedback acknowledgment after clicking command"
-    );
-    Assert.equal(
-      UrlbarPrefs.get("weather.minKeywordLength"),
-      4 + i,
-      "weather.minKeywordLength should be incremented once"
-    );
-  }
-
-  let menuitem = await UrlbarTestUtils.openResultMenuAndGetItem({
-    window,
-    command,
-    resultIndex,
-  });
-  Assert.ok(
-    !menuitem,
-    "The menuitem should not exist after the cap is reached"
-  );
-
-  gURLBar.view.resultMenu.hidePopup(true);
-  await UrlbarTestUtils.promisePopupClose(window);
-  await QuickSuggestTestUtils.setRemoteSettingsRecords([
-    QuickSuggestTestUtils.weatherRecord(),
-  ]);
-  UrlbarPrefs.clear("weather.minKeywordLength");
+  UrlbarPrefs.clear("weather.showLessFrequentlyCount");
 });
 
 // Tests the "Not interested" result menu dismissal command.
@@ -344,6 +277,7 @@ add_task(async function inaccurateLocationAndDismissal() {
 add_task(async function showLessFrequentlyAndDismissal() {
   await doSessionOngoingCommandTest("show_less_frequently");
   UrlbarPrefs.clear("weather.minKeywordLength");
+  UrlbarPrefs.clear("weather.showLessFrequentlyCount");
 });
 
 async function doSessionOngoingCommandTest(command) {
@@ -416,20 +350,27 @@ add_task(async function manage() {
 add_task(async function simpleUI() {
   const testData = [
     {
-      weatherSimpleUI: true,
+      // The simple UI should be enabled by default, when no Nimbus experiment
+      // is installed.
+      nimbusVariables: null,
       expectedSummary:
         MerinoTestUtils.WEATHER_SUGGESTION.current_conditions.summary,
     },
     {
-      weatherSimpleUI: false,
+      nimbusVariables: { weatherSimpleUI: true },
+      expectedSummary:
+        MerinoTestUtils.WEATHER_SUGGESTION.current_conditions.summary,
+    },
+    {
+      nimbusVariables: { weatherSimpleUI: false },
       expectedSummary: `${MerinoTestUtils.WEATHER_SUGGESTION.current_conditions.summary}; ${MerinoTestUtils.WEATHER_SUGGESTION.forecast.summary}`,
     },
   ];
 
-  for (let { weatherSimpleUI, expectedSummary } of testData) {
-    let nimbusCleanup = await UrlbarTestUtils.initNimbusFeature({
-      weatherSimpleUI,
-    });
+  for (let { nimbusVariables, expectedSummary } of testData) {
+    let nimbusCleanup = nimbusVariables
+      ? await UrlbarTestUtils.initNimbusFeature(nimbusVariables)
+      : null;
 
     await UrlbarTestUtils.promiseAutocompleteResultPopup({
       window,
@@ -459,8 +400,21 @@ add_task(async function simpleUI() {
       "The summary text should be correct"
     );
 
+    // Check the title too while we're here.
+    let title = row.querySelector(".urlbarView-dynamic-weather-title");
+    let expectedTitle = "Weather for San Francisco, CA";
+    await TestUtils.waitForCondition(
+      () => title.textContent == expectedTitle,
+      "Waiting for the row's title text to be updated"
+    );
+    Assert.equal(
+      title.textContent,
+      expectedTitle,
+      "The title text should be correct"
+    );
+
     await UrlbarTestUtils.promisePopupClose(window);
-    await nimbusCleanup();
+    await nimbusCleanup?.();
   }
 });
 

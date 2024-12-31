@@ -75,7 +75,7 @@ const PREF_URLBAR_DEFAULTS = new Map([
 
   // Whether to show a link for using the search functionality provided by the
   // active view if the the view utilizes OpenSearch.
-  ["contextualSearch.enabled", false],
+  ["contextualSearch.enabled", true],
 
   // Whether using `ctrl` when hitting return/enter in the URL bar
   // (or clicking 'go') should prefix 'www.' and suffix
@@ -157,6 +157,9 @@ const PREF_URLBAR_DEFAULTS = new Map([
   // locales. Labels are not shown in other locales but likely will be in the
   // future.
   ["groupLabels.enabled", true],
+
+  // Set default intent threshold value of 0.5
+  ["intentThreshold", [0.5, "float"]],
 
   // Whether the results panel should be kept open during IME composition.
   ["keepPanelOpenDuringImeComposition", false],
@@ -547,6 +550,10 @@ const PREF_URLBAR_DEFAULTS = new Map([
   // or remote settings.
   ["weather.minKeywordLength", 0],
 
+  // The number of times the user has clicked the "Show less frequently" command
+  // for weather suggestions.
+  ["weather.showLessFrequentlyCount", 0],
+
   // Feature gate pref for Yelp suggestions in the urlbar.
   ["yelp.featureGate", false],
 
@@ -589,9 +596,9 @@ const NIMBUS_DEFAULTS = {
   quickSuggestRemoteSettingsDataType: "data",
   quickSuggestScoreMap: null,
   recordNavigationalSuggestionTelemetry: false,
-  weatherKeywordsMinimumLength: 0,
-  weatherKeywordsMinimumLengthCap: 0,
-  weatherSimpleUI: false,
+  weatherKeywordsMinimumLength: null,
+  weatherShowLessFrequentlyCap: null,
+  weatherSimpleUI: true,
   yelpMinKeywordLength: null,
   yelpSuggestNonPriorityIndex: null,
 };

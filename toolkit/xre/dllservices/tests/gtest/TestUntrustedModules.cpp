@@ -247,14 +247,15 @@ class UntrustedModulesFixture : public TelemetryTestFixture {
   }
 };
 
-const nsString UntrustedModulesFixture::kTestModules[] = {
+MOZ_RUNINIT const nsString UntrustedModulesFixture::kTestModules[] = {
     // Sorted for binary-search
     u"TestUntrustedModules_Dll1.dll"_ns,
     u"TestUntrustedModules_Dll2.dll"_ns,
 };
 
 INIT_ONCE UntrustedModulesFixture::sInitLoadOnce = INIT_ONCE_STATIC_INIT;
-UntrustedModulesCollector UntrustedModulesFixture::sInitLoadDataCollector;
+MOZ_RUNINIT UntrustedModulesCollector
+    UntrustedModulesFixture::sInitLoadDataCollector;
 
 void UntrustedModulesFixture::ValidateUntrustedModules(
     const UntrustedModulesData& aData, bool aIsTruncatedData) {
@@ -302,7 +303,7 @@ void UntrustedModulesFixture::ValidateUntrustedModules(
 
     size_t match;
     if (BinarySearchIf(
-            kKnownModules, 0, ArrayLength(kKnownModules),
+            kKnownModules, 0, std::size(kKnownModules),
             [&leafNameStr](const auto& aVal) {
               return _wcsicmp(leafNameStr.get(), aVal.mName);
             },
@@ -313,7 +314,7 @@ void UntrustedModulesFixture::ValidateUntrustedModules(
     }
 
     if (BinarySearchIf(
-            kTestModules, 0, ArrayLength(kTestModules),
+            kTestModules, 0, std::size(kTestModules),
             [&leafNameStr](const auto& aVal) {
               return _wcsicmp(leafNameStr.get(), aVal.get());
             },
@@ -431,7 +432,7 @@ TEST_F(UntrustedModulesFixture, Serialize) {
     backup1.Add(std::move(data3));
   }
 
-  ValidateJSValue(kPattern, ArrayLength(kPattern) - 1, cx.GetJSContext(),
+  ValidateJSValue(kPattern, std::size(kPattern) - 1, cx.GetJSContext(),
                   [&backup1, &backup2](
                       Telemetry::UntrustedModulesDataSerializer& aSerializer) {
                     EXPECT_NS_SUCCEEDED(aSerializer.Add(backup1));

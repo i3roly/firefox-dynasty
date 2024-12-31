@@ -13,7 +13,7 @@
 edition = "2021"
 rust-version = "1.73"
 name = "wgpu-core"
-version = "22.0.0"
+version = "23.0.0"
 authors = ["gfx-rs developers"]
 build = "build.rs"
 autobins = false
@@ -33,14 +33,14 @@ ignored = ["cfg_aliases"]
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = [
-"--cfg",
-"docsrs",
+    "--cfg",
+    "docsrs",
 ]
 targets = [
-"x86_64-unknown-linux-gnu",
-"x86_64-apple-darwin",
-"x86_64-pc-windows-msvc",
-"wasm32-unknown-unknown",
+    "x86_64-unknown-linux-gnu",
+    "x86_64-apple-darwin",
+    "x86_64-pc-windows-msvc",
+    "wasm32-unknown-unknown",
 ]
 
 [lib]
@@ -57,14 +57,14 @@ version = "0.8"
 version = "2.6"
 
 [dependencies.bytemuck]
-version = "1.18"
+version = "1.19"
 optional = true
 
 [dependencies.document-features]
 version = "0.2.10"
 
 [dependencies.hal]
-version = "22.0.0"
+version = "23.0.0"
 path = "../wgpu-hal"
 default-features = false
 package = "wgpu-hal"
@@ -76,7 +76,7 @@ version = "2"
 version = "0.4"
 
 [dependencies.naga]
-version = "22.0.0"
+version = "23.0.0"
 path = "../naga"
 
 [dependencies.once_cell]
@@ -109,10 +109,10 @@ optional = true
 version = "1"
 
 [dependencies.thiserror]
-version = "1.0.64"
+version = "1.0.67"
 
 [dependencies.wgt]
-version = "22.0.0"
+version = "23.0.0"
 path = "../wgpu-types"
 package = "wgpu-types"
 
@@ -124,37 +124,38 @@ api_log_info = []
 counters = ["wgt/counters"]
 dx12 = ["hal/dx12"]
 fragile-send-sync-non-atomic-wasm = [
-"hal/fragile-send-sync-non-atomic-wasm",
-"wgt/fragile-send-sync-non-atomic-wasm",
+    "hal/fragile-send-sync-non-atomic-wasm",
+    "wgt/fragile-send-sync-non-atomic-wasm",
 ]
 gles = ["hal/gles"]
 glsl = ["naga/glsl-in"]
+indirect-validation = ["naga/wgsl-in"]
 metal = ["hal/metal"]
 observe_locks = [
-"dep:ron",
-"serde/serde_derive",
+    "dep:ron",
+    "serde/serde_derive",
 ]
 raw-window-handle = ["dep:raw-window-handle"]
 renderdoc = ["hal/renderdoc"]
 replay = [
-"serde",
-"naga/deserialize",
+    "serde",
+    "naga/deserialize",
 ]
 resource_log_info = []
 serde = [
-"dep:serde",
-"wgt/serde",
-"arrayvec/serde",
+    "dep:serde",
+    "wgt/serde",
+    "arrayvec/serde",
 ]
 spirv = [
-"naga/spv-in",
-"dep:bytemuck",
+    "naga/spv-in",
+    "dep:bytemuck",
 ]
 strict_asserts = ["wgt/strict_asserts"]
 trace = [
-"dep:ron",
-"serde",
-"naga/serialize",
+    "dep:ron",
+    "serde",
+    "naga/serialize",
 ]
 vulkan = ["hal/vulkan"]
 wgsl = ["naga/wgsl-in"]

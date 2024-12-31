@@ -75,7 +75,7 @@ struct CertStoreLocation {
 // The documentation doesn't make this clear, but the certificate location
 // identified by "ROOT" contains trusted root certificates. The certificate
 // location identified by "CA" contains intermediate certificates.
-const CertStoreLocation kCertStoreLocations[] = {
+MOZ_RUNINIT const CertStoreLocation kCertStoreLocations[] = {
     CertStoreLocation(L"ROOT", true), CertStoreLocation(L"CA", false)};
 
 // Because HCERTSTORE is just a typedef void*, we can't use any of the nice
@@ -413,11 +413,11 @@ OSStatus GatherEnterpriseCertsMacOS(nsTArray<EnterpriseCert>& certs,
   // this query. Further work (below) filters such certificates out.
   const CFStringRef keys[] = {kSecClass, kSecMatchLimit};
   const void* values[] = {kSecClassCertificate, kSecMatchLimitAll};
-  static_assert(ArrayLength(keys) == ArrayLength(values),
+  static_assert(std::size(keys) == std::size(values),
                 "mismatched SecItemCopyMatching key/value array sizes");
   // https://developer.apple.com/documentation/corefoundation/1516782-cfdictionarycreate
   ScopedCFType<CFDictionaryRef> searchDictionary(CFDictionaryCreate(
-      nullptr, (const void**)&keys, (const void**)&values, ArrayLength(keys),
+      nullptr, (const void**)&keys, (const void**)&values, std::size(keys),
       &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks));
   CFTypeRef items;
   // https://developer.apple.com/documentation/security/1398306-secitemcopymatching

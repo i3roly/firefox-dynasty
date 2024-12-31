@@ -70,6 +70,10 @@
     <string name="mozac_feature_addons_permissions_tab_hide_description">Απόκρυψη και εμφανιση καρτελών προγράμματος περιήγησης</string>
     <!-- Description for top_sites permission. -->
     <string name="mozac_feature_addons_permissions_top_sites_description">Πρόσβαση στο ιστορικό περιήγησης</string>
+    <!-- Description for trialML permission. -->
+    <string name="mozac_feature_addons_permissions_trial_ml_description">Λήψη και εκτέλεση μοντέλων AI στη συσκευή</string>
+    <!-- Description for userScripts permission. -->
+    <string name="mozac_feature_addons_permissions_user_scripts_description">Να επιτρέπεται σε μη επαληθευμένα σενάρια τρίτων η πρόσβαση στα δεδομένα σας</string>
     <!-- Description for devtools permission. -->
     <string name="mozac_feature_addons_permissions_devtools_description">Επέκταση εργαλείων προγραμματιστή για πρόσβαση στα δεδομένα σας στις ανοικτές καρτέλες</string>
     <!-- The version on of add-on. -->
@@ -253,7 +257,7 @@
     <!-- Text shown in the dialog when add-on installation is completed. %1$s is the add-on name. %2$s is the app name. -->
     <string name="mozac_feature_addons_installed_dialog_description_2">Αποκτήστε πρόσβαση στο %1$s από το μενού του %2$s.</string>
     <!-- Confirmation button text for the dialog when add-on installation is completed. -->
-    <string name="mozac_feature_addons_installed_dialog_okay_button_2">ΟΚ</string>
+    <string name="mozac_feature_addons_installed_dialog_okay_button_2">OK</string>
     <!-- "Learn more" link displayed below an add-on status message. -->
     <string name="mozac_feature_addons_status_learn_more">Μάθετε περισσότερα</string>
     <!-- "See details" link displayed below an add-on status message. -->

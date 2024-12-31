@@ -1853,7 +1853,6 @@ struct MOZ_NEEDS_MEMMOVABLE_MEMBERS nsStyleUI {
 
  private:
   mozilla::StyleUserInput mUserInput;
-  mozilla::StyleUserModify mUserModify;
   mozilla::StyleUserFocus mUserFocus;
   mozilla::StylePointerEvents mPointerEvents;
   mozilla::StyleCursor mCursor;
@@ -1861,13 +1860,7 @@ struct MOZ_NEEDS_MEMMOVABLE_MEMBERS nsStyleUI {
  public:
   bool IsInert() const { return mInert == mozilla::StyleInert::Inert; }
 
-  mozilla::StyleUserInput UserInput() const {
-    return IsInert() ? mozilla::StyleUserInput::None : mUserInput;
-  }
-
-  mozilla::StyleUserModify UserModify() const {
-    return IsInert() ? mozilla::StyleUserModify::ReadOnly : mUserModify;
-  }
+  mozilla::StyleUserInput UserInput() const { return mUserInput; }
 
   mozilla::StyleUserFocus UserFocus() const {
     return IsInert() ? mozilla::StyleUserFocus::None : mUserFocus;

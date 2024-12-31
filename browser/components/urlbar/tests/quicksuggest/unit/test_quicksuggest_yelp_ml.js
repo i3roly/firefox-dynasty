@@ -28,7 +28,18 @@ const REMOTE_SETTINGS_RECORDS = [
       score: 0.5,
     },
   },
+  QuickSuggestTestUtils.geonamesRecord(),
 ];
+
+const WATERLOO_RESULT = {
+  url: "https://www.yelp.com/search?find_desc=burgers&find_loc=Waterloo%2C+IA",
+  title: "burgers in Waterloo, IA",
+};
+
+const YOKOHAMA_RESULT = {
+  url: "https://www.yelp.com/search?find_desc=burgers&find_loc=Yokohama%2C+Kanagawa",
+  title: "burgers in Yokohama, Kanagawa",
+};
 
 let gSandbox;
 let gMakeSuggestionsStub;
@@ -55,19 +66,121 @@ add_setup(async function init() {
   await MerinoTestUtils.initGeolocation();
 });
 
+// Yelp ML should be disabled when the relevant prefs are disabled.
+add_task(async function yelpDisabled() {
+  gMakeSuggestionsStub.returns({ intent: "yelp_intent", subject: "burgers" });
+  let expectedResult = makeExpectedResult(YOKOHAMA_RESULT);
+
+  let tests = [
+    // These disable the Yelp feature itself, including Rust suggestions.
+    "suggest.quicksuggest.sponsored",
+    "suggest.yelp",
+    "yelp.featureGate",
+
+    // These disable Yelp ML suggestions but leave the Yelp feature enabled.
+    // This test doesn't add any Yelp data to remote settings, but if it did,
+    // Yelp Rust suggestions would still be triggered.
+    "yelp.mlEnabled",
+    "browser.ml.enable",
+    "quicksuggest.mlEnabled",
+
+    // pref combinations
+    {
+      prefs: {
+        "suggest.quicksuggest.sponsored": true,
+        "suggest.quicksuggest.nonsponsored": true,
+      },
+      expected: true,
+    },
+    {
+      prefs: {
+        "suggest.quicksuggest.sponsored": true,
+        "suggest.quicksuggest.nonsponsored": false,
+      },
+      expected: true,
+    },
+    {
+      prefs: {
+        "suggest.quicksuggest.sponsored": false,
+        "suggest.quicksuggest.nonsponsored": true,
+      },
+      expected: false,
+    },
+    {
+      prefs: {
+        "suggest.quicksuggest.sponsored": false,
+        "suggest.quicksuggest.nonsponsored": false,
+      },
+      expected: false,
+    },
+  ];
+  for (let test of tests) {
+    info("Starting subtest: " + JSON.stringify(test));
+
+    let prefs;
+    let expected;
+    if (typeof test == "string") {
+      // A string value is a pref name, and we'll set it to false and expect no
+      // suggestions.
+      prefs = { [test]: false };
+      expected = false;
+    } else {
+      ({ prefs, expected } = test);
+    }
+
+    // Before setting the prefs, first make sure the suggestion is added.
+    info("Doing search 1");
+    await check_results({
+      context: createContext("burgers", {
+        providers: [UrlbarProviderQuickSuggest.name],
+        isPrivate: false,
+      }),
+      matches: [expectedResult],
+    });
+
+    // Also get the original pref values.
+    let originalPrefs = Object.fromEntries(
+      Object.keys(prefs).map(name => [name, UrlbarPrefs.get(name)])
+    );
+
+    // Now set the prefs.
+    info("Setting prefs and doing search 2");
+    for (let [name, value] of Object.entries(prefs)) {
+      UrlbarPrefs.set(name, value);
+    }
+    await check_results({
+      context: createContext("burgers", {
+        providers: [UrlbarProviderQuickSuggest.name],
+        isPrivate: false,
+      }),
+      matches: expected ? [expectedResult] : [],
+    });
+
+    // Revert.
+    for (let [name, value] of Object.entries(originalPrefs)) {
+      UrlbarPrefs.set(name, value);
+    }
+    await QuickSuggestTestUtils.forceSync();
+
+    // Make sure Yelp is added again.
+    info("Doing search 3 after reverting the prefs");
+    await check_results({
+      context: createContext("burgers", {
+        providers: [UrlbarProviderQuickSuggest.name],
+        isPrivate: false,
+      }),
+      matches: [expectedResult],
+    });
+  }
+});
+
 // Runs through a variety of mock intents.
 add_task(async function intents() {
   let tests = [
     {
       desc: "subject with no location",
       ml: { intent: "yelp_intent", subject: "burgers" },
-      expected: {
-        url: "https://www.yelp.com/search?find_desc=burgers&find_loc=Yokohama%2C+Kanagawa",
-        originalUrl: "https://www.yelp.com/search?find_desc=burgers",
-        displayUrl:
-          "yelp.com/search?find_desc=burgers&find_loc=Yokohama,+Kanagawa",
-        title: "burgers in Yokohama, Kanagawa",
-      },
+      expected: YOKOHAMA_RESULT,
     },
     {
       desc: "subject with null city and null state",
@@ -76,13 +189,7 @@ add_task(async function intents() {
         subject: "burgers",
         location: { city: null, state: null },
       },
-      expected: {
-        url: "https://www.yelp.com/search?find_desc=burgers&find_loc=Yokohama%2C+Kanagawa",
-        originalUrl: "https://www.yelp.com/search?find_desc=burgers",
-        displayUrl:
-          "yelp.com/search?find_desc=burgers&find_loc=Yokohama,+Kanagawa",
-        title: "burgers in Yokohama, Kanagawa",
-      },
+      expected: YOKOHAMA_RESULT,
     },
     {
       desc: "subject with city",
@@ -91,27 +198,27 @@ add_task(async function intents() {
         subject: "burgers",
         location: { city: "Waterloo", state: null },
       },
-      expected: {
-        url: "https://www.yelp.com/search?find_desc=burgers&find_loc=Waterloo",
-        originalUrl:
-          "https://www.yelp.com/search?find_desc=burgers&find_loc=Waterloo",
-        displayUrl: "yelp.com/search?find_desc=burgers&find_loc=Waterloo",
-        title: "burgers in Waterloo",
-      },
+      expected: WATERLOO_RESULT,
     },
     {
-      desc: "subject with state",
+      desc: "subject with state abbreviation",
       ml: {
         intent: "yelp_intent",
         subject: "burgers",
         location: { city: null, state: "IA" },
       },
+      expected: null,
+    },
+    {
+      desc: "subject with state name",
+      ml: {
+        intent: "yelp_intent",
+        subject: "burgers",
+        location: { city: null, state: "Iowa" },
+      },
       expected: {
-        url: "https://www.yelp.com/search?find_desc=burgers&find_loc=IA",
-        originalUrl:
-          "https://www.yelp.com/search?find_desc=burgers&find_loc=IA",
-        displayUrl: "yelp.com/search?find_desc=burgers&find_loc=IA",
-        title: "burgers in IA",
+        url: "https://www.yelp.com/search?find_desc=burgers&find_loc=Iowa",
+        title: "burgers in Iowa",
       },
     },
     {
@@ -121,13 +228,7 @@ add_task(async function intents() {
         subject: "burgers",
         location: { city: "Waterloo", state: "IA" },
       },
-      expected: {
-        url: "https://www.yelp.com/search?find_desc=burgers&find_loc=Waterloo%2C+IA",
-        originalUrl:
-          "https://www.yelp.com/search?find_desc=burgers&find_loc=Waterloo%2C+IA",
-        displayUrl: "yelp.com/search?find_desc=burgers&find_loc=Waterloo,+IA",
-        title: "burgers in Waterloo, IA",
-      },
+      expected: WATERLOO_RESULT,
     },
     {
       desc: "no subject with no location",
@@ -153,12 +254,7 @@ add_task(async function intents() {
         subject: "",
         location: { city: "Waterloo", state: null },
       },
-      expected: {
-        url: "https://www.yelp.com/search?find_loc=Waterloo",
-        originalUrl: "https://www.yelp.com/search?find_loc=Waterloo",
-        displayUrl: "yelp.com/search?find_loc=Waterloo",
-        title: "Waterloo",
-      },
+      expected: null,
     },
     {
       desc: "no subject with state",
@@ -167,12 +263,7 @@ add_task(async function intents() {
         subject: "",
         location: { city: null, state: "IA" },
       },
-      expected: {
-        url: "https://www.yelp.com/search?find_loc=IA",
-        originalUrl: "https://www.yelp.com/search?find_loc=IA",
-        displayUrl: "yelp.com/search?find_loc=IA",
-        title: "IA",
-      },
+      expected: null,
     },
     {
       desc: "no subject with city and state",
@@ -181,12 +272,7 @@ add_task(async function intents() {
         subject: "",
         location: { city: "Waterloo", state: "IA" },
       },
-      expected: {
-        url: "https://www.yelp.com/search?find_loc=Waterloo%2C+IA",
-        originalUrl: "https://www.yelp.com/search?find_loc=Waterloo%2C+IA",
-        displayUrl: "yelp.com/search?find_loc=Waterloo,+IA",
-        title: "Waterloo, IA",
-      },
+      expected: null,
     },
     {
       desc: "unrecognized intent",
@@ -201,12 +287,10 @@ add_task(async function intents() {
         source: "rust",
         provider: "Yelp",
         url: "https://www.yelp.com/search?find_desc=coffee&find_loc=Yokohama%2C+Kanagawa",
-        originalUrl: "https://www.yelp.com/search?find_desc=coffee",
-        displayUrl:
-          "yelp.com/search?find_desc=coffee&find_loc=Yokohama,+Kanagawa",
         title: "coffee in Yokohama, Kanagawa",
       },
     },
+
     {
       desc: "both ML and Rust return a suggestion",
       query: "coffee",
@@ -216,11 +300,8 @@ add_task(async function intents() {
         location: { city: "Waterloo", state: null },
       },
       expected: {
-        url: "https://www.yelp.com/search?find_desc=coffee&find_loc=Waterloo",
-        originalUrl:
-          "https://www.yelp.com/search?find_desc=coffee&find_loc=Waterloo",
-        displayUrl: "yelp.com/search?find_desc=coffee&find_loc=Waterloo",
-        title: "coffee in Waterloo",
+        url: "https://www.yelp.com/search?find_desc=coffee&find_loc=Waterloo%2C+IA",
+        title: "coffee in Waterloo, IA",
       },
     },
   ];
@@ -262,21 +343,13 @@ add_task(async function intents() {
 // The search string passed in to `MLSuggest.makeSuggestions()` should be
 // trimmed and lowercased.
 add_task(async function searchString() {
-  let ml = {
-    intent: "yelp_intent",
-    subject: "burgers",
-  };
-  let expected = {
-    url: "https://www.yelp.com/search?find_desc=burgers&find_loc=Yokohama%2C+Kanagawa",
-    originalUrl: "https://www.yelp.com/search?find_desc=burgers",
-    displayUrl: "yelp.com/search?find_desc=burgers&find_loc=Yokohama,+Kanagawa",
-    title: "burgers in Yokohama, Kanagawa",
-  };
-
   let searchStrings = [];
   gMakeSuggestionsStub.callsFake(str => {
     searchStrings.push(str);
-    return ml;
+    return {
+      intent: "yelp_intent",
+      subject: "burgers",
+    };
   });
 
   await check_results({
@@ -284,7 +357,7 @@ add_task(async function searchString() {
       providers: [UrlbarProviderQuickSuggest.name],
       isPrivate: false,
     }),
-    matches: [makeExpectedResult(expected)],
+    matches: [makeExpectedResult(YOKOHAMA_RESULT)],
   });
 
   Assert.deepEqual(
@@ -303,9 +376,6 @@ add_task(async function cache_fromRust() {
       source: "rust",
       provider: "Yelp",
       url: "https://www.yelp.com/search?find_desc=coffee&find_loc=Yokohama%2C+Kanagawa",
-      originalUrl: "https://www.yelp.com/search?find_desc=coffee",
-      displayUrl:
-        "yelp.com/search?find_desc=coffee&find_loc=Yokohama,+Kanagawa",
       title: "coffee in Yokohama, Kanagawa",
     },
   });
@@ -314,7 +384,9 @@ add_task(async function cache_fromRust() {
 // The metadata cache should be populated with default values when the "coffee"
 // Rust suggestion is not present in remote settings.
 add_task(async function cache_defaultValues() {
-  await QuickSuggestTestUtils.setRemoteSettingsRecords([]);
+  await QuickSuggestTestUtils.setRemoteSettingsRecords([
+    QuickSuggestTestUtils.geonamesRecord(),
+  ]);
   await doCacheTest({
     // This value is hardcoded in `YelpSuggestions` as the default.
     expectedScore: 0.25,
@@ -367,15 +439,7 @@ async function doCacheTest({ expectedScore, expectedRust }) {
       providers: [UrlbarProviderQuickSuggest.name],
       isPrivate: false,
     }),
-    matches: [
-      makeExpectedResult({
-        url: "https://www.yelp.com/search?find_desc=burgers&find_loc=Waterloo",
-        originalUrl:
-          "https://www.yelp.com/search?find_desc=burgers&find_loc=Waterloo",
-        displayUrl: "yelp.com/search?find_desc=burgers&find_loc=Waterloo",
-        title: "burgers in Waterloo",
-      }),
-    ],
+    matches: [makeExpectedResult(WATERLOO_RESULT)],
   });
 
   stub.restore();
@@ -393,6 +457,99 @@ async function doCacheTest({ expectedScore, expectedRust }) {
   );
 }
 
+// Tests the "Not relevant" command: a dismissed suggestion shouldn't be added.
+add_task(async function notRelevant() {
+  let burgersIntent = { intent: "yelp_intent", subject: "burgers" };
+  let waterlooIntent = {
+    intent: "yelp_intent",
+    subject: "burgers",
+    location: { city: "Waterloo" },
+  };
+
+  gMakeSuggestionsStub.returns(burgersIntent);
+  let result = makeExpectedResult(YOKOHAMA_RESULT);
+
+  info("Doing initial search to verify the suggestion is matched");
+  await check_results({
+    context: createContext("burgers", {
+      providers: [UrlbarProviderQuickSuggest.name],
+      isPrivate: false,
+    }),
+    matches: [result],
+  });
+
+  info("Triggering the 'Not relevant' command");
+  QuickSuggest.getFeature("YelpSuggestions").handleCommand(
+    {
+      controller: { removeResult() {} },
+    },
+    result,
+    "not_relevant"
+  );
+  await QuickSuggest.blockedSuggestions._test_readyPromise;
+
+  Assert.ok(
+    await QuickSuggest.blockedSuggestions.has(result.payload.originalUrl),
+    "The result's URL should be blocked"
+  );
+
+  info("Doing search for blocked suggestion");
+  await check_results({
+    context: createContext("burgers", {
+      providers: [UrlbarProviderQuickSuggest.name],
+      isPrivate: false,
+    }),
+    matches: [],
+  });
+
+  // Yelp suggestions are blocked by URL excluding location, so all
+  // "ramen in <valid location>" results should be blocked.
+  gMakeSuggestionsStub.returns(waterlooIntent);
+  await check_results({
+    context: createContext("burgers in waterloo", {
+      providers: [UrlbarProviderQuickSuggest.name],
+      isPrivate: false,
+    }),
+    matches: [],
+  });
+
+  info("Doing search for a suggestion that wasn't blocked");
+  gMakeSuggestionsStub.returns({ intent: "yelp_intent", subject: "ramen" });
+  await check_results({
+    context: createContext("ramen", {
+      providers: [UrlbarProviderQuickSuggest.name],
+      isPrivate: false,
+    }),
+    matches: [
+      makeExpectedResult({
+        url: "https://www.yelp.com/search?find_desc=ramen&find_loc=Yokohama%2C+Kanagawa",
+        title: "ramen in Yokohama, Kanagawa",
+      }),
+    ],
+  });
+
+  info("Clearing blocked suggestions");
+  await QuickSuggest.blockedSuggestions.clear();
+
+  info("Doing search for unblocked suggestion");
+  gMakeSuggestionsStub.returns(burgersIntent);
+  await check_results({
+    context: createContext("burgers", {
+      providers: [UrlbarProviderQuickSuggest.name],
+      isPrivate: false,
+    }),
+    matches: [result],
+  });
+  gMakeSuggestionsStub.returns(waterlooIntent);
+  await check_results({
+    context: createContext("burgers in waterloo", {
+      providers: [UrlbarProviderQuickSuggest.name],
+      isPrivate: false,
+    }),
+    matches: [makeExpectedResult(WATERLOO_RESULT)],
+  });
+});
+
 function makeExpectedResult({
   url,
   title,
@@ -404,6 +561,9 @@ function makeExpectedResult({
   const utmParameters = "&utm_medium=partner&utm_source=mozilla";
 
   originalUrl ??= url;
+  originalUrl = new URL(originalUrl);
+  originalUrl.searchParams.delete("find_loc");
+  originalUrl = originalUrl.toString();
 
   displayUrl =
     (displayUrl ??

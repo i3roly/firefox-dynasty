@@ -638,8 +638,10 @@ bool DrawTargetWebgl::GenerateComplexClipMask() {
   }
   dt->SetTransform(Matrix::Translation(-mClipBounds.TopLeft()));
   dt->FillRect(Rect(mClipBounds), ColorPattern(DeviceColor(1, 1, 1, 1)));
-  // Bind the clip mask for uploading.
-  webgl->ActiveTexture(1);
+  // Bind the clip mask for uploading. This is done on texture unit 0 so that
+  // we can work around an Windows Intel driver bug. If done on texture unit 1,
+  // the driver doesn't notice that the texture contents was modified. Force a
+  // re-latch by binding the texture on texture unit 1 only after modification.
   webgl->BindTexture(LOCAL_GL_TEXTURE_2D, mClipMask);
   if (init) {
     mSharedContext->InitTexParameters(mClipMask, false);
@@ -658,10 +660,9 @@ bool DrawTargetWebgl::GenerateComplexClipMask() {
   mSharedContext->UploadSurface(data, SurfaceFormat::A8,
                                 IntRect(IntPoint(), mClipBounds.Size()),
                                 mClipBounds.TopLeft(), init);
-  webgl->ActiveTexture(0);
-  // We already bound the texture, so notify the shared context that the clip
-  // mask changed to it.
-  mSharedContext->mLastClipMask = mClipMask;
+  mSharedContext->ClearLastTexture();
+  // Bind the new clip mask to the clip sampler on texture unit 1.
+  mSharedContext->SetClipMask(mClipMask);
   mSharedContext->SetClipRect(mClipBounds);
   // We uploaded a surface, just as if we missed the texture cache, so account
   // for that here.
@@ -3659,9 +3660,11 @@ bool SharedContextWebgl::DrawPathAccel(
     DrawTargetWebgl* oldTarget = mCurrentTarget;
     {
       RefPtr<const Path> path;
-      if (color || !aPathXform) {
+      if (!aPathXform || (color && !aStrokeOptions)) {
         // If the pattern is transform invariant or there is no pathXform, then
-        // it is safe to use the path directly.
+        // it is safe to use the path directly. Solid colors are transform
+        // invariant, except when there are stroke options such as line width or
+        // dashes that should not be scaled by pathXform.
         path = aPath;
         pathDT->SetTransform(pathXform * Matrix::Translation(offset));
       } else {
@@ -4341,27 +4344,17 @@ static DeviceColor QuantizePreblendColor(const DeviceColor& aColor,
   int32_t r = int32_t(aColor.r * 255.0f + 0.5f);
   int32_t g = int32_t(aColor.g * 255.0f + 0.5f);
   int32_t b = int32_t(aColor.b * 255.0f + 0.5f);
-  // Ensure that even if two values would normally quantize to the same bucket,
-  // that the reference value within the bucket still allows for accurate
-  // determination of whether light-on-dark or dark-on-light rasterization will
-  // be used (as on macOS).
-  bool lightOnDark = r >= 85 && g >= 85 && b >= 85 && r + g + b >= 2 * 255;
   // Skia only uses the high 3 bits of each color component to cache preblend
   // ramp tables.
   constexpr int32_t lumBits = 3;
-  constexpr int32_t ceilMask = (1 << (8 - lumBits)) - 1;
   constexpr int32_t floorMask = ((1 << lumBits) - 1) << (8 - lumBits);
   if (!aUseSubpixelAA) {
     // If not using subpixel AA, then quantize only the luminance, stored in the
     // G channel.
     g = (r * 54 + g * 183 + b * 19) >> 8;
-    g |= ceilMask;
-    // Still distinguish between light and dark in the key.
-    r = b = lightOnDark ? 255 : 0;
-  } else if (lightOnDark) {
-    r |= ceilMask;
-    g |= ceilMask;
-    b |= ceilMask;
+    g &= floorMask;
+    r = g;
+    b = g;
   } else {
     r &= floorMask;
     g &= floorMask;
@@ -4420,8 +4413,7 @@ bool SharedContextWebgl::DrawGlyphsAccel(ScaledFont* aFont,
 #endif
 
   // If the font has bitmaps, use the color directly. Otherwise, the texture
-  // will hold a grayscale mask, so encode the key's subpixel and light-or-dark
-  // state in the color.
+  // holds a grayscale mask, so encode the key's subpixel state in the color.
   const Matrix& currentTransform = mCurrentTarget->GetTransform();
   IntPoint quantizeScale = QuantizeScale(aFont, currentTransform);
   Matrix quantizeTransform = currentTransform;

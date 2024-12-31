@@ -90,7 +90,11 @@ internal fun MenuItem(
             ) { onClick?.invoke() }
             .clearAndSetSemantics {
                 role = Role.Button
-                this.contentDescription = label
+                if (description != null) {
+                    this.contentDescription = label + description
+                } else {
+                    this.contentDescription = label
+                }
             }
             .wrapContentSize(),
         labelTextColor = labelTextColor,
@@ -265,7 +269,7 @@ private fun WebExtensionMenuItemPreview() {
         ) {
             WebExtensionMenuItem(
                 label = "label",
-                iconPainter = painterResource(R.drawable.googleg_standard_color_18),
+                iconPainter = painterResource(R.drawable.mozac_ic_web_extension_default_icon),
                 enabled = true,
                 badgeText = "badgeText",
                 badgeTextColor = Color.Black.toArgb(),

@@ -129,7 +129,7 @@ static mozilla::LazyLogModule sGVSupportLog("GeckoViewSupport");
 // All the toplevel windows that have been created; these are in
 // stacking order, so the window at gTopLevelWindows[0] is the topmost
 // one.
-static nsTArray<nsWindow*> gTopLevelWindows;
+MOZ_RUNINIT static nsTArray<nsWindow*> gTopLevelWindows;
 
 static bool sFailedToCreateGLContext = false;
 
@@ -1747,7 +1747,7 @@ class LayerViewSupport final
       return;
     }
 
-    ScreenIntMargin safeAreaInsets(aTop, aRight, aBottom, aLeft);
+    LayoutDeviceIntMargin safeAreaInsets(aTop, aRight, aBottom, aLeft);
     gkWindow->UpdateSafeAreaInsets(safeAreaInsets);
   }
 };
@@ -3275,9 +3275,12 @@ void nsWindow::KeyboardHeightChanged(ScreenIntCoord aHeight) {
   }
 }
 
-ScreenIntMargin nsWindow::GetSafeAreaInsets() const { return mSafeAreaInsets; }
+LayoutDeviceIntMargin nsWindow::GetSafeAreaInsets() const {
+  return mSafeAreaInsets;
+}
 
-void nsWindow::UpdateSafeAreaInsets(const ScreenIntMargin& aSafeAreaInsets) {
+void nsWindow::UpdateSafeAreaInsets(
+    const LayoutDeviceIntMargin& aSafeAreaInsets) {
   mSafeAreaInsets = aSafeAreaInsets;
 
   if (mWidgetListener) {

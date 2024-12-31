@@ -42,7 +42,7 @@ namespace mozilla {
 
 FilterDescription FilterInstance::GetFilterDescription(
     nsIContent* aFilteredElement, Span<const StyleFilter> aFilterChain,
-    nsISupports* aFiltersObserverList, bool aFilterInputIsTainted,
+    ISVGFilterObserverList* aFiltersObserverList, bool aFilterInputIsTainted,
     const UserSpaceMetrics& aMetrics, const gfxRect& aBBox,
     nsTArray<RefPtr<SourceSurface>>& aOutAdditionalImages) {
   gfxMatrix identity;
@@ -711,7 +711,7 @@ static WrFiltersStatus WrFilterOpSVGFEComponentTransfer(
           size_t k = (size_t)floorkf;
           k = std::min(k, length1);
           float v = aAttributes.mValues[c][k];
-          v = mozilla::clamped(v, 0.0f, 1.0f);
+          v = std::clamp(v, 0.0f, 1.0f);
           values[i * 4 + c] = v;
         }
         break;
@@ -723,7 +723,7 @@ static WrFiltersStatus WrFilterOpSVGFEComponentTransfer(
         float offset = aAttributes.mValues[c][2];
         for (size_t i = 0; i < stops; i++) {
           float v = amplitude * pow((float)i * step, exponent) + offset;
-          v = mozilla::clamped(v, 0.0f, 1.0f);
+          v = std::clamp(v, 0.0f, 1.0f);
           values[i * 4 + c] = v;
         }
         break;
@@ -732,7 +732,7 @@ static WrFiltersStatus WrFilterOpSVGFEComponentTransfer(
         float step = 1.0f / (float)(stops - 1);
         for (size_t i = 0; i < stops; i++) {
           float v = (float)i * step;
-          v = mozilla::clamped(v, 0.0f, 1.0f);
+          v = std::clamp(v, 0.0f, 1.0f);
           values[i * 4 + c] = v;
         }
         break;
@@ -742,7 +742,7 @@ static WrFiltersStatus WrFilterOpSVGFEComponentTransfer(
         float intercept = aAttributes.mValues[c][1];
         for (size_t i = 0; i < stops; i++) {
           float v = (float)i * step + intercept;
-          v = mozilla::clamped(v, 0.0f, 1.0f);
+          v = std::clamp(v, 0.0f, 1.0f);
           values[i * 4 + c] = v;
         }
         break;
@@ -758,7 +758,7 @@ static WrFiltersStatus WrFilterOpSVGFEComponentTransfer(
           float v1 = aAttributes.mValues[c][k];
           float v2 = aAttributes.mValues[c][(k + 1 <= length1) ? k + 1 : k];
           float v = v1 + (v2 - v1) * (kf - floorkf);
-          v = mozilla::clamped(v, 0.0f, 1.0f);
+          v = std::clamp(v, 0.0f, 1.0f);
           values[i * 4 + c] = v;
         }
         break;
@@ -1170,8 +1170,12 @@ static WrFiltersStatus WrFilterOpSVGFETurbulence(
   // for setting up the seed.
   int32_t m1 = 2147483647 - 1;
   int32_t seed = (int32_t)((uint32_t)aAttributes.mSeed);
-  if (seed <= 0) seed = -(seed % m1) + 1;
-  if (seed > m1) seed = m1;
+  if (seed <= 0) {
+    seed = -(seed % m1) + 1;
+  }
+  if (seed > m1) {
+    seed = m1;
+  }
   switch (aAttributes.mType) {
     case SVG_TURBULENCE_TYPE_FRACTALNOISE:
       if (aAttributes.mStitchable) {

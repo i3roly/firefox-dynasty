@@ -661,6 +661,30 @@ class GeckoEngineSession(
     }
 
     /**
+     * See [EngineSession.getWebCompatInfo].
+     */
+    override fun getWebCompatInfo(
+        onResult: (JSONObject) -> Unit,
+        onException: (Throwable) -> Unit,
+    ) {
+        geckoSession.webCompatInfo.then(
+            { result ->
+                if (result == null) {
+                    logger.error("No result from GeckoView getWebCompatInfo.")
+                    return@then GeckoResult<JSONObject>()
+                }
+                onResult(result)
+                GeckoResult()
+            },
+            { throwable ->
+                logger.error("Getting web compat info failed.", throwable)
+                onException(throwable)
+                GeckoResult()
+            },
+        )
+    }
+
+    /**
      * See [EngineSession.requestProductRecommendations]
      */
     override fun requestProductRecommendations(
@@ -1241,8 +1265,10 @@ class GeckoEngineSession(
 
             val interceptor = settings.requestInterceptor
             val interceptionResponse = if (
-                interceptor != null && (!request.isDirectNavigation || interceptor.interceptsAppInitiatedRequests())
+                interceptor == null || (request.isDirectNavigation && !interceptor.interceptsAppInitiatedRequests())
             ) {
+                null
+            } else {
                 val engineSession = this@GeckoEngineSession
                 val isSameDomain =
                     engineSession.currentUrl?.tryGetHostFromUrl() == request.uri.tryGetHostFromUrl()
@@ -1255,27 +1281,28 @@ class GeckoEngineSession(
                     request.isRedirect,
                     request.isDirectNavigation,
                     isSubframeRequest,
-                )?.apply {
+                )?.takeUnless {
+                    it is InterceptionResponse.AppIntent && request.isDirectNavigation
+                }?.apply {
                     when (this) {
-                        is InterceptionResponse.Content -> loadData(data, mimeType, encoding)
-                        is InterceptionResponse.Url -> loadUrl(
-                            url = url,
-                            flags = flags,
-                            additionalHeaders = additionalHeaders,
-                        )
                         is InterceptionResponse.AppIntent -> {
                             appRedirectUrl = lastLoadRequestUri
                             notifyObservers {
                                 onLaunchIntentRequest(url = url, appIntent = appIntent)
                             }
                         }
+
+                        is InterceptionResponse.Content -> loadData(data, mimeType, encoding)
+                        is InterceptionResponse.Url -> loadUrl(
+                            url = url,
+                            flags = flags,
+                            additionalHeaders = additionalHeaders,
+                        )
                         else -> {
                             // no-op
                         }
                     }
                 }
-            } else {
-                null
             }
 
             if (interceptionResponse !is InterceptionResponse.AppIntent) {

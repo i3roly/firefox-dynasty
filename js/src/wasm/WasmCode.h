@@ -185,22 +185,8 @@ enum class CodeBlockKind {
   LazyStubs
 };
 
-// CodeSegment contains common helpers for determining the base and length of a
-// code segment and if a pc belongs to this segment. It is inherited by:
-// - ModuleSegment, i.e. the code segment of a Module, generated
-// eagerly when a Module is instanciated.
-// - LazyStubSegment, i.e. the code segment of entry stubs that are lazily
-// generated.
-
-// LazyStubSegment is a code segment lazily generated for function entry stubs
-// (both interpreter and jit ones).
-//
-// Because a stub is usually small (a few KiB) and an executable code segment
-// isn't (64KiB), a given stub segment can contain entry stubs of many
-// functions.
-
-// A wasm ModuleSegment owns the allocated executable code for a wasm module.
-
+// CodeSegment is a fixed-size chunk of executable memory that we can
+// bump-allocate smaller allocations from.
 class CodeSegment : public ShareableBase<CodeSegment> {
  private:
   const UniqueCodeBytes bytes_;
@@ -235,31 +221,75 @@ class CodeSegment : public ShareableBase<CodeSegment> {
                                              const LinkData& linkData,
                                              bool allowLastDitchGC = true);
 
-  // Allocate code space at a hardware page granularity, taking space from
-  // `code->lazyFuncSegments`, and copy/link code from `masm` into it.  If an
-  // existing segment can satisy the allocation, space is reserved there, and
-  // that segment is returned; else a new segment is created for the
-  // allocation, is added to `code->lazyFuncSegments`, and returned.
+  // Claims space for `codeLength` from an existing code segment in a pool, or
+  // else creates a new code segment and adds it to the pool.
   //
-  // The location/length of the final code is returned in
-  // `*codeStart`/`*codeLength`.  Note that placement is somewhat randomised
-  // inside the page, so `*codeStart` will not be page-aligned.  Also, the
-  // metadata associated with the code block will have to be offset by the
-  // value returned in `*metadataBias`.
-  static RefPtr<CodeSegment> createFromMasmWithBumpAlloc(
-      jit::MacroAssembler& masm, const LinkData& linkData, const Code* code,
-      bool allowLastDitchGC, uint8_t** codeStartOut, uint32_t* codeLengthOut,
-      uint32_t* metadataBiasOut);
+  // Returns the code segment along with details of the allocation. The caller
+  // must copy, link, and make the code executable.
+  //
+  // There are two important ranges created, an 'allocation' range and a 'code
+  // range'.
+  //
+  // The allocation range is a superset of the code range. The allocation start
+  // offset will be aligned to `AllocationAlignment` which is either the system
+  // page size or just executable code alignment.
+  //
+  // The code range will be within the allocation range and may have some
+  // padding inserted before the start of the allocation. The code start offset
+  // will always be aligned to the executable code alignment.
+  //
+  // Random padding is added before the code range when we are aligning to the
+  // system page size, the start addressess of all the code memories will not
+  // conflict in associative icaches.
+  //
+  // Here's a picture that illustrates the resulting structure of allocations:
+  //
+  // This is an example for a machine with a 4KB page size, for a codeLength
+  // which requires more than one page but less than two, in a segment where
+  // the first page is already allocated.
+  //
+  // Note: if !JitOptions.writeProtectCode, then allocationStart and
+  //   allocationLength will be a multiple of jit::CodeAlignment, not the
+  //   system page size.
+  //
+  // segment->base() (aligned at 4K = hardware page size)
+  // :
+  // :                      +4k                     +8k                    +12k
+  // :                       :                       :                       :
+  // +-----------------------+          +---------------------------------+   :
+  // |        IN USE         |          |   CODE              CODE        |   :
+  // +-----------------------+----------+---------------------------------+---+
+  // .                       :          :                                 :
+  // :                       :          :     allocationLength            :
+  // :                       :<------------------------------------------>:
+  // .                       :          :                                 :
+  // :                       :  padding :           codeLength            :
+  // :<--------------------->:<-------->:<------------------------------->:
+  // :                       :          :
+  // :                       :          :
+  // :<-------------------------------->:
+  //                         :          :
+  //                         :          codeStart
+  //                         :
+  //                         allocationStart
+  static RefPtr<CodeSegment> claimSpaceFromPool(
+      uint32_t codeLength,
+      Vector<RefPtr<CodeSegment>, 0, SystemAllocPolicy>* segmentPool,
+      bool allowLastDitchGC, uint8_t** allocationStartOut,
+      uint8_t** codeStartOut, uint32_t* allocationLengthOut);
 
-  // For this CodeSegment, perform linking on the area
-  // [codeStart, +codeLength), then make all pages that intersect
-  // [pageStart, +codeLength+(codeStart-pageStart)) executable.  See ASCII
-  // art at CodeSegment::createFromMasmWithBumpAlloc (implementation) for the
-  // meaning of pageStart/codeStart/codeLength.
+  // For this CodeSegment, link the code given at `codeStart` and make the
+  // range of `[allocationStart, allocationLength)` executable.
   bool linkAndMakeExecutableSubRange(
       jit::AutoMarkJitCodeWritableForThread& writable, const LinkData& linkData,
-      const Code* maybeCode, uint8_t* pageStart, uint8_t* codeStart,
-      uint32_t codeLength);
+      const Code* maybeCode, uint8_t* allocationStart, uint8_t* codeStart,
+      uint32_t allocationLength);
+  // Same as above, but only does the minimum necessary linking using a given
+  // masm.
+  bool linkAndMakeExecutableSubRange(
+      jit::AutoMarkJitCodeWritableForThread& writable,
+      jit::MacroAssembler& masm, uint8_t* allocationStart, uint8_t* codeStart,
+      uint32_t allocationLength);
 
   // For this CodeSegment, perform linking on the entire code area, then make
   // it executable.
@@ -278,23 +308,24 @@ class CodeSegment : public ShareableBase<CodeSegment> {
     return capacityBytes_;
   }
 
-  static size_t PageSize() { return gc::SystemPageSize(); }
-  static size_t PageRoundup(uintptr_t bytes) {
-    // All new code allocations must be rounded to the system page size
-    return AlignBytes(bytes, gc::SystemPageSize());
-  }
-  static bool IsPageAligned(uintptr_t bytes) {
-    return bytes == PageRoundup(bytes);
-  }
-  bool hasSpace(size_t bytes) const {
-    MOZ_ASSERT(IsPageAligned(bytes));
-    return bytes <= capacityBytes() && lengthBytes_ <= capacityBytes() - bytes;
-  }
-  void claimSpace(size_t bytes, uint8_t** claimedBase) {
-    MOZ_RELEASE_ASSERT(hasSpace(bytes));
-    *claimedBase = base() + lengthBytes_;
-    lengthBytes_ += bytes;
-  }
+  // Returns the alignment that all allocations within a code segment must be.
+  //
+  // If we are write-protecting code, then we must start every new allocation
+  // on a new system page, otherwise we can re-use system pages for new
+  // allocations.
+  static size_t AllocationAlignment();
+  // Align `bytes` to be at least the allocation alignment. See above.
+  static size_t AlignAllocationBytes(uintptr_t bytes);
+  // Returns whether `bytes` is aligned to the allocation alignment.
+  static bool IsAligned(uintptr_t bytes);
+
+  // Checks if this code segment has enough room for an allocation of bytes.
+  // The bytes must be aligned to allocation alignment.
+  bool hasSpace(size_t bytes) const;
+
+  // Claims space in this code segment for an allocation of bytes. The bytes
+  // must be aligned to allocation alignment.
+  void claimSpace(size_t bytes, uint8_t** claimedBase);
 
   const Code& code() const { return *code_; }
 
@@ -910,26 +941,6 @@ using MetadataAnalysisHashMap =
     HashMap<const char*, uint32_t, mozilla::CStringHasher, SystemAllocPolicy>;
 
 class Code : public ShareableBase<Code> {
-  // A primitive PRNG, as used in early C library implementations.
-  // See https://en.wikipedia.org/wiki/
-  //             Linear_congruential_generator#Parameters_in_common_use.
-  // It is used for randomising code layout so as to avoid icache misses, not
-  // for any security-related reason, which is why we don't care about its
-  // quality too much.  It also gives us repeatability when debugging or
-  // profiling.
-  class SimplePRNG {
-    uint32_t state_;
-
-   public:
-    SimplePRNG() : state_(999) {}
-    // Returns an 11-bit pseudo-random number.
-    uint32_t get11RandomBits() {
-      state_ = state_ * 1103515245 + 12345;
-      // Both the high and low order bits are reputed to be not very random.
-      // Throw them away.
-      return (state_ >> 4) & 0x7FF;
-    }
-  };
   struct ProtectedData {
     // A vector of all of the code blocks owned by this code. Each code block
     // is immutable once added to the vector, but this vector may grow.
@@ -946,9 +957,6 @@ class Code : public ShareableBase<Code> {
 
     // A vector of code segments that we can lazily allocate functions into
     SharedCodeSegmentVector lazyFuncSegments;
-
-    // For randomizing code layout.
-    SimplePRNG simplePRNG;
   };
   using ReadGuard = RWExclusiveData<ProtectedData>::ReadGuard;
   using WriteGuard = RWExclusiveData<ProtectedData>::WriteGuard;
@@ -963,10 +971,8 @@ class Code : public ShareableBase<Code> {
   // Thread-safe mutable map from code pointer to code block that contains it.
   mutable ThreadSafeCodeBlockMap blockMap_;
 
-  // These have the same lifetime end as Code itself -- they can be dropped
-  // when Code itself is dropped.  FIXME: should these be MutableCodeXX?
-  //
-  // This must always be non-null.
+  // Metadata for this module that is needed for the lifetime of Code. This is
+  // always non-null.
   SharedCodeMetadata codeMeta_;
   // This is null for a wasm module, non-null for asm.js
   SharedCodeMetadataForAsmJS codeMetaForAsmJS_;
@@ -1067,7 +1073,10 @@ class Code : public ShareableBase<Code> {
                                             const FuncExport** funcExport,
                                             void** interpEntry) const;
 
-  const RWExclusiveData<ProtectedData>& data() const { return data_; }
+  SharedCodeSegment createFuncCodeSegmentFromPool(
+      jit::MacroAssembler& masm, const LinkData& linkData,
+      bool allowLastDitchGC, uint8_t** codeStartOut,
+      uint32_t* codeLengthOut) const;
 
   bool requestTierUp(uint32_t funcIndex) const;
 
@@ -1098,11 +1107,6 @@ class Code : public ShareableBase<Code> {
   }
   void setUpdateCallRefMetricsStubOffset(uint32_t offs) {
     updateCallRefMetricsStubOffset_ = offs;
-  }
-
-  const Bytes& bytecode() const {
-    MOZ_ASSERT(codeMeta().debugEnabled || mode_ == CompileMode::LazyTiering);
-    return codeMeta_->bytecode->bytes;
   }
 
   const FuncImport& funcImport(uint32_t funcIndex) const {
@@ -1231,16 +1235,6 @@ class Code : public ShareableBase<Code> {
 };
 
 void PatchDebugSymbolicAccesses(uint8_t* codeBase, jit::MacroAssembler& masm);
-
-// Allocate executable memory from the pool in `lazySegments`, or if none of
-// those have space, create a new Segment, add it to the vector, and allocate
-// from that.  `*roundedUpAllocationSize` returns the actual allocation size;
-// it is guaranteed to be a multiple of the machine's page size.
-SharedCodeSegment AllocateCodePagesFrom(SharedCodeSegmentVector& lazySegments,
-                                        uint32_t bytesNeeded,
-                                        bool allowLastDitchGC,
-                                        size_t* offsetInSegment,
-                                        size_t* roundedUpAllocationSize);
 
 }  // namespace wasm
 }  // namespace js

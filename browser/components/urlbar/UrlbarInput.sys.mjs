@@ -27,6 +27,8 @@ ChromeUtils.defineESModuleGetters(lazy, {
   UrlbarEventBufferer: "resource:///modules/UrlbarEventBufferer.sys.mjs",
   UrlbarPrefs: "resource:///modules/UrlbarPrefs.sys.mjs",
   UrlbarQueryContext: "resource:///modules/UrlbarUtils.sys.mjs",
+  UrlbarProviderGlobalActions:
+    "resource:///modules/UrlbarProviderGlobalActions.sys.mjs",
   UrlbarProviderOpenTabs: "resource:///modules/UrlbarProviderOpenTabs.sys.mjs",
   UrlbarSearchUtils: "resource:///modules/UrlbarSearchUtils.sys.mjs",
   UrlbarTokenizer: "resource:///modules/UrlbarTokenizer.sys.mjs",
@@ -67,9 +69,6 @@ XPCOMUtils.defineLazyPreferenceGetter(
 
 const DEFAULT_FORM_HISTORY_NAME = "searchbar-history";
 const SEARCH_BUTTON_CLASS = "urlbar-search-button";
-
-// The scalar category of TopSites click for Contextual Services
-const SCALAR_CATEGORY_TOPSITES = "contextual.services.topsites.click";
 
 const UNLIMITED_MAX_RESULTS = 99;
 
@@ -475,10 +474,7 @@ export class UrlbarInput {
       state.persist.shouldPersist = shouldPersist;
       this.toggleAttribute("persistsearchterms", state.persist.shouldPersist);
       if (state.persist.shouldPersist && !isSameDocument) {
-        Services.telemetry.scalarAdd(
-          "urlbar.persistedsearchterms.view_count",
-          1
-        );
+        Glean.urlbarPersistedsearchterms.viewCount.add(1);
       }
     } else if (state.persist) {
       // Ensure the persist search state is unloaded for tabs that had state
@@ -599,30 +595,29 @@ export class UrlbarInput {
     // search mode depends on it.
     this.setPageProxyState(valid ? "valid" : "invalid", dueToTabSwitch);
 
-    if (state.persist?.shouldPersist) {
+    if (
+      state.persist?.shouldPersist &&
+      !lazy.UrlbarSearchTermsPersistence.searchModeMatchesState(
+        this.searchMode,
+        state
+      )
+    ) {
       // When search terms persist, on non-default engine search result pages
       // the address bar should show the same search mode. For default engines,
       // search mode should not persist.
-      if (
-        !lazy.UrlbarSearchTermsPersistence.searchModeMatchesState(
-          this.searchMode,
-          state
-        )
-      ) {
-        if (state.persist.isDefaultEngine) {
-          this.searchMode = null;
-        } else {
-          this.searchMode = {
-            engineName: state.persist.originalEngineName,
-            source: lazy.UrlbarUtils.RESULT_SOURCE.SEARCH,
-            isPreview: false,
-          };
-        }
+      if (state.persist.isDefaultEngine) {
+        this.searchMode = null;
+      } else {
+        this.searchMode = {
+          engineName: state.persist.originalEngineName,
+          source: lazy.UrlbarUtils.RESULT_SOURCE.SEARCH,
+          isPreview: false,
+        };
       }
     } else if (dueToTabSwitch && !valid) {
       // If we're switching tabs, restore the tab's search mode.
       this.restoreSearchModeState();
-    } else if (valid && this.#shouldExitSearchMode(uri)) {
+    } else if (valid) {
       // If the URI is valid, exit search mode.  This must happen
       // after setting proxystate above because search mode depends on it.
       this.searchMode = null;
@@ -867,7 +862,9 @@ export class UrlbarInput {
     if (isValidUrl) {
       // Annotate if the untrimmed value contained a scheme, to later potentially
       // be upgraded by schemeless HTTPS-First.
-      openParams.wasSchemelessInput = this.#isSchemeless(this.untrimmedValue);
+      openParams.schemelessInput = this.#getSchemelessInput(
+        this.untrimmedValue
+      );
       this._loadURL(url, event, where, openParams);
       return;
     }
@@ -929,7 +926,7 @@ export class UrlbarInput {
               // `uri` is not a search engine url, so we annotate if the untrimmed
               // value contained a scheme, to potentially be later upgraded by
               // schemeless HTTPS-First.
-              openParams.wasSchemelessInput = this.#isSchemeless(
+              openParams.schemelessInput = this.#getSchemelessInput(
                 this.untrimmedValue
               );
             }
@@ -959,10 +956,7 @@ export class UrlbarInput {
     let state = this.getBrowserState(this.window.gBrowser.selectedBrowser);
     if (anchorElement?.closest("#urlbar") && state.persist?.shouldPersist) {
       this.handleRevert();
-      Services.telemetry.scalarAdd(
-        "urlbar.persistedsearchterms.revert_by_popup_count",
-        1
-      );
+      Glean.urlbarPersistedsearchterms.revertByPopupCount.add(1);
     }
   }
 
@@ -1041,9 +1035,11 @@ export class UrlbarInput {
     // manner was agreed on as a compromise between consistent UX and
     // engineering effort. See review discussion at bug 1667766.
     if (
-      result.heuristic &&
-      this.searchMode?.isPreview &&
-      this.view.oneOffSearchButtons.selectedButton
+      (this.searchMode?.isPreview &&
+        result.providerName == lazy.UrlbarProviderGlobalActions.name) ||
+      (result.heuristic &&
+        this.searchMode?.isPreview &&
+        this.view.oneOffSearchButtons.selectedButton)
     ) {
       this.confirmSearchMode();
       this.search(this.value);
@@ -1146,7 +1142,7 @@ export class UrlbarInput {
           }
           // Annotate if the untrimmed value contained a scheme, to later potentially
           // be upgraded by schemeless HTTPS-First.
-          openParams.wasSchemelessInput = this.#isSchemeless(
+          openParams.schemelessInput = this.#getSchemelessInput(
             originalUntrimmedValue
           );
         }
@@ -1297,7 +1293,7 @@ export class UrlbarInput {
       }
       case lazy.UrlbarUtils.RESULT_TYPE.TIP: {
         let scalarName = `${result.payload.type}-picked`;
-        Services.telemetry.keyedScalarAdd("urlbar.tips", scalarName, 1);
+        Glean.urlbar.tips[scalarName].add(1);
         if (url) {
           break;
         }
@@ -1415,11 +1411,7 @@ export class UrlbarInput {
       if (!this.isPrivate && result.providerName === "UrlbarProviderTopSites") {
         // The position is 1-based for telemetry
         const position = result.rowIndex + 1;
-        Services.telemetry.keyedScalarAdd(
-          SCALAR_CATEGORY_TOPSITES,
-          `urlbar_${position}`,
-          1
-        );
+        Glean.contextualServicesTopsites.click[`urlbar_${position}`].add(1);
       }
     }
 
@@ -1514,11 +1506,17 @@ export class UrlbarInput {
       let enteredSearchMode;
       // Only preview search mode if the result is selected.
       if (this.view.resultIsSelected(result)) {
-        // Not starting a query means we will only preview search mode.
+        // For ScotchBonnet, As Tab and Arrow Down/Up, Page Down/Up key are used
+        // for selection of the urlbar results, keep the search mode as preview
+        // mode if there are multiple results.
+        // If ScotchBonnet is disabled, not starting a query means we will only
+        // preview search mode.
         enteredSearchMode = this.maybeConfirmSearchModeFromResult({
           result,
           checkValue: false,
-          startQuery: false,
+          startQuery:
+            lazy.UrlbarPrefs.get("scotchBonnet.enableOverride") &&
+            this.view.visibleResults.length == 1,
         });
       }
       if (!enteredSearchMode) {
@@ -1833,7 +1831,7 @@ export class UrlbarInput {
         "search-mode-switcher"
       ).uri.spec;
     } else {
-      url = searchEngine.wrappedJSObject.searchForm;
+      url = searchEngine.searchForm;
     }
 
     this._lastSearchString = "";
@@ -2518,22 +2516,6 @@ export class UrlbarInput {
     return val;
   }
 
-  #shouldExitSearchMode(uri) {
-    if (
-      !lazy.UrlbarPrefs.getScotchBonnetPref("scotchBonnet.persistSearchMode")
-    ) {
-      return true;
-    }
-
-    if (this.searchMode?.engineName) {
-      let engine = Services.search.getEngineByName(this.searchMode.engineName);
-      // If the host we are navigating to matches the host of the current
-      // searchModes engine host then persist searchMode.
-      return uri.host != engine.searchUrlDomain;
-    }
-    return true;
-  }
-
   /**
    * Extracts a input value from a UrlbarResult, used when filling the input
    * field on selecting a result.
@@ -2596,7 +2578,8 @@ export class UrlbarInput {
       result.heuristic &&
       result.payload.url.startsWith("http://") &&
       this.window.gBrowser.userTypedValue &&
-      this.#isSchemeless(this.window.gBrowser.userTypedValue);
+      this.#getSchemelessInput(this.window.gBrowser.userTypedValue) ==
+        Ci.nsILoadInfo.SchemelessInputTypeSchemeless;
     if (!stripHttp) {
       return url;
     }
@@ -3126,7 +3109,7 @@ export class UrlbarInput {
 
     if (result.type == lazy.UrlbarUtils.RESULT_TYPE.TIP) {
       let scalarName = `${result.payload.type}-help`;
-      Services.telemetry.keyedScalarAdd("urlbar.tips", scalarName, 1);
+      Glean.urlbar.tips[scalarName].add(1);
     }
 
     this._loadURL(
@@ -3163,7 +3146,7 @@ export class UrlbarInput {
    *   The POST data associated with a search submission.
    * @param {boolean} [params.allowInheritPrincipal]
    *   Whether the principal can be inherited.
-   * @param {boolean} [params.wasSchemelessInput]
+   * @param {SchemelessInputType} [params.schemelessInput]
    *   Whether the search/URL term was without an explicit scheme.
    * @param {object} [resultDetails]
    *   Details of the selected result, if any.
@@ -3536,11 +3519,6 @@ export class UrlbarInput {
   _initStripOnShare() {
     let contextMenu = this.querySelector("moz-input-box").menupopup;
     let insertLocation = this.#findMenuItemLocation("cmd_copy");
-    // FIXME(bug 1927220): This check is wrong, !getAttribute() is a
-    // boolean.
-    if (!insertLocation.getAttribute("cmd") == "cmd_copy") {
-      return;
-    }
     // set up the menu item
     let stripOnShare = this.document.createXULElement("menuitem");
     this.document.l10n.setAttributes(
@@ -3737,9 +3715,6 @@ export class UrlbarInput {
     this._searchModeIndicatorTitle.removeAttribute("data-l10n-id");
     this._searchModeLabel.removeAttribute("data-l10n-id");
 
-    let results = this.querySelector(".urlbarView-results");
-    results.removeAttribute("searchmodesource");
-
     if (!engineName && !source) {
       try {
         // This will throw before DOMContentLoaded in
@@ -3771,7 +3746,6 @@ export class UrlbarInput {
         this.inputField,
         `urlbar-placeholder-search-mode-other-${sourceName}`
       );
-      results.setAttribute("searchmodesource", sourceName);
     }
 
     this.toggleAttribute("searchmode", true);
@@ -4101,7 +4075,7 @@ export class UrlbarInput {
         event.inputType === "deleteContentForward")
     ) {
       // Take a telemetry if user deleted whole autofilled value.
-      Services.telemetry.scalarAdd("urlbar.autofill_deletion", 1);
+      Glean.urlbar.autofillDeletion.add(1);
     }
 
     let value = this.value;
@@ -4707,14 +4681,19 @@ export class UrlbarInput {
 
   /**
    * @param {string} value A untrimmed address bar input.
-   * @returns {boolean}
-   *          `true` if the input doesn't start with a scheme relevant for
+   * @returns {SchemelessInputType}
+   *          Returns `Ci.nsILoadInfo.SchemelessInputTypeSchemeless` if the
+   *          input doesn't start with a scheme relevant for
    *          schemeless HTTPS-First (http://, https:// and file://).
+   *          Returns `Ci.nsILoadInfo.SchemelessInputTypeSchemeful` if it does
+   *          have a scheme.
    */
-  #isSchemeless(value) {
+  #getSchemelessInput(value) {
     return ["http://", "https://", "file://"].every(
       scheme => !value.trim().startsWith(scheme)
-    );
+    )
+      ? Ci.nsILoadInfo.SchemelessInputTypeSchemeless
+      : Ci.nsILoadInfo.SchemelessInputTypeSchemeful;
   }
 
   get #isOpenedPageInBlankTargetLoading() {

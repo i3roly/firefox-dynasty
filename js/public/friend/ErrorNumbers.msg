@@ -439,7 +439,7 @@ MSG_DEF(JSMSG_WASM_COMPILE_ERROR,      1, JSEXN_WASMCOMPILEERROR, "{0}")
 MSG_DEF(JSMSG_WASM_BAD_IMPORT_TYPE,    2, JSEXN_WASMLINKERROR, "import object field '{0}' is not a {1}")
 MSG_DEF(JSMSG_WASM_BAD_IMPORT_SIG,     2, JSEXN_WASMLINKERROR, "imported function '{0}.{1}' signature mismatch")
 MSG_DEF(JSMSG_WASM_BAD_TAG_SIG,        2, JSEXN_WASMLINKERROR, "imported tag '{0}.{1}' signature mismatch")
-MSG_DEF(JSMSG_WASM_BAD_IMP_INDEX,      1, JSEXN_WASMLINKERROR, "imported {0} with incompatible index type")
+MSG_DEF(JSMSG_WASM_BAD_IMP_ADDRESS,    1, JSEXN_WASMLINKERROR, "imported {0} with incompatible address type")
 MSG_DEF(JSMSG_WASM_BAD_IMP_SIZE,       1, JSEXN_WASMLINKERROR, "imported {0} with incompatible size")
 MSG_DEF(JSMSG_WASM_BAD_IMP_MAX,        1, JSEXN_WASMLINKERROR, "imported {0} with incompatible maximum size")
 MSG_DEF(JSMSG_WASM_IMP_SHARED_REQD,    0, JSEXN_WASMLINKERROR, "imported unshared memory but shared required")
@@ -488,7 +488,7 @@ MSG_DEF(JSMSG_WASM_BAD_ARRAYREF_VALUE,  0, JSEXN_TYPEERR,     "can only pass a W
 MSG_DEF(JSMSG_WASM_BAD_TYPEREF_VALUE,  0, JSEXN_TYPEERR,     "bad type")
 MSG_DEF(JSMSG_WASM_BAD_VAL_TYPE,       0, JSEXN_TYPEERR,     "cannot pass value to or from JS")
 MSG_DEF(JSMSG_WASM_BAD_STRING_VAL_TYPE,    0, JSEXN_TYPEERR,     "bad value type")
-MSG_DEF(JSMSG_WASM_BAD_STRING_IDX_TYPE,    0, JSEXN_TYPEERR,     "bad index type")
+MSG_DEF(JSMSG_WASM_BAD_STRING_ADDR_TYPE,    0, JSEXN_TYPEERR,     "bad address type")
 MSG_DEF(JSMSG_WASM_BAD_EXN_ARG,        0, JSEXN_TYPEERR,     "first argument must be a WebAssembly.Tag")
 MSG_DEF(JSMSG_WASM_BAD_EXN_PAYLOAD,    0, JSEXN_TYPEERR,     "second argument must be an object")
 MSG_DEF(JSMSG_WASM_BAD_EXN_PAYLOAD_LEN, 2, JSEXN_TYPEERR,    "expected {0} values but got {1}")
@@ -643,6 +643,15 @@ MSG_DEF(JSMSG_UNDEFINED_TYPE,          0, JSEXN_TYPEERR, "missing \"type\" optio
 MSG_DEF(JSMSG_NAN_NUMBER_RANGE,        3, JSEXN_RANGEERR, "range can't {0} with NaN in {1}.{2}()")
 MSG_DEF(JSMSG_INVALID_NUMBER_OPTION,   2, JSEXN_TYPEERR, "can't set option {0} when {1} is used")
 MSG_DEF(JSMSG_UNEQUAL_FRACTION_DIGITS, 0, JSEXN_RANGEERR, "fraction digits must be the same when roundingIncrement is used")
+MSG_DEF(JSMSG_INTL_DURATION_INVALID_NON_NUMERIC_OPTION, 2, JSEXN_RANGEERR, "invalid non-numeric value {0} for option {1}")
+MSG_DEF(JSMSG_INTL_DURATION_INVALID_DISPLAY_OPTION, 1, JSEXN_RANGEERR, "{0} can't use \"numeric\" style with \"always\" display")
+MSG_DEF(JSMSG_INTL_DURATION_INVALID_DISPLAY_OPTION_DEFAULT_STYLE, 1, JSEXN_RANGEERR, "{0} can't use \"always\" display when style defaults to \"numeric\"")
+MSG_DEF(JSMSG_INTL_DURATION_INVALID_DISPLAY_OPTION_DEFAULT_DISPLAY, 1, JSEXN_RANGEERR, "{0} can't use \"numeric\" style when display defaults to \"always\"")
+MSG_DEF(JSMSG_INTL_DURATION_NOT_INTEGER, 1, JSEXN_RANGEERR, "{0} isn't a valid duration value because it isn't an integer")
+MSG_DEF(JSMSG_INTL_DURATION_INVALID_SIGN, 0, JSEXN_RANGEERR, "duration elements must have the same sign")
+MSG_DEF(JSMSG_INTL_DURATION_INVALID_LIMIT, 0, JSEXN_RANGEERR, "duration elements must be below valid limits")
+MSG_DEF(JSMSG_INTL_DURATION_MISSING_UNIT, 0, JSEXN_TYPEERR, "Duration-like objects must have at least one duration unit")
+MSG_DEF(JSMSG_INTL_DURATION_UNEXPECTED_STRING, 0, JSEXN_RANGEERR, "duration can't be a string")
 
 // RegExp
 MSG_DEF(JSMSG_BAD_CLASS_RANGE,         0, JSEXN_SYNTAXERR, "invalid range in character class")
@@ -735,6 +744,7 @@ MSG_DEF(JSMSG_SYMBOL_TO_NUMBER,        0, JSEXN_TYPEERR, "can't convert symbol t
 // Atomics and futexes
 MSG_DEF(JSMSG_ATOMICS_BAD_ARRAY,         0, JSEXN_TYPEERR, "invalid array type for the operation")
 MSG_DEF(JSMSG_ATOMICS_WAIT_NOT_ALLOWED,  0, JSEXN_TYPEERR, "waiting is not allowed on this thread")
+MSG_DEF(JSMSG_ATOMICS_PAUSE_BAD_COUNT,   0, JSEXN_TYPEERR, "Atomics.pause called with non-integral Number")
 
 // XPConnect wrappers and DOM bindings
 MSG_DEF(JSMSG_CANT_SET_INTERPOSED,       1, JSEXN_TYPEERR, "unable to set interposed data property '{0}'")

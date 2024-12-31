@@ -127,8 +127,7 @@ class FuncType {
   ValType result(unsigned i) const { return results_[i]; }
   const ValTypeVector& results() const { return results_; }
 
-  void initImmediateTypeId(bool gcEnabled, bool isFinal,
-                           const TypeDef* superTypeDef,
+  void initImmediateTypeId(bool isFinal, const TypeDef* superTypeDef,
                            uint32_t recGroupLength);
   bool hasImmediateTypeId() const {
     return immediateTypeId_ != NO_IMMEDIATE_TYPE_ID;
@@ -867,6 +866,9 @@ class TypeDef {
 
   size_t sizeOfExcludingThis(mozilla::MallocSizeOf mallocSizeOf) const;
   WASM_DECLARE_FRIEND_SERIALIZE(TypeDef);
+
+  inline void AddRef() const;
+  inline void Release() const;
 };
 
 using SharedTypeDef = RefPtr<const TypeDef>;
@@ -1353,14 +1355,17 @@ void RefType::AddRef() const {
   if (!isTypeRef()) {
     return;
   }
-  typeDef()->recGroup().AddRef();
+  typeDef()->AddRef();
 }
 void RefType::Release() const {
   if (!isTypeRef()) {
     return;
   }
-  typeDef()->recGroup().Release();
+  typeDef()->Release();
 }
+
+void TypeDef::AddRef() const { recGroup().AddRef(); }
+void TypeDef::Release() const { recGroup().Release(); }
 
 inline RefTypeHierarchy RefType::hierarchy() const {
   switch (kind()) {

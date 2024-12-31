@@ -276,7 +276,6 @@
 #include "mozilla/net/NeckoChannelParams.h"
 #include "mozilla/net/RequestContextService.h"
 #include "nsAboutProtocolUtils.h"
-#include "nsAlgorithm.h"
 #include "nsAttrValue.h"
 #include "nsAttrValueInlines.h"
 #include "nsBaseHashtable.h"
@@ -994,7 +993,7 @@ nsresult ExternalResourceMap::AddExternalResource(nsIURI* aURI,
     // Make sure that hiding our viewer will tear down its presentation.
     aViewer->SetSticky(false);
 
-    rv = aViewer->Init(nullptr, nsIntRect(0, 0, 0, 0), nullptr);
+    rv = aViewer->Init(nullptr, LayoutDeviceIntRect(), nullptr);
     if (NS_SUCCEEDED(rv)) {
       rv = aViewer->Open(nullptr, nullptr);
     }
@@ -1285,12 +1284,6 @@ void DOMStyleSheetSetList::EnsureFresh() {
 
 Document::PendingFrameStaticClone::~PendingFrameStaticClone() = default;
 
-static InteractiveWidget DefaultInteractiveWidget() {
-  return StaticPrefs::dom_interactive_widget_default_resizes_visual()
-             ? InteractiveWidget::ResizesVisual
-             : InteractiveWidget::ResizesContent;
-}
-
 // ==================================================================
 // =
 // ==================================================================
@@ -1375,7 +1368,6 @@ Document::Document(const char* aContentType)
       mStyleSetFilled(false),
       mQuirkSheetAdded(false),
       mContentEditableSheetAdded(false),
-      mDesignModeSheetAdded(false),
       mMayHaveTitleElement(false),
       mDOMLoadingSet(false),
       mDOMInteractiveSet(false),
@@ -1402,7 +1394,6 @@ Document::Document(const char* aContentType)
       mTooDeepWriteRecursion(false),
       mPendingMaybeEditingStateChanged(false),
       mHasBeenEditable(false),
-      mHasWarnedAboutZoom(false),
       mIsRunningExecCommandByContent(false),
       mIsRunningExecCommandByChromeOrAddon(false),
       mSetCompleteAfterDOMContentLoaded(false),
@@ -1419,6 +1410,7 @@ Document::Document(const char* aContentType)
       mSuspendDOMNotifications(false),
       mForceLoadAtTop(false),
       mFireMutationEvents(true),
+      mHasPolicyWithRequireTrustedTypesForDirective(false),
       mXMLDeclarationBits(0),
       mOnloadBlockCount(0),
       mWriteLevel(0),
@@ -1450,7 +1442,8 @@ Document::Document(const char* aContentType)
       mHttpsOnlyStatus(nsILoadInfo::HTTPS_ONLY_UNINITIALIZED),
       mViewportType(Unknown),
       mViewportFit(ViewportFitType::Auto),
-      mInteractiveWidgetMode(DefaultInteractiveWidget()),
+      mInteractiveWidgetMode(
+          InteractiveWidgetUtils::DefaultInteractiveWidgetMode()),
       mHeaderData(nullptr),
       mServoRestyleRootDirtyBits(0),
       mThrowOnDynamicMarkupInsertionCounter(0),
@@ -2534,7 +2527,7 @@ NS_IMPL_CYCLE_COLLECTION_TRAVERSE_BEGIN_INTERNAL(Document)
     static const char* kNSURIs[] = {"([none])", "(xmlns)", "(xml)",
                                     "(xhtml)",  "(XLink)", "(XSLT)",
                                     "(MathML)", "(RDF)",   "(XUL)"};
-    if (nsid < ArrayLength(kNSURIs)) {
+    if (nsid < std::size(kNSURIs)) {
       SprintfLiteral(name, "Document %s %s %s", loadedAsData.get(),
                      kNSURIs[nsid], uri.get());
     } else {
@@ -3015,8 +3008,8 @@ void Document::ResetToURI(nsIURI* aURI, nsILoadGroup* aLoadGroup,
         // This is asserting that if we previously set mIsInPrivateBrowsing
         // to true from the channel in Document::Reset, that the loadContext
         // also believes it to be true.
-        // MOZ_ASSERT(!mIsInPrivateBrowsing ||
-        //           mIsInPrivateBrowsing == loadContext->UsePrivateBrowsing());
+        MOZ_ASSERT(!mIsInPrivateBrowsing ||
+                   mIsInPrivateBrowsing == loadContext->UsePrivateBrowsing());
         mIsInPrivateBrowsing = loadContext->UsePrivateBrowsing();
       }
     }
@@ -3101,9 +3094,9 @@ already_AddRefed<nsIPrincipal> Document::MaybeDowngradePrincipal(
   // extension principal, in the case of extension content scripts).
   auto* basePrin = BasePrincipal::Cast(aPrincipal);
   if (basePrin->Is<ExpandedPrincipal>()) {
-    MOZ_DIAGNOSTIC_ASSERT(false,
-                          "Should never try to create a document with "
-                          "an expanded principal");
+    MOZ_DIAGNOSTIC_CRASH(
+        "Should never try to create a document with "
+        "an expanded principal");
 
     auto* expanded = basePrin->As<ExpandedPrincipal>();
     return do_AddRef(expanded->AllowList().LastElement());
@@ -3285,17 +3278,12 @@ void Document::FillStyleSet() {
   mStyleSetFilled = true;
 }
 
-void Document::RemoveContentEditableStyleSheets() {
+void Document::RemoveContentEditableStyleSheet() {
   MOZ_ASSERT(IsHTMLOrXHTML());
 
   ServoStyleSet& styleSet = EnsureStyleSet();
   auto* cache = GlobalStyleSheetCache::Singleton();
   bool changed = false;
-  if (mDesignModeSheetAdded) {
-    styleSet.RemoveStyleSheet(*cache->DesignModeSheet());
-    mDesignModeSheetAdded = false;
-    changed = true;
-  }
   if (mContentEditableSheetAdded) {
     styleSet.RemoveStyleSheet(*cache->ContentEditableSheet());
     mContentEditableSheetAdded = false;
@@ -3307,7 +3295,7 @@ void Document::RemoveContentEditableStyleSheets() {
   }
 }
 
-void Document::AddContentEditableStyleSheetsToStyleSet(bool aDesignMode) {
+void Document::AddContentEditableStyleSheetToStyleSet() {
   MOZ_ASSERT(IsHTMLOrXHTML());
   MOZ_DIAGNOSTIC_ASSERT(mStyleSetFilled,
                         "Caller should ensure we're being rendered");
@@ -3318,15 +3306,6 @@ void Document::AddContentEditableStyleSheetsToStyleSet(bool aDesignMode) {
   if (!mContentEditableSheetAdded) {
     styleSet.AppendStyleSheet(*cache->ContentEditableSheet());
     mContentEditableSheetAdded = true;
-    changed = true;
-  }
-  if (mDesignModeSheetAdded != aDesignMode) {
-    if (mDesignModeSheetAdded) {
-      styleSet.RemoveStyleSheet(*cache->DesignModeSheet());
-    } else {
-      styleSet.AppendStyleSheet(*cache->DesignModeSheet());
-    }
-    mDesignModeSheetAdded = !mDesignModeSheetAdded;
     changed = true;
   }
   if (changed) {
@@ -3721,7 +3700,11 @@ void Document::SetLoadedAsData(bool aLoadedAsData,
 
 nsIContentSecurityPolicy* Document::GetCsp() const { return mCSP; }
 
-void Document::SetCsp(nsIContentSecurityPolicy* aCSP) { mCSP = aCSP; }
+void Document::SetCsp(nsIContentSecurityPolicy* aCSP) {
+  mCSP = aCSP;
+  mHasPolicyWithRequireTrustedTypesForDirective =
+      aCSP && aCSP->GetHasPolicyWithRequireTrustedTypesForDirective();
+}
 
 nsIContentSecurityPolicy* Document::GetPreloadCsp() const {
   return mPreloadCSP;
@@ -3848,6 +3831,10 @@ nsresult Document::InitCSP(nsIChannel* aChannel) {
   // already been created.
   if (!mCSP) {
     mCSP = new nsCSPContext();
+    mHasPolicyWithRequireTrustedTypesForDirective = false;
+  } else {
+    mHasPolicyWithRequireTrustedTypesForDirective =
+        mCSP->GetHasPolicyWithRequireTrustedTypesForDirective();
   }
 
   // Always overwrite the requesting context of the CSP so that any new
@@ -4657,6 +4644,16 @@ static void NotifyEditableStateChange(Document& aDoc) {
   MOZ_DIAGNOSTIC_ASSERT(!g.Mutated(0));
 }
 
+void Document::SetDocumentEditableFlag(bool aEditable) {
+  if (HasFlag(NODE_IS_EDITABLE) == aEditable) {
+    return;
+  }
+  SetEditableFlag(aEditable);
+  // Changing the NODE_IS_EDITABLE flags on document changes the intrinsic
+  // state of all descendant elements of it. Update that now.
+  NotifyEditableStateChange(*this);
+}
+
 void Document::SetDesignMode(const nsAString& aDesignMode,
                              const Maybe<nsIPrincipal*>& aSubjectPrincipal,
                              ErrorResult& rv) {
@@ -4667,10 +4664,7 @@ void Document::SetDesignMode(const nsAString& aDesignMode,
   }
   const bool editableMode = IsInDesignMode();
   if (aDesignMode.LowerCaseEqualsASCII(editableMode ? "off" : "on")) {
-    SetEditableFlag(!editableMode);
-    // Changing the NODE_IS_EDITABLE flags on document changes the intrinsic
-    // state of all descendant elements of it. Update that now.
-    NotifyEditableStateChange(*this);
+    SetDocumentEditableFlag(!editableMode);
     rv = EditingStateChanged();
   }
 }
@@ -6028,7 +6022,7 @@ void Document::TearingDownEditor() {
   if (IsEditingOn()) {
     mEditingState = EditingState::eTearingDown;
     if (IsHTMLOrXHTML()) {
-      RemoveContentEditableStyleSheets();
+      RemoveContentEditableStyleSheet();
     }
   }
 }
@@ -6123,7 +6117,6 @@ nsresult Document::EditingStateChanged() {
     // Editing is being turned off.
     nsAutoScriptBlocker scriptBlocker;
     RefPtr<HTMLEditor> htmlEditor = GetHTMLEditor();
-    NotifyEditableStateChange(*this);
     nsresult rv = TurnEditingOff();
     // If this document has focus and the editing state of this document
     // becomes "off", it means that HTMLEditor won't handle any inputs nor
@@ -6240,7 +6233,7 @@ nsresult Document::EditingStateChanged() {
     // because new style may change whether focused element will be focusable
     // or not.
     if (IsHTMLOrXHTML()) {
-      AddContentEditableStyleSheetsToStyleSet(designMode);
+      AddContentEditableStyleSheetToStyleSet();
     }
 
     if (designMode) {
@@ -7399,7 +7392,6 @@ void Document::DeletePresShell() {
   mStyleSetFilled = false;
   mQuirkSheetAdded = false;
   mContentEditableSheetAdded = false;
-  mDesignModeSheetAdded = false;
 }
 
 void Document::DisallowBFCaching(uint32_t aStatus) {
@@ -8545,7 +8537,7 @@ void Document::ElementStateChanged(Element* aElement, ElementState aStateMask) {
 }
 
 void Document::RuleChanged(StyleSheet& aSheet, css::Rule*,
-                           StyleRuleChangeKind) {
+                           const StyleRuleChange&) {
   if (aSheet.IsApplicable()) {
     ApplicableStylesChanged();
   }
@@ -10669,8 +10661,8 @@ static Maybe<LayoutDeviceToScreenScale> ParseScaleString(
   if (scale < 0) {
     return Nothing();
   }
-  return Some(clamped(LayoutDeviceToScreenScale(scale), ViewportMinScale(),
-                      ViewportMaxScale()));
+  return Some(std::clamp(LayoutDeviceToScreenScale(scale), ViewportMinScale(),
+                         ViewportMaxScale()));
 }
 
 void Document::ParseScalesInViewportMetaData(
@@ -10727,7 +10719,7 @@ void Document::ParseWidthAndHeightInMetaViewport(const nsAString& aWidthString,
       if (NS_FAILED(widthErrorCode)) {
         mMaxWidth = nsViewportInfo::kAuto;
       } else if (mMaxWidth >= 0.0f) {
-        mMaxWidth = clamped(mMaxWidth, CSSCoord(1.0f), CSSCoord(10000.0f));
+        mMaxWidth = std::clamp(mMaxWidth, CSSCoord(1.0f), CSSCoord(10000.0f));
       } else {
         mMaxWidth = nsViewportInfo::kAuto;
       }
@@ -10754,7 +10746,7 @@ void Document::ParseWidthAndHeightInMetaViewport(const nsAString& aWidthString,
       if (NS_FAILED(heightErrorCode)) {
         mMaxHeight = nsViewportInfo::kAuto;
       } else if (mMaxHeight >= 0.0f) {
-        mMaxHeight = clamped(mMaxHeight, CSSCoord(1.0f), CSSCoord(10000.0f));
+        mMaxHeight = std::clamp(mMaxHeight, CSSCoord(1.0f), CSSCoord(10000.0f));
       } else {
         mMaxHeight = nsViewportInfo::kAuto;
       }
@@ -11076,8 +11068,8 @@ nsViewportInfo Document::GetViewportInfo(const ScreenIntSize& aDisplaySize) {
       // prevent the viewport from taking on that size.
       CSSSize effectiveMinSize = Min(CSSSize(kViewportMinSize), displaySize);
 
-      size.width = clamped(size.width, effectiveMinSize.width,
-                           float(kViewportMaxSize.width));
+      size.width = std::clamp(size.width, effectiveMinSize.width,
+                              float(kViewportMaxSize.width));
 
       // Also recalculate the default zoom, if it wasn't specified in the
       // metadata, and the width is specified.
@@ -11086,8 +11078,8 @@ nsViewportInfo Document::GetViewportInfo(const ScreenIntSize& aDisplaySize) {
         scaleFloat = (scaleFloat > bestFitScale) ? scaleFloat : bestFitScale;
       }
 
-      size.height = clamped(size.height, effectiveMinSize.height,
-                            float(kViewportMaxSize.height));
+      size.height = std::clamp(size.height, effectiveMinSize.height,
+                               float(kViewportMaxSize.height));
 
       // In cases of user-scalable=no, if we have a positive scale, clamp it to
       // min and max, and then use the clamped value for the scale, the min, and
@@ -11096,7 +11088,7 @@ nsViewportInfo Document::GetViewportInfo(const ScreenIntSize& aDisplaySize) {
       if (effectiveZoomFlag == nsViewportInfo::ZoomFlag::DisallowZoom &&
           scaleFloat > CSSToScreenScale(0.0f)) {
         scaleFloat = scaleMinFloat = scaleMaxFloat =
-            clamped(scaleFloat, scaleMinFloat, scaleMaxFloat);
+            std::clamp(scaleFloat, scaleMinFloat, scaleMaxFloat);
       }
       MOZ_ASSERT(
           scaleFloat > CSSToScreenScale(0.0f) || !mValidScaleFloat,
@@ -11131,7 +11123,7 @@ ViewportMetaData Document::GetViewportMetaData() const {
 static InteractiveWidget ParseInteractiveWidget(
     const ViewportMetaData& aViewportMetaData) {
   if (aViewportMetaData.mInteractiveWidgetMode.IsEmpty()) {
-    return DefaultInteractiveWidget();
+    return InteractiveWidgetUtils::DefaultInteractiveWidgetMode();
   }
 
   if (aViewportMetaData.mInteractiveWidgetMode.EqualsIgnoreCase(
@@ -11146,7 +11138,7 @@ static InteractiveWidget ParseInteractiveWidget(
           "overlays-content")) {
     return InteractiveWidget::OverlaysContent;
   }
-  return DefaultInteractiveWidget();
+  return InteractiveWidgetUtils::DefaultInteractiveWidgetMode();
 }
 
 void Document::SetMetaViewportData(UniquePtr<ViewportMetaData> aData) {
@@ -11859,10 +11851,14 @@ bool Document::CanSavePresentation(nsIRequest* aNewRequest,
 }
 
 void Document::Destroy() {
-  // The ContentViewer wants to release the document now.  So, tell our content
+  // The DocumentViewer wants to release the document now.  So, tell our content
   // to drop any references to the document so that it can be destroyed.
   if (mIsGoingAway) {
     return;
+  }
+
+  if (RefPtr transition = mActiveViewTransition) {
+    transition->SkipTransition(SkipTransitionReason::DocumentHidden);
   }
 
   ReportDocumentUseCounters();
@@ -12242,7 +12238,7 @@ void Document::OnPageHide(bool aPersisted, EventTarget* aDispatchStartTarget,
     mVisible = false;
   }
 
-  ExitPointerLock();
+  PointerLockManager::Unlock("Document::OnPageHide", this);
 
   if (!mIsBeingUsedAsImage) {
     // Dispatch observer notification to notify observers page is hidden.
@@ -14563,22 +14559,6 @@ void Document::EvaluateMediaQueriesAndReportChanges(bool aRecurse) {
   }
 }
 
-void Document::MaybeWarnAboutZoom() {
-  if (mHasWarnedAboutZoom) {
-    return;
-  }
-  const bool usedZoom = Servo_IsPropertyIdRecordedInUseCounter(
-      mStyleUseCounters.get(), eCSSProperty_zoom);
-  if (!usedZoom) {
-    return;
-  }
-
-  mHasWarnedAboutZoom = true;
-  nsContentUtils::ReportToConsole(nsIScriptError::warningFlag, "Layout"_ns,
-                                  this, nsContentUtils::eLAYOUT_PROPERTIES,
-                                  "ZoomPropertyWarning");
-}
-
 nsIHTMLCollection* Document::Children() {
   if (!mChildrenCollection) {
     mChildrenCollection =
@@ -14791,7 +14771,7 @@ class PendingFullscreenChangeList {
 };
 
 /* static */
-LinkedList<FullscreenChange> PendingFullscreenChangeList::sList;
+MOZ_RUNINIT LinkedList<FullscreenChange> PendingFullscreenChangeList::sList;
 
 size_t Document::CountFullscreenElements() const {
   size_t count = 0;
@@ -14973,7 +14953,7 @@ void Document::ExitFullscreenInDocTree(Document* aMaybeNotARootDoc) {
   MOZ_ASSERT(aMaybeNotARootDoc);
 
   // Unlock the pointer
-  PointerLockManager::Unlock();
+  PointerLockManager::Unlock("Document::ExitFullscreenInDocTree");
 
   // Resolve all promises which waiting for exit fullscreen.
   PendingFullscreenChangeList::Iterator<FullscreenExit> iter(
@@ -15079,7 +15059,7 @@ void Document::RestorePreviousFullscreenState(UniquePtr<FullscreenExit> aExit) {
   }
 
   // If fullscreen mode is updated the pointer should be unlocked
-  PointerLockManager::Unlock();
+  PointerLockManager::Unlock("Document::RestorePreviousFullscreenState");
   // All documents listed in the array except the last one are going to
   // completely exit from the fullscreen state.
   for (auto i : IntegerRange(exitElements.Length() - 1)) {
@@ -16013,7 +15993,7 @@ bool Document::ApplyFullscreen(UniquePtr<FullscreenRequest> aRequest) {
 
   // If a document is already in fullscreen, then unlock the mouse pointer
   // before setting a new document to fullscreen
-  PointerLockManager::Unlock();
+  PointerLockManager::Unlock("Document::ApplyFullscreen");
 
   // Set the fullscreen element. This sets the fullscreen style on the
   // element, and the fullscreen-ancestor styles on ancestors of the element
@@ -16863,7 +16843,6 @@ void Document::UpdateIntersections(TimeStamp aNowTime) {
 
 static void UpdateEffectsOnBrowsingContext(BrowsingContext* aBc,
                                            const IntersectionInput& aInput,
-                                           bool aIsHidden,
                                            bool aIncludeInactive) {
   Element* el = aBc->GetEmbedderElement();
   if (!el) {
@@ -16876,8 +16855,14 @@ static void UpdateEffectsOnBrowsingContext(BrowsingContext* aBc,
   const bool isInactiveTop = aBc->IsTop() && !aBc->IsActive();
   nsSubDocumentFrame* subDocFrame = do_QueryFrame(el->GetPrimaryFrame());
   rb->UpdateEffects([&] {
-    if (aIsHidden || isInactiveTop) {
-      // Fully hidden if in the background.
+    if (isInactiveTop) {
+      // We don't use the visible rect of top browsers, so if they're inactive
+      // don't waste time computing it. Note that for OOP iframes, it might seem
+      // a bit wasteful to bother computing this in background tabs, but:
+      //  * We need it so that child frames know if they're visible or not, in
+      //    case they're preserving layers for example.
+      //  * If we're hidden, our refresh driver is throttled and we don't run
+      //    this code very often anyways.
       return EffectsInfo::FullyHidden();
     }
     const IntersectionOutput output = DOMIntersectionObserver::Intersect(
@@ -16927,17 +16912,16 @@ void Document::UpdateRemoteFrameEffects(bool aIncludeInactive) {
   auto margin = DOMIntersectionObserver::LazyLoadingRootMargin();
   const IntersectionInput input = DOMIntersectionObserver::ComputeInput(
       *this, /* aRoot = */ nullptr, &margin);
-  const bool hidden = Hidden();
   if (auto* wc = GetWindowContext()) {
     for (const RefPtr<BrowsingContext>& child : wc->Children()) {
-      UpdateEffectsOnBrowsingContext(child, input, hidden, aIncludeInactive);
+      UpdateEffectsOnBrowsingContext(child, input, aIncludeInactive);
     }
   }
   if (XRE_IsParentProcess()) {
     if (auto* bc = GetBrowsingContext(); bc && bc->IsTop()) {
       bc->Canonical()->CallOnAllTopDescendants(
           [&](CanonicalBrowsingContext* aDescendant) {
-            UpdateEffectsOnBrowsingContext(aDescendant, input, hidden,
+            UpdateEffectsOnBrowsingContext(aDescendant, input,
                                            aIncludeInactive);
             return CallState::Continue;
           },
@@ -18557,8 +18541,7 @@ already_AddRefed<mozilla::dom::Promise> Document::RequestStorageAccessForOrigin(
                 }
                 if (AntiTrackingUtils::CheckStoragePermission(
                         self->NodePrincipal(), type,
-                        nsContentUtils::IsInPrivateBrowsing(self), nullptr,
-                        0)) {
+                        self->IsInPrivateBrowsing(), nullptr, 0)) {
                   return MozPromise<int, bool, true>::CreateAndResolve(
                       true, __func__);
                 }
@@ -18890,8 +18873,8 @@ already_AddRefed<Promise> Document::CompleteStorageAccessRequestFromSite(
                       false, __func__);
             }
             if (AntiTrackingUtils::CheckStoragePermission(
-                    self->NodePrincipal(), type,
-                    nsContentUtils::IsInPrivateBrowsing(self), nullptr, 0)) {
+                    self->NodePrincipal(), type, self->IsInPrivateBrowsing(),
+                    nullptr, 0)) {
               return StorageAccessAPIHelper::
                   StorageAccessPermissionGrantPromise::CreateAndResolve(
                       StorageAccessAPIHelper::eAllowAutoGrant, __func__);

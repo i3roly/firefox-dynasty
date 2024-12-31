@@ -86,12 +86,16 @@ export const DefaultMeta = ({
   ctaButtonVariant,
   dispatch,
   spocMessageVariant,
+  mayHaveSectionsCards,
   mayHaveThumbsUpDown,
   onThumbsUpClick,
   onThumbsDownClick,
   isListCard,
   state,
   format,
+  topic,
+  isSectionsCard,
+  showTopics,
 }) => (
   <div className="meta">
     <div className="info-wrap">
@@ -107,28 +111,53 @@ export const DefaultMeta = ({
       )}
       {format !== "rectangle" && (
         <>
-          <header className="title clamp">{title}</header>
+          <h3 className="title clamp">{title}</h3>
           {excerpt && <p className="excerpt clamp">{excerpt}</p>}
         </>
       )}
       {/* Rectangle format is returned for English clients only.*/}
       {format === "rectangle" && (
         <>
-          <header className="title clamp">Sponsored</header>
+          <h3 className="title clamp">Sponsored</h3>
           <p className="excerpt clamp">
             Sponsored content supports our mission to build a better web.
           </p>
         </>
       )}
     </div>
-    {!isListCard && format !== "rectangle" && mayHaveThumbsUpDown && (
-      <DSThumbsUpDownButtons
-        onThumbsDownClick={onThumbsDownClick}
-        onThumbsUpClick={onThumbsUpClick}
-        sponsor={sponsor}
-        isThumbsDownActive={state.isThumbsDownActive}
-        isThumbsUpActive={state.isThumbsUpActive}
-      />
+    {!isListCard &&
+      format !== "rectangle" &&
+      !mayHaveSectionsCards &&
+      mayHaveThumbsUpDown && (
+        <DSThumbsUpDownButtons
+          onThumbsDownClick={onThumbsDownClick}
+          onThumbsUpClick={onThumbsUpClick}
+          sponsor={sponsor}
+          isThumbsDownActive={state.isThumbsDownActive}
+          isThumbsUpActive={state.isThumbsUpActive}
+        />
+      )}
+    {isSectionsCard && (
+      <div className="sections-card-footer">
+        {!isListCard &&
+          format !== "rectangle" &&
+          mayHaveSectionsCards &&
+          mayHaveThumbsUpDown && (
+            <DSThumbsUpDownButtons
+              onThumbsDownClick={onThumbsDownClick}
+              onThumbsUpClick={onThumbsUpClick}
+              sponsor={sponsor}
+              isThumbsDownActive={state.isThumbsDownActive}
+              isThumbsUpActive={state.isThumbsUpActive}
+            />
+          )}
+        {showTopics && (
+          <span
+            className="ds-card-topic"
+            data-l10n-id={`newtab-topic-label-${topic}`}
+          />
+        )}
+      </div>
     )}
     {!newSponsoredLabel && (
       <DSContextFooter
@@ -140,6 +169,7 @@ export const DefaultMeta = ({
         source={source}
         dispatch={dispatch}
         spocMessageVariant={spocMessageVariant}
+        mayHaveSectionsCards={mayHaveSectionsCards}
       />
     )}
     {/* Sponsored label is normally in the way of any message.
@@ -200,6 +230,26 @@ export class _DSCard extends React.PureComponent {
         mediaMatcher: "(min-width: 1122px)",
         width: 296,
         height: 148,
+      },
+
+      {
+        mediaMatcher: "(min-width: 866px)",
+        width: 218,
+        height: 109,
+      },
+
+      {
+        mediaMatcher: "(max-width: 610px)",
+        width: 202,
+        height: 101,
+      },
+    ];
+
+    this.largeCardImageSizes = [
+      {
+        mediaMatcher: "(min-width: 1122px)",
+        width: 220,
+        height: 220,
       },
 
       {
@@ -283,6 +333,12 @@ export class _DSCard extends React.PureComponent {
               selected_topics: this.props.selectedTopics,
               is_list_card: this.props.isListCard,
               ...(this.props.format ? { format: this.props.format } : {}),
+              ...(this.props.section
+                ? {
+                    section: this.props.section,
+                    section_position: this.props.sectionPosition,
+                  }
+                : {}),
             },
           })
         );
@@ -305,6 +361,12 @@ export class _DSCard extends React.PureComponent {
                 selected_topics: this.props.selectedTopics,
                 is_list_card: this.props.isListCard,
                 ...(this.props.format ? { format: this.props.format } : {}),
+                ...(this.props.section
+                  ? {
+                      section: this.props.section,
+                      section_position: this.props.sectionPosition,
+                    }
+                  : {}),
               },
             ],
           })
@@ -346,6 +408,12 @@ export class _DSCard extends React.PureComponent {
             selected_topics: this.props.selectedTopics,
             is_list_card: this.props.isListCard,
             ...(this.props.format ? { format: this.props.format } : {}),
+            ...(this.props.section
+              ? {
+                  section: this.props.section,
+                  section_position: this.props.sectionPosition,
+                }
+              : {}),
           },
         })
       );
@@ -366,6 +434,12 @@ export class _DSCard extends React.PureComponent {
               selected_topics: this.props.selectedTopics,
               is_list_card: this.props.isListCard,
               ...(this.props.format ? { format: this.props.format } : {}),
+              ...(this.props.section
+                ? {
+                    section: this.props.section,
+                    section_position: this.props.sectionPosition,
+                  }
+                : {}),
             },
           ],
         })
@@ -574,6 +648,7 @@ export class _DSCard extends React.PureComponent {
       saveToPocketCard,
       isListCard,
       isFakespot,
+      mayHaveSectionsCards,
       format,
       alt_text,
     } = this.props;
@@ -637,6 +712,10 @@ export class _DSCard extends React.PureComponent {
       : ``;
     const listCardClassName = isListCard ? `list-feed-card` : ``;
     const fakespotClassName = isFakespot ? `fakespot` : ``;
+    const sectionsCardsClassName = [
+      mayHaveSectionsCards ? `sections-card-ui` : ``,
+      this.props.sectionsClassNames,
+    ].join(" ");
     const titleLinesName = `ds-card-title-lines-${titleLines}`;
     const descLinesClassName = `ds-card-desc-lines-${descLines}`;
     const isMediumRectangle = format === "rectangle";
@@ -646,6 +725,8 @@ export class _DSCard extends React.PureComponent {
     if (!isMediumRectangle) {
       sizes = isListCard ? this.listCardImageSizes : this.dsImageSizes;
     }
+
+    // TODO: Add logic to assign this.largeCardImageSizes
 
     let stpButton = () => {
       return (
@@ -674,15 +755,22 @@ export class _DSCard extends React.PureComponent {
     };
     return (
       <article
-        className={`ds-card ${listCardClassName} ${fakespotClassName} ${compactImagesClassName} ${imageGradientClassName} ${titleLinesName} ${descLinesClassName} ${spocFormatClassName} ${ctaButtonClassName} ${ctaButtonVariantClassName}`}
+        className={`ds-card ${listCardClassName} ${fakespotClassName} ${sectionsCardsClassName} ${compactImagesClassName} ${imageGradientClassName} ${titleLinesName} ${descLinesClassName} ${spocFormatClassName} ${ctaButtonClassName} ${ctaButtonVariantClassName}`}
         ref={this.setContextMenuButtonHostRef}
+        data-position-one={this.props["data-position-one"]}
+        data-position-two={this.props["data-position-one"]}
+        data-position-three={this.props["data-position-one"]}
+        data-position-four={this.props["data-position-one"]}
       >
-        {this.props.showTopics && this.props.topic && !isListCard && (
-          <span
-            className="ds-card-topic"
-            data-l10n-id={`newtab-topic-label-${this.props.topic}`}
-          />
-        )}
+        {this.props.showTopics &&
+          !this.props.mayHaveSectionsCards &&
+          this.props.topic &&
+          !isListCard && (
+            <span
+              className="ds-card-topic"
+              data-l10n-id={`newtab-topic-label-${this.props.topic}`}
+            />
+          )}
         <div className="img-wrapper">
           <DSImage
             extraClassNames="img"
@@ -721,6 +809,12 @@ export class _DSCard extends React.PureComponent {
                 ...(format ? { format } : {}),
                 isFakespot,
                 category: this.props.category,
+                ...(this.props.section
+                  ? {
+                      section: this.props.section,
+                      section_position: this.props.sectionPosition,
+                    }
+                  : {}),
               },
             ]}
             dispatch={this.props.dispatch}
@@ -735,7 +829,7 @@ export class _DSCard extends React.PureComponent {
         {isFakespot ? (
           <div className="meta">
             <div className="info-wrap">
-              <header className="title clamp">{this.props.title}</header>
+              <h3 className="title clamp">{this.props.title}</h3>
             </div>
           </div>
         ) : (
@@ -754,11 +848,17 @@ export class _DSCard extends React.PureComponent {
             dispatch={this.props.dispatch}
             spocMessageVariant={this.props.spocMessageVariant}
             mayHaveThumbsUpDown={this.props.mayHaveThumbsUpDown}
+            mayHaveSectionsCards={this.props.mayHaveSectionsCards}
             onThumbsUpClick={this.onThumbsUpClick}
             onThumbsDownClick={this.onThumbsDownClick}
             state={this.state}
             isListCard={isListCard}
+            showTopics={this.props.showTopics}
+            isSectionsCard={
+              this.props.mayHaveSectionsCards && this.props.topic && !isListCard
+            }
             format={format}
+            topic={this.props.topic}
           />
         )}
 
@@ -796,7 +896,10 @@ export class _DSCard extends React.PureComponent {
                 recommended_at={this.props.recommended_at}
                 received_rank={this.props.received_rank}
                 is_list_card={this.props.isListCard}
+                section={this.props.section}
+                section_position={this.props.sectionPosition}
                 format={format}
+                isSectionsCard={this.props.mayHaveSectionsCards}
               />
             )}
           </div>

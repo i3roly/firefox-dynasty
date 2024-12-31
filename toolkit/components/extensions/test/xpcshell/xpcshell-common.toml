@@ -7,6 +7,8 @@ prefs = ["browser.download.useDownloadDir=true"]
 
 ["test_ChannelWrapper.js"]
 
+["test_ExtensionTaskScheduler.js"]
+
 ["test_QuarantinedDomains.js"]
 
 ["test_change_backgroundServiceWorker_enabled_pref_false.js"]
@@ -375,9 +377,6 @@ skip-if = ["appname == 'thunderbird'"]
 
 ["test_ext_notifications_unsupported.js"]
 
-["test_ext_onmessage_removelistener.js"]
-skip-if = ["true"] # This test no longer tests what it is meant to test.
-
 ["test_ext_optional_host_permissions.js"]
 
 ["test_ext_permission_xhr.js"]
@@ -399,6 +398,8 @@ skip-if = [
   "appname == 'thunderbird'",
   "os == 'android'", # Bug 1350559
 ]
+
+["test_ext_permissions_optional_only.js"]
 
 ["test_ext_permissions_uninstall.js"]
 skip-if = [
@@ -613,6 +614,18 @@ run-sequentially = "very high failure rate in parallel"
 
 ["test_ext_userScripts_exports.js"]
 run-sequentially = "very high failure rate in parallel"
+
+["test_ext_userScripts_mv3_availability.js"]
+
+["test_ext_userScripts_mv3_csp.js"]
+
+["test_ext_userScripts_mv3_injection.js"]
+
+["test_ext_userScripts_mv3_messaging.js"]
+
+["test_ext_userScripts_mv3_persistence.js"]
+
+["test_ext_userScripts_mv3_worlds.js"]
 
 ["test_ext_userScripts_register.js"]
 skip-if = [

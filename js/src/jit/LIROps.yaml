@@ -262,6 +262,16 @@
   num_temps: 1
   mir_op: true
 
+- name: NewMapObject
+  result_type: WordSized
+  num_temps: 1
+  mir_op: true
+
+- name: NewSetObject
+  result_type: WordSized
+  num_temps: 1
+  mir_op: true
+
 - name: NewStringObject
   result_type: WordSized
   operands:
@@ -359,6 +369,7 @@
   mir_op: true
 
 - name: WasmStackSwitchToMain
+  result_type: WordSized
   operands:
     suspender: WordSized
     fn: WordSized
@@ -375,6 +386,7 @@
 - name: WasmStackContinueOnSuspendable
   operands:
     suspender: WordSized
+    result: WordSized
   call_instruction: true
 
 - name: WasmInterruptCheck
@@ -3506,10 +3518,10 @@
     input: WordSized
   mir_op: true
 
-- name: WasmClampTable64Index
+- name: WasmClampTable64Address
   result_type: WordSized
   operands:
-    index: Int64
+    address: Int64
   mir_op: true
 
 - name: WasmAlignmentCheck
@@ -4288,6 +4300,13 @@
 
 - name: WasmTrapIfAnyRefIsNotJSString
   mir_op: true
+  operands:
+    input: WordSized
+  num_temps: 1
+
+- name: WasmAnyRefJSStringLength
+  mir_op: true
+  result_type: WordSized
   operands:
     input: WordSized
   num_temps: 1

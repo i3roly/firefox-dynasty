@@ -2765,8 +2765,8 @@ CodeOffset MacroAssembler::move32WithPatch(Register dest) {
   return offs;
 }
 
-void MacroAssembler::patchMove32(CodeOffset offset, int32_t n) {
-  patchSub32FromStackPtr(offset, Imm32(n));
+void MacroAssembler::patchMove32(CodeOffset offset, Imm32 n) {
+  patchSub32FromStackPtr(offset, n);
 }
 
 void MacroAssembler::pushReturnAddress() { push(ra); }
@@ -4354,6 +4354,12 @@ void MacroAssembler::atomicEffectOpJS(Scalar::Type arrayType,
                  offsetTemp, maskTemp);
 }
 
+void MacroAssembler::atomicPause() {
+  // LoongArch doesn't have 'pause' or 'yield' instructions like other
+  // platforms, just use nop here.
+  nop();
+}
+
 void MacroAssembler::flexibleQuotient32(Register rhs, Register srcDest,
                                         bool isUnsigned,
                                         const LiveRegisterSet&) {
@@ -5567,7 +5573,6 @@ void MacroAssembler::shiftIndex32AndAdd(Register indexTemp32, int shift,
   addPtr(indexTemp32, pointer);
 }
 
-#ifdef ENABLE_WASM_TAIL_CALLS
 void MacroAssembler::wasmMarkCallAsSlow() { mov(ra, ra); }
 
 const int32_t SlowCallMarker = 0x03800021;  // ori ra, ra, 0
@@ -5585,7 +5590,6 @@ CodeOffset MacroAssembler::wasmMarkedSlowCall(const wasm::CallSiteDesc& desc,
   wasmMarkCallAsSlow();
   return offset;
 }
-#endif  // ENABLE_WASM_TAIL_CALLS
 
 //}}} check_macroassembler_style
 

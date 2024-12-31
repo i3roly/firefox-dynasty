@@ -28,6 +28,10 @@
 #  include "mozilla/webgpu/ExternalTextureDMABuf.h"
 #endif
 
+#if defined(XP_MACOSX)
+#  include "mozilla/webgpu/ExternalTextureMacIOSurface.h"
+#endif
+
 namespace mozilla::webgpu {
 
 const uint64_t POLL_TIME_MS = 100;
@@ -108,6 +112,7 @@ extern int32_t wgpu_server_get_dma_buf_fd(void* aParam, WGPUTextureId aId) {
 #endif
 }
 
+#if !defined(XP_MACOSX)
 extern WGPUVkImageHandle* wgpu_server_get_vk_image_handle(void* aParam,
                                                           WGPUTextureId aId) {
   auto* parent = static_cast<WebGPUParent*>(aParam);
@@ -118,14 +123,38 @@ extern WGPUVkImageHandle* wgpu_server_get_vk_image_handle(void* aParam,
     return nullptr;
   }
 
-#if defined(MOZ_WIDGET_GTK)
+#  if defined(MOZ_WIDGET_GTK)
   auto* textureDMABuf = texture->AsExternalTextureDMABuf();
   if (!textureDMABuf) {
     return nullptr;
   }
   return textureDMABuf->GetHandle();
-#else
+#  else
   return nullptr;
+#  endif
+}
+#endif
+
+extern uint32_t wgpu_server_get_external_io_surface_id(void* aParam,
+                                                       WGPUTextureId aId) {
+  auto* parent = static_cast<WebGPUParent*>(aParam);
+
+  auto texture = parent->GetExternalTexture(aId);
+  if (!texture) {
+    MOZ_ASSERT_UNREACHABLE("unexpected to be called");
+    return 0;
+  }
+
+#if defined(XP_MACOSX)
+  auto* textureIOSurface = texture->AsExternalTextureMacIOSurface();
+  if (!textureIOSurface) {
+    MOZ_ASSERT_UNREACHABLE("unexpected to be called");
+    return 0;
+  }
+  return textureIOSurface->GetIOSurfaceId();
+#else
+  MOZ_ASSERT_UNREACHABLE("unexpected to be called");
+  return 0;
 #endif
 }
 
@@ -632,7 +661,7 @@ void WebGPUParent::MapCallback(ffi::WGPUBufferMapAsyncStatus aStatus,
     mapData->mMappedSize = size;
   }
 
-  req->mResolver(std::move(result));
+  req->mResolver(result);
   delete req;
 }
 
@@ -781,6 +810,11 @@ ipc::IPCResult WebGPUParent::RecvSamplerDrop(RawId aSamplerId) {
   return IPC_OK();
 }
 
+ipc::IPCResult WebGPUParent::RecvQuerySetDrop(RawId aQuerySetId) {
+  ffi::wgpu_server_query_set_drop(mContext.get(), aQuerySetId);
+  return IPC_OK();
+}
+
 ipc::IPCResult WebGPUParent::RecvCommandEncoderFinish(
     RawId aEncoderId, RawId aDeviceId,
     const dom::GPUCommandBufferDescriptor& aDesc) {
@@ -869,13 +903,13 @@ ipc::IPCResult WebGPUParent::RecvQueueWriteAction(
   return IPC_OK();
 }
 
-ipc::IPCResult WebGPUParent::RecvBindGroupLayoutDrop(RawId aBindGroupId) {
-  ffi::wgpu_server_bind_group_layout_drop(mContext.get(), aBindGroupId);
+ipc::IPCResult WebGPUParent::RecvBindGroupLayoutDrop(RawId aBindGroupLayoutId) {
+  ffi::wgpu_server_bind_group_layout_drop(mContext.get(), aBindGroupLayoutId);
   return IPC_OK();
 }
 
-ipc::IPCResult WebGPUParent::RecvPipelineLayoutDrop(RawId aLayoutId) {
-  ffi::wgpu_server_pipeline_layout_drop(mContext.get(), aLayoutId);
+ipc::IPCResult WebGPUParent::RecvPipelineLayoutDrop(RawId aPipelineLayoutId) {
+  ffi::wgpu_server_pipeline_layout_drop(mContext.get(), aPipelineLayoutId);
   return IPC_OK();
 }
 
@@ -1595,10 +1629,7 @@ bool WebGPUParent::EnsureExternalTextureForSwapChain(
 
   auto externalTexture = CreateExternalTexture(aDeviceId, aTextureId, aWidth,
                                                aHeight, aFormat, aUsage);
-  if (!externalTexture) {
-    return false;
-  }
-  return true;
+  return static_cast<bool>(externalTexture);
 }
 
 std::shared_ptr<ExternalTexture> WebGPUParent::CreateExternalTexture(

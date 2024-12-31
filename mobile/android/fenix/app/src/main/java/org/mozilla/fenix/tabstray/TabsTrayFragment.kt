@@ -16,6 +16,7 @@ import android.view.ViewGroup
 import androidx.annotation.UiThread
 import androidx.annotation.VisibleForTesting
 import androidx.appcompat.app.AppCompatDialogFragment
+import androidx.compose.material.SnackbarDuration
 import androidx.core.view.isVisible
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.setFragmentResultListener
@@ -29,6 +30,7 @@ import kotlinx.coroutines.Dispatchers
 import mozilla.appservices.places.BookmarkRoot
 import mozilla.components.browser.state.selector.normalTabs
 import mozilla.components.browser.state.selector.privateTabs
+import mozilla.components.browser.state.state.TabSessionState
 import mozilla.components.browser.state.store.BrowserStore
 import mozilla.components.concept.base.crash.Breadcrumb
 import mozilla.components.feature.accounts.push.CloseTabsUseCases
@@ -41,8 +43,11 @@ import org.mozilla.fenix.GleanMetrics.TabsTray
 import org.mozilla.fenix.HomeActivity
 import org.mozilla.fenix.NavGraphDirections
 import org.mozilla.fenix.R
-import org.mozilla.fenix.components.FenixSnackbar
+import org.mozilla.fenix.browser.tabstrip.isTabStripEnabled
 import org.mozilla.fenix.components.StoreProvider
+import org.mozilla.fenix.compose.core.Action
+import org.mozilla.fenix.compose.snackbar.Snackbar
+import org.mozilla.fenix.compose.snackbar.SnackbarState
 import org.mozilla.fenix.databinding.ComponentTabstray2Binding
 import org.mozilla.fenix.databinding.ComponentTabstray3Binding
 import org.mozilla.fenix.databinding.ComponentTabstray3FabBinding
@@ -61,15 +66,13 @@ import org.mozilla.fenix.tabstray.browser.SelectionBannerBinding
 import org.mozilla.fenix.tabstray.browser.SelectionBannerBinding.VisibilityModifier
 import org.mozilla.fenix.tabstray.browser.SelectionHandleBinding
 import org.mozilla.fenix.tabstray.browser.TabSorter
-import org.mozilla.fenix.tabstray.ext.anchorWithAction
-import org.mozilla.fenix.tabstray.ext.bookmarkMessage
-import org.mozilla.fenix.tabstray.ext.collectionMessage
 import org.mozilla.fenix.tabstray.ext.showWithTheme
 import org.mozilla.fenix.tabstray.syncedtabs.SyncedTabsIntegration
 import org.mozilla.fenix.theme.FirefoxTheme
 import org.mozilla.fenix.theme.Theme
 import org.mozilla.fenix.theme.ThemeManager
 import org.mozilla.fenix.utils.allowUndo
+import kotlin.math.abs
 import kotlin.math.max
 
 /**
@@ -268,6 +271,28 @@ class TabsTrayFragment : AppCompatDialogFragment() {
                         },
                         onTabMediaClick = tabsTrayInteractor::onMediaClicked,
                         onTabClick = { tab ->
+                            run outer@{
+                                if (!requireContext().settings().hasShownTabSwipeCFR &&
+                                    !requireContext().isTabStripEnabled() &&
+                                    requireContext().settings().isSwipeToolbarToSwitchTabsEnabled
+                                ) {
+                                    val normalTabs = tabsTrayStore.state.normalTabs
+                                    val currentTabId = tabsTrayStore.state.selectedTabId
+
+                                    if (normalTabs.size >= 2) {
+                                        val currentTabPosition = currentTabId
+                                            ?.let { getTabPositionFromId(normalTabs, it) }
+                                            ?: return@outer
+                                        val newTabPosition =
+                                            getTabPositionFromId(normalTabs, tab.id)
+
+                                        if (abs(currentTabPosition - newTabPosition) == 1) {
+                                            requireContext().settings().shouldShowTabSwipeCFR = true
+                                        }
+                                    }
+                                }
+                            }
+
                             tabsTrayInteractor.onTabSelected(tab, TABS_TRAY_FEATURE_NAME)
                         },
                         onTabLongClick = tabsTrayInteractor::onTabLongClicked,
@@ -811,6 +836,12 @@ class TabsTrayFragment : AppCompatDialogFragment() {
     }
 
     @VisibleForTesting
+    internal fun getTabPositionFromId(tabsList: List<TabSessionState>, tabId: String): Int {
+        tabsList.forEachIndexed { index, tab -> if (tab.id == tabId) return index }
+        return -1
+    }
+
+    @VisibleForTesting
     internal fun dismissTabsTray() {
         // This should always be the last thing we do because nothing (e.g. telemetry)
         // is guaranteed after that.
@@ -820,42 +851,75 @@ class TabsTrayFragment : AppCompatDialogFragment() {
         dismissAllowingStateLoss()
     }
 
-    @VisibleForTesting
-    internal fun showCollectionSnackbar(
+    private fun showCollectionSnackbar(
         tabSize: Int,
         isNewCollection: Boolean = false,
     ) {
         runIfFragmentIsAttached {
-            FenixSnackbar
-                .make(requireView())
-                .collectionMessage(tabSize, isNewCollection)
-                .anchorWithAction(getSnackbarAnchor()) {
-                    findNavController().navigate(
-                        TabsTrayFragmentDirections.actionGlobalHome(
-                            focusOnAddressBar = false,
-                            scrollToCollection = true,
-                        ),
-                    )
-                    dismissTabsTray()
-                }.show()
+            showSnackbar(
+                snackBarParentView = requireView(),
+                snackbarState = SnackbarState(
+                    message = getString(
+                        when {
+                            isNewCollection -> {
+                                R.string.create_collection_tabs_saved_new_collection
+                            }
+                            tabSize > 1 -> {
+                                R.string.create_collection_tabs_saved
+                            }
+                            else -> {
+                                R.string.create_collection_tab_saved
+                            }
+                        },
+                    ),
+                    duration = SnackbarDuration.Long,
+                    action = Action(
+                        label = getString(R.string.create_collection_view),
+                        onClick = {
+                            findNavController().navigate(
+                                TabsTrayFragmentDirections.actionGlobalHome(
+                                    focusOnAddressBar = false,
+                                    scrollToCollection = true,
+                                ),
+                            )
+                            dismissTabsTray()
+                        },
+                    ),
+                ),
+            )
         }
     }
 
-    @VisibleForTesting
-    internal fun showBookmarkSnackbar(
+    private fun showBookmarkSnackbar(
         tabSize: Int,
         parentFolderTitle: String?,
     ) {
-        FenixSnackbar
-            .make(requireView())
-            .bookmarkMessage(tabSize, parentFolderTitle)
-            .anchorWithAction(getSnackbarAnchor()) {
-                findNavController().navigate(
-                    TabsTrayFragmentDirections.actionGlobalBookmarkFragment(BookmarkRoot.Mobile.id),
-                )
-                dismissTabsTray()
+        val displayFolderTitle = parentFolderTitle ?: getString(R.string.library_bookmarks)
+        val displayResId = when {
+            tabSize > 1 -> {
+                R.string.snackbar_message_bookmarks_saved_in
             }
-            .show()
+            else -> {
+                R.string.bookmark_saved_in_folder_snackbar
+            }
+        }
+
+        showSnackbar(
+            snackBarParentView = requireView(),
+            snackbarState = SnackbarState(
+                message = getString(displayResId, displayFolderTitle),
+                duration = SnackbarDuration.Long,
+                action = Action(
+                    label = getString(R.string.create_collection_view),
+                    onClick = {
+                        findNavController().navigate(
+                            TabsTrayFragmentDirections.actionGlobalBookmarkFragment(BookmarkRoot.Mobile.id),
+                        )
+                        dismissTabsTray()
+                    },
+                ),
+            ),
+        )
     }
 
     private fun findPreviousDialogFragment(): DownloadCancelDialogFragment? {
@@ -870,13 +934,27 @@ class TabsTrayFragment : AppCompatDialogFragment() {
     }
 
     private fun showInactiveTabsAutoCloseConfirmationSnackbar() {
-        val text = getString(R.string.inactive_tabs_auto_close_message_snackbar)
-        val snackbar = FenixSnackbar.make(
-            view = tabsTrayComposeBinding.root,
-            duration = FenixSnackbar.LENGTH_SHORT,
-        ).setText(text)
-        snackbar.view.elevation = ELEVATION
-        snackbar.show()
+        showSnackbar(
+            snackBarParentView = tabsTrayComposeBinding.root,
+            snackbarState = SnackbarState(
+                message = getString(R.string.inactive_tabs_auto_close_message_snackbar),
+                duration = SnackbarDuration.Long,
+            ),
+        )
+    }
+
+    private fun showSnackbar(
+        snackBarParentView: View,
+        snackbarState: SnackbarState,
+    ) {
+        Snackbar.make(
+            snackBarParentView = snackBarParentView,
+            snackbarState = snackbarState,
+        ).apply {
+            setAnchorView(getSnackbarAnchor())
+            view.elevation = ELEVATION
+            show()
+        }
     }
 
     private fun onTabsTrayDismissed() {

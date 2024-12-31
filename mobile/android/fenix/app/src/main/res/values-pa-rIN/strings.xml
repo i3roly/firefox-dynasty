@@ -2,18 +2,18 @@
 <resources xmlns:tools="http://schemas.android.com/tools" xmlns:moz="http://mozac.org/tools">
 
     <!-- App name for private browsing mode. The first parameter is the name of the app defined in app_name (for example: Fenix)-->
-    <string name="app_name_private_5">ਨਿੱਜੀ %s</string>
+    <string name="app_name_private_5">ਪ੍ਰਾਈਵੇਟ %s</string>
     <!-- App name for private browsing mode. The first parameter is the name of the app defined in app_name (for example: Fenix)-->
-    <string name="app_name_private_4">%s (ਨਿੱਜੀ)</string>
+    <string name="app_name_private_4">%s (ਪ੍ਰਾਈਵੇਟ)</string>
 
     <!-- Home Fragment -->
     <!-- Content description (not visible, for screen readers etc.): "Three dot" menu button. -->
     <string name="content_description_menu">ਹੋਰ ਚੋਣਾਂ</string>
 
     <!-- Content description (not visible, for screen readers etc.): "Private Browsing" menu button. -->
-    <string name="content_description_private_browsing_button">ਨਿੱਜੀ ਬਰਾਊਜ਼ ਕਰਨਾ ਸਮਰੱਥ ਕਰੋ</string>
+    <string name="content_description_private_browsing_button">ਪ੍ਰਾਈਵੇਟ ਬਰਾਊਜ਼ ਕਰਨਾ ਸਮਰੱਥ ਕਰੋ</string>
     <!-- Content description (not visible, for screen readers etc.): "Private Browsing" menu button. -->
-    <string name="content_description_disable_private_browsing_button">ਨਿੱਜੀ ਬਰਾਊਜ਼ ਕਰਨਾ ਅਸਮਰੱਥ ਕਰੋ</string>
+    <string name="content_description_disable_private_browsing_button">ਪ੍ਰਾਈਵੇਟ ਬਰਾਊਜ਼ ਕਰਨਾ ਅਸਮਰੱਥ ਕਰੋ</string>
     <!-- Content description (not visible, for screen readers etc.): "Private Browsing" menu button. -->
     <string name="content_description_private_browsing">ਪ੍ਰਾਈਵੇਟ ਬਰਾਊਜ਼ਿੰਗ</string>
     <!-- Placeholder text shown in the search bar before a user enters text for the default engine -->
@@ -32,7 +32,7 @@
     <string name="no_open_tabs_description">ਤੁਹਾਡੀਆਂ ਖੁੱਲ੍ਹੀਆਂ ਟੈਬਾਂ ਨੂੰ ਇੱਥੇ ਵਿਖਾਇਆ ਜਾਵੇਗਾ।</string>
 
     <!-- No Private Tabs Message Description -->
-    <string name="no_private_tabs_description">ਤੁਹਾਡੀਆਂ ਨਿੱਜੀ ਟੈਬਾਂ ਨੂੰ ਇੱਥੇ ਵਿਖਾਇਆ ਜਾਵੇਗਾ।</string>
+    <string name="no_private_tabs_description">ਤੁਹਾਡੀਆਂ ਪ੍ਰਾਈਵੇਟ ਟੈਬਾਂ ਨੂੰ ਇੱਥੇ ਵਿਖਾਇਆ ਜਾਵੇਗਾ।</string>
 
     <!-- Tab tray multi select title in app bar. The first parameter is the number of tabs selected -->
     <string name="tab_tray_multi_select_title">%1$d ਚੁਣੀਆਂ</string>
@@ -66,10 +66,10 @@
     <!-- Explanation for private browsing displayed to users on home view when they first enable private mode
         The first parameter is the name of the app defined in app_name (for example: Fenix) -->
     <string name="private_browsing_placeholder_description_2">
-         ਜਦੋਂ ਤੁਸੀਂ ਸਾਰੀਆਂ ਨਿੱਜੀ ਟੈਬਾਂ ਨੂੰ ਬੰਦ ਕਰਦੇ ਹੋ ਜਾਂ ਐਪ ਤੋਂ ਬਾਹਰ ਜਾਂਦੇ ਹੋ ਤਾਂ %1$s ਤੁਹਾਡੀ ਖੋਜ ਅਤੇ ਬਰਾਊਜ਼ਿੰਗ ਅਤੀਤ ਨੂੰ ਸਾਫ ਕਰਦਾ ਹੈ। ਹਾਲਾਂਕਿ ਇਹ ਤੁਹਾਨੂੰ ਵੈਬਸਾਈਟਾਂ ਜਾਂ ਤੁਹਾਡੇ ਇੰਟਰਨੈੱਟ ਦੇਣ ਵਾਲੇ ਲਈ ਅਣਪਛਾਤਾ ਨਹੀਂ ਬਣਾਉਂਦਾ, ਪਰ ਇਸ ਨਾਲ
-ਇਸ ਡਿਵਾਈਸ ਨੂੰ ਵਰਤੇ ਵਾਲੇ ਕਿਸੇ ਤੋਂ ਵੀ ਤੁਹਾਡੇ ਵਲੋਂ ਆਨਲਾਈਨ ਕੀਤੇ ਨੂੰ ਨਿੱਜੀ ਰੱਖਣਾ ਹੋਰ ਸੌਖਾ ਹੋ ਜਾਂਦਾ ਹੈ।</string>
+         ਜਦੋਂ ਤੁਸੀਂ ਸਾਰੀਆਂ ਪ੍ਰਾਈਵੇਟ ਟੈਬਾਂ ਨੂੰ ਬੰਦ ਕਰਦੇ ਹੋ ਜਾਂ ਐਪ ਤੋਂ ਬਾਹਰ ਜਾਂਦੇ ਹੋ ਤਾਂ %1$s ਤੁਹਾਡੀ ਖੋਜ ਅਤੇ ਬਰਾਊਜ਼ਿੰਗ ਅਤੀਤ ਨੂੰ ਸਾਫ ਕਰਦਾ ਹੈ। ਹਾਲਾਂਕਿ ਇਹ ਤੁਹਾਨੂੰ ਵੈਬਸਾਈਟਾਂ ਜਾਂ ਤੁਹਾਡੇ ਇੰਟਰਨੈੱਟ ਦੇਣ ਵਾਲੇ ਲਈ ਅਣਪਛਾਤਾ ਨਹੀਂ ਬਣਾਉਂਦਾ, ਪਰ ਇਸ ਨਾਲ
+ਇਸ ਡਿਵਾਈਸ ਨੂੰ ਵਰਤੇ ਵਾਲੇ ਕਿਸੇ ਤੋਂ ਵੀ ਤੁਹਾਡੇ ਵਲੋਂ ਆਨਲਾਈਨ ਕੀਤੇ ਨੂੰ ਪ੍ਰਾਈਵੇਟ ਰੱਖਣਾ ਹੋਰ ਸੌਖਾ ਹੋ ਜਾਂਦਾ ਹੈ।</string>
     <string name="private_browsing_common_myths">
-       ਨਿੱਜੀ ਟੈਬਾਂ ਬਾਰੇ ਆਮ ਫ਼ਰਜ਼ੀ ਗੱਲਾਂ
+       ਪ੍ਰਾਈਵੇਟ ਟੈਬਾਂ ਬਾਰੇ ਆਮ ਫ਼ਰਜ਼ੀ ਗੱਲਾਂ
     </string>
 
     <!-- True Private Browsing Mode -->
@@ -87,7 +87,7 @@
 
     <!-- Private mode shortcut "contextual feature recommendation" (CFR) -->
     <!-- Text for the Private mode shortcut CFR message for adding a private mode shortcut to open private tabs from the Home screen -->
-    <string name="private_mode_cfr_message_2">ਆਪਣੀ ਅਗਲੀ ਨਿੱਜੀ ਟੈਬ ਨੂੰ ਛੂਹ ਕੇ ਚਲਾਓ।</string>
+    <string name="private_mode_cfr_message_2">ਆਪਣੀ ਅਗਲੀ ਪ੍ਰਾਈਵੇਟ ਟੈਬ ਨੂੰ ਛੂਹ ਕੇ ਚਲਾਓ।</string>
     <!-- Text for the positive button to accept adding a Private Browsing shortcut to the Home screen -->
     <string name="private_mode_cfr_pos_button_text">ਮੁੱਖ ਸਕਰੀਨ ‘ਤੇ ਜੋੜੋ</string>
     <!-- Text for the negative button to decline adding a Private Browsing shortcut to the Home screen -->
@@ -100,12 +100,6 @@
     <string name="open_in_app_cfr_positive_button_text">ਸੈਟਿੰਗਾਂ ਉੱਤੇ ਜਾਓ</string>
     <!-- Text for the negative action button -->
     <string name="open_in_app_cfr_negative_button_text">ਖ਼ਾਰਜ ਕਰੋ</string>
-
-    <!-- Total cookie protection "contextual feature recommendation" (CFR) -->
-    <!-- Text for the message displayed in the contextual feature recommendation popup promoting the total cookie protection feature. -->
-    <string name="tcp_cfr_message" moz:removedIn="132" tools:ignore="UnusedResources">ਸਾਡਾ ਹਾਲੇ ਤੱਕ ਦਾ ਸਭ ਤੋਂ ਜ਼ਿਆਦਾ ਮਜ਼ਬੂਤ ਪਰਦੇਦਾਰੀ ਫ਼ੀਚਰ ਅੰਤਰ-ਸਾਈਟ ਟਰੈਕਰਾਂ ਨੂੰ ਨਿਖੇੜਦਾ ਹੈ।</string>
-    <!-- Text displayed that links to website containing documentation about the "Total cookie protection" feature. -->
-    <string name="tcp_cfr_learn_more" moz:removedIn="132" tools:ignore="UnusedResources">ਪੂਰੀ ਕੂਕੀ ਸੁਰੱਖਿਆ ਬਾਰੇ ਜਾਣੋ</string>
 
     <!-- Private browsing erase action "contextual feature recommendation" (CFR) -->
     <!-- Text for the message displayed in the contextual feature recommendation popup promoting the erase private browsing feature. -->
@@ -122,11 +116,11 @@
     <!-- Text for the message displayed for the popup promoting the long press of navigation in the navigation bar. -->
     <string name="navbar_navigation_buttons_cfr_message">ਇਸ ਟੈਬ ਦੇ ਅਤੀਤ ਵਿਚਲੇ ਸਫ਼ਿਆਂ ਵਿੱਚ ਜਾਣ ਲਈ ਤੀਰ ਦੇ ਨਿਸ਼ਾਨਾਂ ਨੂੰ ਛੂਹ ਕੇ ਰੱਖੋ।</string>
 
-    <!-- Tablet navigation bar "contextual feature recommendation" (CFR) -->
-    <!-- Text for the title displayed in the contextual feature recommendation popup promoting the tablet navigation bar. -->
-    <string name="tablet_nav_bar_cfr_title" moz:removedIn="132" tools:ignore="UnusedResources">ਨਵਾਂ: ਇੱਕ ਛੋਹ ਨਾਲ ਅੱਗੇ ਅਤੇ ਪਿੱਛੇ ਲੈ ਜਾਣ ਵਾਲੇ ਤੀਰ</string>
-    <!-- Text for the message displayed in the contextual feature recommendation popup promoting the tablet navigation bar. -->
-    <string name="tablet_nav_bar_cfr_message" moz:removedIn="132" tools:ignore="UnusedResources">ਫ਼ੌਰੀ ਨੇਵੀਗੇਸ਼ਨ, ਜੋ ਹਮੇਸ਼ਾਂ ਤੁਹਾਡੀ ਪਹੁੰਚ ਵੱਚ ਹੁੰਦੀ ਹੈ, ਦਾ ਆਨੰਦ ਮਾਣੋ।</string>
+    <!-- Address bar swipe "contextual feature recommendation" (CFR) -->
+    <!-- Text for the title displayed in the contextual feature recommendation popup promoting swipe of address bar. -->
+    <string name="address_bar_swipe_cfr_title">ਟੈਬਾਂ ਵਿਚਾਲੇ ਬਦਲਣ ਵਾਸਤੇ ਟੂਲਬਾਰ ਨੂੰ ਸਰਕਾਓ</string>
+    <!-- Text for the message displayed in the contextual feature recommendation popup promoting swipe of address bar. -->
+    <string name="address_bar_swipe_cfr_message">ਬਦਲਣ ਵਾਸਤੇ ਖੱਬੇ ਜਾਂ ਸੱਜੇ ਵੱਲ ਸਰਕਾਓ। ਆਪਣੀ ਆਖਰੀ ਟੈਬ ਉੱਤੇ ਖੱਬੇ ਵੱਲ ਸਰਕਾਉਣ ਨਾਲ ਨਵੀਂ ਟੈਬ ਨੂੰ ਖੋਲ੍ਹੋ।</string>
 
     <!-- Text for the info dialog when camera permissions have been denied but user tries to access a camera feature. -->
     <string name="camera_permissions_needed_message">ਕੈਮਰੇ ਲਈ ਪਹੁੰਚ ਚਾਹੀਦੀ ਹੈ। Android ਸੈਟਿੰਗਾਂ ਉੱਤੇ ਜਾਓ, ਇਜਾਜ਼ਤਾਂ ਨੂੰ
@@ -164,7 +158,7 @@
     <!-- Shortcut action to open new tab -->
     <string name="home_screen_shortcut_open_new_tab_2">ਨਵੀਂ ਟੈਬ</string>
     <!-- Shortcut action to open new private tab -->
-    <string name="home_screen_shortcut_open_new_private_tab_2">ਨਵੀਂ ਨਿੱਜੀ ਟੈਬ</string>
+    <string name="home_screen_shortcut_open_new_private_tab_2">ਨਵੀਂ ਪ੍ਰਾਈਵੇਟ ਟੈਬ</string>
 
     <!-- Shortcut action to open Passwords screen -->
     <string name="home_screen_shortcut_passwords">ਪਾਸਵਰਡ</string>
@@ -252,8 +246,12 @@
     <string name="browser_menu_open_in_regular_tab">ਰੈਲੂਲਰ ਟੈਬ ਵਿੱਚ ਖੋਲ੍ਹੋ</string>
     <!-- Browser menu toggle that adds a shortcut to the site on the device home screen. -->
     <string name="browser_menu_add_to_homescreen">ਮੁੱਖ ਸਕਰੀਨ ‘ਤੇ ਜੋੜੋ</string>
+    <!-- Browser menu toggle that adds a PWA of the site on the device home screen. -->
+    <string name="browser_menu_add_app_to_homescreen">ਮੁੱਖ ਸਕਰੀਨ \'ਤੇ ਜੋੜੋ</string>
     <!-- Browser menu toggle that adds a shortcut to the site on the device home screen. -->
     <string name="browser_menu_add_to_homescreen_2">…ਮੁੱਖ ਸਕਰੀਨ ‘ਤੇ ਜੋੜੋ</string>
+    <!-- Browser menu toggle that adds a PWA of the site on the device home screen. -->
+    <string name="browser_menu_add_app_to_homescreen_2">…ਮੁੱਖ ਸਕਰੀਨ \'ਤੇ ਜੋੜੋ</string>
     <!-- Text for notifying users that Xiaomi devices require additional permissions to add to home screen -->
     <string name="browser_menu_add_to_homescreen_xiaomi">Xiaomi ਡਿਵਾਈਸਾਂ ਲਈ ਸ਼ਾਰਟਕੱਟ ਨੂੰ ਮੁੱਖ ਸਕਰੀਨ ਉੱਤੇ ਜੋੜਨ ਲਈ ਵਧੀਕ ਇਜਾਜ਼ਤਾਂ ਚਾਹੀਦੀਆਂ ਹਨ। ਆਪਣੀਆਂ ਸੈਟਿੰਗਾਂ ਦੀ ਜਾਂਚ ਕਰੋ।</string>
     <!-- Content description (not visible, for screen readers etc.) for the Resync tabs button -->
@@ -343,9 +341,23 @@
     <!-- Content description (not visible, for screen readers etc.) for bottom sheet handlebar custom tab menu. -->
     <string name="browser_custom_tab_menu_handlebar_content_description">ਪਸੰਦੀਦਾ ਟੈਬ ਮੇਨੂ ਸ਼ੀਟ ਨੂੰ ਬੰਦ ਕਰੋ</string>
     <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
-    <string name="browser_menu_tools_description_with_translate">ਰੀਡਰ ਝਲਕ, ਉਲੱਥਾ, ਛਾਪਣਾ, ਸ਼ੇਅਰ ਕਰਨਾ ,ਐਪ ਖੋਲ੍ਹਣਾ</string>
+    <string name="browser_menu_tools_description_with_translate" moz:removedIn="134" tools:ignore="UnusedResources">ਰੀਡਰ ਝਲਕ, ਉਲੱਥਾ, ਛਾਪਣਾ, ਸ਼ੇਅਰ ਕਰਨਾ ,ਐਪ ਖੋਲ੍ਹਣਾ</string>
     <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
-    <string name="browser_menu_tools_description">ਰੀਡਰ ਝਲਕ, ਛਾਪਣਾ, ਸ਼ੇਅਰ ਕਰਨਾ ,ਐਪ ਖੋਲ੍ਹਣਾ</string>
+    <string name="browser_menu_tools_description" moz:removedIn="134" tools:ignore="UnusedResources">ਰੀਡਰ ਝਲਕ, ਛਾਪਣਾ, ਸ਼ੇਅਰ ਕਰਨਾ ,ਐਪ ਖੋਲ੍ਹਣਾ</string>
+    <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu
+         The first parameter is the label of the report site issue (for example: Report Site issue) -->
+    <string name="browser_menu_tools_description_with_translate_with_report_site" moz:removedIn="135" tools:ignore="UnusedResources">ਰੀਡਰ ਝਲਕ, ਉਲੱਥਾ, %s, ਪਰਿੰਟ, ਸਾਂਝਾ ਕਰਨਾ, ਐਪ ਨੂੰ ਖੋਲ੍ਹਣਾ</string>
+    <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu when the "Report broken site" feature is available-->
+    <string name="browser_menu_tools_description_with_translate_with_report_site_2">ਰੀਡਰ ਝਲਕ, ਉਲੱਥਾ,ਖ਼ਰਾਬ ਸਾਟਈ ਬਾਰੇ ਰਿਪੋਰਟ, ਪਰਿੰਟ, ਸਾਂਝਾ ਕਰਨਾ, ਐਪ ਨੂੰ ਖੋਲ੍ਹਣਾ</string>
+    <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
+    <string name="browser_menu_tools_description_with_translate_without_report_site">ਰੀਡਰ ਝਲਕ, ਉਲੱਥਾ, ਪਰਿੰਟ, ਸਾਂਝਾ ਕਰਨਾ ,ਐਪ ਨੂੰ ਖੋਲ੍ਹਣਾ</string>
+    <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu
+         The first parameter is the label of the report site issue (for example: Report Site issue) -->
+    <string name="browser_menu_tools_description_with_report_site" moz:removedIn="135" tools:ignore="UnusedResources">ਰੀਡਰ ਝਲਕ, %s, ਪਰਿੰਟ, ਸਾਂਝਾ ਕਰਨਾ, ਐਪ ਨੂੰ ਖੋਲ੍ਹਣਾ</string>
+    <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu when the "Report broken site" feature is available-->
+    <string name="browser_menu_tools_description_with_report_site_2">ਰੀਡਰ ਝਲਕ, ਖ਼ਰਾਬ ਸਾਈਟ ਬਾਰੇ ਰਿਪੋਰਟ, ਪਰਿੰਟ, ਸਾਂਝਾ ਕਰਨਾ, ਐਪ ਖੋਲ੍ਹਣਾ</string>
+    <!-- Browser menu description that describes the various tools related menu items inside of the tools sub-menu -->
+    <string name="browser_menu_tools_description_without_report_site">ਰੀਡਰ ਝਲਕ, ਪਰਿੰਟ, ਸਾਂਝਾ ਕਰਨਾ, ਐਪ ਨੂੰ ਖੋਲ੍ਹਣਾ</string>
     <!-- Browser menu label that navigates to the save sub-menu, which contains various save related menu items such as
          bookmarking a page, saving to collection, shortcut or as a PDF, and adding to home screen -->
     <string name="browser_menu_save">ਸੰਭਾਲੋ</string>
@@ -362,9 +374,13 @@
     <string name="browser_menu_turn_on_reader_view">ਪੜ੍ਹਨ ਝਲਕ ਨੂੰ ਚਾਲੂ ਕਰੋ</string>
     <!-- Browser menu label for turning OFF reader view of the current visited page -->
     <string name="browser_menu_turn_off_reader_view">ਪੜ੍ਹਨ ਝਲਕ ਨੂੰ ਬੰਦ ਕਰੋ</string>
+    <!-- Browser menu button that reopens a private tab as a regular tab -->
+    <string name="browser_menu_open_in_normal_tab">ਗ਼ੈਰ-ਨਿੱਜੀ ਟੈਬ ਉੱਤੇ ਭੇਜੋ</string>dsa
     <!-- Browser menu label for navigating to the translation feature, which provides language translation options the current visited page -->
     <string name="browser_menu_translate_page">…ਸਫ਼ੇ ਦਾ ਉਲੱਥਾ ਕਰੋ</string>
 
+    <!-- Browser menu label for navigating to the Web Compat Reporter feature, which provides users the ability to send bug reports for broken sites. -->
+    <string name="browser_menu_webcompat_reporter">…ਖ਼ਰਾਬ ਸਾਈਟ ਬਾਰੇ ਰਿਪੋਰਟ ਕਰੋ</string>
     <!-- Browser menu label that is displayed when the current page has been translated by the translation feature.
          The first parameter is the name of the language that page was translated to (e.g. English). -->
     <string name="browser_menu_translated_to">%1$s ਵਿੱਚ ਉਲੱਥਾ ਕੀਤਾ</string>
@@ -424,7 +440,7 @@
     <!-- Button in the search suggestions onboarding that does not allow search suggestions in private sessions -->
     <string name="search_suggestions_onboarding_do_not_allow_button">ਇਜਾਜ਼ਤ ਨਾ ਦਿਓ</string>
     <!-- Search suggestion onboarding hint title text -->
-    <string name="search_suggestions_onboarding_title">ਨਿੱਜੀ ਸ਼ੈਸ਼ਨਾਂ ਵਿੱਚ ਖੋਜ ਸੁਝਾਆਵਾਂ ਦੀ ਇਜਾਜ਼ਤ ਦੇਣੀ ਹੈ?</string>
+    <string name="search_suggestions_onboarding_title">ਪ੍ਰਾਈਵੇਟ ਸ਼ੈਸ਼ਨਾਂ ਵਿੱਚ ਖੋਜ ਸੁਝਾਆਵਾਂ ਨੂੰ ਮਨਜ਼ੂਰੀ ਦੇਣੀ ਹੈ?</string>
     <!-- Search suggestion onboarding hint description text, first parameter is the name of the app defined in app_name (for example: Fenix)-->
     <string name="search_suggestions_onboarding_text">ਤੁਹਾਡੇ ਵਲੋਂ ਸਿਰਨਾਵਾਂ ਪੱਟੀ ਵਿੱਚ ਲਿਖੀ ਹਰ ਚੀਜ਼ ਨੂੰ %s ਤੁਹਾਡੇ ਮੂਲ ਖੋਜ ਇੰਜਣ ਨਾਲ ਸਾਂਝਾ ਕਰੇਗਾ।</string>
 
@@ -447,10 +463,8 @@
     <string name="search_engine_icon_content_description_1">ਖੋਜ ਇੰਜਣ: %s</string>
 
     <!-- Home onboarding -->
-    <!-- Onboarding home screen popup dialog, shown on top of the Jump back in section. -->
-    <string name="onboarding_home_screen_jump_back_contextual_hint_2" moz:removedIn="132">ਤੁਹਾਡੇ ਆਪਣੇ ਬਣਾਏ ਮੁੱਖ-ਸਫ਼ੇ ਨੂੰ ਸਮਝੋ। ਸੱਜਰੀਆਂ ਟੈਬਾਂ, ਬੁੱਕਮਾਰਕ ਅਤੇ ਖੋਜ ਨਤੀਜੇ ਇੱਥੇ ਦਿਖਾਈ ਦੇਣਗੇ।</string>
     <!-- Home onboarding dialog welcome screen title text. -->
-    <string name="onboarding_home_welcome_title_2">ਵੱਧ ਨਿੱਜੀ ਇੰਟਰਨੈੱਟ ਲਈ ਜੀ ਆਇਆਂ ਨੂੰ</string>
+    <string name="onboarding_home_welcome_title_2">ਬੇਹਤਰ ਨਿੱਜੀ ਇੰਟਰਨੈੱਟ ਲਈ ਜੀ ਆਇਆਂ ਨੂੰ</string>
     <!-- Home onboarding dialog welcome screen description text. -->
     <string name="onboarding_home_welcome_description">ਵੱਧ ਰੰਗ। ਵੱਧ ਪਰਦੇਦਾਰੀ। ਫਾਇਦੇ ਨਾਲੋਂ ਲੋਕਾਂ ਨੂੰ ਪਹਿਲ ਦੇਣ ਦਾ ਉਹੀ ਵਾਅਦਾ।</string>
     <!-- Home onboarding dialog sign into sync screen title text. -->
@@ -568,6 +582,83 @@
     <!-- Content description for the star rating group. -->
     <string name="onboarding_add_on_star_rating_content_description">5 ਵਿੱਚੋਂ %1$s ਰੇਟ ਕੀਤਾ</string>
 
+    <!-- Title for the privacy preferences dialog shown during onboarding. Note: The word "Firefox" should NOT be translated. -->
+    <string name="onboarding_preferences_dialog_title" tools:ignore="BrandUsage,UnusedResources">Firefox ਨੂੰ ਬੇਹਤਰ ਬਣਾਉਣ ਲਈ ਸਾਡੀ ਮਦਦ ਕਰੋ</string>
+    <!-- Title for the crash reporting option in the privacy preferences dialog shown during onboarding. -->
+    <string name="onboarding_preferences_dialog_crash_reporting_title" tools:ignore="UnusedResources">ਕਰੈਸ਼ ਰਿਪੋਰਟਾਂ ਨੂੰ ਆਪਣੇ-ਆਪ ਭੇਜੋ</string>
+    <!-- Description for the crash reporting option in the privacy preferences dialog shown during onboarding. -->
+    <string name="onboarding_preferences_dialog_crash_reporting_description" tools:ignore="UnusedResources">ਕਰੈਸ਼ ਰਿਪੋਰਟਾਂ ਸਾਨੂੰ ਬਰਾਊਜ਼ਰ ਦੀ ਜਾਂਚ ਪੜਤਾਲ ਕਰਨ ਅਤੇ ਮਸਲਿਆਂ ਨੂੰ ਠੀਕ ਕਰਨ ਮਦਦ ਕਰਦੀਆਂ ਹਨ। ਰਿਪੋਰਟਾਂ ਵਿੱਚ ਨਿੱਜੀ ਜਾਂ ਸੰਵੇਦਨਸ਼ੀਲ ਡਾਟਾ ਸ਼ਾਮਲ ਹੋ ਸਕਦਾ ਹੈ।</string>
+    <!-- Learn more link for the crash reporting option in the privacy preferences dialog shown during onboarding. -->
+    <string name="onboarding_preferences_dialog_crash_reporting_learn_more" tools:ignore="UnusedResources">ਕਰੈਸ਼ ਰਿਪੋਰਟਾਂ ਬਾਰੇ ਹੋਰ ਜਾਣੋ</string>
+    <!-- Title for the usage data option in the privacy preferences dialog shown during onboarding. Note: The word "Mozilla" should NOT be translated. -->
+    <string name="onboarding_preferences_dialog_usage_data_title" tools:ignore="UnusedResources">Mozilla ਤਕਨੀਕੀ ਅਤੇ ਤਾਲਮੇਲ ਡਾਟਾ ਭੇਜੋ</string>
+    <!-- Description for the usage data option in the privacy preferences dialog shown during onboarding. Note: The word "Firefox" should NOT be translated. -->
+    <string name="onboarding_preferences_dialog_usage_data_description" tools:ignore="BrandUsage,UnusedResources">ਤੁਹਾਡੇ ਡਿਵਾਈਸ, ਹਾਰਡਵੇਅਰ ਸੰਰਚਨਾ ਅਤੇ Firefox ਨੂੰ ਤੁਸੀਂ ਕਿਵੇਂ ਵਰਤਦੇ ਹੋ ਦੇ ਬਾਰੇ ਡਾਟਾ ਹਰ ਥਾਂ ਦੇ ਵਰਤੋਂਕਾਰਾਂ ਲਈ ਫ਼ੀਚਰਾਂ, ਕਾਰਗੁਜ਼ਾਰੀ ਅਤੇ ਸਥਿਰਤਾਂ ਵਿੱਚ ਸੁਧਾਰ ਕਰਨ ਲਈ ਮਦਦ ਕਰਦਾ ਹੈ।</string>
+    <!-- Learn more link for the usage data option in the privacy preferences dialog shown during onboarding. -->
+    <string name="onboarding_preferences_dialog_usage_data_learn_more" tools:ignore="UnusedResources">ਵਰਤੋਂ ਡਾਟੇ ਬਾਰੇ ਹੋਰ ਸਿੱਖੋ</string>
+    <!-- Positive button label for the privacy preferences dialog shown during onboarding. -->
+    <string name="onboarding_preferences_dialog_positive_button" tools:ignore="UnusedResources">ਮੁਕੰਮਲ</string>
+    <!-- Negative button label for the privacy preferences dialog shown during onboarding. -->
+    <string name="onboarding_preferences_dialog_negative_button" tools:ignore="UnusedResources">ਰੱਦ ਕਰੋ</string>
+
+    <!-- Terms of service onboarding title card label. 'Firefox' intentionally hardcoded here-->
+    <string name="onboarding_welcome_to_firefox" tools:ignore="UnusedResources,BrandUsage">Firefox ਵਲੋਂ ਜੀ ਆਇਆਂ ਨੂੰ</string>
+    <!-- Terms of service onboarding page continue button label. -->
+    <string name="onboarding_term_of_service_agree_and_continue_button_label" tools:ignore="UnusedResources">ਸਹਿਮਤ ਅਤੇ ਜਾਰੀ ਰੱਖੋ</string>
+    <!-- Line one of the terms of service onboarding page. 'Firefox' is intentionally hardcoded. %1$s is replaced by an active link, using onboarding_term_of_service_line_one_link_text as text (“Terms of Service”). -->
+    <string name="onboarding_term_of_service_line_one" tools:ignore="UnusedResources,BrandUsage">ਜਾਰੀ ਰੱਖ ਕੇ ਤੁਸੀਂ Firefox %1$s ਨਾਲ ਸਹਿਮਤ ਹੁੰਦੇ ਹੋ।</string>
+    <!-- Used as text for the link in onboarding_term_of_service_line_one. -->
+    <string name="onboarding_term_of_service_line_one_link_text" tools:ignore="UnusedResources,BrandUsage">ਸੇਵਾ ਦੀਆਂ ਸ਼ਰਤਾਂ</string>
+
+    <!-- Line two of the terms of service onboarding page. 'Firefox' is intentionally hardcoded. %1$s is replaced by an active link, using onboarding_term_of_service_line_two_link_text as text (Privacy Notice”). -->
+    <string name="onboarding_term_of_service_line_two" tools:ignore="UnusedResources,BrandUsage">Firefox ਤੁਹਾਡੀ ਪਰਦੇਦਾਰੀ ਦੀ ਪਰਵਾਹ ਕਰਦਾ ਹੈ। ਸਾਡੀ %1$s ਵਿੱਚ ਹੋਰ ਪੜ੍ਹੋ।</string>
+    <!-- Used as text for the link in onboarding_term_of_service_line_two. -->
+    <string name="onboarding_term_of_service_line_two_link_text" tools:ignore="UnusedResources,BrandUsage">ਪਰਦੇਦਾਰੀ ਸੂਚਨਾ</string>
+    <!-- Line three of the terms of service onboarding page. 'Firefox' and 'Mozilla' are intentionally hardcoded. %1$S is replaced by an active link, using onboarding_term_of_service_line_three_link_text as text (Manage”). -->
+    <string name="onboarding_term_of_service_line_three" tools:ignore="UnusedResources,BrandUsage">ਬਰਾਊਜ਼ਰ ਵਿੱਚ ਸੁਧਾਰ ਕਰਨ ਲਈ ਮਦਦ ਵਾਸਤੇ Firefox Mozilla ਨੂੰ ਪੜਤਾਲ ਅਤੇ ਤਾਲਮੇਲ ਡਾਟਾ ਭੇਜਦਾ ਹੈ। %1$s</string>
+    <!-- Used as text for the link in onboarding_term_of_service_line_three. -->
+    <string name="onboarding_term_of_service_line_three_link_text" tools:ignore="UnusedResources,BrandUsage">ਬੰਦੋਬਸਤ</string>
+    <!-- Onboarding header for the toolbar selection card, used by Nimbus experiments. -->
+    <string name="onboarding_customize_toolbar_title" tools:ignore="UnusedResources">ਟੂਲਬਾਰ ਦੀ ਥਾਂ ਚੁਣੋ</string>
+    <!-- Onboarding sub header for toolbar selection card, used by Nimbus experiments. -->
+    <string name="onboarding_customize_toolbar_description" tools:ignore="UnusedResources">ਖੋਜਾਂ ਨੂੰ ਪਹੁੰਚ ਵਿੱਚ ਰੱਖੋ</string>
+    <!-- Onboarding label for 'Save and continue' button, used by Nimbus experiments. -->
+    <string name="onboarding_save_and_continue_button">ਸੰਭਾਲੋ ਅਤੇ ਜਾਰੀ ਰੱਖੋ</string>
+    <!-- Onboarding toolbar selection card label for 'skip' button, used by Nimbus experiments. -->
+    <string name="onboarding_customize_toolbar_skip_button">ਛੱਡੋ</string>
+    <!-- Onboarding toolbar selection card label for 'top' option, used by Nimbus experiments. -->
+    <string name="onboarding_customize_toolbar_top_option">ਉੱਤੇ</string>
+    <!-- Onboarding toolbar selection card label for 'bottom' option, used by Nimbus experiments. -->
+    <string name="onboarding_customize_toolbar_bottom_option">ਹੇਠਾਂ</string>
+
+    <!-- Onboarding toolbar selection card content description for the main image. -->
+    <string name="onboarding_customize_toolbar_main_image_content_description">ਟੂਲਬਾਰ ਚੋਣ ਝਲਕ ਦਾ ਵੱਡਾ ਹੈੱਡਰ ਚਿੱਤਰ ਬਣਾਏ ਗਏ ਟੂਲਬਾਰ ਚਿੱਤਰ ਵਿੱਚ ਦਿਖਾਇਆ ਜਾ ਰਿਹਾ ਹੈ।</string>
+    <!-- Onboarding toolbar selection card content description for the toolbar placement image. %1$s is placeholder for either 'top' or 'bottom'. -->
+    <string name="onboarding_customize_toolbar_placement_content_description" moz:removedIn="135" tools:ignore="UnusedResources">%1$s ਟੂਲਬਾਰ ਦਾ ਚਿੱਤਰ</string>
+
+    <!-- Onboarding toolbar selection card content description for the toolbar placement image. -->
+    <string name="onboarding_customize_toolbar_placement_bottom_content_description">ਹੇਠਾਂ ਟੂਲਬਾਰ ਦਾ ਚਿੱਤਰ</string>
+    <string name="onboarding_customize_toolbar_placement_top_content_description">ਉੱਤੇ ਟੂਲਬਾਰ ਦਾ ਚਿੱਤਰ</string>
+
+    <!-- Onboarding header for the theme selection card, used by Nimbus experiments. -->
+    <string name="onboarding_customize_theme_title" tools:ignore="UnusedResources">ਥੀਮ ਨੂੰ ਚੁਣੋ</string>
+    <!-- Onboarding sub header for theme selection card, used by Nimbus experiments. -->
+    <string name="onboarding_customize_theme_description" tools:ignore="UnusedResources">ਵੈੱਬ ਨੂੰ ਸਭ ਤੋਂ ਵਧੀਆ ਰੌਸ਼ਨੀ ਵਿੱਚ ਵੇਖੋ।</string>
+    <!-- Onboarding label for 'Save and start browsing' button, used by Nimbus experiments. -->
+    <string name="onboarding_save_and_start_button">ਸੰਭਾਲੋ ਅਤੇ ਬਰਾਊਜ਼ ਕਰਨਾ ਸ਼ੁਰੂ ਕਰੋ</string>
+    <!-- Onboarding theme selection card label for 'skip' button, used by Nimbus experiments. -->
+    <string name="onboarding_customize_theme_skip_button">ਛੱਡੋ</string>
+    <!-- Onboarding theme selection card label for 'dark' option, used by Nimbus experiments. -->
+    <string name="onboarding_customize_theme_dark_option">ਗੂੜ੍ਹਾ</string>
+    <!-- Onboarding theme selection card label for 'light' option, used by Nimbus experiments. -->
+    <string name="onboarding_customize_theme_light_option">ਹਲਕਾ</string>
+    <!-- Onboarding theme selection card label for 'System auto' option, used by Nimbus experiments. -->
+    <string name="onboarding_customize_theme_system_option">ਸਿਸਟਮ ਆਡੀਓ</string>
+    <!-- Onboarding theme selection card content description for the main image. -->
+    <string name="onboarding_customize_theme_main_image_content_description">ਥੀਮ ਚੋਣ ਝਲਕ ਦਾ ਵੱਡਾ ਹੈੱਡਰ ਚਿੱਤਰ ਬਣਾਈ ਗਈ ਸ਼ਕਲ ਵਿੱਚ ਕਲਾਕਾਰ ਅਤੇ ਬਿਲਡਰ ਟੂਲ ਦਿਖਾਏ ਜਾ ਰਹੇ ਹਨ।</string>
+    <!-- Onboarding theme selection card content description for the theme selection image. %1$s is placeholder for either 'system', 'light' or 'dark'. -->
+    <string name="onboarding_customize_theme_content_description">%1$s ਥੀਮ ਦਾ ਚਿੱਤਰ</string>
+
     <!-- Search Widget -->
     <!-- Content description for searching with a widget. The first parameter is the name of the application.-->
     <string name="search_widget_content_description_2">ਨਵੀਂ %1$s ਟੈਬ ਖੋਲ੍ਹੋ</string>
@@ -624,15 +715,15 @@
     <!-- Preference for advanced site settings -->
     <string name="preferences_site_settings">ਸਾਈਟ ਦੀਆਂ ਸੈਟਿੰਗਾਂ</string>
     <!-- Preference for private browsing options -->
-    <string name="preferences_private_browsing_options">ਨਿੱਜੀ ਬਰਾਊਜ਼ਿੰਗ</string>
+    <string name="preferences_private_browsing_options">ਪ੍ਰਾਈਵੇਟ ਬਰਾਊਜ਼ਿੰਗ</string>
     <!-- Preference for opening links in a private tab-->
-    <string name="preferences_open_links_in_a_private_tab">ਲਿੰਕ ਨਿੱਜੀ ਟੈਬ ਵਿੱਚ ਖੋਲ੍ਹੋ</string>
+    <string name="preferences_open_links_in_a_private_tab">ਲਿੰਕ ਨੂੰ ਪ੍ਰਾਈਵੇਟ ਟੈਬ ਵਿੱਚ ਖੋਲ੍ਹੋ</string>
     <!-- Preference for allowing screenshots to be taken while in a private tab-->
-    <string name="preferences_allow_screenshots_in_private_mode">ਨਿੱਜੀ ਬ੍ਰਾਊਜ਼ਿੰਗ ਵਿੱਚ ਸਕਰੀਨਸ਼ਾਟ ਮਨਜ਼ੂਰ ਕਰੋ</string>
+    <string name="preferences_allow_screenshots_in_private_mode">ਪ੍ਰਾਈਵੇਟ ਬਰਾਊਜ਼ਿੰਗ ਵਿੱਚ ਸਕਰੀਨਸ਼ਾਟ ਮਨਜ਼ੂਰ ਕਰੋ</string>
     <!-- Will inform the user of the risk of activating Allow screenshots in private browsing option -->
-    <string name="preferences_screenshots_in_private_mode_disclaimer">ਜੇ ਇਜਾਜ਼ਤ ਦਿੱਤੀ ਤਾਂ ਨਿੱਜੀ ਟੈਬਾਂ ਉਦੋਂ ਵੀ ਦਿਖਾਈ ਦੇਣਗੀਆਂ, ਜਦੋਂ ਕਈ ਐਪਾਂ ਖੁੱਲ੍ਹੀਆਂ ਹੁੰਦੀਆਂ ਹਨ</string>
+    <string name="preferences_screenshots_in_private_mode_disclaimer">ਜੇ ਇਜਾਜ਼ਤ ਦਿੱਤੀ ਤਾਂ ਪ੍ਰਾਈਵੇਟ ਟੈਬਾਂ ਉਦੋਂ ਵੀ ਦਿਖਾਈ ਦੇਣਗੀਆਂ, ਜਦੋਂ ਕਈ ਐਪਾਂ ਖੁੱਲ੍ਹੀਆਂ ਹੁੰਦੀਆਂ ਹਨ</string>
     <!-- Preference for adding private browsing shortcut -->
-    <string name="preferences_add_private_browsing_shortcut">ਨਿੱਜੀ ਬਰਾਊਜ਼ਿੰਗ ਸ਼ਾਰਟਕੱਟ ਜੋੜੋ</string>
+    <string name="preferences_add_private_browsing_shortcut">ਪ੍ਰਾਈਵੇਟ ਬਰਾਊਜ਼ਿੰਗ ਸ਼ਾਰਟਕੱਟ ਜੋੜੋ</string>
     <!-- Preference for enabling "HTTPS-Only" mode -->
     <string name="preferences_https_only_title">ਸਿਰਫ਼-HTTPS ਢੰਗ</string>
 
@@ -683,13 +774,13 @@
     <!-- Summary of https only preference if https only is set to on in all tabs -->
     <string name="preferences_https_only_on_all">ਸਭ ਟੈਬਾਂ ਉੱਤੇ</string>
     <!-- Summary of https only preference if https only is set to on in private tabs only -->
-    <string name="preferences_https_only_on_private">ਨਿੱਜੀ ਟੈਬਾਂ ਉੱਤੇ</string>
+    <string name="preferences_https_only_on_private">ਪ੍ਰਾਈਵੇਟ ਟੈਬਾਂ ਉੱਤੇ</string>
     <!-- Text displayed that links to website containing documentation about "HTTPS-Only" mode -->
     <string name="preferences_http_only_learn_more">ਹੋਰ ਜਾਣੋ</string>
     <!-- Option for the https only setting -->
     <string name="preferences_https_only_in_all_tabs">ਸਾਰੀਆਂ ਟੈਬਾਂ ਵਿੱਚ ਸਮਰੱਥ ਕਰੋ</string>
     <!-- Option for the https only setting -->
-    <string name="preferences_https_only_in_private_tabs">ਸਿਰਫ਼ ਨਿੱਜੀ ਟੈਬ ਵਿੱਚ ਸਮਰੱਥ ਕਰੋ</string>
+    <string name="preferences_https_only_in_private_tabs">ਸਿਰਫ਼ ਪ੍ਰਾਈਵੇਟ ਟੈਬਾਂ ਵਿੱਚ ਸਮਰੱਥ ਕਰੋ</string>
     <!-- Title shown in the error page for when trying to access a http website while https only mode is enabled. -->
     <string name="errorpage_httpsonly_title">ਸੁਰੱਖਿਅਤ ਸਾਈਟ ਮੌਜੂਦ ਨਹੀਂ ਹੈ</string>
     <!-- Message shown in the error page for when trying to access a http website while https only mode is enabled. The message has two paragraphs. This is the first. -->
@@ -738,7 +829,7 @@
     <!-- Preference title for switch preference to show voice search button -->
     <string name="preferences_show_voice_search">ਅਵਾਜ਼ੀ ਖੋਜ ਵਿਖਾਓ</string>
     <!-- Preference title for switch preference to show search suggestions also in private mode -->
-    <string name="preferences_show_search_suggestions_in_private">ਨਿੱਜੀ ਸ਼ੈਸ਼ਨ ਵਿੱਚ ਵੇਖਾਓ</string>
+    <string name="preferences_show_search_suggestions_in_private">ਪ੍ਰਾਈਵੇਟ ਸ਼ੈਸ਼ਨਾਂ ਵਿੱਚ ਵੇਖਾਓ</string>
     <!-- Preference title for switch preference to show a clipboard suggestion when searching -->
     <string name="preferences_show_clipboard_suggestions">ਕਲਿੱਪਬੋਰਡ ਸੁਝਾਅ ਵੇਖਾਓ</string>
     <!-- Preference title for switch preference to suggest browsing history when searching -->
@@ -967,17 +1058,30 @@
     <string name="exceptions_empty_message_learn_more_link">ਹੋਰ ਸਿੱਖੋ</string>
 
     <!-- Preference switch for usage and technical data collection -->
-    <string name="preference_usage_data">ਵਰਤੋਂ ਅਤੇ ਤਕਨੀਕੀ ਡਾਟਾ</string>
+    <string name="preference_usage_data" moz:removedIn="134" tools:ignore="UnusedResources">ਵਰਤੋਂ ਅਤੇ ਤਕਨੀਕੀ ਡਾਟਾ</string>
+    <!-- Preference switch for usage and technical data collection -->
+    <string name="preference_usage_data_1">ਤਕਨੀਕੀ ਅਤੇ ਤਾਲਮੇਲ ਡਾਟਾ</string>
+    <!-- Preference switch for usage and technical learn more link -->
+    <string name="preference_usage_data_learn_more" tools:ignore="UnusedResources">ਹੋਰ ਜਾਣੋ</string>
     <!-- Preference description for usage and technical data collection -->
     <string name="preferences_usage_data_description">ਸਾਨੂੰ %1$s ਵਧੀਆ ਬਣਾਉਣ ਲਈ ਆਪਣੇ ਬਰਾਊਜ਼ਰ ਦੀ ਕਾਰਗੁਜ਼ਾਰੀ, ਵਰਤੋ, ਹਾਰਡਵੇਅਰ ਅਤੇ ਪਸੰਦ ਬਦਲਣ ਦਾ ਡਾਟਾ ਸਾਂਝਾ ਕਰੋ</string>
     <!-- Preference switch for marketing data collection -->
     <string name="preferences_marketing_data">ਮਾਰਕੀਟਿੰਗ ਡਾਟਾ</string>
     <!-- Preference description for marketing data collection -->
-    <string name="preferences_marketing_data_description2">ਕੁਝ ਅਨੁਕੂਲ ਬਣਾ ਕੇ ਮੁੱਢਲਾ ਵਰਤੋਂ ਡਾਟਾ ਸਾਡੇ ਮੋਬਾਈਲ ਮਾਰਕੀਟਿੰਗ ਵੇਂਡਰ ਨਾਲ ਸਾਂਝਾ ਕਰਦਾ ਹੈ</string>
+    <string name="preferences_marketing_data_description2" moz:removedIn="134" tools:ignore="UnusedResources">ਕੁਝ ਅਨੁਕੂਲ ਬਣਾ ਕੇ ਮੁੱਢਲਾ ਵਰਤੋਂ ਡਾਟਾ ਸਾਡੇ ਮੋਬਾਈਲ ਮਾਰਕੀਟਿੰਗ ਵੇਂਡਰ ਨਾਲ ਸਾਂਝਾ ਕਰਦਾ ਹੈ</string>
+    <!-- Preference description for marketing data collection. Note: The words "Firefox" and "Mozilla" should NOT be translated -->
+    <string name="preferences_marketing_data_description_3" tools:ignore="BrandUsage">Firefox ਨੂੰ ਤੁਸੀਂ ਕਿਵੇਂ ਲੱਭਿਆ, ਇਸ ਬਾਰੇ ਜਾਣਕਾਰੀ Mozilla ਦੇ ਮਾਰਕੀਟਿੰਗ ਹਿੱਸੇਦਾਰਾਂ ਨਾਲ ਸਾਂਝੀ ਕਰੋ। ਇਸ ਨਾਲ Firefox ਨੂੰ ਤਰੱਕੀ ਕਰਨ ਅਤੇ ਬੇਹਤਰ ਇੰਟਰਨੈੱਟ ਬਣਾਉਣ ਲਈ ਮਦਦ ਮਿਲਦੀ ਹੈ।</string>
+    <!-- Learn more link for marketing data preference -->
+    <string name="preferences_marketing_data_learn_more">ਮਾਰਕੀਟਿੰਗ ਡਾਟੇ ਬਾਰੇ ਹੋਰ ਸਿੱਖੋ</string>
+
     <!-- Preference switch title for automatically submitting crash reports -->
-    <string name="preferences_automatically_submit_crashes_title">ਕਰੈਸ਼ ਰਿਪੋਰਟeਂ ਆਪਣੇ-ਆਪ ਭੇਜੋ</string>
+    <string name="preferences_automatically_send_crashes_title">ਕਰੈਸ਼ ਰਿਪੋਰਟਾਂ ਨੂੰ ਆਪਣੇ-ਆਪ ਭੇਜੋ</string>
+    <string name="preferences_automatically_submit_crashes_title" moz:removedIn="136" tools:ignore="UnusedResources">ਕਰੈਸ਼ ਰਿਪੋਰਟeਂ ਆਪਣੇ-ਆਪ ਭੇਜੋ</string>
+
     <!-- Preference switch description for automatically submitting crash reports -->
-    <string name="preferences_automatically_submit_crashes_description">ਕਰੈਸ਼ ਹੋਣ ਦੇ ਬਾਅਦ ਸ਼ੁਰੂ ਹੋਣ ਦੇ ਬਾਅਦ ਕਰੈਸ਼ ਰਿਪੋਰਟ ਆਪਣੇ-ਆਪ Mozilla ਨੂੰ ਭੇਜੋ</string>
+    <string name="preferences_automatically_send_crashes_description">ਇਹ ਸਾਨੂੰ ਬਰਾਊਜ਼ਰ ਦੀ ਜਾਂਚ ਪੜਤਾਲ ਕਰਨ ਅਤੇ ਮਸਲਿਆਂ ਨੂੰ ਠੀਕ ਕਰਨ ਮਦਦ ਕਰਦੀਆਂ ਹਨ। ਰਿਪੋਰਟਾਂ ਵਿੱਚ ਨਿੱਜੀ ਜਾਂ ਸੰਵੇਦਨਸ਼ੀਲ ਡਾਟਾ ਸ਼ਾਮਲ ਹੋ ਸਕਦਾ ਹੈ।</string>
+    <string name="preferences_automatically_submit_crashes_description" moz:removedIn="136" tools:ignore="UnusedResources">ਕਰੈਸ਼ ਹੋਣ ਦੇ ਬਾਅਦ ਸ਼ੁਰੂ ਹੋਣ ਦੇ ਬਾਅਦ ਕਰੈਸ਼ ਰਿਪੋਰਟ ਆਪਣੇ-ਆਪ Mozilla ਨੂੰ ਭੇਜੋ</string>
+
     <!-- Title for studies preferences -->
     <string name="preference_experiments_2">ਅਧਿਐਨ</string>
     <!-- Summary for studies preferences -->
@@ -1147,27 +1251,27 @@
     <!-- Learn more link for studies, links to an article for more information about studies. -->
     <string name="studies_learn_more">ਹੋਰ ਸਿੱਖੋ</string>
     <!-- Dialog message shown after removing a study -->
-    <string name="studies_restart_app">ਤਬਦੀਲੀਆਂ ਲਾਗੂ ਕਰਨ ਲਈ ਐਪਲੀਕੇਸ਼ਨ ਬੰਦ ਹੋਵੇਗੀ</string>
+    <string name="studies_restart_app" moz:removedIn="135">ਤਬਦੀਲੀਆਂ ਲਾਗੂ ਕਰਨ ਲਈ ਐਪਲੀਕੇਸ਼ਨ ਬੰਦ ਹੋਵੇਗੀ</string>
     <!-- Dialog button to confirm the removing a study. -->
-    <string name="studies_restart_dialog_ok">ਠੀਕ ਹੈ</string>
+    <string name="studies_restart_dialog_ok" moz:removedIn="135">ਠੀਕ ਹੈ</string>
     <!-- Dialog button text for canceling removing a study. -->
-    <string name="studies_restart_dialog_cancel">ਰੱਦ ਕਰੋ</string>
+    <string name="studies_restart_dialog_cancel" moz:removedIn="135">ਰੱਦ ਕਰੋ</string>
     <!-- Toast shown after turning on/off studies preferences -->
-    <string name="studies_toast_quit_application" tools:ignore="UnusedResources">ਤਬਦੀਲੀਆਂ ਲਾਗੂ ਕਰਨ ਲਈ ਐਪਲੀਕੇਸ਼ਨ ਨੂੰ ਬੰਦ ਕੀਤਾ ਜਾ ਰਿਹਾ ਹੈ…</string>
+    <string name="studies_toast_quit_application" moz:removedIn="135" tools:ignore="UnusedResources">ਤਬਦੀਲੀਆਂ ਲਾਗੂ ਕਰਨ ਲਈ ਐਪਲੀਕੇਸ਼ਨ ਨੂੰ ਬੰਦ ਕੀਤਾ ਜਾ ਰਿਹਾ ਹੈ…</string>
 
     <!-- Sessions -->
     <!-- Title for the list of tabs -->
     <string name="tab_header_label">ਟੈਬਾਂ ਖੋਲ੍ਹੋ</string>
     <!-- Title for the list of tabs in the current private session -->
-    <string name="tabs_header_private_tabs_title">ਨਿੱਜੀ ਟੈਬਾਂ</string>
+    <string name="tabs_header_private_tabs_title">ਪ੍ਰਾਈਵੇਟ ਟੈਬਾਂ</string>
     <!-- Title for the list of tabs in the synced tabs -->
     <string name="tabs_header_synced_tabs_title">ਸਿੰਕ ਕੀਤੀਆਂ ਟੈਬਾਂ</string>
     <!-- Content description (not visible, for screen readers etc.): Add tab button. Adds a news tab when pressed -->
     <string name="add_tab">ਟੈਬ ਜੋੜੋ</string>
     <!-- Content description (not visible, for screen readers etc.): Add tab button. Adds a news tab when pressed -->
-    <string name="add_private_tab">ਨਿੱਜੀ ਟੈਬ ਜੋੜੋ</string>
+    <string name="add_private_tab">ਪ੍ਰਾਈਵੇਟ ਟੈਬ ਜੋੜੋ</string>
     <!-- Text for the new tab button to indicate adding a new private tab in the tab -->
-    <string name="tab_drawer_fab_content">ਨਿੱਜੀ</string>
+    <string name="tab_drawer_fab_content">ਪ੍ਰਾਈਵੇਟ</string>
     <!-- Text for the new tab button to indicate syncing command on the synced tabs page -->
     <string name="tab_drawer_fab_sync">ਸਿੰਕ</string>
     <!-- Text shown in the menu for sharing all tabs -->
@@ -1218,7 +1322,7 @@
     <!-- Text for the menu button to delete a top site from history -->
     <string name="delete_from_history">ਅਤੀਤ ਵਿੱਚੋਂ ਹਟਾਓ</string>
     <!-- Postfix for private WebApp titles, placeholder is replaced with app name -->
-    <string name="pwa_site_controls_title_private">%1$s (ਨਿੱਜੀ ਮੋਡ)</string>
+    <string name="pwa_site_controls_title_private">%1$s (ਪ੍ਰਾਈਵੇਟ ਮੋਡ)</string>
 
     <!-- History -->
     <!-- Text for the button to search all history -->
@@ -1254,7 +1358,7 @@
     <!-- Text for the snackbar to confirm that a single download item has been removed. The first parameter is the name of the download item. -->
     <string name="download_delete_single_item_snackbar">%1$s ਹਟਾਏ</string>
     <!-- Text shown when no download exists -->
-    <string name="download_empty_message_1">ਕੋਈ ਡਾਊਨਲੋਡ ਕੀਤੀ ਫਾਇਲ ਨਹੀਂ ਹੈ</string>
+    <string name="download_empty_message_1">ਕੋਈ ਡਾਊਨਲੋਡ ਕੀਤੀ ਫਾਈਲ ਨਹੀਂ ਹੈ</string>
     <!-- History multi select title in app bar
     The first parameter is the number of downloads selected -->
     <string name="download_multi_select_title">%1$d ਚੁਣੇ</string>
@@ -1265,6 +1369,29 @@
 
 
     <!-- WebCompat Reporter -->
+
+    <!-- WebCompat Reporter -->
+    <!-- The title of the Web Compat Reporter feature. This is displayed in the top app bar. -->
+    <string name="webcompat_reporter_screen_title">ਖ਼ਰਾਬ ਸਾਈਟ ਬਾਰੇ ਰਿਪੋਰਟ ਕਰੋ</string>
+    <!-- The description of the Web Compat Reporter feature. This first parameter is the name of the application (For example: Fenix) -->
+    <string name="webcompat_reporter_description">%1$s ਨੂੰ ਹਰੇਕ ਲਈ ਬੇਹਤਰ ਬਣਾਉਣ ਵਾਸਤੇ ਮਦਦ ਕਰੋ। Mozilla ਦੇ ਮੁਲਾਜ਼ਮ ਤੁਹਾਡੇ ਵਲੋਂ ਭੇਜੀ ਜਾਣਕਾਰੀ ਨੂੰ ਵੈੱਬਸਾਈਟ ਸਮੱਸਿਆਵਾਂ ਨੂੰ ਠੀਕ ਕਰਨ ਲਈ ਵਰਤਦੇ ਹਨ।</string>
+    <!-- The text field label of the URL text field. This is displayed above the user-inputted URL. -->
+    <string name="webcompat_reporter_label_url">URL</string>
+    <!-- The error message of the URL text field when an invalid URL has been entered. -->
+    <string name="webcompat_reporter_url_error_invalid">ਵਾਜਬ URL ਦਿਓ ਜੀ</string>
+    <!-- The label/title of an optional field in the Web Compat Reporter feature for explaining a high-level reason why the site is broken. -->
+    <string name="webcompat_reporter_label_whats_broken">ਕੀ ਖ਼ਰਾਬ ਹੈ? (ਚੋਣਵਾਂ)</string>
+    <!-- The placeholder text for the dropdown where a user can select a high-level reason why the site is broken. -->
+    <string name="webcompat_reporter_choose_reason">ਕਾਰਨ ਚੁਣੋ</string>
+    <!-- The label/title of an optional field in the Web Compat Reporter feature for adding additional information. -->
+    <string name="webcompat_reporter_label_description">ਸਮੱਸਿਆ ਬਾਰੇ ਜਾਣਕਾਰੀ ਦਿਓ (ਚੋਣਵਾਂ)</string>
+    <!-- The button text for navigating away from the feature to provide more information on the broken site's bug report. -->
+    <string name="webcompat_reporter_send_more_info">ਹੋਰ ਜਾਣਕਾਰੀ ਭੇਜੋ</string>
+    <!-- The button text for the cancel button to leave the Web Compat Reporter feature. -->
+    <string name="webcompat_reporter_cancel">ਰੱਦ ਕਰੋ</string>
+    <!-- The button text for the send button to submit the provided form data. -->
+    <string name="webcompat_reporter_send">ਭੇਜੋ</string>
+
 
     <!-- These reason strings are dropdown options on a WebCompat reporter form, indicating what is broken on the site. -->
     <!-- Broken site reason text for site slow or not working -->
@@ -1310,8 +1437,6 @@
     <string name="bookmark_delete_negative">ਰੱਦ ਕਰੋ</string>
     <!-- Screen title for adding a bookmarks folder -->
     <string name="bookmark_add_folder">ਫੋਲਡਰ ਜੋੜੋ</string>
-    <!-- Snackbar title shown after a bookmark has been created. -->
-    <string name="bookmark_saved_snackbar" moz:removedIn="132" tools:ignore="UnusedResources">ਬੁੱਕਮਾਰਕ ਸੰਭਾਲਿਆ!</string>
     <!-- Snackbar title that confirms a bookmark was saved into a folder. Parameter will be replaced by the name of the folder the bookmark was saved into. -->
     <string name="bookmark_saved_in_folder_snackbar">“%s” ਵਿੱਚ ਸੰਭਾਲਿਆ</string>
     <!-- Snackbar edit button shown after a bookmark has been created. -->
@@ -1327,11 +1452,11 @@
     <!-- Bookmark overflow menu open in new tab button -->
     <string name="bookmark_menu_open_in_new_tab_button">ਨਵੀਂ ਟੈਬ ‘ਚ ਖੋਲ੍ਹੋ</string>
     <!-- Bookmark overflow menu open in private tab button -->
-    <string name="bookmark_menu_open_in_private_tab_button">ਨਿੱਜੀ ਟੈਬ ‘ਚ ਖੋਲ੍ਹੋ</string>
+    <string name="bookmark_menu_open_in_private_tab_button">ਪ੍ਰਾਈਵੇਟ ਟੈਬ ‘ਚ ਖੋਲ੍ਹੋ</string>
     <!-- Bookmark overflow menu open all in tabs button -->
     <string name="bookmark_menu_open_all_in_tabs_button">ਸਭ ਨੂੰ ਨਵੀਆਂ ਟੈਬਾਂ ਵਿੱਚ ਖੋਲ੍ਹੋ</string>
     <!-- Bookmark overflow menu open all in private tabs button -->
-    <string name="bookmark_menu_open_all_in_private_tabs_button">ਸਭ ਨੂੰ ਨਿੱਜੀ ਟੈਬਾਂ ਵਿੱਚ ਖੋਲ੍ਹੋ</string>
+    <string name="bookmark_menu_open_all_in_private_tabs_button">ਸਭ ਨੂੰ ਪ੍ਰਾਈਵੇਟ ਟੈਬਾਂ ਵਿੱਚ ਖੋਲ੍ਹੋ</string>
     <!-- Bookmark overflow menu delete button -->
     <string name="bookmark_menu_delete_button">ਹਟਾਓ</string>
     <!--Bookmark overflow menu save button -->
@@ -1606,7 +1731,7 @@
 
     <!-- Notifications -->
     <!-- Text shown in the notification that pops up to remind the user that a private browsing session is active. -->
-    <string name="notification_pbm_delete_text_2">ਨਿੱਜੀ ਟੈਬਾਂ ਬੰਦ ਕਰੋ</string>
+    <string name="notification_pbm_delete_text_2">ਪ੍ਰਾਈਵੇਟ ਟੈਬਾਂ ਬੰਦ ਕਰੋ</string>
 
 
     <!-- Text shown in the notification that pops up to remind the user that a private browsing session is active for Android 14+ -->
@@ -1618,12 +1743,12 @@
 
     <!-- Title shown in the notification that pops up to remind the user to set fenix as default browser.
     The app name is in the text, due to limitations with localizing Nimbus experiments -->
-    <string name="nimbus_notification_default_browser_title" tools:ignore="BrandUsage,UnusedResources">Firefox ਤੇਜ਼ ਅਤੇ ਨਿੱਜੀ ਹੈ</string>
+    <string name="nimbus_notification_default_browser_title" tools:ignore="BrandUsage,UnusedResources">Firefox ਤੇਜ਼ ਅਤੇ ਪ੍ਰਾਈਵੇਟ ਹੈ</string>
     <!-- Text shown in the notification that pops up to remind the user to set fenix as default browser.
     The app name is in the text, due to limitations with localizing Nimbus experiments -->
     <string name="nimbus_notification_default_browser_text" tools:ignore="BrandUsage,UnusedResources">Firefox ਨੂੰ ਆਪਣਾ ਡਿਫਾਲਟ ਬਰਾਊਜ਼ਰ ਬਣਾਓ</string>
     <!-- Title shown in the notification that pops up to re-engage the user -->
-    <string name="notification_re_engagement_title">ਨਿੱਜੀ ਬਰਾਊਜ਼ ਕਰਨ ਨੂੰ ਅਜ਼ਮਾਓ</string>
+    <string name="notification_re_engagement_title">ਪ੍ਰਾਈਵੇਟ ਬਰਾਊਜ਼ ਕਰਨ ਨੂੰ ਅਜ਼ਮਾਓ</string>
     <!-- Text shown in the notification that pops up to re-engage the user.
     %1$s is a placeholder that will be replaced by the app name. -->
     <string name="notification_re_engagement_text">%1$s ਵਿੱਚ ਬਿਨਾਂ ਕਿਸੇ ਸੰਭਾਲੇ ਕੂਕੀ ਜਾਂ ਅਤੀਤ ਦੇ ਬਰਾਊਜ਼ ਕਰੋ</string>
@@ -1658,16 +1783,14 @@
     <string name="snackbar_tabs_closed">ਟੈਬਾਂ ਬੰਦ ਕੀਤੀਆਂ</string>
     <!-- Text shown in snackbar when user closes multiple inactive tabs. %1$s will be replaced with the number of tabs closed. -->
     <string name="snackbar_num_tabs_closed">ਟੈਬ ਬੰਦ ਕੀਤਾ: %1$s</string>
-    <!-- Text shown in snackbar when user bookmarks a list of tabs -->
-    <string name="snackbar_message_bookmarks_saved" moz:removedIn="132" tools:ignore="UnusedResources">ਬੁੱਕਮਾਰਕ ਸੰਭਾਲੇ ਗਏ!</string>
     <!-- Text shown in snackbar when user bookmarks a list of tabs. Parameter will be replaced by the name of the folder the bookmark was saved into.-->
     <string name="snackbar_message_bookmarks_saved_in">“%s” ਵਿੱਚ ਸੰਭਾਲੇ ਬੁੱਕਮਾਰਕ!</string>
     <!-- Text shown in snackbar when user adds a site to shortcuts -->
     <string name="snackbar_added_to_shortcuts">ਸ਼ਾਰਟਕੱਟਾਂ ਵਿੱਚ ਜੋੜਿਆ!</string>
     <!-- Text shown in snackbar when user closes a private tab -->
-    <string name="snackbar_private_tab_closed">ਨਿੱਜੀ ਟੈਬ ਬੰਦ ਕੀਤੀ</string>
+    <string name="snackbar_private_tab_closed">ਪ੍ਰਾਈਵੇਟ ਟੈਬ ਨੂੰ ਬੰਦ ਕੀਤਾ</string>
     <!-- Text shown in snackbar when user closes all private tabs -->
-    <string name="snackbar_private_tabs_closed">ਨਿੱਜੀ ਟੈਬਾਂ ਬੰਦ ਕੀਤੀਆਂ</string>
+    <string name="snackbar_private_tabs_closed">ਪ੍ਰਾਈਵੇਟ ਟੈਬਾਂ ਨੂੰ ਬੰਦ ਕੀਤਾ</string>
     <!-- Text shown in snackbar when user erases their private browsing data -->
     <string name="snackbar_private_data_deleted">ਪ੍ਰਾਈਵੇਟ ਬਰਾਊਜ਼ ਕਰਨ ਵਾਲਾ ਡਾਟਾ ਹਟਾਇਆ</string>
     <!-- Text shown in snackbar to undo deleting a tab, top site or collection -->
@@ -1856,7 +1979,7 @@
     <!-- Option for enhanced tracking protection for the custom protection settings for tracking content-->
     <string name="preference_enhanced_tracking_protection_custom_tracking_content_1">ਸਭ ਟੈਬਾਂ ਵਿੱਚ</string>
     <!-- Option for enhanced tracking protection for the custom protection settings for tracking content-->
-    <string name="preference_enhanced_tracking_protection_custom_tracking_content_2">ਸਿਰਫ਼ ਨਿੱਜੀ ਟੈਬ ਵਿੱਚ</string>
+    <string name="preference_enhanced_tracking_protection_custom_tracking_content_2">ਸਿਰਫ਼ ਪ੍ਰਾਈਵੇਟ ਟੈਬ ਵਿੱਚ</string>
     <!-- Preference for enhanced tracking protection for the custom protection settings -->
     <string name="preference_enhanced_tracking_protection_custom_cryptominers">ਕ੍ਰਿਪਟੋ-ਮਾਈਨਰ</string>
     <!-- Preference for enhanced tracking protection for the custom protection settings -->
@@ -2568,15 +2691,7 @@
     <string name="review_quality_check_contextual_onboarding_primary_button_text">ਹਾਂ, ਇਸ ਨੂੰ ਅਜ਼ਮਾਓ</string>
     <!-- Text for opt-out button from the review quality check contextual onboarding card. -->
     <string name="review_quality_check_contextual_onboarding_secondary_button_text">ਹੁਣੇ ਨਹੀਂ</string>
-    <!-- Text for the first CFR presenting the review quality check feature. -->
-    <string name="review_quality_check_first_cfr_message" moz:removedIn="132" tools:ignore="UnusedResources">ਪਤਾ ਕਰੋ ਕਿ ਜੇ ਤੁਸੀਂ ਇਸ ਉਤਪਾਦ ਦੇ ਰੀਵਿਊ ਉੱਤੇ ਭਰੋਸਾ ਕਰ ਸਕਦੇ ਹੋ — ਖਰੀਦਣ ਤੋਂ ਪਹਿਲਾਂ।</string>
-    <!-- Text displayed in the first CFR presenting the review quality check feature that opens the review checker when clicked. -->
-    <string name="review_quality_check_first_cfr_action" moz:removedIn="132" tools:ignore="UnusedResources">ਰੀਵਿਊ ਚੈਕਰ ਅਜ਼ਮਾਓ</string>
 
-    <!-- Text for the second CFR presenting the review quality check feature. -->
-    <string name="review_quality_check_second_cfr_message" moz:removedIn="132" tools:ignore="UnusedResources">ਕੀ ਇਹ ਰੀਵਿਊ ਭਰੋਸੇਯੋਗ ਹਨ? ਅਡਜੱਸਟ ਕੀਤੀ ਰੇਟਿੰਗ ਵੇਖਣ ਲਈ ਹੁਣੇ ਜਾਂਚ ਕਰੋ।</string>
-    <!-- Text displayed in the second CFR presenting the review quality check feature that opens the review checker when clicked. -->
-    <string name="review_quality_check_second_cfr_action" moz:removedIn="132" tools:ignore="UnusedResources">ਰੀਵਿਊ ਚੈਕਰ ਖੋਲ੍ਹੋ</string>
     <!-- Content description (not visible, for screen readers etc.) for opening browser menu button to open review quality check bottom sheet. -->
     <string name="review_quality_check_open_handle_content_description">ਰੀਵਿਊ ਚੈਕਰ ਖੋਲ੍ਹੋ</string>
     <!-- Content description (not visible, for screen readers etc.) for closing browser menu button to open review quality check bottom sheet. -->
@@ -2841,6 +2956,29 @@
     <!-- Button text on the data saving mode warning dialog used by the translations feature to allow users to cancel the action and not perform a download of the language file. -->
     <string name="download_language_file_dialog_negative_button_text">ਰੱਦ ਕਰੋ</string>
 
+    <!-- Unified Trust Panel -->
+    <!-- Title text for the protection panel banner when the site is not secure. -->
+    <string name="protection_panel_banner_not_secure_title">ਇਸ ਸਾਈਟ ਤੋਂ ਸਾਵਧਾਨ ਰਹੋ</string>
+
+    <!-- Description text for the protection panel banner when the site is not secure. -->
+    <string name="protection_panel_banner_not_secure_description">ਤੁਹਾਡਾ ਕਨੈਕਸ਼ਨ ਸੁਰੱਖਿਅਤ ਨਹੀਂ ਹੈ।</string>
+    <!-- Title text for the protection panel banner when tracking protection is disabled. -->
+    <string name="protection_panel_banner_not_protected_title">ਤੁਸੀਂ ਸੁਰੱਖਿਆਵਾਂ ਨੂੰ ਬੰਦ ਕੀਤਾ ਹੈ</string>
+    <!-- Description text for the protection panel banner when tracking protection is disabled.
+        The first parameter is the name of the app defined in app_name (for example: Fenix) -->
+    <string name="protection_panel_banner_not_protected_description">%s ਬੰਦ ਹੈ। ਅਸੀਂ ਸੁਰੱਖਿਆ ਨੂੰ ਵਾਪਸ ਚਾਲੂ ਕਰਨ ਦਾ ਸੁਝਾਅ ਦਿੰਦੇ ਹਾਂ।</string>
+    <!-- Title text for the protection panel banner when tracking protection is enabled.
+        The first parameter is the name of the app defined in app_name (for example: Fenix) -->
+    <string name="protection_panel_banner_protected_title">%s ਚੌਕਸੀ ਚਾਲੂ ਹੈ</string>
+    <!-- Description text for the protection panel banner when tracking protection is enabled. -->
+    <string name="protection_panel_banner_protected_description">ਤੁਸੀਂ ਸੁਰੱਖਿਅਤ ਹੋ। ਜੇ ਸਾਨੂੰ ਕੁਝ ਲੱਭਿਆ ਤਾਂ ਅਸੀਂ ਤੁਹਾਨੂੰ ਦੱਸਾਂਗੇ।</string>
+    <!-- Label text for the Enhanced Tracking Protection toggle. -->
+    <string name="protection_panel_etp_toggle_label">ਵਾਧਾ ਕੀਤੀ ਟਰੈਕਿੰਗ ਸੁਰੱਖਿਆ</string>
+    <!-- Description text for the Enhanced Tracking Protection toggle when tracking protection is enabled. -->
+    <string name="protection_panel_etp_toggle_enabled_description">ਜੇ ਇਸ ਸਾਈਟ ਉੱਤੇ ਕੁਝ ਕੰਮ ਨਹੀਂ ਕਰਦਾ ਹੈ ਤਾਂ ਕੁਝ ਸੁਰੱਖਿਆਵਾਂ ਨੂੰ ਬੰਦ ਕਰਕੇ ਕੋਸ਼ਿਸ਼ ਕਰੋ।</string>
+    <!-- Description text for the Enhanced Tracking Protection toggle when tracking protection is disabled. -->
+    <string name="protection_panel_etp_toggle_disabled_description">ਸੁਰੱਖਿਆਵਾਂ ਬੰਦ ਹਨ। ਅਸੀਂ ਉਹਨਾਂ ਨੂੰ ਚਾਲੂ ਕਰਨ ਦਾ ਸੁਝਾਅ ਦਿੰਦੇ ਹਾਂ।</string>
+
     <!-- Debug drawer -->
     <!-- The user-facing title of the Debug Drawer feature. -->
     <string name="debug_drawer_title">ਡੀਬੱਗ ਟੂਲ</string>
@@ -2860,7 +2998,7 @@
     <!-- The inactive tab count category in the tab count section in Tab Tools. -->
     <string name="debug_drawer_tab_tools_tab_count_inactive">ਨਾ-ਸਰਗਰਮ</string>
     <!-- The private tab count category in the tab count section in Tab Tools. -->
-    <string name="debug_drawer_tab_tools_tab_count_private">ਨਿੱਜੀ</string>
+    <string name="debug_drawer_tab_tools_tab_count_private">ਪ੍ਰਾਈਵੇਟ</string>
     <!-- The total tab count category in the tab count section in Tab Tools. -->
     <string name="debug_drawer_tab_tools_tab_count_total">ਕੁੱਲ</string>
     <!-- The title of the tab creation tool section in Tab Tools. -->
@@ -2954,6 +3092,12 @@
     <!-- Content description for delete button where parameter will be the username of the login -->
     <string name="debug_drawer_logins_delete_login_button_content_description">%s ਵਰਤੋਂਕਾਰ-ਨਾਂ ਨਾਲ ਲਾਗਇਨ ਨੂੰ ਹਟਾਓ</string>
 
+    <!-- Debug drawer addresses -->
+    <!-- The title of the Addresses feature in the Debug Drawer. -->
+    <string name="debug_drawer_addresses_title">ਸਿਰਨਾਵੇਂ</string>
+    <!-- The title of the section header for the list of debug locales that can be enabled and disabled. -->
+    <string name="debug_drawer_addresses_debug_locales_header">ਸਮਰੱਥ ਕਰਨ ਲਈ ਲੋਕੇਲ ਨੂੰ ਡੀਬੱਗ ਕਰੋ</string>
+
     <!-- Debug drawer "contextual feature recommendation" (CFR) tools -->
     <!-- The title of the CFR Tools feature in the Debug Drawer -->
     <string name="debug_drawer_cfr_tools_title">CFR ਟੂਲ</string>
@@ -2965,11 +3109,6 @@
     <string name="glean_debug_tools_title">ਗਲੇਨ ਡੀਬੱਗ ਟੂਲ</string>
 
     <!-- Messages explaining how to exit fullscreen mode -->
-    <!-- Message shown to explain how to exit fullscreen mode when gesture navigation is enabled -->
-    <string name="exit_fullscreen_with_gesture" moz:removedIn="132" tools:ignore="UnusedResources">ਪੂਰੀ ਸਕਰੀਨ ਤੋਂ ਬਾਹਰ ਆਉਣ ਲਈ, ਉੱਤੇ ਤੋਂ ਖਿੱਚੋ ਅਤੇ ਪਿੱਛੇ ਜਾਣ ਵਾਲੇ ਸੰਕੇਤ ਨੂੰ ਵਰਤੋਂ</string>
-    <!-- Message shown to explain how to exit fullscreen mode when using back button navigation -->
-    <string name="exit_fullscreen_with_back_button" moz:removedIn="132" tools:ignore="UnusedResources">ਪੂਰੀ ਸਕਰੀਨ ਤੋਂ ਬਾਹਰ ਆਉਣ ਲਈ, ਉੱਤੇ ਤੋਂ ਖਿੱਚੋ ਅਤੇ ਪਿੱਛੇ ਨੂੰ ਦਬਾਓ</string>
-
     <!-- Message shown to explain how to exit fullscreen mode when gesture navigation is enabled. -->
     <!-- Localisation note: this text should be as short as possible, max 68 chars -->
     <string name="exit_fullscreen_with_gesture_short">ਬਾਹਰ ਜਾਣ ਲਈ ਸਿਖਰ ਤੋਂ ਖਿੱਚ ਕੇ ਪਿੱਛੇ ਜਾਣ ਵਾਲੇ ਸੰਕੇਤ ਨੂੰ ਵਰਤੋਂ</string>
@@ -2980,4 +3119,35 @@
     <!-- Beta Label Component !-->
     <!-- Text shown as a label or tag to indicate a feature or area is still undergoing active development. Note that here "Beta" should not be translated, as it is used as an icon styled element. -->
     <string name="beta_feature">ਬੀਟਾ</string>
+
+    <!-- Root certificate expiration warnings -->
+    <!-- These strings for homepage cards and push notifications to be pushed to users running outdated versions of Firefox. We want to encourage these users to update to the latest version so their extensions and other features don't stop working when Firefox's old root certificate expires on 2025-03-14. For more information, see this SUMO article: https://support.mozilla.org/kb/root-certificate-expiration !-->
+    <!-- Homepage card button to open Google Play Store. "Update" is a verb. -->
+    <string name="certificate_warning_homepage_card_update_now_button" tools:ignore="UnusedResources">ਹੁਣੇ ਅੱਪਡੇਟ ਕਰੋ</string>
+    <!-- Homepage card title about old Firefox version. "Update" is a verb. Note: The word "Firefox" should NOT be translated. -->
+    <string name="certificate_warning_homepage_card_hca1_title" tools:ignore="BrandUsage,UnusedResources">ਆਪਣੇ Firefox ਬਰਾਊਜ਼ਰ ਨੂੰ ਅੱਪਡੇਟ ਕਰੋ</string>
+    <!-- Homepage card message about old Firefox version -->
+    <string name="certificate_warning_homepage_card_hca1_message" tools:ignore="UnusedResources">ਰੂਟ ਸਰਟੀਫਿਕੇਟ ਦੀ ਮਿਆਦ ਪੁੱਗ ਜਾਵੇਗੀ, ਜਿਸ ਨਾਲ 14 ਮਾਰਚ ਤੋਂ ਬਾਅਦ ਕੁਝ ਫ਼ੀਚਰ ਕੰਮ ਨਹੀਂ ਕਰਨਗੇ।</string>
+    <!-- Homepage card title about old Firefox version. "Update" is a verb. -->
+    <string name="certificate_warning_homepage_card_hcr1_title" tools:ignore="UnusedResources">14 ਮਾਚਰ ਤੋਂ ਪਹਿਲਾਂ ਅੱਪਡੇਟ</string>
+    <!-- Homepage card message about old Firefox version. Note: The word "Firefox" should NOT be translated. -->
+    <string name="certificate_warning_homepage_card_hcr1_message" tools:ignore="BrandUsage,UnusedResources">ਰੂਟ ਸਰਟੀਫਿਕੇਟ ਦੀ ਮਿਆਦ ਪੁੱਗ ਜਾਵੇਗੀ, ਜਿਸ ਨਾਲ Firefox ਦਾ ਤੁਹਾਡਾ ਵਰਜ਼ਨ ਠੀਕ ਤਰ੍ਹਾਂ ਕੰਮ ਨਹੀਂ ਕਰੇਗਾ।</string>
+    <!-- Homepage card title about old Firefox version -->
+    <string name="certificate_warning_homepage_card_hcw2_title" tools:ignore="UnusedResources">ਅੱਪਡੇਟ ਕਰਨ ਵਾਸਤੇ 7 ਤੋਂ ਘੱਟ ਦਿਨ ਬਚੇ ਹਨ</string>
+    <!-- Homepage card message about old Firefox version. Note: The word "Firefox" should NOT be translated. -->
+    <string name="certificate_warning_homepage_card_hcw2_message" tools:ignore="BrandUsage,UnusedResources">14 ਮਾਰਚ ਨੂੰ ਰੂਟ ਸਰਟੀਫਿਕੇਟ ਦੀ ਮਿਆਦ ਪੁੱਗਣ ਕਰਕੇ ਐਡ-ਆਨ ਅਤੇ ਹੋਰ Firefox ਫ਼ੀਚਰ ਕੰਮ ਕਰਨਾ ਬੰਦ ਕਰ ਦੇਣਗੇ।</string>
+    <!-- Homepage card title about old Firefox version. Note: The word "Firefox" should NOT be translated. -->
+    <string name="certificate_warning_homepage_card_hcw3_title" tools:ignore="BrandUsage,UnusedResources">ਆਪਣੇ Firefox ਨੂੰ ਰੱਖਣ ਦਾ ਆਖਰੀ ਮੌਕਾ</string>
+    <!-- Homepage card message about old Firefox version. Note: The word "Firefox" should NOT be translated. -->
+    <string name="certificate_warning_homepage_card_hcw3_message" tools:ignore="BrandUsage,UnusedResources">ਰੂਟ ਸਰਟੀਫਿਕੇਟ ਦੀ ਮਿਆਦ ਪੁੱਗਣ ਕਰਕੇ 14 ਮਾਰਚ ਨੂੰ Firefox ਦਾ ਤੁਹਾਡਾ ਵਰਜ਼ਨ ਕੰਮ ਕਰਨਾ ਬੰਦ ਕਰ ਦੇਵੇਗਾ।</string>
+    <!-- Push notification title about old Firefox version. "Update" is a noun. -->
+    <string name="certificate_warning_push_notification_update_recommended_title" tools:ignore="UnusedResources">ਅੱਪਡੇਟ ਕਰਨ ਦੀ ਸਿਫ਼ਾਰਸ਼ ਕੀਤੀ ਜਾਂਦੀ ਹੈ</string>
+    <!-- Push notification message about old Firefox version -->
+    <string name="certificate_warning_push_notification_pnr1_message" tools:ignore="UnusedResources">14 ਮਾਰਚ ਨੂੰ ਐਡ-ਆਨ ਅਤੇ ਹੋਰ ਫ਼ੀਚਰ ਕੰਮ ਕਰਨਾ ਬੰਦ ਕਰ ਦੇਣਗੇ।</string>
+    <!-- Push notification title about old Firefox version. Note: The word "Firefox" should NOT be translated. -->
+    <string name="certificate_warning_push_notification_pnw2_title" tools:ignore="BrandUsage,UnusedResources">ਤੁਸੀਂ Firefox ਦਾ ਪੁਰਾਣਾ ਵਰਜ਼ਨ ਵਰਤ ਰਹੇ ਹੋ</string>
+    <!-- Push notification message about old Firefox version. "Update" is a verb. -->
+    <string name="certificate_warning_push_notification_pnw2_message" tools:ignore="UnusedResources">ਐਡ-ਆਨ ਅਤੇ ਹੋਰ ਫ਼ੀਚਰਾਂ ਨੂੰ ਵਰਤਣਾ ਜਾਰੀ ਰੱਖਣ ਲਈ 14 ਮਾਰਚ ਤੋਂ ਪਹਿਲਾਂ ਅੱਪਡੇਟ ਕਰ ਲਵੋ</string>
+    <!-- Push notification message about old Firefox version -->
+    <string name="certificate_warning_push_notification_pnw3_message" tools:ignore="UnusedResources">ਭਲਕੇ ਕੁਝ ਫ਼ੀਚਰ ਕੰਮ ਕਰਨਾ ਬੰਦ ਕਰ ਦੇਣਗੇ।</string>
 </resources>

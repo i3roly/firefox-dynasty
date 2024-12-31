@@ -11,6 +11,9 @@
 #include "AppleATDecoder.h"
 #include "AppleVTDecoder.h"
 #include "AppleVDADecoder.h"
+#include "AppleVDALinker.h"
+#include "AppleCMLinker.h"
+#include "AppleVTLinker.h"
 
 #include "MP4Decoder.h"
 #include "VideoUtils.h"
@@ -39,11 +42,21 @@ bool AppleDecoderModule::sInitialized = false;
 bool AppleDecoderModule::sCanUseVP9Decoder = false;
 bool AppleDecoderModule::sCanUseAV1Decoder = false;
 
+bool AppleDecoderModule::sIsCoreMediaAvailable = false;
+bool AppleDecoderModule::sIsVTAvailable = false;
+bool AppleDecoderModule::sIsVDAAvailable = false;
+
 /* static */
 void AppleDecoderModule::Init() {
   if (sInitialized) {
     return;
   }
+
+
+  //10.7.3 - > 10.7 need these (thanks jya)
+  sIsCoreMediaAvailable = AppleCMLinker::Link();
+  sIsVDAAvailable = AppleVDALinker::Link();
+  sIsVTAvailable = AppleVTLinker::Link();
   sInitialized = true;
   if (RegisterSupplementalVP9Decoder()) {
     sCanUseVP9Decoder = CanCreateHWDecoder(MediaCodec::VP9);
@@ -64,10 +77,10 @@ already_AddRefed<MediaDataDecoder> AppleDecoderModule::CreateVideoDecoder(
           .isEmpty()) {
     return nullptr;
   }
-
+  
   RefPtr<MediaDataDecoder> decoder;
 
-  if(__builtin_available(macOS 10.8, *)) {
+  if(__builtin_available(macOS 10.7, *)) {
     if (IsVideoSupported(aParams.VideoConfig(), aParams.mOptions)) {
       decoder = new AppleVTDecoder(aParams.VideoConfig(), aParams.mImageContainer,
           aParams.mOptions, aParams.mKnowsCompositor,
@@ -270,10 +283,10 @@ bool AppleDecoderModule::CanCreateHWDecoder(MediaCodec aCodec) {
   }
     // VT reports HW decode is supported -- verify by creating an actual decoder
   if (vtReportsSupport) {
-    RefPtr<MediaDataDecoder> decoder;
+    RefPtr<MediaDataDecoder> decoder;//Dummy variable
     MediaResult rv;
     char *type;
-    if(__builtin_available(macOS 10.8, *)) {
+    if(__builtin_available(macOS 10.7, *)) {
       RefPtr<AppleVTDecoder> decoder =
           new AppleVTDecoder(info, nullptr, {}, nullptr, Nothing());
       rv = decoder->InitializeSession();

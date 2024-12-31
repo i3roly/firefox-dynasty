@@ -7,11 +7,11 @@
 newtab-page-title = New Tab
 newtab-settings-button =
     .title = Customize your New Tab page
-newtab-personalize-icon-label =
-    .title = Personalize new tab
-    .aria-label = Personalize new tab
-newtab-personalize-dialog-label =
-    .aria-label = Personalize
+newtab-personalize-settings-icon-label =
+    .title = Personalize New Tab
+    .aria-label = Settings
+newtab-settings-dialog-label =
+    .aria-label = Settings
 newtab-logo-and-wordmark =
     .aria-label = { -brand-full-name }
 
@@ -228,15 +228,6 @@ newtab-discovery-empty-section-topstories-loading = Loading…
 newtab-discovery-empty-section-topstories-timed-out = Oops! We almost loaded this section, but not quite.
 
 ## Pocket Content Section.
-
-# This is shown at the bottom of the trending stories section and precedes a list of links to popular topics.
-newtab-pocket-read-more = Popular Topics:
-newtab-pocket-new-topics-title = Want even more stories? See these popular topics from { -pocket-brand-name }
-newtab-pocket-more-recommendations = More Recommendations
-newtab-pocket-learn-more = Learn more
-newtab-pocket-cta-button = Get { -pocket-brand-name }
-newtab-pocket-cta-text = Save the stories you love in { -pocket-brand-name }, and fuel your mind with fascinating reads.
-newtab-pocket-pocket-firefox-family = { -pocket-brand-name } is part of the { -brand-product-name } family
 
 # A save to Pocket button that shows over the card thumbnail on hover.
 newtab-pocket-image =

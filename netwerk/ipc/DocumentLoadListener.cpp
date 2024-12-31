@@ -161,7 +161,7 @@ static auto CreateDocumentLoadInfo(CanonicalBrowsingContext* aBrowsingContext,
     loadInfo->SetHttpsOnlyStatus(httpsOnlyStatus);
   }
 
-  loadInfo->SetWasSchemelessInput(aLoadState->GetWasSchemelessInput());
+  loadInfo->SetSchemelessInput(aLoadState->GetSchemelessInput());
   loadInfo->SetHttpsUpgradeTelemetry(aLoadState->GetHttpsUpgradeTelemetry());
 
   loadInfo->SetTriggeringSandboxFlags(aLoadState->TriggeringSandboxFlags());
@@ -265,6 +265,14 @@ class ParentProcessDocumentOpenInfo final : public nsDocumentOpenInfo,
     if (mContentType.LowerCaseEqualsASCII(UNKNOWN_CONTENT_TYPE) ||
         mContentType.IsEmpty()) {
       return nsDocumentOpenInfo::TryStreamConversion(aChannel);
+    }
+
+    if (nsCOMPtr<nsILoadInfo> loadInfo = aChannel->LoadInfo();
+        loadInfo->GetSandboxFlags() &&
+        mContentType.LowerCaseEqualsLiteral(APPLICATION_PDF)) {
+      // Sandboxed iframes are just never allowed to display plugins. In the
+      // modern world, this just means "application/pdf".
+      return NS_ERROR_FAILURE;
     }
 
     nsresult rv;
@@ -2411,13 +2419,14 @@ bool DocumentLoadListener::MaybeHandleLoadErrorWithURIFixup(nsresult aStatus) {
   }
 
   nsCOMPtr<nsIInputStream> newPostData;
-  bool wasSchemelessInput = false;
+  nsILoadInfo::SchemelessInputType schemelessInput =
+      nsILoadInfo::SchemelessInputTypeUnset;
   nsCOMPtr<nsIURI> newURI = nsDocShell::AttemptURIFixup(
       mChannel, aStatus, mOriginalUriString, mLoadStateLoadType, bc->IsTop(),
       mLoadStateInternalLoadFlags &
           nsDocShell::INTERNAL_LOAD_FLAGS_ALLOW_THIRD_PARTY_FIXUP,
       bc->UsePrivateBrowsing(), true, getter_AddRefs(newPostData),
-      &wasSchemelessInput);
+      &schemelessInput);
 
   // Since aStatus will be NS_OK for 4xx and 5xx error codes we
   // have to check each request which was upgraded by https-first.
@@ -2451,7 +2460,7 @@ bool DocumentLoadListener::MaybeHandleLoadErrorWithURIFixup(nsresult aStatus) {
   loadState->SetPostDataStream(newPostData);
 
   // Record whether the protocol was added through a fixup.
-  loadState->SetWasSchemelessInput(wasSchemelessInput);
+  loadState->SetSchemelessInput(schemelessInput);
 
   if (isHTTPSFirstFixup) {
     nsHTTPSOnlyUtils::UpdateLoadStateAfterHTTPSFirstDowngrade(this, loadState);

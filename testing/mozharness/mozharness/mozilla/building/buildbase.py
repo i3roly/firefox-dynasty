@@ -325,6 +325,7 @@ class BuildOptionParser(object):
         "aarch64-beta-debug": path_base + "%s_aarch64_beta_debug.py",
         "aarch64-pgo": path_base + "%s_aarch64_pgo.py",
         "aarch64-debug": path_base + "%s_aarch64_debug.py",
+        "aarch64-fenix-debug": path_base + "%s_aarch64_fenix_debug.py",
         "aarch64-lite-debug": path_base + "%s_aarch64_debug_lite.py",
         "aarch64-debug-searchfox": path_base + "%s_aarch64_debug_searchfox.py",
         "aarch64-profile-generate": path_base + "%s_aarch64_profile_generate.py",
@@ -988,10 +989,9 @@ items from that key's value."
         if self.config.get("debug_build"):
             return False
 
-        # OS X opt builds without a variant are shipped.
-        if self.config.get("platform") == "macosx64":
-            if not self.config.get("build_variant"):
-                return True
+        # shippable builds set nightly_build
+        if self.query_is_nightly():
+            return True
 
         # Android opt builds without a variant are shipped.
         if self.config.get("platform") == "android":

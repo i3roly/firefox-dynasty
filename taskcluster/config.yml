@@ -7,7 +7,6 @@ project-repo-param-prefix: ''
 product-dir: 'browser'
 treeherder:
     group-names:
-        'cram': 'Cram tests'
         'js-bench-sm': 'JavaScript shell benchmarks with Spidermonkey'
         'js-bench-v8': 'JavaScript shell benchmarks with Google V8'
         'node': 'Node tests'
@@ -25,6 +24,7 @@ treeherder:
         'Btime-live-nofis-fenix': 'Browsertime tests on Fenix without fission enabled using live sites'
         'Btime-nofis-fenix': 'Browsertime tests on Fenix without fission enabled'
         'Btime-webext-nofis-fenix': 'Browsertime performance tests on Fenix with extensions and without fission enabled'
+        'Btime-webext-fenix': 'Browsertime performance tests on Fenix with extensions'
         'Btime-webext': 'Browsertime performance tests on Firefox with extensions'
         'Btime-live-nofis': 'Browsertime tests on Firefox without fission enabled using live sites'
         'Btime-nofis-refbrow': 'Browsertime tests on reference browser without fission enabled'
@@ -193,6 +193,7 @@ treeherder:
         'X-nofis-cf': 'Xpcshell tests confirm failure without fission enabled'
         'X-nofis-ship': 'Xpcshell tests without fission and with SHIP (session history in parent) enabled (Android specific)'
         'X-nofis-ship-cf': 'Xpcshell confirm failure: no fission + with SHIP (session history in parent) on (Android-only)'
+        'X-osint': 'Xpcshell tests tagged with the os-integration tag'
         'X-spi-nw': 'Xpcshell tests with networking on socket process'
         'X-spi-nw-cf': 'Xpcshell tests confirm failure with networking on socket process'
         'X-spi-nw-nofis': 'Xpcshell tests with networking on socket process without fission enabled'
@@ -240,6 +241,7 @@ treeherder:
         'Searchfox': 'Searchfox builds'
         'SM': 'Spidermonkey builds'
         'p': 'Partial generation'
+        'pz': 'Partial-zucchini generation'
         'ps': 'Partials signing'
         'ms': 'Complete MAR signing'
         'ms-stage': 'Autograph-stage MAR signing test'
@@ -274,7 +276,6 @@ treeherder:
         'perftest-http3': 'Performance tests with HTTP/3'
         'perftest-fenix': 'Performance tests using Fenix'
         'l10n': 'Localization checks'
-        'fxrec': 'Desktop startup recorder (fxrecord)'
         'wc': 'webcompat'
         'Boot': 'Bootstrap'
         'Attr-L10n': 'Build Attribution'
@@ -743,6 +744,11 @@ workers:
             implementation: generic-worker
             os: windows
             worker-type: '{alias}'
+        b-win-aarch64:
+            provisioner: '{trust-domain}-{level}'
+            implementation: generic-worker
+            os: windows
+            worker-type: 'win11-a64-24h2-builder'
         image:
             provisioner: '{trust-domain}-{level}'
             implementation: docker-worker
@@ -1003,6 +1009,11 @@ workers:
             os: windows
             worker-type: '{alias}'
         win11-64-2009(|-gpu|-ssd|-source|-ssd-gpu):
+            provisioner: 'gecko-t'
+            implementation: generic-worker
+            os: windows
+            worker-type: '{alias}'
+        win11-a64-24h2:
             provisioner: 'gecko-t'
             implementation: generic-worker
             os: windows

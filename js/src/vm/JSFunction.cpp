@@ -10,7 +10,7 @@
 
 #include "vm/JSFunction-inl.h"
 
-#include "mozilla/ArrayUtils.h"  // mozilla::ArrayLength
+#include "mozilla/ArrayUtils.h"
 #include "mozilla/Maybe.h"
 #include "mozilla/Range.h"
 
@@ -1652,7 +1652,7 @@ static SharedShape* GetFunctionShape(JSContext* cx, const JSClass* clasp,
 SharedShape* GlobalObject::createFunctionShapeWithDefaultProto(JSContext* cx,
                                                                bool extended) {
   GlobalObjectData& data = cx->global()->data();
-  HeapPtr<SharedShape*>& shapeRef =
+  GCPtr<SharedShape*>& shapeRef =
       extended ? data.extendedFunctionShapeWithDefaultProto
                : data.functionShapeWithDefaultProto;
   MOZ_ASSERT(!shapeRef);

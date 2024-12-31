@@ -494,10 +494,7 @@ void WebExtensionPolicy::SetAllowedOrigins(MatchPatternSet& aAllowedOrigins) {
 }
 
 void WebExtensionPolicy::InjectContentScripts(ErrorResult& aRv) {
-  nsresult rv = EPS().InjectContentScripts(this);
-  if (NS_FAILED(rv)) {
-    aRv.Throw(rv);
-  }
+  EPS().InjectContentScripts(this, aRv);
 }
 
 /* static */
@@ -703,11 +700,20 @@ WebExtensionContentScript::Constructor(GlobalObject& aGlobal,
   return script.forget();
 }
 
+void WebExtensionContentScript::GetWorldId(nsAString& aWorldId) const {
+  if (!mWorldId.IsNull()) {
+    aWorldId = mWorldId.Value();
+  } else {
+    SetDOMStringToNull(aWorldId);
+  }
+}
+
 MozDocumentMatcher::MozDocumentMatcher(GlobalObject& aGlobal,
                                        const dom::MozDocumentMatcherInit& aInit,
                                        bool aRestricted, ErrorResult& aRv)
     : mHasActiveTabPermission(aInit.mHasActiveTabPermission),
       mRestricted(aRestricted),
+      mIsUserScript(aInit.mIsUserScript),
       mAllFrames(aInit.mAllFrames),
       mCheckPermissions(aInit.mCheckPermissions),
       mFrameID(aInit.mFrameID),
@@ -764,7 +770,8 @@ WebExtensionContentScript::WebExtensionContentScript(
                          !aExtension.HasPermission(nsGkAtoms::mozillaAddons),
                          aRv),
       mRunAt(aInit.mRunAt),
-      mWorld(aInit.mWorld) {
+      mWorld(aInit.mWorld),
+      mWorldId(aInit.mWorldId) {
   mCssPaths.Assign(aInit.mCssPaths);
   mJsPaths.Assign(aInit.mJsPaths);
   mExtension = &aExtension;
@@ -773,6 +780,12 @@ WebExtensionContentScript::WebExtensionContentScript(
   if (mExtension->ManifestVersion() >= 3) {
     mCheckPermissions = true;
   }
+
+  // The USER_SCRIPT world is not supported for regular content scripts.
+  MOZ_ASSERT_IF(!mIsUserScript,
+                mWorld != ContentScriptExecutionWorld::USER_SCRIPT);
+  // User scripts should never run in privileged content script worlds.
+  MOZ_ASSERT_IF(mIsUserScript, mWorld != ContentScriptExecutionWorld::ISOLATED);
 }
 
 bool MozDocumentMatcher::Matches(const DocInfo& aDoc,
@@ -809,6 +822,12 @@ bool MozDocumentMatcher::Matches(const DocInfo& aDoc,
   }
 
   if (!mMatchAboutBlank && aDoc.URL().InheritsPrincipal()) {
+    return false;
+  }
+
+  if (mIsUserScript && mExtension &&
+      !mExtension->HasPermission(nsGkAtoms::userScripts)) {
+    // The "userScripts" permission can be revoked after script registration.
     return false;
   }
 
@@ -875,15 +894,31 @@ bool MozDocumentMatcher::MatchesURI(const URLInfo& aURL,
                                     bool aIgnorePermissions) const {
   MOZ_ASSERT((!mRestricted && !mCheckPermissions) || mExtension);
 
-  if (!mMatches->Matches(aURL)) {
-    return false;
+  if (MOZ_LIKELY(!mIsUserScript)) {
+    // mMatches must always match for normal content scripts.
+    if (!mMatches->Matches(aURL)) {
+      return false;
+    }
+    // mIncludeGlobs is optional, but if specified must match.
+    if (!mIncludeGlobs.IsNull() &&
+        !mIncludeGlobs.Value().Matches(aURL.CSpec())) {
+      return false;
+    }
+  } else {
+    // Unlike normal content scripts that match by (mMatches AND mIncludeGlobs),
+    // user scripts accept if there is any match: (mMatches OR mIncludeGlobs).
+    // This implies that mMatches does not have to be specified.
+    // mMatches is not a Nullable because we want it to be specified for content
+    // scripts (which is by far the most common case). An empty MatchPatternSet
+    // is equivalent to an unspecified (non-matching) mMatches.
+    if (!mMatches->Matches(aURL) &&
+        (mIncludeGlobs.IsNull() ||
+         !mIncludeGlobs.Value().Matches(aURL.CSpec()))) {
+      return false;
+    }
   }
 
   if (mExcludeMatches && mExcludeMatches->Matches(aURL)) {
-    return false;
-  }
-
-  if (!mIncludeGlobs.IsNull() && !mIncludeGlobs.Value().Matches(aURL.CSpec())) {
     return false;
   }
 

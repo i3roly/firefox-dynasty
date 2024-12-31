@@ -28,6 +28,7 @@
 #include "mozilla/dom/WheelEventBinding.h"
 #include "mozilla/dom/WindowGlobalChild.h"
 #include "mozilla/EventStateManager.h"
+#include "mozilla/ImageInputTelemetry.h"
 #include "mozilla/Maybe.h"
 #include "mozilla/MouseEvents.h"
 #include "mozilla/PresShell.h"
@@ -178,7 +179,7 @@ static const nsAttrValue::EnumTable kInputTypeTable[] = {
 
 // Default type is 'text'.
 static const nsAttrValue::EnumTable* kInputDefaultType =
-    &kInputTypeTable[ArrayLength(kInputTypeTable) - 2];
+    &kInputTypeTable[std::size(kInputTypeTable) - 2];
 
 static const nsAttrValue::EnumTable kCaptureTable[] = {
     {"user", nsIFilePicker::captureUser},
@@ -488,6 +489,8 @@ HTMLInputElement::nsFilePickerShownCallback::Done(
 
       OwningFileOrDirectory* element = newFilesOrDirectories.AppendElement();
       element->SetAsFile() = domBlob->ToFile();
+
+      ImageInputTelemetry::MaybeRecordFilePickerImageInputTelemetry(domBlob);
     }
   } else {
     MOZ_ASSERT(mode == nsIFilePicker::modeOpen ||
@@ -537,6 +540,8 @@ HTMLInputElement::nsFilePickerShownCallback::Done(
 
       OwningFileOrDirectory* element = newFilesOrDirectories.AppendElement();
       element->SetAsFile() = file;
+
+      ImageInputTelemetry::MaybeRecordFilePickerImageInputTelemetry(blob);
     } else if (tmp) {
       RefPtr<Directory> directory = static_cast<Directory*>(tmp.get());
       OwningFileOrDirectory* element = newFilesOrDirectories.AppendElement();
@@ -5418,12 +5423,12 @@ bool HTMLInputElement::ParseAttribute(int32_t aNamespaceID, nsAtom* aAttribute,
       FormControlType(kInputDefaultType->value) == FormControlType::InputText,
       "Someone forgot to update kInputDefaultType when adding a new "
       "input type.");
-  MOZ_ASSERT(kInputTypeTable[ArrayLength(kInputTypeTable) - 1].tag == nullptr,
+  MOZ_ASSERT(kInputTypeTable[std::size(kInputTypeTable) - 1].tag == nullptr,
              "Last entry in the table must be the nullptr guard");
-  MOZ_ASSERT(FormControlType(
-                 kInputTypeTable[ArrayLength(kInputTypeTable) - 2].value) ==
-                 FormControlType::InputText,
-             "Next to last entry in the table must be the \"text\" entry");
+  MOZ_ASSERT(
+      FormControlType(kInputTypeTable[std::size(kInputTypeTable) - 2].value) ==
+          FormControlType::InputText,
+      "Next to last entry in the table must be the \"text\" entry");
 
   if (aNamespaceID == kNameSpaceID_None) {
     if (aAttribute == nsGkAtoms::type) {

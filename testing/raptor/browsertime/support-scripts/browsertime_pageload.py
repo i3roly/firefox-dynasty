@@ -35,7 +35,7 @@ def _get_raptor_val(mdict, mname, retval=False):
     # mdict: a dictionary to look through to find the mname
     #        value.
 
-    if type(mname) != list:
+    if type(mname) is not list:
         if mname in mdict:
             return mdict[mname]
         return retval
@@ -116,14 +116,6 @@ class PageloadSupport(BasePythonSupport):
             bt_result["statistics"][bt] = _get_raptor_val(
                 raw_result["statistics"]["timings"], raptor, retval={}
             )
-
-        # Bug 1806402 - Handle chrome cpu data properly
-        cpu_vals = raw_result.get("cpu", None)
-        if (
-            cpu_vals
-            and self.app not in NON_FIREFOX_BROWSERS + NON_FIREFOX_BROWSERS_MOBILE
-        ):
-            bt_result["measurements"].setdefault("cpuTime", []).extend(cpu_vals)
 
         if self.perfstats:
             for cycle in raw_result["geckoPerfStats"]:
@@ -225,6 +217,19 @@ class PageloadSupport(BasePythonSupport):
                     new_subtest["replicates"]
                 )
 
+        # Handle chimeras here, by default the add_additional_metrics
+        # parses for all the results together regardless of cold/warm
+        cycle_type = "browser-cycle"
+        if "warm" in suite["extraOptions"]:
+            cycle_type = "page-cycle"
+
+        self.add_additional_metrics(test, suite, cycle_type=cycle_type)
+
+        # Don't alert on cpuTime metrics
+        for measurement_name, measurement_info in suite["subtests"].items():
+            if "cputime" in measurement_name.lower():
+                measurement_info["shouldAlert"] = False
+
     def summarize_suites(self, suites):
         def _process_geomean(subtest):
             data = subtest["replicates"]
@@ -259,9 +264,9 @@ class PageloadSupport(BasePythonSupport):
                     try:
                         for alternative_method in self.extra_summary_methods:
                             new_subtest = copy.deepcopy(subtest)
-                            new_subtest[
-                                "name"
-                            ] = f"{new_subtest['name']} ({alternative_method})"
+                            new_subtest["name"] = (
+                                f"{new_subtest['name']} ({alternative_method})"
+                            )
                             _process(new_subtest, alternative_method)
                             new_subtests.append(new_subtest)
                     except Exception as e:

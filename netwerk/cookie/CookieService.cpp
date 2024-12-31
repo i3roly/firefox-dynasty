@@ -486,7 +486,11 @@ CookieService::SetCookieStringFromHttp(nsIURI* aHostURI,
       aCookieHeader, priorCookieCount, storagePrincipalOriginAttributes,
       &rejectedReason);
 
-  MOZ_ASSERT_IF(rejectedReason, cookieStatus == STATUS_REJECTED);
+  MOZ_ASSERT_IF(
+      rejectedReason &&
+          rejectedReason !=
+              nsIWebProgressListener::STATE_COOKIES_PARTITIONED_TRACKER,
+      cookieStatus == STATUS_REJECTED);
 
   // fire a notification if third party or if cookie was rejected
   // (but not if there was an error)
@@ -502,6 +506,14 @@ CookieService::SetCookieStringFromHttp(nsIURI* aHostURI,
     case STATUS_ACCEPTED:  // Fallthrough
     case STATUS_ACCEPT_SESSION:
       NotifyAccepted(aChannel);
+
+      // Notify the content blocking event if tracker cookies are partitioned.
+      if (rejectedReason ==
+          nsIWebProgressListener::STATE_COOKIES_PARTITIONED_TRACKER) {
+        ContentBlockingNotifier::OnDecision(
+            aChannel, ContentBlockingNotifier::BlockingDecision::eBlock,
+            rejectedReason);
+      }
       break;
     default:
       break;
@@ -696,7 +708,7 @@ CookieService::Add(const nsACString& aHost, const nsACString& aPath,
                    bool aIsSecure, bool aIsHttpOnly, bool aIsSession,
                    int64_t aExpiry, JS::Handle<JS::Value> aOriginAttributes,
                    int32_t aSameSite, nsICookie::schemeType aSchemeMap,
-                   JSContext* aCx) {
+                   bool aIsPartitioned, JSContext* aCx) {
   OriginAttributes attrs;
 
   if (!aOriginAttributes.isObject() || !attrs.Init(aCx, aOriginAttributes)) {
@@ -704,8 +716,8 @@ CookieService::Add(const nsACString& aHost, const nsACString& aPath,
   }
 
   return AddNative(aHost, aPath, aName, aValue, aIsSecure, aIsHttpOnly,
-                   aIsSession, aExpiry, &attrs, aSameSite, aSchemeMap, false,
-                   nullptr);
+                   aIsSession, aExpiry, &attrs, aSameSite, aSchemeMap,
+                   aIsPartitioned, nullptr);
 }
 
 NS_IMETHODIMP_(nsresult)
@@ -881,7 +893,11 @@ void CookieService::GetCookiesForURI(
         aStorageAccessPermissionGranted, VoidCString(), priorCookieCount, attrs,
         &rejectedReason);
 
-    MOZ_ASSERT_IF(rejectedReason, cookieStatus == STATUS_REJECTED);
+    MOZ_ASSERT_IF(
+        rejectedReason &&
+            rejectedReason !=
+                nsIWebProgressListener::STATE_COOKIES_PARTITIONED_TRACKER,
+        cookieStatus == STATUS_REJECTED);
 
     // for GetCookie(), we only fire acceptance/rejection notifications
     // (but not if there was an error)
@@ -1100,11 +1116,21 @@ CookieStatus CookieService::CheckPrefs(
   if (aIsForeign && aIsThirdPartyTrackingResource &&
       !aStorageAccessPermissionGranted &&
       aCookieJarSettings->GetRejectThirdPartyContexts()) {
+    // Set the reject reason to partitioned tracker if we are not blocking
+    // tracker cookie.
     uint32_t rejectReason =
-        nsIWebProgressListener::STATE_COOKIES_BLOCKED_TRACKER;
+        aCookieJarSettings->GetPartitionForeign() &&
+                !StaticPrefs::
+                    network_cookie_cookieBehavior_trackerCookieBlocking()
+            ? nsIWebProgressListener::STATE_COOKIES_PARTITIONED_FOREIGN
+            : nsIWebProgressListener::STATE_COOKIES_BLOCKED_TRACKER;
     if (StoragePartitioningEnabled(rejectReason, aCookieJarSettings)) {
       MOZ_ASSERT(!aOriginAttrs.mPartitionKey.IsEmpty(),
                  "We must have a StoragePrincipal here!");
+      // Set the reject reason to partitioned tracker if the resource to reflect
+      // that we are partitioning tracker cookies.
+      *aRejectedReason =
+          nsIWebProgressListener::STATE_COOKIES_PARTITIONED_TRACKER;
       return STATUS_ACCEPTED;
     }
 

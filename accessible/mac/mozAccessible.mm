@@ -411,7 +411,7 @@ struct RoleDescrMap {
   const nsString description;
 };
 
-static const RoleDescrMap sRoleDescrMap[] = {
+MOZ_RUNINIT static const RoleDescrMap sRoleDescrMap[] = {
     {@"AXApplicationAlert", u"alert"_ns},
     {@"AXApplicationAlertDialog", u"alertDialog"_ns},
     {@"AXApplicationDialog", u"dialog"_ns},
@@ -468,7 +468,7 @@ struct RoleDescrComparator {
 
   if (subrole) {
     size_t idx = 0;
-    if (BinarySearchIf(sRoleDescrMap, 0, ArrayLength(sRoleDescrMap),
+    if (BinarySearchIf(sRoleDescrMap, 0, std::size(sRoleDescrMap),
                        RoleDescrComparator(subrole), &idx)) {
       return utils::LocalizedString(sRoleDescrMap[idx].description);
     }

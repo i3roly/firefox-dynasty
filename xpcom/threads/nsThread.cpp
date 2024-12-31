@@ -1078,6 +1078,10 @@ nsThread::ProcessNextEvent(bool aMayWait, bool* aResult) {
     DoMainThreadSpecificProcessing();
   }
 
+#ifdef DEBUG
+  BlockingResourceBase::AssertSafeToProcessEventLoop();
+#endif
+
   ++mNestedEventLoopDepth;
 
   // We only want to create an AutoNoJSAPI on threads that actually do DOM

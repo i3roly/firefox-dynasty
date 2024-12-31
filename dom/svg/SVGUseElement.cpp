@@ -562,7 +562,7 @@ void SVGUseElement::LookupHref() {
 
   Element* treeToWatch = mOriginal ? mOriginal.get() : this;
   if (nsContentUtils::IsLocalRefURL(href)) {
-    mReferencedElementTracker.ResetWithLocalRef(*treeToWatch, href);
+    mReferencedElementTracker.ResetToLocalFragmentID(*treeToWatch, href);
     return;
   }
 
@@ -583,8 +583,8 @@ void SVGUseElement::LookupHref() {
 
   nsIReferrerInfo* referrer =
       OwnerDoc()->ReferrerInfoForInternalCSSAndSVGResources();
-  mReferencedElementTracker.ResetToURIFragmentID(treeToWatch, targetURI,
-                                                 referrer);
+  mReferencedElementTracker.ResetToURIWithFragmentID(treeToWatch, targetURI,
+                                                     referrer);
 }
 
 void SVGUseElement::TriggerReclone() {
@@ -626,12 +626,12 @@ bool SVGUseElement::HasValidDimensions() const {
 
 SVGElement::LengthAttributesInfo SVGUseElement::GetLengthInfo() {
   return LengthAttributesInfo(mLengthAttributes, sLengthInfo,
-                              ArrayLength(sLengthInfo));
+                              std::size(sLengthInfo));
 }
 
 SVGElement::StringAttributesInfo SVGUseElement::GetStringInfo() {
   return StringAttributesInfo(mStringAttributes, sStringInfo,
-                              ArrayLength(sStringInfo));
+                              std::size(sStringInfo));
 }
 
 SVGUseFrame* SVGUseElement::GetFrame() const {

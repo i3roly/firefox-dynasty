@@ -126,7 +126,6 @@ class SyncedTabsInSidebar extends SidebarPage {
    * @param {string[]} options.descriptionArray
    * @param {string} options.descriptionLink
    * @param {string} options.header
-   * @param {string} options.headerIconUrl
    * @param {string} options.mainImageUrl
    * @returns {TemplateResult}
    */
@@ -136,7 +135,6 @@ class SyncedTabsInSidebar extends SidebarPage {
     descriptionArray,
     descriptionLink,
     header,
-    headerIconUrl,
     mainImageUrl,
   }) {
     return html`
@@ -147,7 +145,6 @@ class SyncedTabsInSidebar extends SidebarPage {
         class="empty-state synced-tabs error"
         isSelectedTab
         mainImageUrl="${ifDefined(mainImageUrl)}"
-        headerIconUrl="${ifDefined(headerIconUrl)}"
         id="empty-container"
       >
         <moz-button
@@ -180,6 +177,7 @@ class SyncedTabsInSidebar extends SidebarPage {
     >
       <sidebar-tab-list
         compactRows
+        maxTabsLength="-1"
         .tabItems=${tabItems}
         .updatesPaused=${false}
         .searchQuery=${this.controller.searchQuery}
@@ -305,7 +303,7 @@ class SyncedTabsInSidebar extends SidebarPage {
         >
         </sidebar-panel-header>
         <fxview-search-textbox
-          data-l10n-id="firefoxview-search-text-box-syncedtabs"
+          data-l10n-id="firefoxview-search-text-box-tabs"
           data-l10n-attrs="placeholder"
           @fxview-search-textbox-query=${this.onSearchQuery}
           size="15"

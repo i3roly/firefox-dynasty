@@ -402,6 +402,9 @@ pref("browser.urlbar.autoFill.adaptiveHistory.enabled", false);
 // autofill.
 pref("browser.urlbar.autoFill.adaptiveHistory.minCharsThreshold", 0);
 
+// Set default suggest intent threshold value of 0.5
+pref("browser.urlbar.intentThreshold", "0.5");
+
 // Set default NER threshold value of 0.5
 pref("browser.urlbar.nerThreshold", "0.5");
 
@@ -415,7 +418,7 @@ pref("browser.urlbar.filter.javascript", true);
 
 // Focus the content document when pressing the Escape key, if there's no
 // remaining typed history.
-pref("browser.urlbar.focusContentDocumentOnEsc", false);
+pref("browser.urlbar.focusContentDocumentOnEsc", true);
 
 // Enable a certain level of urlbar logging to the Browser Console. See
 // ConsoleInstance.webidl.
@@ -444,7 +447,11 @@ pref("browser.urlbar.suggest.quickactions",         true);
 pref("browser.urlbar.deduplication.enabled", false);
 pref("browser.urlbar.deduplication.thresholdDays", 7);
 
+#ifdef NIGHTLY_BUILD
+pref("browser.urlbar.scotchBonnet.enableOverride", true);
+#else
 pref("browser.urlbar.scotchBonnet.enableOverride", false);
+#endif
 
 // Enable trending suggestions and recent searches.
 pref("browser.urlbar.trending.featureGate", true);
@@ -456,7 +463,11 @@ pref("browser.urlbar.richSuggestions.featureGate", true);
 pref("browser.search.param.search_rich_suggestions", "fen");
 
 // Feature gate pref for weather suggestions in the urlbar.
+#ifdef NIGHTLY_BUILD
+pref("browser.urlbar.weather.featureGate", true);
+#else
 pref("browser.urlbar.weather.featureGate", false);
+#endif
 
 // Enable clipboard suggestions feature, the pref should be removed once stable.
 pref("browser.urlbar.clipboard.featureGate", false);
@@ -963,6 +974,11 @@ pref("browser.tabs.insertRelatedAfterCurrent", true);
 // for non-related links. Note that if this is set to true, it will trump
 // the value of browser.tabs.insertRelatedAfterCurrent.
 pref("browser.tabs.insertAfterCurrent", false);
+// When |insertRelatedAfterCurrent| is true opening a link from a pinned tab
+// results in the tabbar scrolling back to the beginning. Setting
+// |insertAfterCurrentExceptPinned| to true will add tabs at the end of the
+// tabbar.
+pref("browser.tabs.insertAfterCurrentExceptPinned", false);
 pref("browser.tabs.warnOnClose", false);
 pref("browser.tabs.warnOnCloseOtherTabs", true);
 pref("browser.tabs.warnOnOpen", true);
@@ -1015,6 +1031,7 @@ pref("browser.tabs.hoverPreview.showThumbnails", true);
 
 pref("browser.tabs.groups.enabled", false);
 pref("browser.tabs.groups.dragOverThresholdPercent", 20);
+pref("browser.tabs.groups.dragOverDelayMS", 30);
 
 pref("browser.tabs.firefox-view.logLevel", "Warn");
 
@@ -1493,11 +1510,7 @@ pref("browser.bookmarks.editDialog.maxRecentFolders", 7);
   // On windows these levels are:
   // See - security/sandbox/win/src/sandboxbroker/sandboxBroker.cpp
   // SetSecurityLevelForContentProcess() for what the different settings mean.
-  #if defined(EARLY_BETA_OR_EARLIER)
-    pref("security.sandbox.content.level", 8);
-  #else
-    pref("security.sandbox.content.level", 7);
-  #endif
+  pref("security.sandbox.content.level", 7);
 
   // Pref controlling if messages relevant to sandbox violations are logged.
   pref("security.sandbox.logging.enabled", false);
@@ -1888,15 +1901,9 @@ pref("browser.newtabpage.activity-stream.discoverystream.region-stories-config",
 pref("browser.newtabpage.activity-stream.discoverystream.region-bff-config", "US,DE,CA,GB,IE,CH,AT,BE,IN,FR,IT,ES");
 pref("browser.newtabpage.activity-stream.discoverystream.merino-provider.enabled", true);
 
-// Merino & topic selection related prefs in nightly only
-#if defined(EARLY_BETA_OR_EARLIER)
-  // List of regions that get topics selection by default.
-  pref("browser.newtabpage.activity-stream.discoverystream.topicSelection.region-topics-config", "US, CA");
-  pref("browser.newtabpage.activity-stream.discoverystream.topicSelection.onboarding.enabled", true);
-#else
-  pref("browser.newtabpage.activity-stream.discoverystream.topicSelection.region-topics-config", "");
-  pref("browser.newtabpage.activity-stream.discoverystream.topicSelection.onboarding.enabled", false);
-#endif
+// List of regions that get topics selection by default.
+pref("browser.newtabpage.activity-stream.discoverystream.topicSelection.region-topics-config", "");
+pref("browser.newtabpage.activity-stream.discoverystream.topicSelection.onboarding.enabled", false);
 
 // List of locales that get topics selection by default.
 pref("browser.newtabpage.activity-stream.discoverystream.topicLabels.region-topic-label-config", "US, CA");
@@ -1907,6 +1914,12 @@ pref("browser.newtabpage.activity-stream.discoverystream.topicLabels.locale-topi
 pref("browser.newtabpage.activity-stream.discoverystream.contextualContent.locale-content-config", "en-US,en-GB,en-CA,de");
 // List of regions that get contextual content by default- TODO: update once development is closer to being finished
 pref("browser.newtabpage.activity-stream.discoverystream.contextualContent.region-content-config", "");
+
+// List of locales that get section layout by default
+pref("browser.newtabpage.activity-stream.discoverystream.sections.locale-content-config", "en-US,en-CA");
+// List of regions that get section layout by default
+pref("browser.newtabpage.activity-stream.discoverystream.sections.region-content-config", "");
+
 
 pref("browser.newtabpage.activity-stream.discoverystream.merino-provider.endpoint", "merino.services.mozilla.com");
 // List of regions that get spocs by default.
@@ -2055,10 +2068,10 @@ pref("identity.fxaccounts.enabled", true);
 pref("identity.fxaccounts.remote.root", "https://accounts.firefox.com/");
 
 // The value of the context query parameter passed in fxa requests.
-pref("identity.fxaccounts.contextParam", "fx_desktop_v3");
+pref("identity.fxaccounts.contextParam", "oauth_webchannel_v1");
 
 // Whether to use the oauth flow for desktop or not
-pref("identity.fxaccounts.oauth.enabled", false);
+pref("identity.fxaccounts.oauth.enabled", true);
 
 // The remote URL of the FxA Profile Server
 pref("identity.fxaccounts.remote.profile.uri", "https://profile.accounts.firefox.com/v1");
@@ -2403,6 +2416,13 @@ pref("privacy.webrtc.showIndicatorsOnMacos14AndAbove", true);
 // Enable Fingerprinting Protection in private windows..
 pref("privacy.fingerprintingProtection.pbmode", true);
 
+// Enable Smartblock embed placeholders
+#ifdef NIGHTLY_BUILD
+  pref("extensions.webcompat.smartblockEmbeds.enabled", true);
+#else
+  pref("extensions.webcompat.smartblockEmbeds.enabled", false);
+#endif
+
 // Enable including the content in the window title.
 // PBM users might want to disable this to avoid a possible source of disk
 // leaks.
@@ -2429,6 +2449,13 @@ pref("browser.tabs.remote.warmup.unloadDelayMs", 2000);
 // For the about:tabcrashed page
 pref("browser.tabs.crashReporting.sendReport", true);
 pref("browser.tabs.crashReporting.includeURL", false);
+
+// Enables the "Unload Tab" context menu item
+#ifdef NIGHTLY_BUILD
+pref("browser.tabs.unloadTabInContextMenu", true);
+#else
+pref("browser.tabs.unloadTabInContextMenu", false);
+#endif
 
 // If true, unprivileged extensions may use experimental APIs on
 // nightly and developer edition.
@@ -2681,6 +2708,10 @@ pref("identity.fxaccounts.toolbar.pxiToolbarEnabled", true);
 pref("identity.fxaccounts.toolbar.pxiToolbarEnabled.monitorEnabled", true);
 pref("identity.fxaccounts.toolbar.pxiToolbarEnabled.relayEnabled", true);
 pref("identity.fxaccounts.toolbar.pxiToolbarEnabled.vpnEnabled", true);
+
+// Prefs to control Mozilla account panels that shows an updated flow
+// for users who don't have sync enabled
+pref("identity.fxaccounts.toolbar.syncSetup.enabled", false);
 
 // Toolbox preferences
 pref("devtools.toolbox.footer.height", 250);

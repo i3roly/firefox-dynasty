@@ -100,6 +100,11 @@ class WebPlatformTestsRunnerSetup(MozbuildObject):
         if kwargs["stackfix_dir"] is None:
             kwargs["stackfix_dir"] = self.bindir
 
+        kwargs["gmp_path"] = os.pathsep.join(
+            os.path.join(self.distdir, "bin", p, "1.0")
+            for p in ("gmp-fake", "gmp-fakeopenh264")
+        )
+
         kwargs = wptcommandline.check_args(kwargs)
 
         return kwargs
@@ -384,25 +389,6 @@ class WebPlatformTestsTestPathsRunner(MozbuildObject):
         return True
 
 
-class WebPlatformTestsFissionRegressionsRunner(MozbuildObject):
-    def run(self, **kwargs):
-        import fissionregressions
-        import mozlog
-
-        src_root = self.topsrcdir
-        obj_root = self.topobjdir
-        logger = mozlog.structuredlog.StructuredLogger("web-platform-tests")
-
-        try:
-            return fissionregressions.run(logger, src_root, obj_root, **kwargs)
-        except Exception:
-            import pdb
-            import traceback
-
-            traceback.print_exc()
-            pdb.post_mortem()
-
-
 def create_parser_update():
     from update import updatecommandline
 
@@ -440,12 +426,6 @@ def create_parser_unittest():
     import unittestrunner
 
     return unittestrunner.get_parser()
-
-
-def create_parser_fission_regressions():
-    import fissionregressions
-
-    return fissionregressions.get_parser()
 
 
 def create_parser_fetch_logs():
@@ -667,19 +647,6 @@ def wpt_unittest(command_context, **params):
 )
 def wpt_test_paths(command_context, **params):
     runner = command_context._spawn(WebPlatformTestsTestPathsRunner)
-    runner.run(**params)
-    return 0
-
-
-@Command(
-    "wpt-fission-regressions",
-    category="testing",
-    description="Dump a list of fission-specific regressions",
-    parser=create_parser_fission_regressions,
-    virtualenv_name="wpt",
-)
-def wpt_fission_regressions(command_context, **params):
-    runner = command_context._spawn(WebPlatformTestsFissionRegressionsRunner)
     runner.run(**params)
     return 0
 

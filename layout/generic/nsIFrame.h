@@ -449,6 +449,11 @@ struct MOZ_STACK_CLASS IntrinsicSizeInput final {
   // to NS_UNCONSTRAINEDSIZE.
   Maybe<LogicalSize> mPercentageBasisForChildren;
 
+  bool HasSomePercentageBasisForChildren() const {
+    return mPercentageBasisForChildren &&
+           !mPercentageBasisForChildren->IsAllValues(NS_UNCONSTRAINEDSIZE);
+  }
+
   IntrinsicSizeInput(gfxContext* aContext,
                      const Maybe<LogicalSize>& aContainingBlockSize,
                      const Maybe<LogicalSize>& aPercentageBasisForChildren)
@@ -767,9 +772,6 @@ class nsIFrame : public nsQueryFrame {
    *
    * If the frame is a continuing frame, then aPrevInFlow indicates the previous
    * frame (the frame that was split).
-   *
-   * Each subclass that need a view should override this method and call
-   * CreateView() after calling its base class Init().
    *
    * @param   aContent the content object associated with the frame
    * @param   aParent the parent frame
@@ -1793,6 +1795,17 @@ class nsIFrame : public nsQueryFrame {
     return GetLogicalBaseline(GetWritingMode());
   }
 
+  // Gets a caret baseline suitable for the frame if the frame doesn't have one.
+  //
+  // @param aBSize the content box block size of the line container. Needed to
+  // resolve line-height: -moz-block-height. NS_UNCONSTRAINEDSIZE is fine
+  // otherwise.
+  //
+  // TODO(emilio): Now we support align-content on blocks it seems we could
+  // get rid of line-height: -moz-block-height.
+  nscoord GetFontMetricsDerivedCaretBaseline(
+      nscoord aBSize = NS_UNCONSTRAINEDSIZE) const;
+
   /**
    * Subclasses can call this method to enable visibility tracking for this
    * frame.
@@ -2608,6 +2621,11 @@ class nsIFrame : public nsQueryFrame {
   virtual nsIFrame* LastInFlow() const { return const_cast<nsIFrame*>(this); }
 
   /**
+   * Useful for line participants. Find the line container frame for this line.
+   */
+  nsIFrame* FindLineContainer() const;
+
+  /**
    * Mark any stored intrinsic inline size information as dirty (requiring
    * re-calculation).  Note that this should generally not be called
    * directly; PresShell::FrameNeedsReflow() will call it instead.
@@ -2959,6 +2977,28 @@ class nsIFrame : public nsQueryFrame {
       mozilla::ComputeSizeFlags aFlags);
 
   /**
+   * A helper used by |nsIFrame::ComputeAutoSize|, computing auto sizes of
+   * frames that are absolutely positioned. Any class that overrides
+   * `ComputeAutoSize` may use this function to maintain the standard absolute
+   * size computation specified in [1].
+   *
+   * [1]: https://drafts.csswg.org/css-position-3/#abspos-auto-size
+   */
+  mozilla::LogicalSize ComputeAbsolutePosAutoSize(
+      gfxContext* aRenderingContext, mozilla::WritingMode aWM,
+      const mozilla::LogicalSize& aCBSize, nscoord aAvailableISize,
+      const mozilla::LogicalSize& aMargin,
+      const mozilla::LogicalSize& aBorderPadding,
+      const mozilla::StyleSizeOverrides& aSizeOverrides,
+      const mozilla::ComputeSizeFlags& aFlags);
+
+  /**
+   * Precondition helper function to determine if
+   * |nsIFrame::ComputeAbsolutePosAutoSize| can be called on this frame.
+   */
+  bool IsAbsolutelyPositionedWithDefiniteContainingBlock() const;
+
+  /**
    * Utility function for ComputeAutoSize implementations.  Return
    * max(GetMinISize(), min(aISizeInCB, GetPrefISize()))
    */
@@ -3244,12 +3284,6 @@ class nsIFrame : public nsQueryFrame {
     return IsIntrinsicKeyword(bSize);
   }
 
-  /**
-   * Helper method to create a view for a frame.  Only used by a few sub-classes
-   * that need a view.
-   */
-  void CreateView();
-
  protected:
   virtual nsView* GetViewInternal() const {
     MOZ_ASSERT_UNREACHABLE("method should have been overridden by subclass");
@@ -3276,11 +3310,6 @@ class nsIFrame : public nsQueryFrame {
    * from the returned view.
    */
   nsView* GetClosestView(nsPoint* aOffset = nullptr) const;
-
-  /**
-   * Find the closest ancestor (excluding |this| !) that has a view
-   */
-  nsIFrame* GetAncestorWithView() const;
 
   /**
    * Sets the view's attributes from the frame style.
@@ -3463,7 +3492,7 @@ class nsIFrame : public nsQueryFrame {
    * @see mozilla::LayoutFrameType
    */
   mozilla::LayoutFrameType Type() const {
-    MOZ_ASSERT(uint8_t(mClass) < mozilla::ArrayLength(sLayoutFrameTypes));
+    MOZ_ASSERT(uint8_t(mClass) < std::size(sLayoutFrameTypes));
     return sLayoutFrameTypes[uint8_t(mClass)];
   }
 
@@ -3476,7 +3505,7 @@ class nsIFrame : public nsQueryFrame {
    * @see mozilla::LayoutFrameType
    */
   ClassFlags GetClassFlags() const {
-    MOZ_ASSERT(uint8_t(mClass) < mozilla::ArrayLength(sLayoutFrameClassFlags));
+    MOZ_ASSERT(uint8_t(mClass) < std::size(sLayoutFrameClassFlags));
     return sLayoutFrameClassFlags[uint8_t(mClass)];
   }
 
@@ -5529,7 +5558,9 @@ class nsIFrame : public nsQueryFrame {
 #ifdef DEBUG_FRAME_DUMP
  public:
   static void IndentBy(FILE* out, int32_t aIndent) {
-    while (--aIndent >= 0) fputs("  ", out);
+    while (--aIndent >= 0) {
+      fputs("  ", out);
+    }
   }
   void ListTag(FILE* out) const { fputs(ListTag().get(), out); }
   nsAutoCString ListTag() const;

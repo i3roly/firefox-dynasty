@@ -13,7 +13,7 @@
 edition = "2021"
 rust-version = "1.73"
 name = "wgpu-hal"
-version = "22.0.0"
+version = "23.0.0"
 authors = ["gfx-rs developers"]
 build = "build.rs"
 autobins = false
@@ -32,19 +32,19 @@ ignored = ["cfg_aliases"]
 
 [package.metadata.docs.rs]
 features = [
-"vulkan",
-"gles",
-"renderdoc",
+    "vulkan",
+    "gles",
+    "renderdoc",
 ]
 rustdoc-args = [
-"--cfg",
-"docsrs",
+    "--cfg",
+    "docsrs",
 ]
 targets = [
-"x86_64-unknown-linux-gnu",
-"x86_64-apple-darwin",
-"x86_64-pc-windows-msvc",
-"wasm32-unknown-unknown",
+    "x86_64-unknown-linux-gnu",
+    "x86_64-apple-darwin",
+    "x86_64-pc-windows-msvc",
+    "wasm32-unknown-unknown",
 ]
 
 [lib]
@@ -71,18 +71,18 @@ version = "0.7"
 version = "2.6"
 
 [dependencies.bytemuck]
-version = "1.18"
+version = "1.19"
 optional = true
 
 [dependencies.glow]
-version = "0.14.1"
+version = "0.14.2"
 optional = true
 
 [dependencies.log]
 version = "0.4"
 
 [dependencies.naga]
-version = "22.0.0"
+version = "23.0.0"
 path = "../naga"
 
 [dependencies.once_cell]
@@ -102,10 +102,10 @@ version = "0.6"
 version = "1.1.0"
 
 [dependencies.thiserror]
-version = "1.0.64"
+version = "1.0.67"
 
 [dependencies.wgt]
-version = "22.0.0"
+version = "23.0.0"
 path = "../wgpu-types"
 package = "wgpu-types"
 
@@ -119,7 +119,7 @@ version = "0.11"
 version = "0.28"
 
 [dev-dependencies.naga]
-version = "22.0.0"
+version = "23.0.0"
 path = "../naga"
 features = ["wgsl-in"]
 
@@ -133,72 +133,72 @@ version = "0.1"
 [features]
 device_lost_panic = []
 dx12 = [
-"dep:bit-set",
-"dep:libloading",
-"dep:range-alloc",
-"dep:windows-core",
-"gpu-allocator/d3d12",
-"naga/hlsl-out-if-target-windows",
-"windows/Win32_Graphics_Direct3D_Fxc",
-"windows/Win32_Graphics_Direct3D_Dxc",
-"windows/Win32_Graphics_Direct3D",
-"windows/Win32_Graphics_Direct3D12",
-"windows/Win32_Graphics_DirectComposition",
-"windows/Win32_Graphics_Dxgi_Common",
-"windows/Win32_Security",
-"windows/Win32_System_Diagnostics_Debug",
-"windows/Win32_System_Kernel",
-"windows/Win32_System_Performance",
-"windows/Win32_System_Threading",
-"windows/Win32_UI_WindowsAndMessaging",
+    "dep:bit-set",
+    "dep:libloading",
+    "dep:range-alloc",
+    "dep:windows-core",
+    "gpu-allocator/d3d12",
+    "naga/hlsl-out-if-target-windows",
+    "windows/Win32_Graphics_Direct3D_Fxc",
+    "windows/Win32_Graphics_Direct3D_Dxc",
+    "windows/Win32_Graphics_Direct3D",
+    "windows/Win32_Graphics_Direct3D12",
+    "windows/Win32_Graphics_DirectComposition",
+    "windows/Win32_Graphics_Dxgi_Common",
+    "windows/Win32_Security",
+    "windows/Win32_System_Diagnostics_Debug",
+    "windows/Win32_System_Kernel",
+    "windows/Win32_System_Performance",
+    "windows/Win32_System_Threading",
+    "windows/Win32_UI_WindowsAndMessaging",
 ]
 fragile-send-sync-non-atomic-wasm = ["wgt/fragile-send-sync-non-atomic-wasm"]
 gles = [
-"naga/glsl-out",
-"dep:bytemuck",
-"dep:glow",
-"dep:glutin_wgl_sys",
-"dep:khronos-egl",
-"dep:libloading",
-"dep:ndk-sys",
-"windows/Win32_Graphics_OpenGL",
-"windows/Win32_Graphics_Gdi",
-"windows/Win32_System_LibraryLoader",
-"windows/Win32_UI_WindowsAndMessaging",
+    "naga/glsl-out",
+    "dep:bytemuck",
+    "dep:glow",
+    "dep:glutin_wgl_sys",
+    "dep:khronos-egl",
+    "dep:libloading",
+    "dep:ndk-sys",
+    "windows/Win32_Graphics_OpenGL",
+    "windows/Win32_Graphics_Gdi",
+    "windows/Win32_System_LibraryLoader",
+    "windows/Win32_UI_WindowsAndMessaging",
 ]
 internal_error_panic = []
 metal = [
-"naga/msl-out-if-target-apple",
-"dep:block",
+    "naga/msl-out-if-target-apple",
+    "dep:block",
 ]
 oom_panic = []
 renderdoc = [
-"dep:libloading",
-"dep:renderdoc-sys",
+    "dep:libloading",
+    "dep:renderdoc-sys",
 ]
 vulkan = [
-"naga/spv-out",
-"dep:ash",
-"dep:gpu-alloc",
-"dep:gpu-descriptor",
-"dep:libloading",
-"dep:smallvec",
-"dep:android_system_properties",
+    "naga/spv-out",
+    "dep:ash",
+    "dep:gpu-alloc",
+    "dep:gpu-descriptor",
+    "dep:libloading",
+    "dep:smallvec",
+    "dep:android_system_properties",
 ]
 
 [target.'cfg(all(target_arch = "wasm32", not(target_os = "emscripten")))'.dependencies.js-sys]
 version = "0.3.70"
 
 [target.'cfg(all(target_arch = "wasm32", not(target_os = "emscripten")))'.dependencies.wasm-bindgen]
-version = "0.2.87"
+version = "0.2.95"
 
 [target.'cfg(all(target_arch = "wasm32", not(target_os = "emscripten")))'.dependencies.web-sys]
-version = "0.3.70"
+version = "0.3.72"
 features = [
-"Window",
-"HtmlCanvasElement",
-"WebGl2RenderingContext",
-"OffscreenCanvas",
+    "Window",
+    "HtmlCanvasElement",
+    "WebGl2RenderingContext",
+    "OffscreenCanvas",
 ]
 
 [target.'cfg(any(target_os="macos", target_os="ios"))'.dependencies.block]
@@ -217,20 +217,20 @@ version = "0.2.5"
 [target.'cfg(not(any(target_arch = "wasm32", target_os = "ios")))'.dev-dependencies.glutin]
 version = "0.31"
 features = [
-"egl",
-"wgl",
-"wayland",
-"x11",
+    "egl",
+    "wgl",
+    "wayland",
+    "x11",
 ]
 default-features = false
 
 [target.'cfg(not(any(target_arch = "wasm32", target_os = "ios")))'.dev-dependencies.glutin-winit]
 version = "0.4"
 features = [
-"egl",
-"wgl",
-"wayland",
-"x11",
+    "egl",
+    "wgl",
+    "wayland",
+    "x11",
 ]
 default-features = false
 
@@ -241,8 +241,8 @@ package = "raw-window-handle"
 [target.'cfg(not(any(target_arch = "wasm32", target_os = "ios")))'.dev-dependencies.winit]
 version = "0.29"
 features = [
-"android-native-activity",
-"rwh_05",
+    "android-native-activity",
+    "rwh_05",
 ]
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies.ash]
@@ -286,8 +286,8 @@ optional = true
 [target.'cfg(target_os = "emscripten")'.dependencies.khronos-egl]
 version = "6"
 features = [
-"static",
-"no-pkg-config",
+    "static",
+    "no-pkg-config",
 ]
 
 [target.'cfg(target_os = "emscripten")'.dependencies.libloading]

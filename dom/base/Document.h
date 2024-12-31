@@ -101,7 +101,6 @@
 #include "nsTObserverArray.h"
 #include "nsThreadUtils.h"
 #include "nsURIHashKey.h"
-#include "nsViewportInfo.h"
 #include "nsWeakReference.h"
 #include "nsWindowSizes.h"
 #include "nsXULElement.h"
@@ -181,6 +180,7 @@ class nsRange;
 class nsSimpleContentList;
 class nsTextNode;
 class nsViewManager;
+class nsViewportInfo;
 class nsXULPrototypeDocument;
 struct JSContext;
 struct nsFont;
@@ -2039,7 +2039,7 @@ class Document : public nsINode,
 
   // Observation hooks for style data to propagate notifications
   // to document observers
-  void RuleChanged(StyleSheet&, css::Rule*, StyleRuleChangeKind);
+  void RuleChanged(StyleSheet&, css::Rule*, const StyleRuleChange&);
   void RuleAdded(StyleSheet&, css::Rule&);
   void RuleRemoved(StyleSheet&, css::Rule&);
   void SheetCloned(StyleSheet&) {}
@@ -2338,14 +2338,14 @@ class Document : public nsINode,
                         nsIPrincipal* aPartitionedPrincipal);
 
   /**
-   * Notify the document that its associated ContentViewer is being destroyed.
+   * Notify the document that its associated DocumentViewer is being destroyed.
    * This releases circular references so that the document can go away.
    * Destroy() is only called on documents that have a content viewer.
    */
   virtual void Destroy();
 
   /**
-   * Notify the document that its associated ContentViewer is no longer
+   * Notify the document that its associated DocumentViewer is no longer
    * the current viewer for the docshell. The document might still
    * be rendered in "zombie state" until the next document is ready.
    * The document should save form control state.
@@ -3364,6 +3364,7 @@ class Document : public nsINode,
   void SetDesignMode(const nsAString& aDesignMode,
                      const mozilla::Maybe<nsIPrincipal*>& aSubjectPrincipal,
                      mozilla::ErrorResult& rv);
+  void SetDocumentEditableFlag(bool);
   MOZ_CAN_RUN_SCRIPT
   bool ExecCommand(const nsAString& aHTMLCommandName, bool aShowUI,
                    const nsAString& aValue, nsIPrincipal& aSubjectPrincipal,
@@ -3436,7 +3437,9 @@ class Document : public nsINode,
   Element* GetUnretargetedFullscreenElement() const;
   bool Fullscreen() const { return !!GetUnretargetedFullscreenElement(); }
   already_AddRefed<Promise> ExitFullscreen(ErrorResult&);
-  void ExitPointerLock() { PointerLockManager::Unlock(this); }
+  void ExitPointerLock() {
+    PointerLockManager::Unlock("Document::ExitPointerLock", this);
+  }
   void GetFgColor(nsAString& aFgColor);
   void SetFgColor(const nsAString& aFgColor);
   void GetLinkColor(nsAString& aLinkColor);
@@ -3567,8 +3570,6 @@ class Document : public nsINode,
   }
   void SetDevToolsWatchingDOMMutations(bool aValue);
 
-  void MaybeWarnAboutZoom();
-
   // https://drafts.csswg.org/cssom-view/#evaluate-media-queries-and-report-changes
   void EvaluateMediaQueriesAndReportChanges(bool aRecurse);
 
@@ -3669,6 +3670,16 @@ class Document : public nsINode,
   // https://html.spec.whatwg.org/#concept-document-fire-mutation-events-flag
   bool FireMutationEvents() const { return mFireMutationEvents; }
   void SetFireMutationEvents(bool aFire) { mFireMutationEvents = aFire; }
+
+  // https://w3c.github.io/trusted-types/dist/spec/#require-trusted-types-for-csp-directive
+  bool HasPolicyWithRequireTrustedTypesForDirective() const {
+    return mHasPolicyWithRequireTrustedTypesForDirective;
+  }
+  void SetHasPolicyWithRequireTrustedTypesForDirective(
+      bool aHasPolicyWithRequireTrustedTypesForDirective) {
+    mHasPolicyWithRequireTrustedTypesForDirective =
+        aHasPolicyWithRequireTrustedTypesForDirective;
+  }
 
   // Even if mutation events are disabled by default,
   // dom.mutation_events.forceEnable can be used to enable them per site.
@@ -4248,8 +4259,8 @@ class Document : public nsINode,
     // FIXME(emilio): Can SVG documents be in quirks mode anyway?
     return mCompatMode == eCompatibility_NavQuirks && !IsSVGDocument();
   }
-  void AddContentEditableStyleSheetsToStyleSet(bool aDesignMode);
-  void RemoveContentEditableStyleSheets();
+  void AddContentEditableStyleSheetToStyleSet();
+  void RemoveContentEditableStyleSheet();
   void AddStyleSheetToStyleSets(StyleSheet&);
   void RemoveStyleSheetFromStyleSets(StyleSheet&);
   void NotifyStyleSheetApplicableStateChanged();
@@ -4805,9 +4816,6 @@ class Document : public nsINode,
   // Whether we have a contenteditable.css stylesheet in the style set.
   bool mContentEditableSheetAdded : 1;
 
-  // Whether we have a designmode.css stylesheet in the style set.
-  bool mDesignModeSheetAdded : 1;
-
   // True if this document has ever had an HTML or SVG <title> element
   // bound to it
   bool mMayHaveTitleElement : 1;
@@ -4889,12 +4897,6 @@ class Document : public nsINode,
   // eDesignMode or eContentEditable.
   bool mHasBeenEditable : 1;
 
-  // Whether we've warned about the CSS zoom property.
-  //
-  // We don't use the general deprecated operation mechanism for this because we
-  // also record this as a `CountedUnknownProperty`.
-  bool mHasWarnedAboutZoom : 1;
-
   // While we're handling an execCommand call by web app, set
   // to true.
   bool mIsRunningExecCommandByContent : 1;
@@ -4948,6 +4950,9 @@ class Document : public nsINode,
   bool mForceLoadAtTop : 1;
 
   bool mFireMutationEvents : 1;
+
+  // Whether the document's CSP contains a require-trusted-types-for directive.
+  bool mHasPolicyWithRequireTrustedTypesForDirective : 1;
 
   Maybe<bool> mMutationEventsEnabled;
 

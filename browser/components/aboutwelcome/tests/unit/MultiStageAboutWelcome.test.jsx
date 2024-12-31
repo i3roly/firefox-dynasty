@@ -12,6 +12,13 @@ import { shallow, mount } from "enzyme";
 import { AboutWelcomeDefaults } from "modules/AboutWelcomeDefaults.sys.mjs";
 import { AboutWelcomeUtils } from "content-src/lib/aboutwelcome-utils.mjs";
 
+const spinEventLoop = async () => {
+  // Spin the event loop to allow the useEffect hooks to execute,
+  // any promises to resolve, and re-rendering to happen after the
+  // promises have updated the state/props
+  await new Promise(resolve => setTimeout(resolve, 0));
+};
+
 describe("MultiStageAboutWelcome module", () => {
   let globals;
   let sandbox;
@@ -27,9 +34,12 @@ describe("MultiStageAboutWelcome module", () => {
   beforeEach(async () => {
     globals = new GlobalOverrider();
     globals.set({
+      AWEvaluateScreenTargeting: () => {},
       AWGetSelectedTheme: () => Promise.resolve("automatic"),
       AWGetInstalledAddons: () => Promise.resolve(["test-addon-id"]),
+      AWGetUnhandledCampaignAction: () => Promise.resolve(false),
       AWSendEventTelemetry: () => {},
+      AWSendToParent: () => {},
       AWWaitForMigrationClose: () => Promise.resolve(),
       AWSelectTheme: () => Promise.resolve(),
       AWFinish: () => Promise.resolve(),
@@ -51,10 +61,7 @@ describe("MultiStageAboutWelcome module", () => {
 
     it("should pass activeTheme and initialTheme props to WelcomeScreen", async () => {
       let wrapper = mount(<MultiStageAboutWelcome {...DEFAULT_PROPS} />);
-      // Spin the event loop to allow the useEffect hooks to execute,
-      // any promises to resolve, and re-rendering to happen after the
-      // promises have updated the state/props
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await spinEventLoop();
       // sync up enzyme's representation with the real DOM
       wrapper.update();
 
@@ -68,10 +75,7 @@ describe("MultiStageAboutWelcome module", () => {
 
     it("should fetch a list of installed Addons", async () => {
       let wrapper = mount(<MultiStageAboutWelcome {...DEFAULT_PROPS} />);
-      // Spin the event loop to allow the useEffect hooks to execute,
-      // any promises to resolve, and re-rendering to happen after the
-      // promises have updated the state/props
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await spinEventLoop();
       // sync up enzyme's representation with the real DOM
       wrapper.update();
 
@@ -1129,6 +1133,234 @@ describe("MultiStageAboutWelcome module", () => {
 
           AboutWelcomeUtils.handleUserAction.resetHistory();
         }
+      });
+      it("Should handle a campaign action when applicable", async () => {
+        let actionSpy = sandbox.spy(AboutWelcomeUtils, "handleCampaignAction");
+        let telemetrySpy = sandbox.spy(
+          AboutWelcomeUtils,
+          "sendActionTelemetry"
+        );
+
+        globals.set("AWGetUnhandledCampaignAction", () =>
+          Promise.resolve("SET_DEFAULT_BROWSER")
+        );
+        // Return true when "HANDLE_CAMPAIGN_ACTION" is sent to parent
+        globals.set("AWSendToParent", () => Promise.resolve(true));
+        const screens = [
+          {
+            content: {
+              title: "test title",
+            },
+          },
+        ];
+        const TEST_PROPS = {
+          defaultScreens: screens,
+          message_id: "DEFAULT_ABOUTWELCOME",
+          startScreen: 0,
+        };
+        let wrapper = mount(<MultiStageAboutWelcome {...TEST_PROPS} />);
+        await spinEventLoop();
+        wrapper.update();
+        assert.calledOnce(actionSpy);
+        // If campaign is handled, we should send telemetry
+        assert.calledOnce(telemetrySpy);
+        assert.equal(telemetrySpy.firstCall.args[1], "CAMPAIGN_ACTION");
+        globals.restore();
+      });
+      it("Should not handle a campaign action when the action has already been handled", async () => {
+        let actionSpy = sandbox.spy(AboutWelcomeUtils, "handleCampaignAction");
+        let telemetrySpy = sandbox.spy(
+          AboutWelcomeUtils,
+          "sendActionTelemetry"
+        );
+
+        globals.set("AWGetUnhandledCampaignAction", () =>
+          Promise.resolve(false)
+        );
+        const screens = [
+          {
+            content: {
+              title: "test title",
+            },
+          },
+        ];
+        const TEST_PROPS = {
+          defaultScreens: screens,
+          message_id: "DEFAULT_ABOUTWELCOME",
+          startScreen: 0,
+        };
+        let wrapper = mount(<MultiStageAboutWelcome {...TEST_PROPS} />);
+        await spinEventLoop();
+        wrapper.update();
+        assert.notCalled(actionSpy);
+        assert.notCalled(telemetrySpy);
+        globals.restore();
+      });
+      it("Should not send telemetrty when campaign action handling fails", async () => {
+        let actionSpy = sandbox.spy(AboutWelcomeUtils, "handleCampaignAction");
+        let telemetrySpy = sandbox.spy(
+          AboutWelcomeUtils,
+          "sendActionTelemetry"
+        );
+
+        globals.set("AWGetUnhandledCampaignAction", () =>
+          Promise.resolve("SET_DEFAULT_BROWSER")
+        );
+
+        // Return undefined when "HANDLE_CAMPAIGN_ACTION" is sent to parent as
+        // though "AWPage:HANDLE_CAMPAIGN_ACTION" case did not return true due
+        // to failure executing action or the campaign handled pref being true
+        globals.set("AWSendToParent", () => Promise.resolve(undefined));
+        const screens = [
+          {
+            content: {
+              title: "test title",
+            },
+          },
+        ];
+        const TEST_PROPS = {
+          defaultScreens: screens,
+          message_id: "DEFAULT_ABOUTWELCOME",
+          startScreen: 0,
+        };
+        let wrapper = mount(<MultiStageAboutWelcome {...TEST_PROPS} />);
+        await spinEventLoop();
+        wrapper.update();
+        assert.calledOnce(actionSpy);
+        // If campaign handling fails, we should not send telemetry
+        assert.notCalled(telemetrySpy);
+        globals.restore();
+      });
+    });
+
+    describe("#handleUserAction", () => {
+      let SCREEN_PROPS;
+      let TEST_ACTION;
+      let awSendToParentStub;
+      let finishStub;
+      let handleUserActionSpy;
+      beforeEach(() => {
+        SCREEN_PROPS = {
+          content: {
+            primary_button: {
+              action: { type: "TEST_ACTION" },
+              label: "test button",
+            },
+          },
+        };
+        awSendToParentStub = sandbox.stub();
+        globals.set("AWSendToParent", awSendToParentStub);
+        finishStub = sandbox.stub(global, "AWFinish");
+        handleUserActionSpy = sandbox.spy(
+          AboutWelcomeUtils,
+          "handleUserAction"
+        );
+
+        TEST_ACTION = SCREEN_PROPS.content.primary_button.action;
+      });
+
+      afterEach(() => {
+        handleUserActionSpy.restore();
+        finishStub.restore();
+        globals.restore();
+      });
+
+      it("Should dismiss when resolve boolean is true and needAwait true", async () => {
+        TEST_ACTION.dismiss = "actionResult";
+        TEST_ACTION.needsAwait = true;
+        // `needsAwait` is true, so the handleUserAction function should return a `Promise<boolean>`
+        awSendToParentStub.callsFake(
+          () => Promise.resolve(true) // Resolves to a boolean for awaited calls
+        );
+
+        const wrapper = mount(<WelcomeScreen {...SCREEN_PROPS} />);
+        wrapper.find(".primary").simulate("click");
+
+        // Assert click of primary button calls handleUserAction
+        assert.calledOnce(handleUserActionSpy);
+        assert.equal(handleUserActionSpy.firstCall.args[0].type, "TEST_ACTION");
+        // handleUserAction returns a Promise, so let's let the microtask queue
+        // flush so that anything waiting for the handleUserAction Promise to
+        // resolve can run.
+        await new Promise(resolve => queueMicrotask(resolve));
+
+        // Check handleUserAction return value is a `Promise<boolean>`
+        assert.ok(handleUserActionSpy.firstCall.returnValue instanceof Promise);
+        const awaitedResult = await handleUserActionSpy.firstCall.returnValue;
+        // Check that the result is a boolean
+        assert.equal(
+          typeof awaitedResult,
+          "boolean",
+          "The awaited call should return a boolean."
+        );
+        assert.equal(
+          awaitedResult,
+          true,
+          "The awaited call should resolve to true, as per the mock return value."
+        );
+        // Check AWFinish gets called when awaited actionResult value is true
+        assert.calledOnce(finishStub);
+      });
+
+      it("Should not dismiss when resolve boolean is false and needAwait true", async () => {
+        TEST_ACTION.dismiss = "actionResult";
+        TEST_ACTION.needsAwait = true;
+        // `needsAwait` is true, so the handleUserAction function should return a `Promise<boolean>`
+        awSendToParentStub.callsFake(
+          () => Promise.resolve(false) // Resolves to a boolean for awaited calls
+        );
+
+        const wrapper = mount(<WelcomeScreen {...SCREEN_PROPS} />);
+        wrapper.find(".primary").simulate("click");
+
+        // Assert click of primary button calls handleUserAction
+        assert.calledOnce(handleUserActionSpy);
+        assert.equal(handleUserActionSpy.firstCall.args[0].type, "TEST_ACTION");
+        await new Promise(resolve => queueMicrotask(resolve));
+
+        // Check handleUserAction return value is a `Promise<boolean>`
+        assert.ok(handleUserActionSpy.firstCall.returnValue instanceof Promise);
+        const awaitedResult = await handleUserActionSpy.firstCall.returnValue;
+        // Check that the result is a boolean
+        assert.equal(
+          typeof awaitedResult,
+          "boolean",
+          "The awaited call should return a boolean."
+        );
+        assert.equal(
+          awaitedResult,
+          false,
+          "The awaited call should resolve to false, as per the mock return value."
+        );
+        // Check AWFinish not get called when awaited actionResult value is false
+        assert.notCalled(finishStub);
+      });
+
+      it("Should dismiss when true and handleUserAction not awaited", async () => {
+        TEST_ACTION.dismiss = true;
+        // `needsAwait` is not set, so the handleUserAction function should return a `Promise<undefined>`
+        awSendToParentStub.callsFake(
+          () => Promise.resolve(undefined) // Resolves to a undefined for non awaited calls
+        );
+
+        const wrapper = mount(<WelcomeScreen {...SCREEN_PROPS} />);
+        wrapper.find(".primary").simulate("click");
+
+        // Assert click of primary button calls handleUserAction
+        assert.calledOnce(handleUserActionSpy);
+        assert.equal(handleUserActionSpy.firstCall.args[0].type, "TEST_ACTION");
+        await new Promise(resolve => queueMicrotask(resolve));
+
+        // Check handleUserAction return value is a `Promise<undefined>`
+        assert.ok(handleUserActionSpy.firstCall.returnValue instanceof Promise);
+        const awaitedResult = await handleUserActionSpy.firstCall.returnValue;
+        assert.equal(
+          awaitedResult,
+          undefined,
+          "The awaited call should resolve to undefined, as per the mock return value."
+        );
+        // Check AWFinish gets called when dismiss is true for non awaited calls
+        assert.calledOnce(finishStub);
       });
     });
   });

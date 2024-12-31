@@ -24,7 +24,6 @@ import org.mozilla.fenix.GleanMetrics.AppMenu
 import org.mozilla.fenix.GleanMetrics.Events
 import org.mozilla.fenix.GleanMetrics.HomeMenu
 import org.mozilla.fenix.GleanMetrics.HomeScreen
-import org.mozilla.fenix.GleanMetrics.Menu
 import org.mozilla.fenix.GleanMetrics.ReaderMode
 import org.mozilla.fenix.GleanMetrics.Translations
 import org.mozilla.fenix.components.menu.middleware.MenuTelemetryMiddleware
@@ -227,13 +226,17 @@ class MenuTelemetryMiddlewareTest {
     }
 
     @Test
-    fun `WHEN navigating to the release notes page THEN record the whats new interaction telemetry`() {
+    fun `WHEN navigating to the release notes page from home page menu THEN record the whats new interaction telemetry`() {
         val store = createStore()
-        assertNull(HomeMenu.helpTapped.testGetValue())
+        assertNull(Events.whatsNewTapped.testGetValue())
 
         store.dispatch(MenuAction.Navigate.ReleaseNotes).joinBlocking()
 
-        assertTelemetryRecorded(Events.whatsNewTapped)
+        assertNotNull(Events.whatsNewTapped.testGetValue())
+        val snapshot = Events.whatsNewTapped.testGetValue()!!
+
+        assertEquals(1, snapshot.size)
+        assertEquals("MENU", snapshot.single().extra?.getValue("source"))
     }
 
     @Test
@@ -313,26 +316,6 @@ class MenuTelemetryMiddlewareTest {
         store.dispatch(MenuAction.FindInPage).joinBlocking()
 
         assertTelemetryRecorded(Events.browserMenuAction, item = "find_in_page")
-    }
-
-    @Test
-    fun `WHEN CFR is shown THEN record the CFR is shown menu telemetry`() {
-        val store = createStore()
-        assertNull(Menu.showCfr.testGetValue())
-
-        store.dispatch(MenuAction.ShowCFR).joinBlocking()
-
-        assertTelemetryRecorded(Menu.showCfr)
-    }
-
-    @Test
-    fun `WHEN CFR is dismissed THEN record the CFR is dismissed menu telemetry`() {
-        val store = createStore()
-        assertNull(Menu.dismissCfr.testGetValue())
-
-        store.dispatch(MenuAction.DismissCFR).joinBlocking()
-
-        assertTelemetryRecorded(Menu.dismissCfr)
     }
 
     @Test

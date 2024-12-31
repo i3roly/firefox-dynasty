@@ -2062,9 +2062,7 @@ const CachedBAxisMeasurement& nsFlexContainerFrame::MeasureBSizeForFlexItem(
 
 /* virtual */
 void nsFlexContainerFrame::MarkIntrinsicISizesDirty() {
-  mCachedMinISize = NS_INTRINSIC_ISIZE_UNKNOWN;
-  mCachedPrefISize = NS_INTRINSIC_ISIZE_UNKNOWN;
-
+  mCachedIntrinsicSizes.Clear();
   nsContainerFrame::MarkIntrinsicISizesDirty();
 }
 
@@ -2478,8 +2476,16 @@ bool FlexItem::CanMainSizeInfluenceCrossSize() const {
 
   if (IsInlineAxisCrossAxis()) {
     // If we get here, this function is really asking: "can changes to this
-    // item's block size have an influence on its inline size"?  For blocks and
-    // tables, the answer is "no".
+    // item's block size have an influence on its inline size"?
+
+    // If a flex item's intrinsic inline size or its descendants' inline size
+    // contributions depend on the item's block size, the answer is "yes".
+    if (mFrame->HasAnyStateBits(
+            NS_FRAME_DESCENDANT_INTRINSIC_ISIZE_DEPENDS_ON_BSIZE)) {
+      return true;
+    }
+    // For blocks and tables, the answer is "no" (aside from the above special
+    // case).
     if (mFrame->IsBlockFrame() || mFrame->IsTableWrapperFrame()) {
       // XXXdholbert (Maybe use an IsFrameOfType query or something more
       // general to test this across all frame types? For now, I'm just
@@ -4898,7 +4904,7 @@ void nsFlexContainerFrame::UnionInFlowChildOverflow(
     if (useMozBoxCollapseBehavior && f->StyleVisibility()->IsCollapse()) {
       continue;
     }
-    ConsiderChildOverflow(aOverflowAreas, f);
+    ConsiderChildOverflow(aOverflowAreas, f, aAsIfScrolled);
     if (!isScrolledContent) {
       continue;
     }
@@ -6551,13 +6557,9 @@ nscoord nsFlexContainerFrame::ComputeIntrinsicISize(
 
 nscoord nsFlexContainerFrame::IntrinsicISize(const IntrinsicSizeInput& aInput,
                                              IntrinsicISizeType aType) {
-  nscoord& cachedISize = aType == IntrinsicISizeType::MinISize
-                             ? mCachedMinISize
-                             : mCachedPrefISize;
-  if (cachedISize == NS_INTRINSIC_ISIZE_UNKNOWN) {
-    cachedISize = ComputeIntrinsicISize(aInput, aType);
-  }
-  return cachedISize;
+  return mCachedIntrinsicSizes.GetOrSet(*this, aType, aInput, [&] {
+    return ComputeIntrinsicISize(aInput, aType);
+  });
 }
 
 int32_t nsFlexContainerFrame::GetNumLines() const {

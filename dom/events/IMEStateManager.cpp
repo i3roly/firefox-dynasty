@@ -79,12 +79,12 @@ nsIWidget* IMEStateManager::sActiveInputContextWidget = nullptr;
 StaticRefPtr<IMEContentObserver> IMEStateManager::sActiveIMEContentObserver;
 TextCompositionArray* IMEStateManager::sTextCompositions = nullptr;
 InputContext::Origin IMEStateManager::sOrigin = InputContext::ORIGIN_MAIN;
-InputContext IMEStateManager::sActiveChildInputContext;
+MOZ_RUNINIT InputContext IMEStateManager::sActiveChildInputContext;
 bool IMEStateManager::sInstalledMenuKeyboardListener = false;
 bool IMEStateManager::sIsGettingNewIMEState = false;
 bool IMEStateManager::sCleaningUpForStoppingIMEStateManagement = false;
 bool IMEStateManager::sIsActive = false;
-Maybe<IMEStateManager::PendingFocusedBrowserSwitchingData>
+MOZ_RUNINIT Maybe<IMEStateManager::PendingFocusedBrowserSwitchingData>
     IMEStateManager::sPendingFocusedBrowserSwitchingData;
 
 class PseudoFocusChangeRunnable : public Runnable {
@@ -1904,6 +1904,31 @@ static void GetAutocapitalize(const IMEState& aState, const Element& aElement,
   }
 }
 
+static bool GetAutocorrect(const IMEState& aState, const Element& aElement,
+                           const InputContext& aInputContext) {
+  if (!StaticPrefs::dom_forms_autocorrect()) {
+#ifdef ANDROID
+    // Autocorrect was on-by-default on Android by bug 806349, despite
+    // autocorrect preference.
+    return true;
+#else
+    return false;
+#endif
+  }
+
+  if (aElement.IsHTMLElement() && aState.IsEditable()) {
+    if (nsContentUtils::IsChromeDoc(aElement.OwnerDoc()) &&
+        !aElement.HasAttr(nsGkAtoms::autocorrect)) {
+      // Since Chrome UI may not want to enable autocorrect by default such as
+      // bug 1881783.
+      return false;
+    }
+
+    return nsGenericHTMLElement::FromNode(&aElement)->Autocorrect();
+  }
+  return true;
+}
+
 // static
 void IMEStateManager::SetIMEState(const IMEState& aState,
                                   const nsPresContext* aPresContext,
@@ -1957,9 +1982,8 @@ void IMEStateManager::SetIMEState(const IMEState& aState,
   context.mHasHandledUserInput =
       aPresContext && aPresContext->PresShell()->HasHandledUserInput();
 
-  context.mInPrivateBrowsing =
-      aPresContext &&
-      nsContentUtils::IsInPrivateBrowsing(aPresContext->Document());
+  context.mInPrivateBrowsing = aPresContext && aPresContext->Document() &&
+                               aPresContext->Document()->IsInPrivateBrowsing();
 
   const RefPtr<Element> focusedElement =
       aElement ? Element::FromNodeOrNull(
@@ -1972,6 +1996,7 @@ void IMEStateManager::SetIMEState(const IMEState& aState,
     GetInputMode(aState, *focusedElement, context.mHTMLInputMode);
     GetAutocapitalize(aState, *focusedElement, context,
                       context.mAutocapitalize);
+    context.mAutocorrect = GetAutocorrect(aState, *focusedElement, context);
   }
 
   if (aAction.mCause == InputContextAction::CAUSE_UNKNOWN &&

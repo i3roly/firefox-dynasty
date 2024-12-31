@@ -67,6 +67,7 @@ const rollouts = [
       "devtools/shared/tests/xpcshell/test_console_filtering.js",
       "devtools/shared/webconsole/test/chrome/test_consoleapi_innerID.html",
       "dom/push/Push*.sys.mjs",
+      "mobile/android/modules/geckoview/AndroidLog.sys.mjs",
       "mobile/shared/modules/geckoview/GeckoViewUtils.sys.mjs",
       "remote/shared/**",
       "security/manager/ssl/RemoteSecuritySettings.sys.mjs",
@@ -586,7 +587,6 @@ const rollouts = [
     rules: {
       "object-shorthand": "off",
       "mozilla/avoid-removeChild": "off",
-      "mozilla/consistent-if-bracing": "off",
       "mozilla/reject-importGlobalProperties": "off",
       "mozilla/no-arbitrary-setTimeout": "off",
       "mozilla/no-define-cc-etc": "off",
@@ -647,7 +647,6 @@ const rollouts = [
     ],
     rules: {
       "mozilla/avoid-removeChild": "off",
-      "mozilla/consistent-if-bracing": "off",
       "mozilla/no-compare-against-boolean-literals": "off",
       "mozilla/use-includes-instead-of-indexOf": "off",
       "mozilla/use-ownerGlobal": "off",

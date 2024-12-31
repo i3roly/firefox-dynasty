@@ -188,15 +188,17 @@ object TestHelper {
     // Method for granting app permission to access location/camera/mic
     fun grantAppPermission() {
         if (SDK_INT >= 23) {
-            mDevice.findObject(
-                UiSelector().textContains(
-                    when (SDK_INT) {
-                        Build.VERSION_CODES.R ->
-                            "While using the app"
-                        else -> "Allow"
-                    },
-                ),
-            ).click()
+            val permissionOption =
+                mDevice.findObject(
+                    UiSelector().textContains(
+                        when {
+                            SDK_INT >= 30 -> "While using the app"
+                            else -> "Allow"
+                        },
+                    ),
+                )
+            permissionOption.waitForExists(waitingTime)
+            permissionOption.click()
         }
     }
 
@@ -374,6 +376,16 @@ object TestHelper {
             assertTrue(imm.isAcceptingText)
         } else {
             assertFalse(imm.isAcceptingText)
+        }
+    }
+
+    // Prevent or allow the System UI from reading the clipboard content
+    // By preventing, the quick share or nearby share dialog will not be displayed
+    fun allowOrPreventSystemUIFromReadingTheClipboard(allowToReadClipboard: Boolean) {
+        if (allowToReadClipboard) {
+            mDevice.executeShellCommand("appops set com.android.systemui READ_CLIPBOARD allow")
+        } else {
+            mDevice.executeShellCommand("appops set com.android.systemui READ_CLIPBOARD deny")
         }
     }
 }

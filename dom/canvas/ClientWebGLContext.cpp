@@ -2429,6 +2429,7 @@ void ClientWebGLContext::GetParameter(JSContext* cx, GLenum pname,
     case LOCAL_GL_RENDERER:
     case LOCAL_GL_VENDOR:
     case LOCAL_GL_VERSION:
+    case dom::MOZ_debug_Binding::CONTEXT_TYPE:
     case dom::MOZ_debug_Binding::WSI_INFO:
       debugOnly = true;
       asString = true;
@@ -6793,17 +6794,6 @@ bool WebGLShaderPrecisionFormatJS::WrapObject(
 }
 
 // ---------------------
-
-// Todo: Move this to RefPtr.h.
-template <typename T>
-void ImplCycleCollectionTraverse(nsCycleCollectionTraversalCallback& callback,
-                                 const RefPtr<T>& field, const char* name,
-                                 uint32_t flags) {
-  ImplCycleCollectionTraverse(callback, const_cast<RefPtr<T>&>(field), name,
-                              flags);
-}
-
-// -
 
 template <typename T>
 void ImplCycleCollectionTraverse(nsCycleCollectionTraversalCallback& callback,

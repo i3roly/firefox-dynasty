@@ -67,6 +67,7 @@ class VibrancyManager {
   bool UpdateVibrantRegion(VibrancyType aType,
                            const LayoutDeviceIntRegion& aRegion);
 
+  void PrefChanged();
  
   LayoutDeviceIntRegion GetUnionOfVibrantRegions() const;
 

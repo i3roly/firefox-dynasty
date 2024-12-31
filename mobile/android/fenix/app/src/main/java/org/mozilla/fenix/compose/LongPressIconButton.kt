@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import org.mozilla.fenix.theme.FirefoxTheme
 
 /**
  * An [IconButton] that supports a long press gesture.
@@ -44,7 +45,7 @@ fun LongPressIconButton(
                 enabled = enabled,
                 role = Role.Button,
                 interactionSource = interactionSource,
-                indication = ripple(bounded = false, radius = RippleRadius),
+                indication = ripple(bounded = false, radius = RippleRadius, color = FirefoxTheme.colors.ripple),
             ),
         contentAlignment = Alignment.Center,
     ) {

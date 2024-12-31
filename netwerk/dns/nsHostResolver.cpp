@@ -255,7 +255,7 @@ nsresult nsHostResolver::Init() MOZ_NO_THREAD_SAFETY_ANALYSIS {
   } else {
     // We clamp down the idle time between 0 and one hour.
     poolTimeoutMs =
-        mozilla::clamped<uint32_t>(poolTimeoutSecs * 1000, 0, 3600 * 1000);
+        std::clamp<uint32_t>(poolTimeoutSecs * 1000, 0, 3600 * 1000);
   }
 
 #if defined(XP_WIN)
@@ -491,6 +491,7 @@ already_AddRefed<nsHostRecord> nsHostResolver::InitMockHTTPSRecord(
   }
 
   RefPtr<TypeHostRecord> typeRec = do_QueryObject(rec);
+  MutexAutoLock lock(typeRec->mResultsLock);
   typeRec->mResults = result;
   typeRec->negative = false;
   return rec.forget();
@@ -614,6 +615,7 @@ nsresult nsHostResolver::ResolveHost(const nsACString& aHost,
 
     if (IS_OTHER_TYPE(type) && originHost) {
       RefPtr<TypeHostRecord> typeRec = do_QueryObject(rec);
+      MutexAutoLock lock(typeRec->mResultsLock);
       typeRec->mOriginHost = std::move(originHost);
     }
 
@@ -1223,7 +1225,8 @@ nsresult nsHostResolver::NameLookup(nsHostRecord* rec,
   }
 
   LOG(("NameLookup: %s effectiveTRRmode: %d flags: %X", rec->host.get(),
-       static_cast<nsIRequest::TRRMode>(rec->mEffectiveTRRMode), rec->flags));
+       static_cast<nsIRequest::TRRMode>(rec->mEffectiveTRRMode),
+       static_cast<uint32_t>(rec->flags)));
 
   if (rec->flags & nsIDNSService::RESOLVE_DISABLE_TRR) {
     rec->RecordReason(TRRSkippedReason::TRR_DISABLED_FLAG);
@@ -2058,8 +2061,9 @@ void nsHostResolver::GetDNSCacheEntries(nsTArray<DNSCacheEntries>* args) {
     }
 
     info.originAttributesSuffix = recordEntry.GetKey().originSuffix;
-    info.flags = nsPrintfCString("%u|0x%x|%u|%d|%s", rec->type, rec->flags,
-                                 rec->af, rec->pb, rec->mTrrServer.get());
+    info.flags = nsPrintfCString("%u|0x%x|%u|%d|%s", rec->type,
+                                 static_cast<uint32_t>(rec->flags), rec->af,
+                                 rec->pb, rec->mTrrServer.get());
 
     RefPtr<AddrHostRecord> addrRec = do_QueryObject(rec);
     if (addrRec && addrRec->addr_info) {

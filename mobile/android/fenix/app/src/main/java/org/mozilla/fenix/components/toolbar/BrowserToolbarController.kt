@@ -88,7 +88,11 @@ interface BrowserToolbarController {
     /**
      * @see [BrowserToolbarInteractor.onMenuButtonClicked]
      */
-    fun handleMenuButtonClicked(accessPoint: MenuAccessPoint, customTabSessionId: String? = null)
+    fun handleMenuButtonClicked(
+        accessPoint: MenuAccessPoint,
+        customTabSessionId: String? = null,
+        isSandboxCustomTab: Boolean = false,
+    )
 }
 
 @Suppress("LongParameterList")
@@ -125,7 +129,7 @@ class DefaultBrowserToolbarController(
     override fun handleToolbarPasteAndGo(text: String) {
         if (text.isUrl()) {
             store.updateSearchTermsOfSelectedSession("")
-            activity.components.useCases.sessionUseCases.loadUrl.invoke(text)
+            activity.components.useCases.sessionUseCases.loadUrl(text)
             return
         }
 
@@ -280,11 +284,16 @@ class DefaultBrowserToolbarController(
         NavigationBar.browserNewTabLongTapped.record(NoExtras())
     }
 
-    override fun handleMenuButtonClicked(accessPoint: MenuAccessPoint, customTabSessionId: String?) {
+    override fun handleMenuButtonClicked(
+        accessPoint: MenuAccessPoint,
+        customTabSessionId: String?,
+        isSandboxCustomTab: Boolean,
+    ) {
         navController.navigate(
             BrowserFragmentDirections.actionGlobalMenuDialogFragment(
                 accesspoint = accessPoint,
                 customTabSessionId = customTabSessionId,
+                isSandboxCustomTab = isSandboxCustomTab,
             ),
         )
     }

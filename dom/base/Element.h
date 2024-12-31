@@ -1207,6 +1207,9 @@ class Element : public FragmentOrElement {
     return false;
   }
 
+  // Note, this does not notify about the removal.
+  void ClearAttributes() { mAttrs.Clear(); }
+
   void GetTagName(nsAString& aTagName) const { aTagName = NodeName(); }
   void GetId(nsAString& aId) const { GetAttr(nsGkAtoms::id, aId); }
   void GetId(DOMString& aId) const { GetAttr(nsGkAtoms::id, aId); }
@@ -1737,6 +1740,8 @@ class Element : public FragmentOrElement {
   static CORSMode AttrValueToCORSMode(const nsAttrValue* aValue);
 
   nsINode* GetScopeChainParent() const override;
+
+  JSObject* WrapNode(JSContext*, JS::Handle<JSObject*> aGivenProto) override;
 
   /**
    * Locate a TextEditor rooted at this content node, if there is one.
@@ -2344,45 +2349,37 @@ inline mozilla::dom::Element* nsINode::GetNextElementSibling() const {
  * Macros to implement Clone(). _elementName is the class for which to implement
  * Clone.
  */
-#define NS_IMPL_ELEMENT_CLONE(_elementName)                         \
+#define NS_IMPL_ELEMENT_CLONE(_elementName, ...)                    \
   nsresult _elementName::Clone(mozilla::dom::NodeInfo* aNodeInfo,   \
                                nsINode** aResult) const {           \
     *aResult = nullptr;                                             \
-    RefPtr<mozilla::dom::NodeInfo> ni(aNodeInfo);                   \
-    auto* nim = ni->NodeInfoManager();                              \
-    RefPtr<_elementName> it = new (nim) _elementName(ni.forget());  \
+    RefPtr<_elementName> it = new (aNodeInfo->NodeInfoManager())    \
+        _elementName(do_AddRef(aNodeInfo), ##__VA_ARGS__);          \
     nsresult rv = const_cast<_elementName*>(this)->CopyInnerTo(it); \
     if (NS_SUCCEEDED(rv)) {                                         \
       it.forget(aResult);                                           \
     }                                                               \
-                                                                    \
     return rv;                                                      \
   }
 
-#define EXPAND(...) __VA_ARGS__
-#define NS_IMPL_ELEMENT_CLONE_WITH_INIT_HELPER(_elementName, extra_args_) \
-  nsresult _elementName::Clone(mozilla::dom::NodeInfo* aNodeInfo,         \
-                               nsINode** aResult) const {                 \
-    *aResult = nullptr;                                                   \
-    RefPtr<mozilla::dom::NodeInfo> ni(aNodeInfo);                         \
-    auto* nim = ni->NodeInfoManager();                                    \
-    RefPtr<_elementName> it =                                             \
-        new (nim) _elementName(ni.forget() EXPAND extra_args_);           \
-    nsresult rv = it->Init();                                             \
-    nsresult rv2 = const_cast<_elementName*>(this)->CopyInnerTo(it);      \
-    if (NS_FAILED(rv2)) {                                                 \
-      rv = rv2;                                                           \
-    }                                                                     \
-    if (NS_SUCCEEDED(rv)) {                                               \
-      it.forget(aResult);                                                 \
-    }                                                                     \
-                                                                          \
-    return rv;                                                            \
+#define NS_IMPL_ELEMENT_CLONE_WITH_INIT(_elementName, ...)           \
+  nsresult _elementName::Clone(mozilla::dom::NodeInfo* aNodeInfo,    \
+                               nsINode** aResult) const {            \
+    *aResult = nullptr;                                              \
+    RefPtr<_elementName> it = new (aNodeInfo->NodeInfoManager())     \
+        _elementName(do_AddRef(aNodeInfo), ##__VA_ARGS__);           \
+    nsresult rv = it->Init();                                        \
+    nsresult rv2 = const_cast<_elementName*>(this)->CopyInnerTo(it); \
+    if (NS_FAILED(rv2)) {                                            \
+      rv = rv2;                                                      \
+    }                                                                \
+    if (NS_SUCCEEDED(rv)) {                                          \
+      it.forget(aResult);                                            \
+    }                                                                \
+    return rv;                                                       \
   }
 
-#define NS_IMPL_ELEMENT_CLONE_WITH_INIT(_elementName) \
-  NS_IMPL_ELEMENT_CLONE_WITH_INIT_HELPER(_elementName, ())
 #define NS_IMPL_ELEMENT_CLONE_WITH_INIT_AND_PARSER(_elementName) \
-  NS_IMPL_ELEMENT_CLONE_WITH_INIT_HELPER(_elementName, (, NOT_FROM_PARSER))
+  NS_IMPL_ELEMENT_CLONE_WITH_INIT(_elementName, NOT_FROM_PARSER)
 
 #endif  // mozilla_dom_Element_h__

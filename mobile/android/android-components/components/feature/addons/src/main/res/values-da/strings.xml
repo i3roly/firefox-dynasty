@@ -70,6 +70,10 @@
     <string name="mozac_feature_addons_permissions_tab_hide_description">Skjule og vise faneblade</string>
     <!-- Description for top_sites permission. -->
     <string name="mozac_feature_addons_permissions_top_sites_description">Tilgå browserhistorik</string>
+    <!-- Description for trialML permission. -->
+    <string name="mozac_feature_addons_permissions_trial_ml_description">Hente og køre AI-modeller på din enhed</string>
+    <!-- Description for userScripts permission. -->
+    <string name="mozac_feature_addons_permissions_user_scripts_description">Tillade ubekræftede tredjeparts-scripts at få adgang til dine data</string>
     <!-- Description for devtools permission. -->
     <string name="mozac_feature_addons_permissions_devtools_description">Udvide Udviklerværktøj til at have adgang til data i åbne faneblade</string>
     <!-- The version on of add-on. -->
@@ -93,7 +97,7 @@
     <!-- Indicates the add-on is allowed in private browsing mode. -->
     <string name="mozac_feature_addons_settings_allow_in_private_browsing">Tillad i privat browsing</string>
     <!-- Indicates the add-on is allowed in private browsing mode. -->
-    <string name="mozac_feature_addons_settings_run_in_private_browsing">Kør i privat browsing</string>
+    <string name="mozac_feature_addons_settings_run_in_private_browsing">Anvend i privat browsing</string>
     <!-- This is displayed when the add-on is not allowed to run in private browsing. -->
     <string name="mozac_feature_addons_not_allowed_in_private_browsing">Ikke tilladt i private vinduer</string>
     <!-- Indicates the add-on is enabled. -->
@@ -130,6 +134,8 @@
     <string name="mozac_feature_addons_permissions_dialog_allow">Tillad</string>
     <!-- This is a button to deny the optional permissions requested by an add-on . -->
     <string name="mozac_feature_addons_permissions_dialog_deny">Afvis</string>
+    <!-- Text link to learn more about permission requests on the add-on permissions dialog . -->
+    <string name="mozac_feature_addons_permissions_dialog_learn_more">Læs mere</string>
     <!-- This is a button to cancel the add-on installation . -->
     <string name="mozac_feature_addons_permissions_dialog_cancel">Annuller</string>
     <!-- Accessibility content description to install add-on button. %1$s is the add-on name. -->

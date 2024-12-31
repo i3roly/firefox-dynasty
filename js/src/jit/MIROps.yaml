@@ -303,6 +303,18 @@
   guard: true
   possibly_calls: true
 
+- name: NewMapObject
+  arguments:
+    templateObject: JSObject*
+  result_type: Object
+  possibly_calls: true
+
+- name: NewSetObject
+  arguments:
+    templateObject: JSObject*
+  result_type: Object
+  possibly_calls: true
+
 - name: NewObject
   gen_boilerplate: false
 
@@ -674,6 +686,19 @@
     trap: wasm::Trap
     bytecodeOffset: wasm::BytecodeOffset
   type_policy: none
+  congruent_to: if_operands_equal
+  alias_set: none
+  guard: true
+  clone: true
+
+- name: WasmAnyRefJSStringLength
+  operands:
+    input: WasmAnyRef
+  arguments:
+    trap: wasm::Trap
+    bytecodeOffset: wasm::BytecodeOffset
+  type_policy: none
+  result_type: Int32
   congruent_to: if_operands_equal
   alias_set: none
   guard: true
@@ -2810,6 +2835,12 @@
 - name: AtomicIsLockFree
   gen_boilerplate: false
 
+- name: AtomicPause
+  guard: true
+  movable: false
+  alias_set: none
+  generate_lir: true
+
 - name: CompareExchangeTypedArrayElement
   gen_boilerplate: false
 
@@ -3221,6 +3252,21 @@
   alias_set: custom
   possibly_calls: true
 
+- name: SetObjectDelete
+  operands:
+    setObject: Object
+    key: Value
+  result_type: Boolean
+  possibly_calls: true
+  generate_lir: true
+
+- name: SetObjectAdd
+  operands:
+    setObject: Object
+    key: Value
+  possibly_calls: true
+  generate_lir: true
+
 - name: SetObjectSize
   operands:
     set: Object
@@ -3310,6 +3356,22 @@
   congruent_to: if_operands_equal
   alias_set: custom
   possibly_calls: true
+
+- name: MapObjectDelete
+  operands:
+    mapObject: Object
+    key: Value
+  result_type: Boolean
+  possibly_calls: true
+  generate_lir: true
+
+- name: MapObjectSet
+  operands:
+    mapObject: Object
+    key: Value
+    value: Value
+  possibly_calls: true
+  generate_lir: true
 
 - name: MapObjectSize
   operands:
@@ -3409,7 +3471,7 @@
   type_policy: none
   alias_set: none
 
-- name: WasmClampTable64Index
+- name: WasmClampTable64Address
   operands:
     input: Int64
   result_type: Int32
@@ -3536,6 +3598,7 @@
     suspender: Object
     fn: Object
     data: WasmAnyRef
+  result_type: WasmAnyRef
   type_policy: none
 
 - name: WasmStackSwitchToSuspendable
@@ -3548,6 +3611,7 @@
 - name: WasmStackContinueOnSuspendable
   operands:
     suspender: Object
+    result: WasmAnyRef
   type_policy: none
 
 - name: WasmBinarySimd128

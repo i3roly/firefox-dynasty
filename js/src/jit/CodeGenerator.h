@@ -218,6 +218,11 @@ class CodeGenerator final : public CodeGeneratorSpecific {
   void prepareWasmStackSwitchTrampolineCall(Register suspender, Register data);
 #endif
 
+  void setCompilationTime(mozilla::TimeDuration duration) {
+    compileTime_ = duration;
+  }
+  mozilla::TimeDuration getCompilationTime() const { return compileTime_; }
+
  private:
   void emitPostWriteBarrier(const LAllocation* obj);
   void emitPostWriteBarrier(Register objreg);
@@ -337,10 +342,10 @@ class CodeGenerator final : public CodeGeneratorSpecific {
                            const ConstantOrRegister& id,
                            const ConstantOrRegister& value, bool strict);
 
-  template <class IteratorObject, class OrderedHashTable>
+  template <class IteratorObject, class TableObject>
   void emitGetNextEntryForIterator(LGetNextEntryForIterator* lir);
 
-  template <class OrderedHashTable>
+  template <class TableObject>
   void emitLoadIteratorValues(Register result, Register temp, Register front);
 
   void emitStringToInt64(LInstruction* lir, Register input, Register64 output);
@@ -456,6 +461,9 @@ class CodeGenerator final : public CodeGeneratorSpecific {
 
   // Bit mask of JitZone stubs that are to be read-barriered.
   uint32_t zoneStubsToReadBarrier_;
+
+  // Total Ion compilation time.
+  mozilla::TimeDuration compileTime_;
 
 #ifdef FUZZING_JS_FUZZILLI
   void emitFuzzilliHashObject(LInstruction* lir, Register obj, Register output);

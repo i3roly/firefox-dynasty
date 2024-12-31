@@ -17,7 +17,6 @@
 #include "gfxPoint.h"
 #include "gfxRect.h"
 #include "mozilla/gfx/Rect.h"
-#include "nsAlgorithm.h"
 #include "nsChangeHint.h"
 #include "nsColor.h"
 #include "nsCOMPtr.h"
@@ -421,6 +420,12 @@ class SVGUtils final {
    */
   static bool GetNonScalingStrokeTransform(const nsIFrame* aFrame,
                                            gfxMatrix* aUserToOuterSVG);
+
+  /**
+   * We need to track whether content has non-scaling-stroke because we can't
+   * asynchronously animate it with a scaling transform.
+   */
+  static void UpdateNonScalingStrokeStateBit(nsIFrame* aFrame);
 
   /**
    * Compute the maximum possible device space stroke extents of a path given

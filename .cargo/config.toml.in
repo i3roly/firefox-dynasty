@@ -25,9 +25,9 @@ git = "https://github.com/franziskuskiefer/cose-rust"
 rev = "43c22248d136c8b38fe42ea709d08da6355cf04b"
 replace-with = "vendored-sources"
 
-[source."git+https://github.com/gfx-rs/wgpu?rev=d70ef62e9e0683789f745c6a4354495f39354c15"]
+[source."git+https://github.com/gfx-rs/wgpu?rev=b89a57f8ca9d8f93ef7995c8003152240fdbbe12"]
 git = "https://github.com/gfx-rs/wgpu"
-rev = "d70ef62e9e0683789f745c6a4354495f39354c15"
+rev = "b89a57f8ca9d8f93ef7995c8003152240fdbbe12"
 replace-with = "vendored-sources"
 
 [source."git+https://github.com/hsivonen/any_all_workaround?rev=7fb1b7034c9f172aade21ee1c8554e8d8a48af80"]
@@ -60,9 +60,9 @@ git = "https://github.com/mozilla-spidermonkey/jsparagus"
 rev = "61f399c53a641ebd3077c1f39f054f6d396a633c"
 replace-with = "vendored-sources"
 
-[source."git+https://github.com/mozilla/application-services?branch=release-v133-desktop"]
+[source."git+https://github.com/mozilla/application-services?rev=3303de12a04710164f7c80fb5e466fbf2560a20f"]
 git = "https://github.com/mozilla/application-services"
-branch = "release-v133-desktop"
+rev = "3303de12a04710164f7c80fb5e466fbf2560a20f"
 replace-with = "vendored-sources"
 
 [source."git+https://github.com/mozilla/audioipc?rev=e6f44a2bd1e57d11dfc737632a9e849077632330"]
@@ -90,9 +90,9 @@ git = "https://github.com/mozilla/mp4parse-rust"
 rev = "a138e40ec1c603615873e524b5b22e11c0ec4820"
 replace-with = "vendored-sources"
 
-[source."git+https://github.com/mozilla/neqo?tag=v0.9.2"]
+[source."git+https://github.com/mozilla/neqo?tag=v0.10.0"]
 git = "https://github.com/mozilla/neqo"
-tag = "v0.9.2"
+tag = "v0.10.0"
 replace-with = "vendored-sources"
 
 [source."git+https://github.com/servo/unicode-bidi?rev=ca612daf1c08c53abe07327cb3e6ef6e0a760f0c"]

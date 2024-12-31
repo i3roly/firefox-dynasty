@@ -410,8 +410,9 @@ nsresult nsPrintJob::DoCommonPrint(bool aIsPrintPreview,
   }
 
   // XXX This isn't really correct...
-  if (!mPrintObject->mDocument || !mPrintObject->mDocument->GetRootElement())
+  if (!mPrintObject->mDocument || !mPrintObject->mDocument->GetRootElement()) {
     return NS_ERROR_GFX_PRINTER_STARTDOC;
+  }
 
   mPrintSettings->GetShrinkToFit(&mShrinkToFit);
 
@@ -1229,9 +1230,7 @@ nsresult nsPrintJob::SetRootView(nsPrintObject* aPO, bool& doReturn,
       canCreateScrollbars = false;
     }
   } else {
-    nscoord pageWidth, pageHeight;
-    mPrt->mPrintDC->GetDeviceSurfaceDimensions(pageWidth, pageHeight);
-    adjSize = nsSize(pageWidth, pageHeight);
+    adjSize = mPrt->mPrintDC->GetDeviceSurfaceDimensions();
     documentIsTopLevel = true;
     parentView = GetParentViewForRoot();
   }
@@ -1322,7 +1321,7 @@ nsresult nsPrintJob::ReflowPrintObject(const UniquePtr<nsPrintObject>& aPO) {
             do_QueryInterface(mDocViewerPrint)) {
       // If we're print-previewing and the top level document, use the bounds
       // from our doc viewer. Page bounds is not what we want.
-      nsIntRect bounds;
+      LayoutDeviceIntRect bounds;
       viewer->GetBounds(bounds);
       adjSize = nsSize(bounds.width * p2a, bounds.height * p2a);
     }
@@ -2063,7 +2062,9 @@ class nsPrintCompletionEvent : public Runnable {
   }
 
   NS_IMETHOD Run() override {
-    if (mDocViewerPrint) mDocViewerPrint->OnDonePrinting();
+    if (mDocViewerPrint) {
+      mDocViewerPrint->OnDonePrinting();
+    }
     return NS_OK;
   }
 

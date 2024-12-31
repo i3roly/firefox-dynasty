@@ -4,8 +4,6 @@
 
 "use strict";
 
-/* globals DEFAULT_STORE, PRIVATE_STORE */
-
 var { ExtensionError } = ExtensionUtils;
 
 const SAME_SITE_STATUSES = [
@@ -704,6 +702,8 @@ this.cookies = class extends ExtensionAPIPersistent {
             schemeType = Ci.nsICookie.SCHEME_FILE;
           }
 
+          let isPartitioned = originAttributes.partitionKey?.length > 0;
+
           // The permission check may have modified the domain, so use
           // the new value instead.
           Services.cookies.add(
@@ -717,7 +717,8 @@ this.cookies = class extends ExtensionAPIPersistent {
             expiry,
             originAttributes,
             sameSite,
-            schemeType
+            schemeType,
+            isPartitioned
           );
 
           return self.cookies.get(details);

@@ -1377,7 +1377,8 @@ void nsLineLayout::AddMarkerFrame(nsIFrame* aFrame,
 
   nsBlockFrame* blockFrame = do_QueryFrame(LineContainerFrame());
   MOZ_ASSERT(blockFrame, "must be for block");
-  if (!blockFrame->MarkerIsEmpty()) {
+  if (!blockFrame->MarkerIsEmpty(aFrame)) {
+    mLineIsEmpty = false;
     mHasMarker = true;
     mLineBox->SetHasMarker();
   }
@@ -1490,6 +1491,34 @@ void nsLineLayout::VerticalAlignLine() {
   // this operation is set to zero so that the y coordinates for all
   // of the placed children will be relative to there.
   PerSpanData* psd = mRootSpan;
+  if (mLineIsEmpty) {
+    // This line is empty, and should be consisting of only inline elements.
+    // (inline-block elements would make the line non-empty).
+    WritingMode lineWM = psd->mWritingMode;
+    for (PerFrameData* pfd = psd->mFirstFrame; pfd; pfd = pfd->mNext) {
+      // Ideally, if the frame would collapse itself - but it depends on
+      // knowing that the line is empty.
+      if (!pfd->mFrame->IsInlineFrame() && !pfd->mFrame->IsRubyFrame()) {
+        continue;
+      }
+      // Collapse the physical size to 0.
+      pfd->mBounds.BStart(lineWM) = mBStartEdge;
+      pfd->mBounds.BSize(lineWM) = 0;
+      // Initialize mBlockDirAlign (though it doesn't make much difference
+      // because we don't align empty boxes).
+      pfd->mBlockDirAlign = VALIGN_OTHER;
+      pfd->mFrame->SetRect(lineWM, pfd->mBounds, ContainerSize());
+    }
+
+    mFinalLineBSize = 0;
+    if (mGotLineBox) {
+      mLineBox->SetBounds(psd->mWritingMode, psd->mIStart, mBStartEdge,
+                          psd->mICoord - psd->mIStart, 0, ContainerSize());
+
+      mLineBox->SetLogicalAscent(0);
+    }
+    return;
+  }
   VerticalAlignFrames(psd);
 
   // *** Note that comments here still use the anachronistic term
@@ -2205,8 +2234,12 @@ void nsLineLayout::VerticalAlignFrames(PerSpanData* psd) {
             blockEnd = BLOCKDIR_ALIGN_FRAMES_NO_MAXIMUM;
           }
         }
-        if (blockStart < minBCoord) minBCoord = blockStart;
-        if (blockEnd > maxBCoord) maxBCoord = blockEnd;
+        if (blockStart < minBCoord) {
+          minBCoord = blockStart;
+        }
+        if (blockEnd > maxBCoord) {
+          maxBCoord = blockEnd;
+        }
 #ifdef NOISY_BLOCKDIR_ALIGN
         printf(
             "     [frame]raw: a=%d h=%d bp=%d,%d logical: h=%d leading=%d y=%d "
@@ -3395,10 +3428,11 @@ void nsLineLayout::RelativePositionFrames(PerSpanData* psd,
     // Do this here (rather than along with setting the overflow rect
     // below) so we get leaf frames as well.  No need to worry
     // about the root span, since it doesn't have a frame.
-    if (frame->HasView())
+    if (frame->HasView()) {
       nsContainerFrame::SyncFrameViewAfterReflow(
           mPresContext, frame, frame->GetView(), r.InkOverflow(),
           nsIFrame::ReflowChildFlags::NoMoveView);
+    }
 
     overflowAreas.UnionWith(r + frame->GetPosition());
   }

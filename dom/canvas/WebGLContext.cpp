@@ -107,7 +107,7 @@ WebGLContextOptions::WebGLContextOptions() {
 }
 
 StaticMutex WebGLContext::sLruMutex;
-std::list<WebGLContext*> WebGLContext::sLru;
+MOZ_RUNINIT std::list<WebGLContext*> WebGLContext::sLru;
 
 WebGLContext::LruPosition::LruPosition() {
   StaticMutexAutoLock lock(sLruMutex);
@@ -2242,6 +2242,25 @@ Maybe<std::string> WebGLContext::GetString(const GLenum pname) const {
       nsCString info;
       gl->GetWSIInfo(&info);
       return Some(std::string(info.BeginReading()));
+    }
+
+    case dom::MOZ_debug_Binding::CONTEXT_TYPE: {
+      gl::GLContextType ctxType = gl->GetContextType();
+      switch (ctxType) {
+        case gl::GLContextType::Unknown:
+          return Some("unknown"_ns);
+        case gl::GLContextType::WGL:
+          return Some("wgl"_ns);
+        case gl::GLContextType::CGL:
+          return Some("cgl"_ns);
+        case gl::GLContextType::GLX:
+          return Some("glx"_ns);
+        case gl::GLContextType::EGL:
+          return Some("egl"_ns);
+        case gl::GLContextType::EAGL:
+          return Some("eagl"_ns);
+      }
+      return Some("unknown"_ns);
     }
 
     default:

@@ -5028,29 +5028,26 @@ nsDocShell::ForceRefreshURI(nsIURI* aURI, nsIPrincipal* aPrincipal,
   loadState->SetKeepResultPrincipalURIIfSet(true);
   loadState->SetIsMetaRefresh(true);
 
+  RefPtr<Document> doc = GetDocument();
+  NS_ENSURE_STATE(doc);
+
   // Set the triggering pricipal to aPrincipal if available, or current
   // document's principal otherwise.
   nsCOMPtr<nsIPrincipal> principal = aPrincipal;
-  RefPtr<Document> doc = GetDocument();
   if (!principal) {
-    if (!doc) {
-      return NS_ERROR_FAILURE;
-    }
     principal = doc->NodePrincipal();
   }
   loadState->SetTriggeringPrincipal(principal);
-  if (doc) {
-    loadState->SetCsp(doc->GetCsp());
-    loadState->SetHasValidUserGestureActivation(
-        doc->HasValidTransientUserGestureActivation());
+  loadState->SetCsp(doc->GetCsp());
+  loadState->SetHasValidUserGestureActivation(
+      doc->HasValidTransientUserGestureActivation());
 
-    loadState->SetTextDirectiveUserActivation(
-        doc->ConsumeTextDirectiveUserActivation() ||
-        loadState->HasValidUserGestureActivation());
-    loadState->SetTriggeringSandboxFlags(doc->GetSandboxFlags());
-    loadState->SetTriggeringWindowId(doc->InnerWindowID());
-    loadState->SetTriggeringStorageAccess(doc->UsingStorageAccess());
-  }
+  loadState->SetTextDirectiveUserActivation(
+      doc->ConsumeTextDirectiveUserActivation() ||
+      loadState->HasValidUserGestureActivation());
+  loadState->SetTriggeringSandboxFlags(doc->GetSandboxFlags());
+  loadState->SetTriggeringWindowId(doc->InnerWindowID());
+  loadState->SetTriggeringStorageAccess(doc->UsingStorageAccess());
 
   loadState->SetPrincipalIsExplicit(true);
 
@@ -5060,33 +5057,27 @@ nsDocShell::ForceRefreshURI(nsIURI* aURI, nsIPrincipal* aPrincipal,
   bool equalUri = false;
   nsresult rv = aURI->Equals(mCurrentURI, &equalUri);
 
-  nsCOMPtr<nsIReferrerInfo> referrerInfo;
   if (NS_SUCCEEDED(rv) && !equalUri && aDelay <= REFRESH_REDIRECT_TIMER) {
     /* It is a META refresh based redirection within the threshold time
      * we have in mind (15000 ms as defined by REFRESH_REDIRECT_TIMER).
      * Pass a REPLACE flag to LoadURI().
      */
     loadState->SetLoadType(LOAD_REFRESH_REPLACE);
-
-    /* For redirects we mimic HTTP, which passes the
-     * original referrer.
-     * We will pass in referrer but will not send to server
-     */
-    if (mReferrerInfo) {
-      referrerInfo = static_cast<ReferrerInfo*>(mReferrerInfo.get())
-                         ->CloneWithNewSendReferrer(false);
-    }
   } else {
     loadState->SetLoadType(LOAD_REFRESH);
-    /* We do need to pass in a referrer, but we don't want it to
-     * be sent to the server.
-     * For most refreshes the current URI is an appropriate
-     * internal referrer.
-     */
-    referrerInfo = new ReferrerInfo(mCurrentURI, ReferrerPolicy::_empty, false);
   }
 
+  const bool sendReferrer = StaticPrefs::network_http_referer_sendFromRefresh();
+  /* The document's referrer policy is needed instead of mReferrerInfo's
+   * referrer policy.
+   */
+  const nsCOMPtr<nsIReferrerInfo> referrerInfo =
+      new ReferrerInfo(*doc, sendReferrer);
+  /* We mimic HTTP, which passes the original referrer. See step 3 of
+   * <https://html.spec.whatwg.org/multipage/browsing-the-web.html#create-navigation-params-by-fetching>.
+   */
   loadState->SetReferrerInfo(referrerInfo);
+
   loadState->SetLoadFlags(
       nsIWebNavigation::LOAD_FLAGS_DISALLOW_INHERIT_PRINCIPAL);
   loadState->SetFirstParty(true);
@@ -5195,8 +5186,7 @@ void nsDocShell::SetupRefreshURIFromHeader(Document* aDocument,
   const char16_t* position = aHeader.BeginReading();
   const char16_t* end = aHeader.EndReading();
 
-  // See
-  // https://html.spec.whatwg.org/#pragma-directives:shared-declarative-refresh-steps.
+  // See https://html.spec.whatwg.org/#shared-declarative-refresh-steps.
 
   // 3. Skip ASCII whitespace
   position = SkipASCIIWhitespace(position, end);
@@ -5228,7 +5218,10 @@ void nsDocShell::SetupRefreshURIFromHeader(Document* aDocument,
       // The spec assumes no errors here (since we only pass ASCII digits in),
       // but we can still overflow, so this block should deal with that (and
       // only that).
-      MOZ_ASSERT(!(result & nsContentUtils::eParseHTMLInteger_ErrorOverflow));
+      MOZ_ASSERT(
+          !(result & ~(nsContentUtils::eParseHTMLInteger_DidNotConsumeAllInput |
+                       nsContentUtils::eParseHTMLInteger_Error |
+                       nsContentUtils::eParseHTMLInteger_ErrorOverflow)));
       return;
     }
     MOZ_ASSERT(
@@ -5872,7 +5865,7 @@ already_AddRefed<nsIURI> nsDocShell::AttemptURIFixup(
     const mozilla::Maybe<nsCString>& aOriginalURIString, uint32_t aLoadType,
     bool aIsTopFrame, bool aAllowKeywordFixup, bool aUsePrivateBrowsing,
     bool aNotifyKeywordSearchLoading, nsIInputStream** aNewPostData,
-    bool* outWasSchemelessInput) {
+    nsILoadInfo::SchemelessInputType* outSchemelessInput) {
   if (aStatus != NS_ERROR_UNKNOWN_HOST && aStatus != NS_ERROR_NET_RESET &&
       aStatus != NS_ERROR_CONNECTION_REFUSED &&
       aStatus !=
@@ -5958,7 +5951,7 @@ already_AddRefed<nsIURI> nsDocShell::AttemptURIFixup(
         }
         if (info) {
           info->GetPreferredURI(getter_AddRefs(newURI));
-          info->GetWasSchemelessInput(outWasSchemelessInput);
+          info->GetSchemelessInput(outSchemelessInput);
           if (newURI) {
             info->GetKeywordAsSent(keywordAsSent);
             info->GetKeywordProviderName(keywordProviderName);
@@ -6888,9 +6881,9 @@ nsresult nsDocShell::CaptureState() {
 
   // Capture the current content viewer bounds.
   if (mDocumentViewer) {
-    nsIntRect bounds;
+    LayoutDeviceIntRect bounds;
     mDocumentViewer->GetBounds(bounds);
-    mOSHE->SetViewerBounds(bounds);
+    mOSHE->SetViewerBounds(bounds.ToUnknownRect());
   }
 
   // Capture the docshell hierarchy.
@@ -7238,7 +7231,7 @@ nsresult nsDocShell::RestoreFromHistory() {
 
   nsView* rootViewSibling = nullptr;
   nsView* rootViewParent = nullptr;
-  nsIntRect newBounds(0, 0, 0, 0);
+  LayoutDeviceIntRect newBounds(0, 0, 0, 0);
 
   PresShell* oldPresShell = GetPresShell();
   if (oldPresShell) {
@@ -7321,7 +7314,7 @@ nsresult nsDocShell::RestoreFromHistory() {
   mIsRestoringDocument = false;
 
   // Hack to keep nsDocShellEditorData alive across the
-  // SetContentViewer(nullptr) call below.
+  // SetDocumentViewer(nullptr) call below.
   UniquePtr<nsDocShellEditorData> data(mLSHE->ForgetEditorData());
 
   // Now remove it from the cached presentation.
@@ -7545,7 +7538,8 @@ nsresult nsDocShell::RestoreFromHistory() {
   // cached viewer size (skipping the resize if they are equal).
 
   if (newRootView) {
-    if (!newBounds.IsEmpty() && !newBounds.IsEqualEdges(oldBounds)) {
+    if (!newBounds.IsEmpty() &&
+        !newBounds.ToUnknownRect().IsEqualEdges(oldBounds)) {
       MOZ_LOG(gPageCacheLog, LogLevel::Debug,
               ("resize widget(%d, %d, %d, %d)", newBounds.x, newBounds.y,
                newBounds.width, newBounds.height));
@@ -7853,7 +7847,7 @@ nsresult nsDocShell::SetupNewViewer(nsIDocumentViewer* aNewViewer,
   //
   // In this block of code, if we get an error result, we return it
   // but if we get a null pointer, that's perfectly legal for parent
-  // and parentContentViewer.
+  // and parentDocumentViewer.
   //
 
   int32_t x = 0;
@@ -7942,7 +7936,7 @@ nsresult nsDocShell::SetupNewViewer(nsIDocumentViewer* aNewViewer,
   nsCOMPtr<nsIWidget> widget;
   NS_ENSURE_SUCCESS(GetMainWidget(getter_AddRefs(widget)), NS_ERROR_FAILURE);
 
-  nsIntRect bounds(x, y, cx, cy);
+  LayoutDeviceIntRect bounds(x, y, cx, cy);
 
   mDocumentViewer->SetNavigationTiming(mTiming);
 
@@ -7952,7 +7946,7 @@ nsresult nsDocShell::SetupNewViewer(nsIDocumentViewer* aNewViewer,
     viewer->Destroy();
     mDocumentViewer = nullptr;
     SetCurrentURIInternal(nullptr);
-    NS_WARNING("ContentViewer Initialization failed");
+    NS_WARNING("DocumentViewer Initialization failed");
     return NS_ERROR_FAILURE;
   }
 
@@ -9943,8 +9937,6 @@ nsIPrincipal* nsDocShell::GetInheritedPrincipal(
   }
 
   if (nsCOMPtr<nsITimedChannel> timedChannel = do_QueryInterface(channel)) {
-    timedChannel->SetTimingEnabled(true);
-
     nsString initiatorType;
     switch (aLoadInfo->InternalContentPolicyType()) {
       case nsIContentPolicy::TYPE_INTERNAL_EMBED:
@@ -12702,7 +12694,7 @@ class OnLinkClickEvent : public Runnable {
  public:
   OnLinkClickEvent(nsDocShell* aHandler, nsIContent* aContent,
                    nsDocShellLoadState* aLoadState, bool aNoOpenerImplied,
-                   bool aIsTrusted, nsIPrincipal* aTriggeringPrincipal);
+                   nsIPrincipal* aTriggeringPrincipal);
 
   NS_IMETHOD Run() override {
     // We need to set up an AutoJSAPI here for the following reason: When we
@@ -12710,9 +12702,9 @@ class OnLinkClickEvent : public Runnable {
     // nsGlobalWindow::OpenInternal which only does popup blocking if
     // !LegacyIsCallerChromeOrNativeCode(). So we need to fake things so that
     // we don't look like native code as far as LegacyIsCallerNativeCode() is
-    // concerned.
+    // concerned. (Bug 1930445)
     AutoJSAPI jsapi;
-    if (mIsTrusted || jsapi.Init(mContent->OwnerDoc()->GetScopeObject())) {
+    if (jsapi.Init(mContent->OwnerDoc()->GetScopeObject())) {
       mHandler->OnLinkClickSync(mContent, mLoadState, mNoOpenerImplied,
                                 mTriggeringPrincipal);
     }
@@ -12725,25 +12717,23 @@ class OnLinkClickEvent : public Runnable {
   RefPtr<nsDocShellLoadState> mLoadState;
   nsCOMPtr<nsIPrincipal> mTriggeringPrincipal;
   bool mNoOpenerImplied;
-  bool mIsTrusted;
 };
 
 OnLinkClickEvent::OnLinkClickEvent(nsDocShell* aHandler, nsIContent* aContent,
                                    nsDocShellLoadState* aLoadState,
-                                   bool aNoOpenerImplied, bool aIsTrusted,
+                                   bool aNoOpenerImplied,
                                    nsIPrincipal* aTriggeringPrincipal)
     : mozilla::Runnable("OnLinkClickEvent"),
       mHandler(aHandler),
       mContent(aContent),
       mLoadState(aLoadState),
       mTriggeringPrincipal(aTriggeringPrincipal),
-      mNoOpenerImplied(aNoOpenerImplied),
-      mIsTrusted(aIsTrusted) {}
+      mNoOpenerImplied(aNoOpenerImplied) {}
 
 nsresult nsDocShell::OnLinkClick(
     nsIContent* aContent, nsIURI* aURI, const nsAString& aTargetSpec,
     const nsAString& aFileName, nsIInputStream* aPostDataStream,
-    nsIInputStream* aHeadersDataStream, bool aIsUserTriggered, bool aIsTrusted,
+    nsIInputStream* aHeadersDataStream, bool aIsUserTriggered,
     nsIPrincipal* aTriggeringPrincipal, nsIContentSecurityPolicy* aCsp) {
 #ifndef ANDROID
   MOZ_ASSERT(aTriggeringPrincipal, "Need a valid triggeringPrincipal");
@@ -12802,9 +12792,8 @@ nsresult nsDocShell::OnLinkClick(
       ownerDoc->ConsumeTextDirectiveUserActivation() ||
       hasValidUserGestureActivation);
 
-  nsCOMPtr<nsIRunnable> ev =
-      new OnLinkClickEvent(this, aContent, loadState, noOpenerImplied,
-                           aIsTrusted, aTriggeringPrincipal);
+  nsCOMPtr<nsIRunnable> ev = new OnLinkClickEvent(
+      this, aContent, loadState, noOpenerImplied, aTriggeringPrincipal);
   return Dispatch(ev.forget());
 }
 

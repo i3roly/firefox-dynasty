@@ -51,7 +51,8 @@
 using namespace mozilla;
 using namespace mozilla::dom;
 
-static const nscoord kMediumBorderWidth = nsPresContext::CSSPixelsToAppUnits(3);
+MOZ_RUNINIT static const nscoord kMediumBorderWidth =
+    nsPresContext::CSSPixelsToAppUnits(3);
 
 // We set the size limit of style structs to 504 bytes so that when they
 // are allocated by Servo side with Arc, the total size doesn't exceed
@@ -309,7 +310,7 @@ static StyleRect<T> StyleRectWithAllSides(const T& aSide) {
   return {aSide, aSide, aSide, aSide};
 }
 
-const StyleMargin nsStyleMargin::kZeroMargin =
+MOZ_RUNINIT const StyleMargin nsStyleMargin::kZeroMargin =
     StyleMargin::LengthPercentage(StyleLengthPercentage::Zero());
 
 nsStyleMargin::nsStyleMargin()
@@ -1357,9 +1358,10 @@ StyleJustifySelf nsStylePosition::UsedJustifySelf(
   return {StyleAlignFlags::NORMAL};
 }
 
-const StyleInset nsStylePosition::kAutoInset = StyleInset::Auto();
-const StyleSize nsStylePosition::kAutoSize = StyleSize::Auto();
-const StyleMaxSize nsStylePosition::kNoneMaxSize = StyleMaxSize::None();
+MOZ_RUNINIT const StyleInset nsStylePosition::kAutoInset = StyleInset::Auto();
+MOZ_RUNINIT const StyleSize nsStylePosition::kAutoSize = StyleSize::Auto();
+MOZ_RUNINIT const StyleMaxSize nsStylePosition::kNoneMaxSize =
+    StyleMaxSize::None();
 
 // --------------------
 // nsStyleTable
@@ -3004,7 +3006,6 @@ nsStyleUI::nsStyleUI()
     : mInert(StyleInert::None),
       mMozTheme(StyleMozTheme::Auto),
       mUserInput(StyleUserInput::Auto),
-      mUserModify(StyleUserModify::ReadOnly),
       mUserFocus(StyleUserFocus::Normal),
       mPointerEvents(StylePointerEvents::Auto),
       mCursor{{}, StyleCursorKind::Auto},
@@ -3019,7 +3020,6 @@ nsStyleUI::nsStyleUI(const nsStyleUI& aSource)
     : mInert(aSource.mInert),
       mMozTheme(aSource.mMozTheme),
       mUserInput(aSource.mUserInput),
-      mUserModify(aSource.mUserModify),
       mUserFocus(aSource.mUserFocus),
       mPointerEvents(aSource.mPointerEvents),
       mCursor(aSource.mCursor),
@@ -3063,10 +3063,6 @@ nsChangeHint nsStyleUI::CalcDifference(const nsStyleUI& aNewData) const {
 
   if (mPointerEvents != aNewData.mPointerEvents) {
     hint |= kPointerEventsHint;
-  }
-
-  if (mUserModify != aNewData.mUserModify) {
-    hint |= NS_STYLE_HINT_VISUAL;
   }
 
   if (mInert != aNewData.mInert) {
@@ -3504,6 +3500,14 @@ void StyleCalcNode::ScaleLengthsBy(float aScale) {
     case Tag::Sign: {
       const auto& sign = AsSign();
       ScaleNode(*sign);
+      break;
+    }
+    case Tag::Anchor: {
+      MOZ_ASSERT_UNREACHABLE("Unresolved anchor() function");
+      break;
+    }
+    case Tag::AnchorSize: {
+      MOZ_ASSERT_UNREACHABLE("Unresolved anchor-size() function");
       break;
     }
   }

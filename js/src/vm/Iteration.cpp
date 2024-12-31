@@ -1350,7 +1350,7 @@ PlainObject* js::CreateIterResultObject(JSContext* cx, HandleValue value,
 }
 
 PlainObject* GlobalObject::getOrCreateIterResultTemplateObject(JSContext* cx) {
-  HeapPtr<PlainObject*>& obj = cx->global()->data().iterResultTemplate;
+  GCPtr<PlainObject*>& obj = cx->global()->data().iterResultTemplate;
   if (obj) {
     return obj;
   }
@@ -1364,7 +1364,7 @@ PlainObject* GlobalObject::getOrCreateIterResultTemplateObject(JSContext* cx) {
 /* static */
 PlainObject* GlobalObject::getOrCreateIterResultWithoutPrototypeTemplateObject(
     JSContext* cx) {
-  HeapPtr<PlainObject*>& obj =
+  GCPtr<PlainObject*>& obj =
       cx->global()->data().iterResultWithoutPrototypeTemplate;
   if (obj) {
     return obj;
@@ -1464,6 +1464,10 @@ enum {
   ArrayIteratorSlotItemKind,
   ArrayIteratorSlotCount
 };
+// Slot numbers must match constants used in self-hosted code.
+static_assert(ArrayIteratorSlotIteratedObject == ITERATOR_SLOT_TARGET);
+static_assert(ArrayIteratorSlotNextIndex == ITERATOR_SLOT_NEXT_INDEX);
+static_assert(ArrayIteratorSlotItemKind == ARRAY_ITERATOR_SLOT_ITEM_KIND);
 
 const JSClass ArrayIteratorObject::class_ = {
     "Array Iterator",
@@ -1505,6 +1509,9 @@ enum {
   StringIteratorSlotNextIndex,
   StringIteratorSlotCount
 };
+// Slot numbers must match constants used in self-hosted code.
+static_assert(StringIteratorSlotIteratedObject == ITERATOR_SLOT_TARGET);
+static_assert(StringIteratorSlotNextIndex == ITERATOR_SLOT_NEXT_INDEX);
 
 const JSClass StringIteratorObject::class_ = {
     "String Iterator",

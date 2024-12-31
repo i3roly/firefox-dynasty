@@ -10,6 +10,7 @@ ChromeUtils.defineESModuleGetters(lazy, {
   Preferences: "resource://gre/modules/Preferences.sys.mjs",
   setTimeout: "resource://gre/modules/Timer.sys.mjs",
   clearTimeout: "resource://gre/modules/Timer.sys.mjs",
+  ProcessType: "resource://gre/modules/ProcessType.sys.mjs",
 });
 
 import { AppConstants } from "resource://gre/modules/AppConstants.sys.mjs";
@@ -61,6 +62,7 @@ export class UserCharacteristicsPageService {
       return;
     }
     this._initialized = true;
+    this.handledErrors = [];
   }
 
   shutdown() {}
@@ -120,11 +122,23 @@ export class UserCharacteristicsPageService {
           "user-characteristics-populating-data-done"
         );
       } finally {
-        lazy.console.debug("Unregistering actor");
-        ChromeUtils.unregisterWindowActor("UserCharacteristics");
+        lazy.console.debug("Unregistering actors");
+        this.cleanUp();
+        lazy.console.debug("Cleanup done");
         this._backgroundBrowsers.delete(browser);
+        lazy.console.debug("Background browser removed");
       }
     });
+  }
+
+  cleanUp() {
+    ChromeUtils.unregisterWindowActor("UserCharacteristics");
+    // unregisterWindowActor doesn't throw if the actor is not registered.
+    // (Do note it console.error's but doesn't throw)
+    // We can safely double unregister. We do this to handle the case where
+    // the actor was registered but the function it was registered timed out.
+    ChromeUtils.unregisterWindowActor("UserCharacteristicsWindowInfo");
+    ChromeUtils.unregisterWindowActor("UserCharacteristicsCanvasRendering");
   }
 
   async populateAndCollectErrors(browser, data) {
@@ -140,7 +154,15 @@ export class UserCharacteristicsPageService {
       [this.populateClientInfo, []],
       [this.populateCPUInfo, []],
       [this.populateWindowInfo, []],
-      [this.populateWebGlInfo, [browser.ownerGlobal, browser.ownerDocument]],
+      [
+        this.populateWebGlInfo,
+        [browser.ownerGlobal, browser.ownerDocument, false],
+      ],
+      [
+        this.populateWebGlInfo,
+        [browser.ownerGlobal, browser.ownerDocument, true],
+      ],
+      [this.populateCanvasData, []],
     ];
     // Bind them to the class and run them in parallel.
     // Timeout if any of them takes too long (5 minutes).
@@ -162,12 +184,17 @@ export class UserCharacteristicsPageService {
       }
     }
 
+    errors.push(...this.handledErrors);
+
     Glean.characteristics.jsErrors.set(JSON.stringify(errors));
   }
 
-  async collectGleanMetricsFromMap(data, operation = "set") {
+  async collectGleanMetricsFromMap(
+    data,
+    { prefix = "", suffix = "", operation = "set" } = {}
+  ) {
     for (const [key, value] of Object.entries(data)) {
-      Glean.characteristics[key][operation](value);
+      Glean.characteristics[prefix + key + suffix][operation](value);
     }
   }
 
@@ -231,10 +258,14 @@ export class UserCharacteristicsPageService {
     for (const win of Services.wm.getEnumerator("navigator:browser")) {
       if (!win.closed) {
         for (const tab of win.gBrowser.tabs) {
-          const actor =
+          const actor = await promiseTry(() =>
             tab.linkedBrowser.browsingContext?.currentWindowGlobal.getActor(
               "UserCharacteristicsWindowInfo"
-            );
+            )
+          ).catch(async e => {
+            lazy.console.error("Error getting actor", e);
+            this.handledErrors.push(await stringifyError(e));
+          });
 
           if (!actor) {
             continue;
@@ -250,6 +281,167 @@ export class UserCharacteristicsPageService {
 
     const pointerResult = await pointerInfoPromise;
     this.collectGleanMetricsFromMap(pointerResult);
+  }
+
+  async populateCanvasData() {
+    const actorName = "UserCharacteristicsCanvasRendering";
+    ChromeUtils.registerWindowActor(actorName, {
+      parent: {
+        esModuleURI: "resource://gre/actors/UserCharacteristicsParent.sys.mjs",
+      },
+      child: {
+        esModuleURI:
+          "resource://gre/actors/UserCharacteristicsCanvasRenderingChild.sys.mjs",
+      },
+    });
+
+    let data = {};
+    // Returns true if we need to try again
+    const attemptRender = async allowSoftwareRenderer => {
+      const diagnostics = {
+        winCount: 0,
+        tabCount: 0,
+        closed: 0,
+        noActor: 0,
+        noDebugInfo: 0,
+        notHW: 0,
+        remoteTypes: [],
+      };
+      // Try to find a window that supports hardware rendering
+      let acceleratedActor = null;
+      let fallbackActor = null;
+      for (const win of Services.wm.getEnumerator("navigator:browser")) {
+        diagnostics.winCount++;
+        if (win.closed) {
+          diagnostics.closed++;
+          continue;
+        }
+
+        for (const tab of win.gBrowser.tabs) {
+          diagnostics.tabCount++;
+          diagnostics.remoteTypes.push(
+            sanitizeRemoteType(tab.linkedBrowser.remoteType)
+          );
+
+          const actor = await promiseTry(() =>
+            tab.linkedBrowser.browsingContext?.currentWindowGlobal.getActor(
+              actorName
+            )
+          ).catch(async e => {
+            lazy.console.error("Error getting actor", e);
+            this.handledErrors.push(await stringifyError(e));
+          });
+
+          if (!actor) {
+            diagnostics.noActor++;
+            continue;
+          }
+
+          // Example data: {"backendType":3,"drawTargetType":0,"isAccelerated":false,"isShared":true}
+          const debugInfo = await timeoutPromise(
+            actor.sendQuery("CanvasRendering:GetDebugInfo"),
+            5000
+          ).catch(async e => {
+            lazy.console.error("Canvas rendering debug info failed", e);
+            this.handledErrors.push(await stringifyError(e));
+          });
+          if (!debugInfo) {
+            diagnostics.noDebugInfo++;
+            continue;
+          }
+
+          lazy.console.debug("Canvas rendering debug info", debugInfo);
+
+          fallbackActor = actor;
+          if (debugInfo.isAccelerated) {
+            acceleratedActor = actor;
+            break;
+          }
+          diagnostics.notHW++;
+        }
+      }
+
+      // If we didn't find a hardware accelerated window, we use the last one
+      const actor = acceleratedActor || fallbackActor;
+
+      if (!actor) {
+        lazy.console.error("No actor found for canvas rendering");
+        // There's no actor/window to render canvases
+        return { error: { message: "NO_ACTOR", diagnostics }, retry: false };
+      }
+
+      // We have an actor, hw accelerated or not
+      // Ask it to render the canvases.
+      // Timeout after 1 minute to give multiple
+      // chances to render canvases.
+      if (allowSoftwareRenderer || acceleratedActor) {
+        try {
+          data = await timeoutPromise(
+            actor.sendQuery("CanvasRendering:Render", {
+              hwRenderingExpected: !!acceleratedActor,
+            }),
+            1 * 60 * 1000
+          );
+        } catch (e) {
+          lazy.console.error(
+            "Canvas rendering timed out or actor was destroyed (tab closed etc.)",
+            e
+          );
+          return {
+            error: { message: await stringifyError(e), diagnostics },
+            retry: true,
+          };
+        }
+
+        // Successfully rendered at least some canvases, maybe all of them
+        lazy.console.debug(
+          `Canvases rendered because ${
+            acceleratedActor
+              ? "we found a hardware accelerated window"
+              : "we allowed software rendering"
+          }`
+        );
+        return {
+          error: null,
+          retry: false,
+        };
+      }
+
+      // We have a fallback actor, but we don't want to use it for software rendering
+      lazy.console.error(
+        "No hardware accelerated windows found and software rendering is not allowed"
+      );
+      return { error: { message: "NO_HW_ACTOR", diagnostics }, retry: true };
+    };
+
+    // Try to render canvases
+    let result = null;
+    let tries = 1;
+    while (
+      (result = await attemptRender(tries === 5 || Cu.isInAutomation)).retry
+    ) {
+      // We either don't have hardware accelerated windows or we failed to render canvases.
+      this.handledErrors.push(result.error);
+      // We allow software rendering on the fifth try.
+      tries++;
+      // Rendering might fail if the user closes the tab before we render the canvases.
+      // Wait for a bit before trying again
+      await new Promise(resolve => lazy.setTimeout(resolve, 10 * 1000));
+    }
+
+    if (!result.retry && result.error) {
+      this.handledErrors.push(result.error);
+    }
+
+    // We may have HW + SW, or only SW rendered canvases - populate the metrics with what we have
+    this.collectGleanMetricsFromMap(data.renderings);
+
+    ChromeUtils.unregisterWindowActor(actorName);
+
+    // Record the errors
+    if (data.errors?.length) {
+      this.handledErrors.push(...data.errors);
+    }
   }
 
   async populateZoomPrefs() {
@@ -296,32 +488,8 @@ export class UserCharacteristicsPageService {
     // usercharacteristics.js and the metric defined
     const metrics = {
       set: [
-        "canvasdata1",
-        "canvasdata2",
-        "canvasdata3",
-        "canvasdata4",
-        "canvasdata5",
-        "canvasdata6",
-        "canvasdata7",
-        "canvasdata8",
-        "canvasdata9",
-        "canvasdata10",
         "canvasdata11Webgl",
-        "canvasdata12Fingerprintjs1",
-        "canvasdata13Fingerprintjs2",
-        "canvasdata1software",
-        "canvasdata2software",
-        "canvasdata3software",
-        "canvasdata4software",
-        "canvasdata5software",
-        "canvasdata6software",
-        "canvasdata7software",
-        "canvasdata8software",
-        "canvasdata9software",
-        "canvasdata10software",
         "canvasdata11Webglsoftware",
-        "canvasdata12Fingerprintjs1software",
-        "canvasdata13Fingerprintjs2software",
         "voicesCount",
         "voicesLocalCount",
         "voicesDefault",
@@ -437,7 +605,7 @@ export class UserCharacteristicsPageService {
     );
   }
 
-  async populateWebGlInfo(window, document) {
+  async populateWebGlInfo(window, document, forceSoftwareRendering) {
     const results = {
       glVersion: 2,
       parameters: {
@@ -454,17 +622,16 @@ export class UserCharacteristicsPageService {
     };
 
     const canvas = document.createElement("canvas");
-    let gl = canvas.getContext("webgl2");
+    let gl = canvas.getContext("webgl2", { forceSoftwareRendering });
     if (!gl) {
-      gl = canvas.getContext("webgl");
+      gl = canvas.getContext("webgl", { forceSoftwareRendering });
       results.glVersion = 1;
     }
     if (!gl) {
       lazy.console.error(
         "Unable to initialize WebGL. Your browser or machine may not support it."
       );
-      results.glVersion = 0;
-      Glean.characteristics.webglinfo.set(JSON.stringify(results));
+      Glean.characteristics.glVersion.set(results.glVersion);
       return;
     }
 
@@ -600,6 +767,7 @@ export class UserCharacteristicsPageService {
       extensionsRaw: mozDebugExt.getParameter(mozDebugExt.EXTENSIONS),
       vendorDebugInfo: gl.getParameter(debugExt.UNMASKED_VENDOR_WEBGL),
       rendererDebugInfo: gl.getParameter(debugExt.UNMASKED_RENDERER_WEBGL),
+      contextType: mozDebugExt.getParameter(mozDebugExt.CONTEXT_TYPE),
     };
 
     if (gl.getExtension("WEBGL_debug_shaders")) {
@@ -664,35 +832,36 @@ export class UserCharacteristicsPageService {
       };
     }
 
-    // General
-    Glean.characteristics.glVersion.set(results.glVersion);
-    // Debug Params
-    Glean.characteristics.glExtensions.set(results.debugParams.extensions);
-    Glean.characteristics.glExtensionsRaw.set(
-      results.debugParams.extensionsRaw
-    );
-    Glean.characteristics.glRenderer.set(results.debugParams.rendererDebugInfo);
-    Glean.characteristics.glRendererRaw.set(results.debugParams.rendererRaw);
-    Glean.characteristics.glVendor.set(results.debugParams.vendorDebugInfo);
-    Glean.characteristics.glVendorRaw.set(results.debugParams.vendorRaw);
-    Glean.characteristics.glVersionRaw.set(results.debugParams.versionRaw);
-    // Debug Shaders
-    Glean.characteristics.glFragmentShader.set(results.debugShaders.fs);
-    Glean.characteristics.glVertexShader.set(results.debugShaders.vs);
-    Glean.characteristics.glMinimalSource.set(results.debugShaders.ms);
-    // Parameters
-    Glean.characteristics.glParamsExtensions.set(
-      JSON.stringify(results.parameters.extensions)
-    );
-    Glean.characteristics.glParamsV1.set(JSON.stringify(results.parameters.v1));
-    Glean.characteristics.glParamsV2.set(JSON.stringify(results.parameters.v2));
-    // Shader Precision
-    Glean.characteristics.glPrecisionFragment.set(
-      JSON.stringify(results.shaderPrecision.FRAGMENT_SHADER)
-    );
-    Glean.characteristics.glPrecisionVertex.set(
-      JSON.stringify(results.shaderPrecision.VERTEX_SHADER)
-    );
+    const map = {
+      // General
+      glVersion: results.glVersion,
+      // Debug Params
+      glExtensions: results.debugParams.extensions,
+      glExtensionsRaw: results.debugParams.extensionsRaw,
+      glRenderer: results.debugParams.rendererDebugInfo,
+      glRendererRaw: results.debugParams.rendererRaw,
+      glVendor: results.debugParams.vendorDebugInfo,
+      glVendorRaw: results.debugParams.vendorRaw,
+      glVersionRaw: results.debugParams.versionRaw,
+      glContextType: results.debugParams.contextType,
+      // Debug Shaders
+      glFragmentShader: results.debugShaders.fs,
+      glVertexShader: results.debugShaders.vs,
+      glMinimalSource: results.debugShaders.ms,
+      // Parameters
+      glParamsExtensions: JSON.stringify(results.parameters.extensions),
+      glParamsV1: JSON.stringify(results.parameters.v1),
+      glParamsV2: JSON.stringify(results.parameters.v2),
+      // Shader Precision
+      glPrecisionFragment: JSON.stringify(
+        results.shaderPrecision.FRAGMENT_SHADER
+      ),
+      glPrecisionVertex: JSON.stringify(results.shaderPrecision.VERTEX_SHADER),
+    };
+
+    this.collectGleanMetricsFromMap(map, {
+      suffix: forceSoftwareRendering ? "Software" : "",
+    });
   }
 
   async pageLoaded(browsingContext, data) {
@@ -776,4 +945,39 @@ function timeoutPromise(promise, ms) {
       }
     );
   });
+}
+
+function promiseTry(func) {
+  return new Promise((resolve, reject) => {
+    try {
+      resolve(func());
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+// Remote type may include current site url, which is not needed.
+// We only need the remote type.
+// See https://firefox-source-docs.mozilla.org/dom/ipc/process_model.html
+// and search for $SITE for processes that have site information.
+// We return unknown if it isn't one of the known types.
+function sanitizeRemoteType(remoteTypeStr) {
+  if (!remoteTypeStr) {
+    return "null";
+  }
+
+  const remoteTypes = remoteTypeStr.split("=");
+  if (remoteTypes.length >= 2) {
+    return isValidRemoteType(remoteTypes[0]) ? remoteTypes[0] : "unknown";
+  }
+
+  return isValidRemoteType(remoteTypeStr) ? remoteTypeStr : "unknown";
+}
+
+function isValidRemoteType(sanitizedRemoteType) {
+  return (
+    lazy.ProcessType.fluentNameFromProcessTypeString(sanitizedRemoteType) !==
+    lazy.ProcessType.kFallback
+  );
 }

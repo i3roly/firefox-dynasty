@@ -28,10 +28,13 @@
 #include "mozilla/StaticPrefs_widget.h"
 #include "mozilla/UniquePtr.h"
 #include "mozilla/WindowsVersion.h"
+#include "nsArrayEnumerator.h"
 #include "nsCRT.h"
 #include "nsEnumeratorUtils.h"
 #include "nsHashPropertyBag.h"
 #include "nsIContentAnalysis.h"
+#include "nsIFile.h"
+#include "nsISimpleEnumerator.h"
 #include "nsCExternalHandlerService.h"
 #include "nsIExternalHelperAppService.h"
 #include "nsNetUtil.h"
@@ -56,7 +59,7 @@ using namespace mozilla::widget;
 template <typename Res>
 using FDPromise = filedialog::Promise<Res>;
 
-UniquePtr<char16_t[], nsFilePicker::FreeDeleter>
+MOZ_RUNINIT UniquePtr<char16_t[], nsFilePicker::FreeDeleter>
     nsFilePicker::sLastUsedUnicodeDirectory;
 
 #define MAX_EXTENSION_LENGTH 10
@@ -79,11 +82,15 @@ class AutoWidgetPickerState {
   explicit AutoWidgetPickerState(nsIWidget* aWidget)
       : mWindow(GetWindowForWidget(aWidget)) {
     MOZ_ASSERT(mWindow);
-    if (mWindow) mWindow->PickerOpen();
+    if (mWindow) {
+      mWindow->PickerOpen();
+    }
   }
   ~AutoWidgetPickerState() {
     // may be null if moved-from
-    if (mWindow) mWindow->PickerClosed();
+    if (mWindow) {
+      mWindow->PickerClosed();
+    }
   }
 
   AutoWidgetPickerState(AutoWidgetPickerState const&) = delete;
@@ -96,7 +103,7 @@ class AutoWidgetPickerState {
 ///////////////////////////////////////////////////////////////////////////////
 // nsIFilePicker
 
-nsFilePicker::nsFilePicker() : mSelectedType(1) {}
+nsFilePicker::nsFilePicker() = default;
 
 NS_IMPL_ISUPPORTS(nsFilePicker, nsIFilePicker)
 
@@ -321,76 +328,6 @@ class AsyncAllIterator final {
   RefPtr<mozilla::MozPromise<bool, nsresult, true>::Private> mPromise;
 };
 
-namespace telemetry {
-static uint32_t Delta(uint64_t tb, uint64_t ta) {
-  // FILETIMEs are 100ns intervals; we reduce that to 1ms.
-  // (`u32::max()` milliseconds is roughly 47.91 days.)
-  return uint32_t((tb - ta) / 10'000);
-};
-static nsCString HexString(uint32_t val) {
-  return nsPrintfCString("%08" PRIX32, val);
-};
-
-static bool InShutdown() {
-  return AppShutdown::GetCurrentShutdownPhase() != ShutdownPhase::NotInShutdown;
-}
-
-static void RecordSuccess(uint64_t (&&time)[2]) {
-  auto [t0, t1] = time;
-
-  namespace glean_fd = mozilla::glean::file_dialog;
-  glean_fd::FallbackV21Extra extra{
-      .inShutdown = Some(InShutdown()),
-      .succeeded = Some(true),
-      .timeLocal = Nothing(),
-      .timeRemote = Some(Delta(t1, t0)),
-      .whereLocal = Nothing(),
-      .whereRemote = Nothing(),
-      .whyLocal = Nothing(),
-      .whyRemote = Nothing(),
-  };
-  glean_fd::fallback_v2_1.Record(Some(extra));
-}
-
-// for use when a local fallback is not attempted
-static void RecordFailure(uint64_t (&&time)[2], Error const& remote) {
-  auto [t0, t1] = time;
-
-  namespace glean_fd = mozilla::glean::file_dialog;
-  glean_fd::FallbackV21Extra extra{
-      .inShutdown = Some(InShutdown()),
-      .succeeded = Some(false),
-      .timeLocal = Nothing(),
-      .timeRemote = Some(Delta(t1, t0)),
-      .whereLocal = Nothing(),
-      .whereRemote = Some(remote.where.c_str()),
-      .whyLocal = Nothing(),
-      .whyRemote = Some(HexString(remote.why)),
-  };
-  glean_fd::fallback_v2_1.Record(Some(extra));
-}
-
-// for use when a local fallback is attempted
-static void RecordFailure(uint64_t (&&time)[3], Error const& remote,
-                          Maybe<Error> const& local) {
-  auto [t0, t1, t2] = time;
-
-  namespace glean_fd = mozilla::glean::file_dialog;
-  glean_fd::FallbackV21Extra extra{
-      .inShutdown = Some(InShutdown()),
-      .succeeded = Some(false),
-      .timeLocal = Some(Delta(t2, t1)),
-      .timeRemote = Some(Delta(t1, t0)),
-      .whereLocal = local.map([](auto const& e) { return e.where.c_str(); }),
-      .whereRemote = Some(remote.where.c_str()),
-      .whyLocal = local.map([](auto const& e) { return HexString(e.why); }),
-      .whyRemote = Some(HexString(remote.why)),
-  };
-  glean_fd::fallback_v2_1.Record(Some(extra));
-}
-
-}  // namespace telemetry
-
 /* N.B.: L and R stand for Local and Remote, not just Left and Right */
 template <typename FnL, typename FnR, typename... Args>
 struct AsyncExecuteInfo {
@@ -446,14 +383,6 @@ static auto AsyncExecute(Fn1 local, Fn2 remote, Args const&... args) ->
 
   constexpr static char kFunctionName[] = "LocalAndOrRemote::AsyncExecute";
 
-  // capture time for telemetry
-  constexpr static const auto GetTime = []() -> uint64_t {
-    FILETIME t;
-    ::GetSystemTimeAsFileTime(&t);
-    return (uint64_t(t.dwHighDateTime) << 32) | t.dwLowDateTime;
-  };
-  uint64_t const t0 = GetTime();
-
   bool (*useLocalFallback)(Error const& err) = [](Error const& err) {
     MOZ_ASSERT_UNREACHABLE("useLocalFallback not set?!");
     return true;
@@ -491,11 +420,8 @@ static auto AsyncExecute(Fn1 local, Fn2 remote, Args const&... args) ->
 
   return remote(args...)->Then(
       NS_GetCurrentThread(), kFunctionName,
-      [t0](typename RPromiseT::ResolveValueType result) -> RefPtr<PromiseT> {
+      [](typename RPromiseT::ResolveValueType result) -> RefPtr<PromiseT> {
         // success; stop here
-        auto const t1 = GetTime();
-        // record success
-        telemetry::RecordSuccess({t0, t1});
         return PromiseT::CreateAndResolve(std::move(result), kFunctionName);
       },
       // initialized lambda pack captures are C++20 (clang 9, gcc 9);
@@ -503,12 +429,10 @@ static auto AsyncExecute(Fn1 local, Fn2 remote, Args const&... args) ->
       [=, tuple = std::make_tuple(Copy(args)...)](
           typename RPromiseT::RejectValueType err) mutable -> RefPtr<PromiseT> {
         // failure; record time
-        auto const t1 = GetTime();
 
         // should we fall back to a local implementation?
         if (!useLocalFallback(err)) {
           // if not, log this failure immediately...
-          telemetry::RecordFailure({t0, t1}, err);
           MOZ_LOG(filedialog::sLogFileDialog, LogLevel::Info,
                   ("remote file-dialog failed: kind=%s, where=%s, "
                    "why=%08" PRIX32,
@@ -517,19 +441,12 @@ static auto AsyncExecute(Fn1 local, Fn2 remote, Args const&... args) ->
           return PromiseT::CreateAndReject(err, kFunctionName);
         }
 
-        // otherwise, retry locally...
+        // otherwise, retry locally
         auto p0 = std::apply(local, std::move(tuple));
-        // ...then record the telemetry event
         return p0->Then(
             NS_GetCurrentThread(), kFunctionName,
-            [t0, t1, errRemote = std::move(err)](
-                typename LPromiseT::ResolveOrRejectValue&& val)
+            [](typename LPromiseT::ResolveOrRejectValue&& val)
                 -> RefPtr<PromiseT> {
-              auto const t2 = GetTime();
-              Maybe<Error> const errLocal =
-                  val.IsReject() ? Some(val.RejectValue()) : Nothing();
-              telemetry::RecordFailure({t0, t1, t2}, errRemote, errLocal);
-
               using V = typename PromiseT::ResolveOrRejectValue;
               return PromiseT::CreateAndResolveOrReject(
                   val.IsResolve()
@@ -667,7 +584,9 @@ nsFilePicker::ShowFilePicker(const nsString& aInitialDir) {
         fos |= FOS_NOREADONLYRETURN;
         // Don't follow shortcuts when saving a shortcut, this can be used
         // to trick users (bug 271732)
-        if (IsDefaultPathLink()) fos |= FOS_NODEREFERENCELINKS;
+        if (IsDefaultPathLink()) {
+          fos |= FOS_NODEREFERENCELINKS;
+        }
         break;
 
       case modeGetFolder:
@@ -789,7 +708,9 @@ nsFilePicker::CheckContentAnalysisService() {
   if (NS_WARN_IF(NS_FAILED(rv))) {
     return nsFilePicker::ContentAnalysisResponse::CreateAndReject(rv, __func__);
   }
-  if (!contentAnalysisIsActive) {
+  if (!contentAnalysisIsActive ||
+      !mozilla::StaticPrefs::
+          browser_contentanalysis_interception_point_file_upload_enabled()) {
     return nsFilePicker::ContentAnalysisResponse::CreateAndResolve(true,
                                                                    __func__);
   }
@@ -876,7 +797,9 @@ nsresult nsFilePicker::Open(nsIFilePickerShownCallback* aCallback) {
   }
 
   nsAutoString initialDir;
-  if (mDisplayDirectory) mDisplayDirectory->GetPath(initialDir);
+  if (mDisplayDirectory) {
+    mDisplayDirectory->GetPath(initialDir);
+  }
 
   // If no display directory, re-use the last one.
   if (initialDir.IsEmpty()) {
@@ -963,16 +886,14 @@ nsresult nsFilePicker::Open(nsIFilePickerShownCallback* aCallback) {
   return NS_OK;
 }
 
-nsresult nsFilePicker::Show(nsIFilePicker::ResultCode* aReturnVal) {
-  return NS_ERROR_NOT_IMPLEMENTED;
-}
-
 NS_IMETHODIMP
 nsFilePicker::GetFile(nsIFile** aFile) {
   NS_ENSURE_ARG_POINTER(aFile);
   *aFile = nullptr;
 
-  if (mUnicodeFile.IsEmpty()) return NS_OK;
+  if (mUnicodeFile.IsEmpty()) {
+    return NS_OK;
+  }
 
   nsCOMPtr<nsIFile> file;
   nsresult rv = NS_NewLocalFile(mUnicodeFile, getter_AddRefs(file));
@@ -989,7 +910,9 @@ nsFilePicker::GetFileURL(nsIURI** aFileURL) {
   *aFileURL = nullptr;
   nsCOMPtr<nsIFile> file;
   nsresult rv = GetFile(getter_AddRefs(file));
-  if (!file) return rv;
+  if (!file) {
+    return rv;
+  }
 
   return NS_NewFileURI(aFileURL, file);
 }
@@ -1008,16 +931,19 @@ nsBaseWinFilePicker::SetDefaultString(const nsAString& aString) {
   // First, make sure the file name is not too long.
   int32_t nameLength;
   int32_t nameIndex = mDefaultFilePath.RFind(u"\\");
-  if (nameIndex == kNotFound)
+  if (nameIndex == kNotFound) {
     nameIndex = 0;
-  else
+  } else {
     nameIndex++;
+  }
   nameLength = mDefaultFilePath.Length() - nameIndex;
   mDefaultFilename.Assign(Substring(mDefaultFilePath, nameIndex));
 
   if (nameLength > MAX_PATH) {
     int32_t extIndex = mDefaultFilePath.RFind(u".");
-    if (extIndex == kNotFound) extIndex = mDefaultFilePath.Length();
+    if (extIndex == kNotFound) {
+      extIndex = mDefaultFilePath.Length();
+    }
 
     // Let's try to shave the needed characters from the name part.
     int32_t charsToRemove = nameLength - MAX_PATH;
@@ -1133,8 +1059,9 @@ bool nsFilePicker::IsDefaultPathHtml() {
     mDefaultFilePath.Right(ext, mDefaultFilePath.Length() - extIndex);
     if (ext.LowerCaseEqualsLiteral(".htm") ||
         ext.LowerCaseEqualsLiteral(".html") ||
-        ext.LowerCaseEqualsLiteral(".shtml"))
+        ext.LowerCaseEqualsLiteral(".shtml")) {
       return true;
+    }
   }
   return false;
 }
@@ -1207,7 +1134,9 @@ void nsFilePicker::SendFailureNotification(nsFilePicker::ResultCode aResult,
   }
 
   nsCOMPtr<nsIObserverService> obsSvc = mozilla::services::GetObserverService();
-  if (!obsSvc) return;  // normal during XPCOM shutdown
+  if (!obsSvc) {
+    return;  // normal during XPCOM shutdown
+  }
 
   RefPtr<nsHashPropertyBag> props = new nsHashPropertyBag();
   props->SetPropertyAsInterface(u"ctx"_ns, mBrowsingContext);

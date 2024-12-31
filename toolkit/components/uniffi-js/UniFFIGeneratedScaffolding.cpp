@@ -179,6 +179,9 @@ extern "C" {
   void* uniffi_relevancy_fn_clone_relevancystore(void*, RustCallStatus*);
   void uniffi_relevancy_fn_free_relevancystore(void*, RustCallStatus*);
   void* uniffi_relevancy_fn_constructor_relevancystore_new(RustBuffer, RustCallStatus*);
+  void uniffi_relevancy_fn_method_relevancystore_bandit_init(void*, RustBuffer, RustBuffer, RustCallStatus*);
+  RustBuffer uniffi_relevancy_fn_method_relevancystore_bandit_select(void*, RustBuffer, RustBuffer, RustCallStatus*);
+  void uniffi_relevancy_fn_method_relevancystore_bandit_update(void*, RustBuffer, RustBuffer, int8_t, RustCallStatus*);
   RustBuffer uniffi_relevancy_fn_method_relevancystore_calculate_metrics(void*, RustCallStatus*);
   void uniffi_relevancy_fn_method_relevancystore_close(void*, RustCallStatus*);
   RustBuffer uniffi_relevancy_fn_method_relevancystore_ingest(void*, RustBuffer, RustCallStatus*);
@@ -242,6 +245,9 @@ extern "C" {
   void ffi_relevancy_rust_future_free_void(uint64_t);
   void ffi_relevancy_rust_future_complete_void(uint64_t, RustCallStatus*);
   uint16_t uniffi_relevancy_checksum_func_score();
+  uint16_t uniffi_relevancy_checksum_method_relevancystore_bandit_init();
+  uint16_t uniffi_relevancy_checksum_method_relevancystore_bandit_select();
+  uint16_t uniffi_relevancy_checksum_method_relevancystore_bandit_update();
   uint16_t uniffi_relevancy_checksum_method_relevancystore_calculate_metrics();
   uint16_t uniffi_relevancy_checksum_method_relevancystore_close();
   uint16_t uniffi_relevancy_checksum_method_relevancystore_ingest();
@@ -255,6 +261,18 @@ extern "C" {
   void uniffi_remote_settings_fn_method_remotesettings_download_attachment_to_path(void*, RustBuffer, RustBuffer, RustCallStatus*);
   RustBuffer uniffi_remote_settings_fn_method_remotesettings_get_records(void*, RustCallStatus*);
   RustBuffer uniffi_remote_settings_fn_method_remotesettings_get_records_since(void*, uint64_t, RustCallStatus*);
+  void* uniffi_remote_settings_fn_clone_remotesettingsclient(void*, RustCallStatus*);
+  void uniffi_remote_settings_fn_free_remotesettingsclient(void*, RustCallStatus*);
+  RustBuffer uniffi_remote_settings_fn_method_remotesettingsclient_collection_name(void*, RustCallStatus*);
+  RustBuffer uniffi_remote_settings_fn_method_remotesettingsclient_get_attachment(void*, RustBuffer, RustCallStatus*);
+  RustBuffer uniffi_remote_settings_fn_method_remotesettingsclient_get_records(void*, int8_t, RustCallStatus*);
+  RustBuffer uniffi_remote_settings_fn_method_remotesettingsclient_get_records_map(void*, int8_t, RustCallStatus*);
+  void* uniffi_remote_settings_fn_clone_remotesettingsservice(void*, RustCallStatus*);
+  void uniffi_remote_settings_fn_free_remotesettingsservice(void*, RustCallStatus*);
+  void* uniffi_remote_settings_fn_constructor_remotesettingsservice_new(RustBuffer, RustBuffer, RustCallStatus*);
+  void* uniffi_remote_settings_fn_method_remotesettingsservice_make_client(void*, RustBuffer, RustBuffer, RustCallStatus*);
+  RustBuffer uniffi_remote_settings_fn_method_remotesettingsservice_sync(void*, RustCallStatus*);
+  void uniffi_remote_settings_fn_method_remotesettingsservice_update_config(void*, RustBuffer, RustCallStatus*);
   RustBuffer ffi_remote_settings_rustbuffer_alloc(uint64_t, RustCallStatus*);
   RustBuffer ffi_remote_settings_rustbuffer_from_bytes(ForeignBytes, RustCallStatus*);
   void ffi_remote_settings_rustbuffer_free(RustBuffer, RustCallStatus*);
@@ -314,7 +332,15 @@ extern "C" {
   uint16_t uniffi_remote_settings_checksum_method_remotesettings_download_attachment_to_path();
   uint16_t uniffi_remote_settings_checksum_method_remotesettings_get_records();
   uint16_t uniffi_remote_settings_checksum_method_remotesettings_get_records_since();
+  uint16_t uniffi_remote_settings_checksum_method_remotesettingsclient_collection_name();
+  uint16_t uniffi_remote_settings_checksum_method_remotesettingsclient_get_attachment();
+  uint16_t uniffi_remote_settings_checksum_method_remotesettingsclient_get_records();
+  uint16_t uniffi_remote_settings_checksum_method_remotesettingsclient_get_records_map();
+  uint16_t uniffi_remote_settings_checksum_method_remotesettingsservice_make_client();
+  uint16_t uniffi_remote_settings_checksum_method_remotesettingsservice_sync();
+  uint16_t uniffi_remote_settings_checksum_method_remotesettingsservice_update_config();
   uint16_t uniffi_remote_settings_checksum_constructor_remotesettings_new();
+  uint16_t uniffi_remote_settings_checksum_constructor_remotesettingsservice_new();
   uint32_t ffi_remote_settings_uniffi_contract_version();
   void* uniffi_suggest_fn_clone_suggeststore(void*, RustCallStatus*);
   void uniffi_suggest_fn_free_suggeststore(void*, RustCallStatus*);
@@ -322,6 +348,7 @@ extern "C" {
   void uniffi_suggest_fn_method_suggeststore_clear(void*, RustCallStatus*);
   void uniffi_suggest_fn_method_suggeststore_clear_dismissed_suggestions(void*, RustCallStatus*);
   void uniffi_suggest_fn_method_suggeststore_dismiss_suggestion(void*, RustBuffer, RustCallStatus*);
+  RustBuffer uniffi_suggest_fn_method_suggeststore_fetch_geonames(void*, RustBuffer, int8_t, RustBuffer, RustBuffer, RustCallStatus*);
   RustBuffer uniffi_suggest_fn_method_suggeststore_fetch_global_config(void*, RustCallStatus*);
   RustBuffer uniffi_suggest_fn_method_suggeststore_fetch_provider_config(void*, RustBuffer, RustCallStatus*);
   RustBuffer uniffi_suggest_fn_method_suggeststore_ingest(void*, RustBuffer, RustCallStatus*);
@@ -398,6 +425,7 @@ extern "C" {
   uint16_t uniffi_suggest_checksum_method_suggeststore_clear();
   uint16_t uniffi_suggest_checksum_method_suggeststore_clear_dismissed_suggestions();
   uint16_t uniffi_suggest_checksum_method_suggeststore_dismiss_suggestion();
+  uint16_t uniffi_suggest_checksum_method_suggeststore_fetch_geonames();
   uint16_t uniffi_suggest_checksum_method_suggeststore_fetch_global_config();
   uint16_t uniffi_suggest_checksum_method_suggeststore_fetch_provider_config();
   uint16_t uniffi_suggest_checksum_method_suggeststore_ingest();
@@ -771,13 +799,16 @@ extern "C" {
   uint16_t uniffi_uniffi_fixture_external_types_checksum_func_intersection();
   uint32_t ffi_uniffi_fixture_external_types_uniffi_contract_version();
   typedef void (*CallbackInterfaceLoggerMethod0)(uint64_t, RustBuffer, void*, RustCallStatus*);
-  typedef void (*CallbackInterfaceLoggerMethod1)(uint64_t, void*, RustCallStatus*);
+  typedef void (*CallbackInterfaceLoggerMethod1)(uint64_t, RustBuffer, uint32_t, RustBuffer, void*, RustCallStatus*);
+  typedef void (*CallbackInterfaceLoggerMethod2)(uint64_t, void*, RustCallStatus*);
   struct VTableCallbackInterfaceLogger {
     CallbackInterfaceLoggerMethod0 log;
-    CallbackInterfaceLoggerMethod1 finished;
+    CallbackInterfaceLoggerMethod1 log_repeat;
+    CallbackInterfaceLoggerMethod2 finished;
     CallbackInterfaceFree uniffi_free;
   };
   void uniffi_uniffi_fixture_callbacks_fn_init_callback_vtable_logger(VTableCallbackInterfaceLogger*);
+  void uniffi_uniffi_fixture_callbacks_fn_func_call_log_repeat(uint64_t, RustBuffer, uint32_t, RustBuffer, RustCallStatus*);
   void uniffi_uniffi_fixture_callbacks_fn_func_log_even_numbers(uint64_t, RustBuffer, RustCallStatus*);
   void uniffi_uniffi_fixture_callbacks_fn_func_log_even_numbers_main_thread(uint64_t, RustBuffer, RustCallStatus*);
   RustBuffer ffi_uniffi_fixture_callbacks_rustbuffer_alloc(uint64_t, RustCallStatus*);
@@ -836,9 +867,11 @@ extern "C" {
   void ffi_uniffi_fixture_callbacks_rust_future_cancel_void(uint64_t);
   void ffi_uniffi_fixture_callbacks_rust_future_free_void(uint64_t);
   void ffi_uniffi_fixture_callbacks_rust_future_complete_void(uint64_t, RustCallStatus*);
+  uint16_t uniffi_uniffi_fixture_callbacks_checksum_func_call_log_repeat();
   uint16_t uniffi_uniffi_fixture_callbacks_checksum_func_log_even_numbers();
   uint16_t uniffi_uniffi_fixture_callbacks_checksum_func_log_even_numbers_main_thread();
   uint16_t uniffi_uniffi_fixture_callbacks_checksum_method_logger_log();
+  uint16_t uniffi_uniffi_fixture_callbacks_checksum_method_logger_log_repeat();
   uint16_t uniffi_uniffi_fixture_callbacks_checksum_method_logger_finished();
   uint32_t ffi_uniffi_fixture_callbacks_uniffi_contract_version();
   double uniffi_uniffi_geometry_fn_func_gradient(RustBuffer, RustCallStatus*);
@@ -1395,6 +1428,16 @@ const static mozilla::uniffi::UniFFIPointerType kRemoteSettingsRemoteSettingsPoi
   uniffi_remote_settings_fn_clone_remotesettings,
   uniffi_remote_settings_fn_free_remotesettings,
 };
+const static mozilla::uniffi::UniFFIPointerType kRemoteSettingsRemoteSettingsClientPointerType {
+  "remote_settings::RemoteSettingsClient"_ns,
+  uniffi_remote_settings_fn_clone_remotesettingsclient,
+  uniffi_remote_settings_fn_free_remotesettingsclient,
+};
+const static mozilla::uniffi::UniFFIPointerType kRemoteSettingsRemoteSettingsServicePointerType {
+  "remote_settings::RemoteSettingsService"_ns,
+  uniffi_remote_settings_fn_clone_remotesettingsservice,
+  uniffi_remote_settings_fn_free_remotesettingsservice,
+};
 const static mozilla::uniffi::UniFFIPointerType kSuggestSuggestStorePointerType {
   "suggest::SuggestStore"_ns,
   uniffi_suggest_fn_clone_suggeststore,
@@ -1476,8 +1519,7 @@ public:
 
   MOZ_CAN_RUN_SCRIPT
   void MakeCall(JSContext* aCx, dom::UniFFICallbackHandler* aJsHandler, ErrorResult& aError) override {
-    Sequence<dom::UniFFIScaffoldingValue> uniffiArgs;
-
+    nsTArray<dom::UniFFIScaffoldingValue> uniffiArgs;
     // Setup
     if (!uniffiArgs.AppendElements(2, mozilla::fallible)) {
       aError.Throw(NS_ERROR_OUT_OF_MEMORY);
@@ -1540,8 +1582,7 @@ public:
 
   MOZ_CAN_RUN_SCRIPT
   void MakeCall(JSContext* aCx, dom::UniFFICallbackHandler* aJsHandler, ErrorResult& aError) override {
-    Sequence<dom::UniFFIScaffoldingValue> uniffiArgs;
-
+    nsTArray<dom::UniFFIScaffoldingValue> uniffiArgs;
     // Setup
     if (!uniffiArgs.AppendElements(4, mozilla::fallible)) {
       aError.Throw(NS_ERROR_OUT_OF_MEMORY);
@@ -1634,8 +1675,7 @@ public:
 
   MOZ_CAN_RUN_SCRIPT
   void MakeCall(JSContext* aCx, dom::UniFFICallbackHandler* aJsHandler, ErrorResult& aError) override {
-    Sequence<dom::UniFFIScaffoldingValue> uniffiArgs;
-
+    nsTArray<dom::UniFFIScaffoldingValue> uniffiArgs;
     // Setup
     if (!uniffiArgs.AppendElements(1, mozilla::fallible)) {
       aError.Throw(NS_ERROR_OUT_OF_MEMORY);
@@ -1675,6 +1715,76 @@ extern "C" void callback_interface_logger_log(
   UniffiCallbackMethodHandlerBase::FireAndForget(std::move(handler), &gCallbackInterfaceJsHandlerLogger);
 }
 
+class CallbackInterfaceMethodLoggerLogRepeat : public UniffiCallbackMethodHandlerBase {
+private:
+  // Rust arguments, converted using ScaffoldingConverter::FromRust.
+  typename ScaffoldingConverter<RustBuffer>::IntermediateType message;
+  typename ScaffoldingConverter<uint32_t>::IntermediateType count;
+  typename ScaffoldingConverter<RustBuffer>::IntermediateType exclude;
+
+public:
+  CallbackInterfaceMethodLoggerLogRepeat(size_t aObjectHandle, RustBuffer message, uint32_t count, RustBuffer exclude)
+    : UniffiCallbackMethodHandlerBase("fixture_callbacks:Logger", aObjectHandle), message(ScaffoldingConverter<RustBuffer>::FromRust(message)), count(ScaffoldingConverter<uint32_t>::FromRust(count)), exclude(ScaffoldingConverter<RustBuffer>::FromRust(exclude)) {
+  }
+
+  MOZ_CAN_RUN_SCRIPT
+  void MakeCall(JSContext* aCx, dom::UniFFICallbackHandler* aJsHandler, ErrorResult& aError) override {
+    nsTArray<dom::UniFFIScaffoldingValue> uniffiArgs;
+    // Setup
+    if (!uniffiArgs.AppendElements(3, mozilla::fallible)) {
+      aError.Throw(NS_ERROR_OUT_OF_MEMORY);
+      return;
+    }
+
+    // Convert each argument
+    ScaffoldingConverter<RustBuffer>::IntoJs(
+      aCx,
+      std::move(this->message),
+      &uniffiArgs[0],
+      aError);
+    if (aError.Failed()) {
+        return;
+    }
+    ScaffoldingConverter<uint32_t>::IntoJs(
+      aCx,
+      std::move(this->count),
+      &uniffiArgs[1],
+      aError);
+    if (aError.Failed()) {
+        return;
+    }
+    ScaffoldingConverter<RustBuffer>::IntoJs(
+      aCx,
+      std::move(this->exclude),
+      &uniffiArgs[2],
+      aError);
+    if (aError.Failed()) {
+        return;
+    }
+
+    // Stores the return value.  For now, we currently don't do anything with it, since we only support
+    // fire-and-forget callbacks.
+    NullableRootedUnion<dom::UniFFIScaffoldingValue> returnValue(aCx);
+    // Make the call
+    aJsHandler->Call(mObjectHandle, 1, uniffiArgs, returnValue, aError);
+  }
+};
+
+extern "C" void callback_interface_logger_log_repeat(
+    uint64_t uniffiHandle,
+    RustBuffer message, uint32_t count, RustBuffer exclude, 
+    void* uniffiOutReturn,
+    RustCallStatus* uniffiCallStatus
+) {
+  UniquePtr<UniffiCallbackMethodHandlerBase> handler = MakeUnique<CallbackInterfaceMethodLoggerLogRepeat>(uniffiHandle, message, count, exclude);
+  // Note: currently we only support queueing fire-and-forget async callbacks
+
+  // For fire-and-forget callbacks, we don't know if the method succeeds or not
+  // since it's called later. uniffiCallStatus is initialized to a successful
+  // state by the Rust code, so there's no need to modify it.
+  UniffiCallbackMethodHandlerBase::FireAndForget(std::move(handler), &gCallbackInterfaceJsHandlerLogger);
+}
+
 class CallbackInterfaceMethodLoggerFinished : public UniffiCallbackMethodHandlerBase {
 private:
   // Rust arguments, converted using ScaffoldingConverter::FromRust.
@@ -1686,21 +1796,13 @@ public:
 
   MOZ_CAN_RUN_SCRIPT
   void MakeCall(JSContext* aCx, dom::UniFFICallbackHandler* aJsHandler, ErrorResult& aError) override {
-    Sequence<dom::UniFFIScaffoldingValue> uniffiArgs;
-
-    // Setup
-    if (!uniffiArgs.AppendElements(0, mozilla::fallible)) {
-      aError.Throw(NS_ERROR_OUT_OF_MEMORY);
-      return;
-    }
-
-    // Convert each argument
+    nsTArray<dom::UniFFIScaffoldingValue> uniffiArgs;
 
     // Stores the return value.  For now, we currently don't do anything with it, since we only support
     // fire-and-forget callbacks.
     NullableRootedUnion<dom::UniFFIScaffoldingValue> returnValue(aCx);
     // Make the call
-    aJsHandler->Call(mObjectHandle, 1, uniffiArgs, returnValue, aError);
+    aJsHandler->Call(mObjectHandle, 2, uniffiArgs, returnValue, aError);
   }
 };
 
@@ -1729,6 +1831,7 @@ extern "C" void callbackInterfaceFreeLogger(uint64_t uniffiHandle) {
 
 static VTableCallbackInterfaceLogger kCallbackInterfaceVtableLogger {
   callback_interface_logger_log,
+  callback_interface_logger_log_repeat,
   callback_interface_logger_finished,
   callbackInterfaceFreeLogger
 };
@@ -1801,7 +1904,7 @@ void DeregisterCallbackHandler(uint64_t aInterfaceId, ErrorResult& aError) {
 
 // Define scaffolding call classes for each combination of return/argument types
 
-class ScaffoldingCallHandlerUniffiErrorSupportFnFuncSetApplicationErrorReporter : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiErrorSupportFnFuncSetApplicationErrorReporter : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingConverter<uint64_t>::IntermediateType mErrorReporter;
@@ -1832,7 +1935,7 @@ public:
   virtual void ExtractSuccessfulCallResult(JSContext* aCx, dom::Optional<dom::UniFFIScaffoldingValue>& aDest, ErrorResult& aError) override {
   }
 };
-class ScaffoldingCallHandlerUniffiErrorSupportFnFuncUnsetApplicationErrorReporter : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiErrorSupportFnFuncUnsetApplicationErrorReporter : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
 
@@ -1857,7 +1960,7 @@ public:
   virtual void ExtractSuccessfulCallResult(JSContext* aCx, dom::Optional<dom::UniFFIScaffoldingValue>& aDest, ErrorResult& aError) override {
   }
 };
-class ScaffoldingCallHandlerUniffiRelevancyFnFuncScore : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiRelevancyFnFuncScore : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingConverter<RustBuffer>::IntermediateType mInterestVector;
@@ -1903,7 +2006,151 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiRelevancyFnMethodRelevancystoreCalculateMetrics : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiRelevancyFnMethodRelevancystoreBanditInit : public UniffiSyncCallHandler {
+private:
+  // PrepareRustArgs stores the resulting arguments in these fields
+  typename ScaffoldingObjectConverter<&kRelevancyRelevancyStorePointerType>::IntermediateType mPtr;
+  typename ScaffoldingConverter<RustBuffer>::IntermediateType mBandit;
+  typename ScaffoldingConverter<RustBuffer>::IntermediateType mArms;
+
+  // MakeRustCall stores the result of the call in these fields
+
+public:
+  void PrepareRustArgs(const dom::Sequence<dom::UniFFIScaffoldingValue>& aArgs, ErrorResult& aError) override {
+    ScaffoldingObjectConverter<&kRelevancyRelevancyStorePointerType>::FromJs(aArgs[0], &mPtr, aError);
+    if (aError.Failed()) {
+      return;
+    }
+    ScaffoldingConverter<RustBuffer>::FromJs(aArgs[1], &mBandit, aError);
+    if (aError.Failed()) {
+      return;
+    }
+    ScaffoldingConverter<RustBuffer>::FromJs(aArgs[2], &mArms, aError);
+    if (aError.Failed()) {
+      return;
+    }
+  }
+
+  void MakeRustCall() override {
+    RustCallStatus callStatus{};
+    uniffi_relevancy_fn_method_relevancystore_bandit_init(
+      ScaffoldingObjectConverter<&kRelevancyRelevancyStorePointerType>::IntoRust(std::move(mPtr)),
+      ScaffoldingConverter<RustBuffer>::IntoRust(std::move(mBandit)),
+      ScaffoldingConverter<RustBuffer>::IntoRust(std::move(mArms)),
+      &callStatus
+    );
+
+    mUniffiCallStatusCode = callStatus.code;
+    if (callStatus.error_buf.data) {
+      mUniffiCallStatusErrorBuf = OwnedRustBuffer(callStatus.error_buf);
+    }
+  }
+
+  virtual void ExtractSuccessfulCallResult(JSContext* aCx, dom::Optional<dom::UniFFIScaffoldingValue>& aDest, ErrorResult& aError) override {
+  }
+};
+class ScaffoldingCallHandlerUniffiRelevancyFnMethodRelevancystoreBanditSelect : public UniffiSyncCallHandler {
+private:
+  // PrepareRustArgs stores the resulting arguments in these fields
+  typename ScaffoldingObjectConverter<&kRelevancyRelevancyStorePointerType>::IntermediateType mPtr;
+  typename ScaffoldingConverter<RustBuffer>::IntermediateType mBandit;
+  typename ScaffoldingConverter<RustBuffer>::IntermediateType mArms;
+
+  // MakeRustCall stores the result of the call in these fields
+  typename ScaffoldingConverter<RustBuffer>::IntermediateType mUniffiReturnValue;
+
+public:
+  void PrepareRustArgs(const dom::Sequence<dom::UniFFIScaffoldingValue>& aArgs, ErrorResult& aError) override {
+    ScaffoldingObjectConverter<&kRelevancyRelevancyStorePointerType>::FromJs(aArgs[0], &mPtr, aError);
+    if (aError.Failed()) {
+      return;
+    }
+    ScaffoldingConverter<RustBuffer>::FromJs(aArgs[1], &mBandit, aError);
+    if (aError.Failed()) {
+      return;
+    }
+    ScaffoldingConverter<RustBuffer>::FromJs(aArgs[2], &mArms, aError);
+    if (aError.Failed()) {
+      return;
+    }
+  }
+
+  void MakeRustCall() override {
+    RustCallStatus callStatus{};
+    mUniffiReturnValue = ScaffoldingConverter<RustBuffer>::FromRust(
+      uniffi_relevancy_fn_method_relevancystore_bandit_select(
+        ScaffoldingObjectConverter<&kRelevancyRelevancyStorePointerType>::IntoRust(std::move(mPtr)),
+        ScaffoldingConverter<RustBuffer>::IntoRust(std::move(mBandit)),
+        ScaffoldingConverter<RustBuffer>::IntoRust(std::move(mArms)),
+        &callStatus
+      )
+    );
+
+    mUniffiCallStatusCode = callStatus.code;
+    if (callStatus.error_buf.data) {
+      mUniffiCallStatusErrorBuf = OwnedRustBuffer(callStatus.error_buf);
+    }
+  }
+
+  virtual void ExtractSuccessfulCallResult(JSContext* aCx, dom::Optional<dom::UniFFIScaffoldingValue>& aDest, ErrorResult& aError) override {
+    ScaffoldingConverter<RustBuffer>::IntoJs(
+      aCx,
+      std::move(mUniffiReturnValue),
+      &aDest.Construct(),
+      aError
+    );
+  }
+};
+class ScaffoldingCallHandlerUniffiRelevancyFnMethodRelevancystoreBanditUpdate : public UniffiSyncCallHandler {
+private:
+  // PrepareRustArgs stores the resulting arguments in these fields
+  typename ScaffoldingObjectConverter<&kRelevancyRelevancyStorePointerType>::IntermediateType mPtr;
+  typename ScaffoldingConverter<RustBuffer>::IntermediateType mBandit;
+  typename ScaffoldingConverter<RustBuffer>::IntermediateType mArm;
+  typename ScaffoldingConverter<int8_t>::IntermediateType mSelected;
+
+  // MakeRustCall stores the result of the call in these fields
+
+public:
+  void PrepareRustArgs(const dom::Sequence<dom::UniFFIScaffoldingValue>& aArgs, ErrorResult& aError) override {
+    ScaffoldingObjectConverter<&kRelevancyRelevancyStorePointerType>::FromJs(aArgs[0], &mPtr, aError);
+    if (aError.Failed()) {
+      return;
+    }
+    ScaffoldingConverter<RustBuffer>::FromJs(aArgs[1], &mBandit, aError);
+    if (aError.Failed()) {
+      return;
+    }
+    ScaffoldingConverter<RustBuffer>::FromJs(aArgs[2], &mArm, aError);
+    if (aError.Failed()) {
+      return;
+    }
+    ScaffoldingConverter<int8_t>::FromJs(aArgs[3], &mSelected, aError);
+    if (aError.Failed()) {
+      return;
+    }
+  }
+
+  void MakeRustCall() override {
+    RustCallStatus callStatus{};
+    uniffi_relevancy_fn_method_relevancystore_bandit_update(
+      ScaffoldingObjectConverter<&kRelevancyRelevancyStorePointerType>::IntoRust(std::move(mPtr)),
+      ScaffoldingConverter<RustBuffer>::IntoRust(std::move(mBandit)),
+      ScaffoldingConverter<RustBuffer>::IntoRust(std::move(mArm)),
+      ScaffoldingConverter<int8_t>::IntoRust(std::move(mSelected)),
+      &callStatus
+    );
+
+    mUniffiCallStatusCode = callStatus.code;
+    if (callStatus.error_buf.data) {
+      mUniffiCallStatusErrorBuf = OwnedRustBuffer(callStatus.error_buf);
+    }
+  }
+
+  virtual void ExtractSuccessfulCallResult(JSContext* aCx, dom::Optional<dom::UniFFIScaffoldingValue>& aDest, ErrorResult& aError) override {
+  }
+};
+class ScaffoldingCallHandlerUniffiRelevancyFnMethodRelevancystoreCalculateMetrics : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRelevancyRelevancyStorePointerType>::IntermediateType mPtr;
@@ -1943,7 +2190,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiRelevancyFnMethodRelevancystoreClose : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiRelevancyFnMethodRelevancystoreClose : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRelevancyRelevancyStorePointerType>::IntermediateType mPtr;
@@ -1974,7 +2221,7 @@ public:
   virtual void ExtractSuccessfulCallResult(JSContext* aCx, dom::Optional<dom::UniFFIScaffoldingValue>& aDest, ErrorResult& aError) override {
   }
 };
-class ScaffoldingCallHandlerUniffiRelevancyFnMethodRelevancystoreIngest : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiRelevancyFnMethodRelevancystoreIngest : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRelevancyRelevancyStorePointerType>::IntermediateType mPtr;
@@ -2020,7 +2267,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiRelevancyFnMethodRelevancystoreInterrupt : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiRelevancyFnMethodRelevancystoreInterrupt : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRelevancyRelevancyStorePointerType>::IntermediateType mPtr;
@@ -2051,7 +2298,7 @@ public:
   virtual void ExtractSuccessfulCallResult(JSContext* aCx, dom::Optional<dom::UniFFIScaffoldingValue>& aDest, ErrorResult& aError) override {
   }
 };
-class ScaffoldingCallHandlerUniffiRelevancyFnMethodRelevancystoreUserInterestVector : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiRelevancyFnMethodRelevancystoreUserInterestVector : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRelevancyRelevancyStorePointerType>::IntermediateType mPtr;
@@ -2091,7 +2338,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiRelevancyFnConstructorRelevancystoreNew : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiRelevancyFnConstructorRelevancystoreNew : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingConverter<RustBuffer>::IntermediateType mDbPath;
@@ -2131,7 +2378,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiRemoteSettingsFnMethodRemotesettingsDownloadAttachmentToPath : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiRemoteSettingsFnMethodRemotesettingsDownloadAttachmentToPath : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRemoteSettingsRemoteSettingsPointerType>::IntermediateType mPtr;
@@ -2174,7 +2421,7 @@ public:
   virtual void ExtractSuccessfulCallResult(JSContext* aCx, dom::Optional<dom::UniFFIScaffoldingValue>& aDest, ErrorResult& aError) override {
   }
 };
-class ScaffoldingCallHandlerUniffiRemoteSettingsFnMethodRemotesettingsGetRecords : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiRemoteSettingsFnMethodRemotesettingsGetRecords : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRemoteSettingsRemoteSettingsPointerType>::IntermediateType mPtr;
@@ -2214,7 +2461,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiRemoteSettingsFnMethodRemotesettingsGetRecordsSince : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiRemoteSettingsFnMethodRemotesettingsGetRecordsSince : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRemoteSettingsRemoteSettingsPointerType>::IntermediateType mPtr;
@@ -2260,7 +2507,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiRemoteSettingsFnConstructorRemotesettingsNew : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiRemoteSettingsFnConstructorRemotesettingsNew : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingConverter<RustBuffer>::IntermediateType mRemoteSettingsConfig;
@@ -2300,7 +2547,360 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiSuggestFnFuncRawSuggestionUrlMatches : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiRemoteSettingsFnMethodRemotesettingsclientCollectionName : public UniffiSyncCallHandler {
+private:
+  // PrepareRustArgs stores the resulting arguments in these fields
+  typename ScaffoldingObjectConverter<&kRemoteSettingsRemoteSettingsClientPointerType>::IntermediateType mPtr;
+
+  // MakeRustCall stores the result of the call in these fields
+  typename ScaffoldingConverter<RustBuffer>::IntermediateType mUniffiReturnValue;
+
+public:
+  void PrepareRustArgs(const dom::Sequence<dom::UniFFIScaffoldingValue>& aArgs, ErrorResult& aError) override {
+    ScaffoldingObjectConverter<&kRemoteSettingsRemoteSettingsClientPointerType>::FromJs(aArgs[0], &mPtr, aError);
+    if (aError.Failed()) {
+      return;
+    }
+  }
+
+  void MakeRustCall() override {
+    RustCallStatus callStatus{};
+    mUniffiReturnValue = ScaffoldingConverter<RustBuffer>::FromRust(
+      uniffi_remote_settings_fn_method_remotesettingsclient_collection_name(
+        ScaffoldingObjectConverter<&kRemoteSettingsRemoteSettingsClientPointerType>::IntoRust(std::move(mPtr)),
+        &callStatus
+      )
+    );
+
+    mUniffiCallStatusCode = callStatus.code;
+    if (callStatus.error_buf.data) {
+      mUniffiCallStatusErrorBuf = OwnedRustBuffer(callStatus.error_buf);
+    }
+  }
+
+  virtual void ExtractSuccessfulCallResult(JSContext* aCx, dom::Optional<dom::UniFFIScaffoldingValue>& aDest, ErrorResult& aError) override {
+    ScaffoldingConverter<RustBuffer>::IntoJs(
+      aCx,
+      std::move(mUniffiReturnValue),
+      &aDest.Construct(),
+      aError
+    );
+  }
+};
+class ScaffoldingCallHandlerUniffiRemoteSettingsFnMethodRemotesettingsclientGetAttachment : public UniffiSyncCallHandler {
+private:
+  // PrepareRustArgs stores the resulting arguments in these fields
+  typename ScaffoldingObjectConverter<&kRemoteSettingsRemoteSettingsClientPointerType>::IntermediateType mPtr;
+  typename ScaffoldingConverter<RustBuffer>::IntermediateType mAttachmentId;
+
+  // MakeRustCall stores the result of the call in these fields
+  typename ScaffoldingConverter<RustBuffer>::IntermediateType mUniffiReturnValue;
+
+public:
+  void PrepareRustArgs(const dom::Sequence<dom::UniFFIScaffoldingValue>& aArgs, ErrorResult& aError) override {
+    ScaffoldingObjectConverter<&kRemoteSettingsRemoteSettingsClientPointerType>::FromJs(aArgs[0], &mPtr, aError);
+    if (aError.Failed()) {
+      return;
+    }
+    ScaffoldingConverter<RustBuffer>::FromJs(aArgs[1], &mAttachmentId, aError);
+    if (aError.Failed()) {
+      return;
+    }
+  }
+
+  void MakeRustCall() override {
+    RustCallStatus callStatus{};
+    mUniffiReturnValue = ScaffoldingConverter<RustBuffer>::FromRust(
+      uniffi_remote_settings_fn_method_remotesettingsclient_get_attachment(
+        ScaffoldingObjectConverter<&kRemoteSettingsRemoteSettingsClientPointerType>::IntoRust(std::move(mPtr)),
+        ScaffoldingConverter<RustBuffer>::IntoRust(std::move(mAttachmentId)),
+        &callStatus
+      )
+    );
+
+    mUniffiCallStatusCode = callStatus.code;
+    if (callStatus.error_buf.data) {
+      mUniffiCallStatusErrorBuf = OwnedRustBuffer(callStatus.error_buf);
+    }
+  }
+
+  virtual void ExtractSuccessfulCallResult(JSContext* aCx, dom::Optional<dom::UniFFIScaffoldingValue>& aDest, ErrorResult& aError) override {
+    ScaffoldingConverter<RustBuffer>::IntoJs(
+      aCx,
+      std::move(mUniffiReturnValue),
+      &aDest.Construct(),
+      aError
+    );
+  }
+};
+class ScaffoldingCallHandlerUniffiRemoteSettingsFnMethodRemotesettingsclientGetRecords : public UniffiSyncCallHandler {
+private:
+  // PrepareRustArgs stores the resulting arguments in these fields
+  typename ScaffoldingObjectConverter<&kRemoteSettingsRemoteSettingsClientPointerType>::IntermediateType mPtr;
+  typename ScaffoldingConverter<int8_t>::IntermediateType mSyncIfEmpty;
+
+  // MakeRustCall stores the result of the call in these fields
+  typename ScaffoldingConverter<RustBuffer>::IntermediateType mUniffiReturnValue;
+
+public:
+  void PrepareRustArgs(const dom::Sequence<dom::UniFFIScaffoldingValue>& aArgs, ErrorResult& aError) override {
+    ScaffoldingObjectConverter<&kRemoteSettingsRemoteSettingsClientPointerType>::FromJs(aArgs[0], &mPtr, aError);
+    if (aError.Failed()) {
+      return;
+    }
+    ScaffoldingConverter<int8_t>::FromJs(aArgs[1], &mSyncIfEmpty, aError);
+    if (aError.Failed()) {
+      return;
+    }
+  }
+
+  void MakeRustCall() override {
+    RustCallStatus callStatus{};
+    mUniffiReturnValue = ScaffoldingConverter<RustBuffer>::FromRust(
+      uniffi_remote_settings_fn_method_remotesettingsclient_get_records(
+        ScaffoldingObjectConverter<&kRemoteSettingsRemoteSettingsClientPointerType>::IntoRust(std::move(mPtr)),
+        ScaffoldingConverter<int8_t>::IntoRust(std::move(mSyncIfEmpty)),
+        &callStatus
+      )
+    );
+
+    mUniffiCallStatusCode = callStatus.code;
+    if (callStatus.error_buf.data) {
+      mUniffiCallStatusErrorBuf = OwnedRustBuffer(callStatus.error_buf);
+    }
+  }
+
+  virtual void ExtractSuccessfulCallResult(JSContext* aCx, dom::Optional<dom::UniFFIScaffoldingValue>& aDest, ErrorResult& aError) override {
+    ScaffoldingConverter<RustBuffer>::IntoJs(
+      aCx,
+      std::move(mUniffiReturnValue),
+      &aDest.Construct(),
+      aError
+    );
+  }
+};
+class ScaffoldingCallHandlerUniffiRemoteSettingsFnMethodRemotesettingsclientGetRecordsMap : public UniffiSyncCallHandler {
+private:
+  // PrepareRustArgs stores the resulting arguments in these fields
+  typename ScaffoldingObjectConverter<&kRemoteSettingsRemoteSettingsClientPointerType>::IntermediateType mPtr;
+  typename ScaffoldingConverter<int8_t>::IntermediateType mSyncIfEmpty;
+
+  // MakeRustCall stores the result of the call in these fields
+  typename ScaffoldingConverter<RustBuffer>::IntermediateType mUniffiReturnValue;
+
+public:
+  void PrepareRustArgs(const dom::Sequence<dom::UniFFIScaffoldingValue>& aArgs, ErrorResult& aError) override {
+    ScaffoldingObjectConverter<&kRemoteSettingsRemoteSettingsClientPointerType>::FromJs(aArgs[0], &mPtr, aError);
+    if (aError.Failed()) {
+      return;
+    }
+    ScaffoldingConverter<int8_t>::FromJs(aArgs[1], &mSyncIfEmpty, aError);
+    if (aError.Failed()) {
+      return;
+    }
+  }
+
+  void MakeRustCall() override {
+    RustCallStatus callStatus{};
+    mUniffiReturnValue = ScaffoldingConverter<RustBuffer>::FromRust(
+      uniffi_remote_settings_fn_method_remotesettingsclient_get_records_map(
+        ScaffoldingObjectConverter<&kRemoteSettingsRemoteSettingsClientPointerType>::IntoRust(std::move(mPtr)),
+        ScaffoldingConverter<int8_t>::IntoRust(std::move(mSyncIfEmpty)),
+        &callStatus
+      )
+    );
+
+    mUniffiCallStatusCode = callStatus.code;
+    if (callStatus.error_buf.data) {
+      mUniffiCallStatusErrorBuf = OwnedRustBuffer(callStatus.error_buf);
+    }
+  }
+
+  virtual void ExtractSuccessfulCallResult(JSContext* aCx, dom::Optional<dom::UniFFIScaffoldingValue>& aDest, ErrorResult& aError) override {
+    ScaffoldingConverter<RustBuffer>::IntoJs(
+      aCx,
+      std::move(mUniffiReturnValue),
+      &aDest.Construct(),
+      aError
+    );
+  }
+};
+class ScaffoldingCallHandlerUniffiRemoteSettingsFnMethodRemotesettingsserviceMakeClient : public UniffiSyncCallHandler {
+private:
+  // PrepareRustArgs stores the resulting arguments in these fields
+  typename ScaffoldingObjectConverter<&kRemoteSettingsRemoteSettingsServicePointerType>::IntermediateType mPtr;
+  typename ScaffoldingConverter<RustBuffer>::IntermediateType mCollectionName;
+  typename ScaffoldingConverter<RustBuffer>::IntermediateType mAppContext;
+
+  // MakeRustCall stores the result of the call in these fields
+  typename ScaffoldingObjectConverter<&kRemoteSettingsRemoteSettingsClientPointerType>::IntermediateType mUniffiReturnValue;
+
+public:
+  void PrepareRustArgs(const dom::Sequence<dom::UniFFIScaffoldingValue>& aArgs, ErrorResult& aError) override {
+    ScaffoldingObjectConverter<&kRemoteSettingsRemoteSettingsServicePointerType>::FromJs(aArgs[0], &mPtr, aError);
+    if (aError.Failed()) {
+      return;
+    }
+    ScaffoldingConverter<RustBuffer>::FromJs(aArgs[1], &mCollectionName, aError);
+    if (aError.Failed()) {
+      return;
+    }
+    ScaffoldingConverter<RustBuffer>::FromJs(aArgs[2], &mAppContext, aError);
+    if (aError.Failed()) {
+      return;
+    }
+  }
+
+  void MakeRustCall() override {
+    RustCallStatus callStatus{};
+    mUniffiReturnValue = ScaffoldingObjectConverter<&kRemoteSettingsRemoteSettingsClientPointerType>::FromRust(
+      uniffi_remote_settings_fn_method_remotesettingsservice_make_client(
+        ScaffoldingObjectConverter<&kRemoteSettingsRemoteSettingsServicePointerType>::IntoRust(std::move(mPtr)),
+        ScaffoldingConverter<RustBuffer>::IntoRust(std::move(mCollectionName)),
+        ScaffoldingConverter<RustBuffer>::IntoRust(std::move(mAppContext)),
+        &callStatus
+      )
+    );
+
+    mUniffiCallStatusCode = callStatus.code;
+    if (callStatus.error_buf.data) {
+      mUniffiCallStatusErrorBuf = OwnedRustBuffer(callStatus.error_buf);
+    }
+  }
+
+  virtual void ExtractSuccessfulCallResult(JSContext* aCx, dom::Optional<dom::UniFFIScaffoldingValue>& aDest, ErrorResult& aError) override {
+    ScaffoldingObjectConverter<&kRemoteSettingsRemoteSettingsClientPointerType>::IntoJs(
+      aCx,
+      std::move(mUniffiReturnValue),
+      &aDest.Construct(),
+      aError
+    );
+  }
+};
+class ScaffoldingCallHandlerUniffiRemoteSettingsFnMethodRemotesettingsserviceSync : public UniffiSyncCallHandler {
+private:
+  // PrepareRustArgs stores the resulting arguments in these fields
+  typename ScaffoldingObjectConverter<&kRemoteSettingsRemoteSettingsServicePointerType>::IntermediateType mPtr;
+
+  // MakeRustCall stores the result of the call in these fields
+  typename ScaffoldingConverter<RustBuffer>::IntermediateType mUniffiReturnValue;
+
+public:
+  void PrepareRustArgs(const dom::Sequence<dom::UniFFIScaffoldingValue>& aArgs, ErrorResult& aError) override {
+    ScaffoldingObjectConverter<&kRemoteSettingsRemoteSettingsServicePointerType>::FromJs(aArgs[0], &mPtr, aError);
+    if (aError.Failed()) {
+      return;
+    }
+  }
+
+  void MakeRustCall() override {
+    RustCallStatus callStatus{};
+    mUniffiReturnValue = ScaffoldingConverter<RustBuffer>::FromRust(
+      uniffi_remote_settings_fn_method_remotesettingsservice_sync(
+        ScaffoldingObjectConverter<&kRemoteSettingsRemoteSettingsServicePointerType>::IntoRust(std::move(mPtr)),
+        &callStatus
+      )
+    );
+
+    mUniffiCallStatusCode = callStatus.code;
+    if (callStatus.error_buf.data) {
+      mUniffiCallStatusErrorBuf = OwnedRustBuffer(callStatus.error_buf);
+    }
+  }
+
+  virtual void ExtractSuccessfulCallResult(JSContext* aCx, dom::Optional<dom::UniFFIScaffoldingValue>& aDest, ErrorResult& aError) override {
+    ScaffoldingConverter<RustBuffer>::IntoJs(
+      aCx,
+      std::move(mUniffiReturnValue),
+      &aDest.Construct(),
+      aError
+    );
+  }
+};
+class ScaffoldingCallHandlerUniffiRemoteSettingsFnMethodRemotesettingsserviceUpdateConfig : public UniffiSyncCallHandler {
+private:
+  // PrepareRustArgs stores the resulting arguments in these fields
+  typename ScaffoldingObjectConverter<&kRemoteSettingsRemoteSettingsServicePointerType>::IntermediateType mPtr;
+  typename ScaffoldingConverter<RustBuffer>::IntermediateType mConfig;
+
+  // MakeRustCall stores the result of the call in these fields
+
+public:
+  void PrepareRustArgs(const dom::Sequence<dom::UniFFIScaffoldingValue>& aArgs, ErrorResult& aError) override {
+    ScaffoldingObjectConverter<&kRemoteSettingsRemoteSettingsServicePointerType>::FromJs(aArgs[0], &mPtr, aError);
+    if (aError.Failed()) {
+      return;
+    }
+    ScaffoldingConverter<RustBuffer>::FromJs(aArgs[1], &mConfig, aError);
+    if (aError.Failed()) {
+      return;
+    }
+  }
+
+  void MakeRustCall() override {
+    RustCallStatus callStatus{};
+    uniffi_remote_settings_fn_method_remotesettingsservice_update_config(
+      ScaffoldingObjectConverter<&kRemoteSettingsRemoteSettingsServicePointerType>::IntoRust(std::move(mPtr)),
+      ScaffoldingConverter<RustBuffer>::IntoRust(std::move(mConfig)),
+      &callStatus
+    );
+
+    mUniffiCallStatusCode = callStatus.code;
+    if (callStatus.error_buf.data) {
+      mUniffiCallStatusErrorBuf = OwnedRustBuffer(callStatus.error_buf);
+    }
+  }
+
+  virtual void ExtractSuccessfulCallResult(JSContext* aCx, dom::Optional<dom::UniFFIScaffoldingValue>& aDest, ErrorResult& aError) override {
+  }
+};
+class ScaffoldingCallHandlerUniffiRemoteSettingsFnConstructorRemotesettingsserviceNew : public UniffiSyncCallHandler {
+private:
+  // PrepareRustArgs stores the resulting arguments in these fields
+  typename ScaffoldingConverter<RustBuffer>::IntermediateType mStorageDir;
+  typename ScaffoldingConverter<RustBuffer>::IntermediateType mConfig;
+
+  // MakeRustCall stores the result of the call in these fields
+  typename ScaffoldingObjectConverter<&kRemoteSettingsRemoteSettingsServicePointerType>::IntermediateType mUniffiReturnValue;
+
+public:
+  void PrepareRustArgs(const dom::Sequence<dom::UniFFIScaffoldingValue>& aArgs, ErrorResult& aError) override {
+    ScaffoldingConverter<RustBuffer>::FromJs(aArgs[0], &mStorageDir, aError);
+    if (aError.Failed()) {
+      return;
+    }
+    ScaffoldingConverter<RustBuffer>::FromJs(aArgs[1], &mConfig, aError);
+    if (aError.Failed()) {
+      return;
+    }
+  }
+
+  void MakeRustCall() override {
+    RustCallStatus callStatus{};
+    mUniffiReturnValue = ScaffoldingObjectConverter<&kRemoteSettingsRemoteSettingsServicePointerType>::FromRust(
+      uniffi_remote_settings_fn_constructor_remotesettingsservice_new(
+        ScaffoldingConverter<RustBuffer>::IntoRust(std::move(mStorageDir)),
+        ScaffoldingConverter<RustBuffer>::IntoRust(std::move(mConfig)),
+        &callStatus
+      )
+    );
+
+    mUniffiCallStatusCode = callStatus.code;
+    if (callStatus.error_buf.data) {
+      mUniffiCallStatusErrorBuf = OwnedRustBuffer(callStatus.error_buf);
+    }
+  }
+
+  virtual void ExtractSuccessfulCallResult(JSContext* aCx, dom::Optional<dom::UniFFIScaffoldingValue>& aDest, ErrorResult& aError) override {
+    ScaffoldingObjectConverter<&kRemoteSettingsRemoteSettingsServicePointerType>::IntoJs(
+      aCx,
+      std::move(mUniffiReturnValue),
+      &aDest.Construct(),
+      aError
+    );
+  }
+};
+class ScaffoldingCallHandlerUniffiSuggestFnFuncRawSuggestionUrlMatches : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingConverter<RustBuffer>::IntermediateType mRawUrl;
@@ -2346,7 +2946,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststoreClear : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststoreClear : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kSuggestSuggestStorePointerType>::IntermediateType mPtr;
@@ -2377,7 +2977,7 @@ public:
   virtual void ExtractSuccessfulCallResult(JSContext* aCx, dom::Optional<dom::UniFFIScaffoldingValue>& aDest, ErrorResult& aError) override {
   }
 };
-class ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststoreClearDismissedSuggestions : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststoreClearDismissedSuggestions : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kSuggestSuggestStorePointerType>::IntermediateType mPtr;
@@ -2408,7 +3008,7 @@ public:
   virtual void ExtractSuccessfulCallResult(JSContext* aCx, dom::Optional<dom::UniFFIScaffoldingValue>& aDest, ErrorResult& aError) override {
   }
 };
-class ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststoreDismissSuggestion : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststoreDismissSuggestion : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kSuggestSuggestStorePointerType>::IntermediateType mPtr;
@@ -2445,7 +3045,71 @@ public:
   virtual void ExtractSuccessfulCallResult(JSContext* aCx, dom::Optional<dom::UniFFIScaffoldingValue>& aDest, ErrorResult& aError) override {
   }
 };
-class ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststoreFetchGlobalConfig : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststoreFetchGeonames : public UniffiSyncCallHandler {
+private:
+  // PrepareRustArgs stores the resulting arguments in these fields
+  typename ScaffoldingObjectConverter<&kSuggestSuggestStorePointerType>::IntermediateType mPtr;
+  typename ScaffoldingConverter<RustBuffer>::IntermediateType mQuery;
+  typename ScaffoldingConverter<int8_t>::IntermediateType mMatchNamePrefix;
+  typename ScaffoldingConverter<RustBuffer>::IntermediateType mGeonameType;
+  typename ScaffoldingConverter<RustBuffer>::IntermediateType mFilter;
+
+  // MakeRustCall stores the result of the call in these fields
+  typename ScaffoldingConverter<RustBuffer>::IntermediateType mUniffiReturnValue;
+
+public:
+  void PrepareRustArgs(const dom::Sequence<dom::UniFFIScaffoldingValue>& aArgs, ErrorResult& aError) override {
+    ScaffoldingObjectConverter<&kSuggestSuggestStorePointerType>::FromJs(aArgs[0], &mPtr, aError);
+    if (aError.Failed()) {
+      return;
+    }
+    ScaffoldingConverter<RustBuffer>::FromJs(aArgs[1], &mQuery, aError);
+    if (aError.Failed()) {
+      return;
+    }
+    ScaffoldingConverter<int8_t>::FromJs(aArgs[2], &mMatchNamePrefix, aError);
+    if (aError.Failed()) {
+      return;
+    }
+    ScaffoldingConverter<RustBuffer>::FromJs(aArgs[3], &mGeonameType, aError);
+    if (aError.Failed()) {
+      return;
+    }
+    ScaffoldingConverter<RustBuffer>::FromJs(aArgs[4], &mFilter, aError);
+    if (aError.Failed()) {
+      return;
+    }
+  }
+
+  void MakeRustCall() override {
+    RustCallStatus callStatus{};
+    mUniffiReturnValue = ScaffoldingConverter<RustBuffer>::FromRust(
+      uniffi_suggest_fn_method_suggeststore_fetch_geonames(
+        ScaffoldingObjectConverter<&kSuggestSuggestStorePointerType>::IntoRust(std::move(mPtr)),
+        ScaffoldingConverter<RustBuffer>::IntoRust(std::move(mQuery)),
+        ScaffoldingConverter<int8_t>::IntoRust(std::move(mMatchNamePrefix)),
+        ScaffoldingConverter<RustBuffer>::IntoRust(std::move(mGeonameType)),
+        ScaffoldingConverter<RustBuffer>::IntoRust(std::move(mFilter)),
+        &callStatus
+      )
+    );
+
+    mUniffiCallStatusCode = callStatus.code;
+    if (callStatus.error_buf.data) {
+      mUniffiCallStatusErrorBuf = OwnedRustBuffer(callStatus.error_buf);
+    }
+  }
+
+  virtual void ExtractSuccessfulCallResult(JSContext* aCx, dom::Optional<dom::UniFFIScaffoldingValue>& aDest, ErrorResult& aError) override {
+    ScaffoldingConverter<RustBuffer>::IntoJs(
+      aCx,
+      std::move(mUniffiReturnValue),
+      &aDest.Construct(),
+      aError
+    );
+  }
+};
+class ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststoreFetchGlobalConfig : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kSuggestSuggestStorePointerType>::IntermediateType mPtr;
@@ -2485,7 +3149,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststoreFetchProviderConfig : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststoreFetchProviderConfig : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kSuggestSuggestStorePointerType>::IntermediateType mPtr;
@@ -2531,7 +3195,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststoreIngest : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststoreIngest : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kSuggestSuggestStorePointerType>::IntermediateType mPtr;
@@ -2577,7 +3241,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststoreInterrupt : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststoreInterrupt : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kSuggestSuggestStorePointerType>::IntermediateType mPtr;
@@ -2614,7 +3278,7 @@ public:
   virtual void ExtractSuccessfulCallResult(JSContext* aCx, dom::Optional<dom::UniFFIScaffoldingValue>& aDest, ErrorResult& aError) override {
   }
 };
-class ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststoreQuery : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststoreQuery : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kSuggestSuggestStorePointerType>::IntermediateType mPtr;
@@ -2660,7 +3324,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststoreQueryWithMetrics : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststoreQueryWithMetrics : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kSuggestSuggestStorePointerType>::IntermediateType mPtr;
@@ -2706,7 +3370,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiSuggestFnConstructorSuggeststoreNew : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiSuggestFnConstructorSuggeststoreNew : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingConverter<RustBuffer>::IntermediateType mPath;
@@ -2752,7 +3416,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststorebuilderBuild : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststorebuilderBuild : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kSuggestSuggestStoreBuilderPointerType>::IntermediateType mPtr;
@@ -2792,7 +3456,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststorebuilderCachePath : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststorebuilderCachePath : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kSuggestSuggestStoreBuilderPointerType>::IntermediateType mPtr;
@@ -2838,7 +3502,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststorebuilderDataPath : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststorebuilderDataPath : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kSuggestSuggestStoreBuilderPointerType>::IntermediateType mPtr;
@@ -2884,7 +3548,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststorebuilderLoadExtension : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststorebuilderLoadExtension : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kSuggestSuggestStoreBuilderPointerType>::IntermediateType mPtr;
@@ -2936,7 +3600,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststorebuilderRemoteSettingsBucketName : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststorebuilderRemoteSettingsBucketName : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kSuggestSuggestStoreBuilderPointerType>::IntermediateType mPtr;
@@ -2982,7 +3646,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststorebuilderRemoteSettingsServer : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststorebuilderRemoteSettingsServer : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kSuggestSuggestStoreBuilderPointerType>::IntermediateType mPtr;
@@ -3028,7 +3692,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiSuggestFnConstructorSuggeststorebuilderNew : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiSuggestFnConstructorSuggeststorebuilderNew : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
 
@@ -3062,7 +3726,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiTabsFnMethodRemotecommandstoreAddRemoteCommand : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiTabsFnMethodRemotecommandstoreAddRemoteCommand : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kTabsRemoteCommandStorePointerType>::IntermediateType mPtr;
@@ -3114,7 +3778,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiTabsFnMethodRemotecommandstoreAddRemoteCommandAt : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiTabsFnMethodRemotecommandstoreAddRemoteCommandAt : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kTabsRemoteCommandStorePointerType>::IntermediateType mPtr;
@@ -3172,7 +3836,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiTabsFnMethodRemotecommandstoreGetUnsentCommands : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiTabsFnMethodRemotecommandstoreGetUnsentCommands : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kTabsRemoteCommandStorePointerType>::IntermediateType mPtr;
@@ -3212,7 +3876,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiTabsFnMethodRemotecommandstoreRemoveRemoteCommand : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiTabsFnMethodRemotecommandstoreRemoveRemoteCommand : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kTabsRemoteCommandStorePointerType>::IntermediateType mPtr;
@@ -3264,7 +3928,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiTabsFnMethodRemotecommandstoreSetPendingCommandSent : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiTabsFnMethodRemotecommandstoreSetPendingCommandSent : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kTabsRemoteCommandStorePointerType>::IntermediateType mPtr;
@@ -3310,7 +3974,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedengineApply : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedengineApply : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kTabsTabsBridgedEnginePointerType>::IntermediateType mPtr;
@@ -3350,7 +4014,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedengineEnsureCurrentSyncId : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedengineEnsureCurrentSyncId : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kTabsTabsBridgedEnginePointerType>::IntermediateType mPtr;
@@ -3396,7 +4060,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedengineLastSync : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedengineLastSync : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kTabsTabsBridgedEnginePointerType>::IntermediateType mPtr;
@@ -3436,7 +4100,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedenginePrepareForSync : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedenginePrepareForSync : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kTabsTabsBridgedEnginePointerType>::IntermediateType mPtr;
@@ -3473,7 +4137,7 @@ public:
   virtual void ExtractSuccessfulCallResult(JSContext* aCx, dom::Optional<dom::UniFFIScaffoldingValue>& aDest, ErrorResult& aError) override {
   }
 };
-class ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedengineReset : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedengineReset : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kTabsTabsBridgedEnginePointerType>::IntermediateType mPtr;
@@ -3504,7 +4168,7 @@ public:
   virtual void ExtractSuccessfulCallResult(JSContext* aCx, dom::Optional<dom::UniFFIScaffoldingValue>& aDest, ErrorResult& aError) override {
   }
 };
-class ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedengineResetSyncId : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedengineResetSyncId : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kTabsTabsBridgedEnginePointerType>::IntermediateType mPtr;
@@ -3544,7 +4208,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedengineSetLastSync : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedengineSetLastSync : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kTabsTabsBridgedEnginePointerType>::IntermediateType mPtr;
@@ -3581,7 +4245,7 @@ public:
   virtual void ExtractSuccessfulCallResult(JSContext* aCx, dom::Optional<dom::UniFFIScaffoldingValue>& aDest, ErrorResult& aError) override {
   }
 };
-class ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedengineSetUploaded : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedengineSetUploaded : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kTabsTabsBridgedEnginePointerType>::IntermediateType mPtr;
@@ -3624,7 +4288,7 @@ public:
   virtual void ExtractSuccessfulCallResult(JSContext* aCx, dom::Optional<dom::UniFFIScaffoldingValue>& aDest, ErrorResult& aError) override {
   }
 };
-class ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedengineStoreIncoming : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedengineStoreIncoming : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kTabsTabsBridgedEnginePointerType>::IntermediateType mPtr;
@@ -3661,7 +4325,7 @@ public:
   virtual void ExtractSuccessfulCallResult(JSContext* aCx, dom::Optional<dom::UniFFIScaffoldingValue>& aDest, ErrorResult& aError) override {
   }
 };
-class ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedengineSyncFinished : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedengineSyncFinished : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kTabsTabsBridgedEnginePointerType>::IntermediateType mPtr;
@@ -3692,7 +4356,7 @@ public:
   virtual void ExtractSuccessfulCallResult(JSContext* aCx, dom::Optional<dom::UniFFIScaffoldingValue>& aDest, ErrorResult& aError) override {
   }
 };
-class ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedengineSyncId : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedengineSyncId : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kTabsTabsBridgedEnginePointerType>::IntermediateType mPtr;
@@ -3732,7 +4396,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedengineSyncStarted : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedengineSyncStarted : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kTabsTabsBridgedEnginePointerType>::IntermediateType mPtr;
@@ -3763,7 +4427,7 @@ public:
   virtual void ExtractSuccessfulCallResult(JSContext* aCx, dom::Optional<dom::UniFFIScaffoldingValue>& aDest, ErrorResult& aError) override {
   }
 };
-class ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedengineWipe : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedengineWipe : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kTabsTabsBridgedEnginePointerType>::IntermediateType mPtr;
@@ -3794,7 +4458,7 @@ public:
   virtual void ExtractSuccessfulCallResult(JSContext* aCx, dom::Optional<dom::UniFFIScaffoldingValue>& aDest, ErrorResult& aError) override {
   }
 };
-class ScaffoldingCallHandlerUniffiTabsFnMethodTabsstoreBridgedEngine : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiTabsFnMethodTabsstoreBridgedEngine : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kTabsTabsStorePointerType>::IntermediateType mPtr;
@@ -3834,7 +4498,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiTabsFnMethodTabsstoreCloseConnection : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiTabsFnMethodTabsstoreCloseConnection : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kTabsTabsStorePointerType>::IntermediateType mPtr;
@@ -3865,7 +4529,7 @@ public:
   virtual void ExtractSuccessfulCallResult(JSContext* aCx, dom::Optional<dom::UniFFIScaffoldingValue>& aDest, ErrorResult& aError) override {
   }
 };
-class ScaffoldingCallHandlerUniffiTabsFnMethodTabsstoreGetAll : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiTabsFnMethodTabsstoreGetAll : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kTabsTabsStorePointerType>::IntermediateType mPtr;
@@ -3905,7 +4569,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiTabsFnMethodTabsstoreNewRemoteCommandStore : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiTabsFnMethodTabsstoreNewRemoteCommandStore : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kTabsTabsStorePointerType>::IntermediateType mPtr;
@@ -3945,7 +4609,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiTabsFnMethodTabsstoreRegisterWithSyncManager : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiTabsFnMethodTabsstoreRegisterWithSyncManager : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kTabsTabsStorePointerType>::IntermediateType mPtr;
@@ -3976,7 +4640,7 @@ public:
   virtual void ExtractSuccessfulCallResult(JSContext* aCx, dom::Optional<dom::UniFFIScaffoldingValue>& aDest, ErrorResult& aError) override {
   }
 };
-class ScaffoldingCallHandlerUniffiTabsFnMethodTabsstoreSetLocalTabs : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiTabsFnMethodTabsstoreSetLocalTabs : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kTabsTabsStorePointerType>::IntermediateType mPtr;
@@ -4013,7 +4677,7 @@ public:
   virtual void ExtractSuccessfulCallResult(JSContext* aCx, dom::Optional<dom::UniFFIScaffoldingValue>& aDest, ErrorResult& aError) override {
   }
 };
-class ScaffoldingCallHandlerUniffiTabsFnConstructorTabsstoreNew : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiTabsFnConstructorTabsstoreNew : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingConverter<RustBuffer>::IntermediateType mPath;
@@ -4055,7 +4719,7 @@ public:
 };
 
 #ifdef MOZ_UNIFFI_FIXTURES
-class ScaffoldingCallHandlerUniffiArithmeticalFnFuncAdd : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiArithmeticalFnFuncAdd : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingConverter<uint64_t>::IntermediateType mA;
@@ -4101,7 +4765,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiArithmeticalFnFuncDiv : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiArithmeticalFnFuncDiv : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingConverter<uint64_t>::IntermediateType mDividend;
@@ -4147,7 +4811,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiArithmeticalFnFuncEqual : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiArithmeticalFnFuncEqual : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingConverter<uint64_t>::IntermediateType mA;
@@ -4193,7 +4857,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiArithmeticalFnFuncSub : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiArithmeticalFnFuncSub : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingConverter<uint64_t>::IntermediateType mA;
@@ -4239,7 +4903,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiCustomTypesFnFuncGetCustomTypesDemo : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiCustomTypesFnFuncGetCustomTypesDemo : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingConverter<RustBuffer>::IntermediateType mDemo;
@@ -4279,7 +4943,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiFixtureExternalTypesFnFuncGradient : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiFixtureExternalTypesFnFuncGradient : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingConverter<RustBuffer>::IntermediateType mValue;
@@ -4319,7 +4983,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiFixtureExternalTypesFnFuncIntersection : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiFixtureExternalTypesFnFuncIntersection : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingConverter<RustBuffer>::IntermediateType mLn1;
@@ -4365,7 +5029,56 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiFixtureCallbacksFnFuncLogEvenNumbers : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiFixtureCallbacksFnFuncCallLogRepeat : public UniffiSyncCallHandler {
+private:
+  // PrepareRustArgs stores the resulting arguments in these fields
+  typename ScaffoldingConverter<uint64_t>::IntermediateType mLogger;
+  typename ScaffoldingConverter<RustBuffer>::IntermediateType mMessage;
+  typename ScaffoldingConverter<uint32_t>::IntermediateType mCount;
+  typename ScaffoldingConverter<RustBuffer>::IntermediateType mExclude;
+
+  // MakeRustCall stores the result of the call in these fields
+
+public:
+  void PrepareRustArgs(const dom::Sequence<dom::UniFFIScaffoldingValue>& aArgs, ErrorResult& aError) override {
+    ScaffoldingConverter<uint64_t>::FromJs(aArgs[0], &mLogger, aError);
+    if (aError.Failed()) {
+      return;
+    }
+    ScaffoldingConverter<RustBuffer>::FromJs(aArgs[1], &mMessage, aError);
+    if (aError.Failed()) {
+      return;
+    }
+    ScaffoldingConverter<uint32_t>::FromJs(aArgs[2], &mCount, aError);
+    if (aError.Failed()) {
+      return;
+    }
+    ScaffoldingConverter<RustBuffer>::FromJs(aArgs[3], &mExclude, aError);
+    if (aError.Failed()) {
+      return;
+    }
+  }
+
+  void MakeRustCall() override {
+    RustCallStatus callStatus{};
+    uniffi_uniffi_fixture_callbacks_fn_func_call_log_repeat(
+      ScaffoldingConverter<uint64_t>::IntoRust(std::move(mLogger)),
+      ScaffoldingConverter<RustBuffer>::IntoRust(std::move(mMessage)),
+      ScaffoldingConverter<uint32_t>::IntoRust(std::move(mCount)),
+      ScaffoldingConverter<RustBuffer>::IntoRust(std::move(mExclude)),
+      &callStatus
+    );
+
+    mUniffiCallStatusCode = callStatus.code;
+    if (callStatus.error_buf.data) {
+      mUniffiCallStatusErrorBuf = OwnedRustBuffer(callStatus.error_buf);
+    }
+  }
+
+  virtual void ExtractSuccessfulCallResult(JSContext* aCx, dom::Optional<dom::UniFFIScaffoldingValue>& aDest, ErrorResult& aError) override {
+  }
+};
+class ScaffoldingCallHandlerUniffiUniffiFixtureCallbacksFnFuncLogEvenNumbers : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingConverter<uint64_t>::IntermediateType mLogger;
@@ -4402,7 +5115,7 @@ public:
   virtual void ExtractSuccessfulCallResult(JSContext* aCx, dom::Optional<dom::UniFFIScaffoldingValue>& aDest, ErrorResult& aError) override {
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiFixtureCallbacksFnFuncLogEvenNumbersMainThread : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiFixtureCallbacksFnFuncLogEvenNumbersMainThread : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingConverter<uint64_t>::IntermediateType mLogger;
@@ -4439,7 +5152,7 @@ public:
   virtual void ExtractSuccessfulCallResult(JSContext* aCx, dom::Optional<dom::UniFFIScaffoldingValue>& aDest, ErrorResult& aError) override {
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiGeometryFnFuncGradient : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiGeometryFnFuncGradient : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingConverter<RustBuffer>::IntermediateType mLn;
@@ -4479,7 +5192,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiGeometryFnFuncIntersection : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiGeometryFnFuncIntersection : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingConverter<RustBuffer>::IntermediateType mLn1;
@@ -4525,7 +5238,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiFixtureRefcountsFnFuncGetJsRefcount : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiFixtureRefcountsFnFuncGetJsRefcount : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
 
@@ -4559,7 +5272,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiFixtureRefcountsFnFuncGetSingleton : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiFixtureRefcountsFnFuncGetSingleton : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
 
@@ -4593,7 +5306,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiFixtureRefcountsFnMethodSingletonobjectMethod : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiFixtureRefcountsFnMethodSingletonobjectMethod : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRefcountsSingletonObjectPointerType>::IntermediateType mPtr;
@@ -4624,7 +5337,7 @@ public:
   virtual void ExtractSuccessfulCallResult(JSContext* aCx, dom::Optional<dom::UniFFIScaffoldingValue>& aDest, ErrorResult& aError) override {
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnFuncCopieCarte : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnFuncCopieCarte : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingConverter<RustBuffer>::IntermediateType mC;
@@ -4664,7 +5377,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnFuncCopieDictionnaire : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnFuncCopieDictionnaire : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingConverter<RustBuffer>::IntermediateType mD;
@@ -4704,7 +5417,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnFuncCopieEnumeration : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnFuncCopieEnumeration : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingConverter<RustBuffer>::IntermediateType mE;
@@ -4744,7 +5457,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnFuncCopieEnumerations : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnFuncCopieEnumerations : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingConverter<RustBuffer>::IntermediateType mE;
@@ -4784,7 +5497,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnFuncSwitcheroo : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnFuncSwitcheroo : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingConverter<int8_t>::IntermediateType mB;
@@ -4824,7 +5537,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonBoolean : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonBoolean : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointOptionneurPointerType>::IntermediateType mPtr;
@@ -4870,7 +5583,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonEnum : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonEnum : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointOptionneurPointerType>::IntermediateType mPtr;
@@ -4916,7 +5629,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonF32 : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonF32 : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointOptionneurPointerType>::IntermediateType mPtr;
@@ -4962,7 +5675,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonF64 : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonF64 : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointOptionneurPointerType>::IntermediateType mPtr;
@@ -5008,7 +5721,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonI16Dec : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonI16Dec : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointOptionneurPointerType>::IntermediateType mPtr;
@@ -5054,7 +5767,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonI16Hex : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonI16Hex : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointOptionneurPointerType>::IntermediateType mPtr;
@@ -5100,7 +5813,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonI32Dec : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonI32Dec : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointOptionneurPointerType>::IntermediateType mPtr;
@@ -5146,7 +5859,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonI32Hex : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonI32Hex : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointOptionneurPointerType>::IntermediateType mPtr;
@@ -5192,7 +5905,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonI64Dec : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonI64Dec : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointOptionneurPointerType>::IntermediateType mPtr;
@@ -5238,7 +5951,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonI64Hex : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonI64Hex : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointOptionneurPointerType>::IntermediateType mPtr;
@@ -5284,7 +5997,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonI8Dec : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonI8Dec : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointOptionneurPointerType>::IntermediateType mPtr;
@@ -5330,7 +6043,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonI8Hex : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonI8Hex : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointOptionneurPointerType>::IntermediateType mPtr;
@@ -5376,7 +6089,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonNull : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonNull : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointOptionneurPointerType>::IntermediateType mPtr;
@@ -5422,7 +6135,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonSequence : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonSequence : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointOptionneurPointerType>::IntermediateType mPtr;
@@ -5468,7 +6181,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonString : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonString : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointOptionneurPointerType>::IntermediateType mPtr;
@@ -5514,7 +6227,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonU16Dec : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonU16Dec : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointOptionneurPointerType>::IntermediateType mPtr;
@@ -5560,7 +6273,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonU16Hex : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonU16Hex : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointOptionneurPointerType>::IntermediateType mPtr;
@@ -5606,7 +6319,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonU32Dec : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonU32Dec : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointOptionneurPointerType>::IntermediateType mPtr;
@@ -5652,7 +6365,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonU32Hex : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonU32Hex : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointOptionneurPointerType>::IntermediateType mPtr;
@@ -5698,7 +6411,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonU32Oct : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonU32Oct : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointOptionneurPointerType>::IntermediateType mPtr;
@@ -5744,7 +6457,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonU64Dec : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonU64Dec : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointOptionneurPointerType>::IntermediateType mPtr;
@@ -5790,7 +6503,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonU64Hex : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonU64Hex : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointOptionneurPointerType>::IntermediateType mPtr;
@@ -5836,7 +6549,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonU8Dec : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonU8Dec : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointOptionneurPointerType>::IntermediateType mPtr;
@@ -5882,7 +6595,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonU8Hex : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonU8Hex : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointOptionneurPointerType>::IntermediateType mPtr;
@@ -5928,7 +6641,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonZero : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonZero : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointOptionneurPointerType>::IntermediateType mPtr;
@@ -5974,7 +6687,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnConstructorOptionneurNew : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnConstructorOptionneurNew : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
 
@@ -6008,7 +6721,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueBoolean : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueBoolean : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointRetourneurPointerType>::IntermediateType mPtr;
@@ -6054,7 +6767,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueDouble : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueDouble : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointRetourneurPointerType>::IntermediateType mPtr;
@@ -6100,7 +6813,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueFloat : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueFloat : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointRetourneurPointerType>::IntermediateType mPtr;
@@ -6146,7 +6859,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueI16 : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueI16 : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointRetourneurPointerType>::IntermediateType mPtr;
@@ -6192,7 +6905,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueI32 : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueI32 : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointRetourneurPointerType>::IntermediateType mPtr;
@@ -6238,7 +6951,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueI64 : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueI64 : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointRetourneurPointerType>::IntermediateType mPtr;
@@ -6284,7 +6997,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueI8 : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueI8 : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointRetourneurPointerType>::IntermediateType mPtr;
@@ -6330,7 +7043,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueNombres : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueNombres : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointRetourneurPointerType>::IntermediateType mPtr;
@@ -6376,7 +7089,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueNombresSignes : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueNombresSignes : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointRetourneurPointerType>::IntermediateType mPtr;
@@ -6422,7 +7135,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueOptionneurDictionnaire : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueOptionneurDictionnaire : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointRetourneurPointerType>::IntermediateType mPtr;
@@ -6468,7 +7181,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueString : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueString : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointRetourneurPointerType>::IntermediateType mPtr;
@@ -6514,7 +7227,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueU16 : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueU16 : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointRetourneurPointerType>::IntermediateType mPtr;
@@ -6560,7 +7273,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueU32 : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueU32 : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointRetourneurPointerType>::IntermediateType mPtr;
@@ -6606,7 +7319,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueU64 : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueU64 : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointRetourneurPointerType>::IntermediateType mPtr;
@@ -6652,7 +7365,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueU8 : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueU8 : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointRetourneurPointerType>::IntermediateType mPtr;
@@ -6698,7 +7411,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnConstructorRetourneurNew : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnConstructorRetourneurNew : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
 
@@ -6732,7 +7445,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodStringifierToStringBoolean : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodStringifierToStringBoolean : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointStringifierPointerType>::IntermediateType mPtr;
@@ -6778,7 +7491,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodStringifierToStringDouble : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodStringifierToStringDouble : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointStringifierPointerType>::IntermediateType mPtr;
@@ -6824,7 +7537,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodStringifierToStringFloat : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodStringifierToStringFloat : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointStringifierPointerType>::IntermediateType mPtr;
@@ -6870,7 +7583,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodStringifierToStringI16 : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodStringifierToStringI16 : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointStringifierPointerType>::IntermediateType mPtr;
@@ -6916,7 +7629,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodStringifierToStringI32 : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodStringifierToStringI32 : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointStringifierPointerType>::IntermediateType mPtr;
@@ -6962,7 +7675,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodStringifierToStringI64 : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodStringifierToStringI64 : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointStringifierPointerType>::IntermediateType mPtr;
@@ -7008,7 +7721,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodStringifierToStringI8 : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodStringifierToStringI8 : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointStringifierPointerType>::IntermediateType mPtr;
@@ -7054,7 +7767,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodStringifierToStringU16 : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodStringifierToStringU16 : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointStringifierPointerType>::IntermediateType mPtr;
@@ -7100,7 +7813,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodStringifierToStringU32 : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodStringifierToStringU32 : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointStringifierPointerType>::IntermediateType mPtr;
@@ -7146,7 +7859,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodStringifierToStringU64 : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodStringifierToStringU64 : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointStringifierPointerType>::IntermediateType mPtr;
@@ -7192,7 +7905,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodStringifierToStringU8 : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodStringifierToStringU8 : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointStringifierPointerType>::IntermediateType mPtr;
@@ -7238,7 +7951,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodStringifierWellKnownString : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodStringifierWellKnownString : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kRondpointStringifierPointerType>::IntermediateType mPtr;
@@ -7284,7 +7997,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiRondpointFnConstructorStringifierNew : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiRondpointFnConstructorStringifierNew : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
 
@@ -7318,7 +8031,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiSpritesFnFuncTranslate : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiSpritesFnFuncTranslate : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingConverter<RustBuffer>::IntermediateType mPosition;
@@ -7364,7 +8077,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiSpritesFnMethodSpriteGetPosition : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiSpritesFnMethodSpriteGetPosition : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kSpritesSpritePointerType>::IntermediateType mPtr;
@@ -7404,7 +8117,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiSpritesFnMethodSpriteMoveBy : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiSpritesFnMethodSpriteMoveBy : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kSpritesSpritePointerType>::IntermediateType mPtr;
@@ -7441,7 +8154,7 @@ public:
   virtual void ExtractSuccessfulCallResult(JSContext* aCx, dom::Optional<dom::UniFFIScaffoldingValue>& aDest, ErrorResult& aError) override {
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiSpritesFnMethodSpriteMoveTo : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiSpritesFnMethodSpriteMoveTo : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kSpritesSpritePointerType>::IntermediateType mPtr;
@@ -7478,7 +8191,7 @@ public:
   virtual void ExtractSuccessfulCallResult(JSContext* aCx, dom::Optional<dom::UniFFIScaffoldingValue>& aDest, ErrorResult& aError) override {
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiSpritesFnConstructorSpriteNew : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiSpritesFnConstructorSpriteNew : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingConverter<RustBuffer>::IntermediateType mInitialPosition;
@@ -7518,7 +8231,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiSpritesFnConstructorSpriteNewRelativeTo : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiSpritesFnConstructorSpriteNewRelativeTo : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingConverter<RustBuffer>::IntermediateType mReference;
@@ -7564,7 +8277,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiTodolistFnFuncCreateEntryWith : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiTodolistFnFuncCreateEntryWith : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingConverter<RustBuffer>::IntermediateType mTodo;
@@ -7604,7 +8317,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiTodolistFnFuncGetDefaultList : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiTodolistFnFuncGetDefaultList : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
 
@@ -7638,7 +8351,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiTodolistFnFuncSetDefaultList : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiTodolistFnFuncSetDefaultList : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kTodolistTodoListPointerType>::IntermediateType mList;
@@ -7669,7 +8382,7 @@ public:
   virtual void ExtractSuccessfulCallResult(JSContext* aCx, dom::Optional<dom::UniFFIScaffoldingValue>& aDest, ErrorResult& aError) override {
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiTodolistFnMethodTodolistAddEntries : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiTodolistFnMethodTodolistAddEntries : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kTodolistTodoListPointerType>::IntermediateType mPtr;
@@ -7706,7 +8419,7 @@ public:
   virtual void ExtractSuccessfulCallResult(JSContext* aCx, dom::Optional<dom::UniFFIScaffoldingValue>& aDest, ErrorResult& aError) override {
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiTodolistFnMethodTodolistAddEntry : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiTodolistFnMethodTodolistAddEntry : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kTodolistTodoListPointerType>::IntermediateType mPtr;
@@ -7743,7 +8456,7 @@ public:
   virtual void ExtractSuccessfulCallResult(JSContext* aCx, dom::Optional<dom::UniFFIScaffoldingValue>& aDest, ErrorResult& aError) override {
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiTodolistFnMethodTodolistAddItem : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiTodolistFnMethodTodolistAddItem : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kTodolistTodoListPointerType>::IntermediateType mPtr;
@@ -7780,7 +8493,7 @@ public:
   virtual void ExtractSuccessfulCallResult(JSContext* aCx, dom::Optional<dom::UniFFIScaffoldingValue>& aDest, ErrorResult& aError) override {
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiTodolistFnMethodTodolistAddItems : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiTodolistFnMethodTodolistAddItems : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kTodolistTodoListPointerType>::IntermediateType mPtr;
@@ -7817,7 +8530,7 @@ public:
   virtual void ExtractSuccessfulCallResult(JSContext* aCx, dom::Optional<dom::UniFFIScaffoldingValue>& aDest, ErrorResult& aError) override {
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiTodolistFnMethodTodolistClearItem : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiTodolistFnMethodTodolistClearItem : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kTodolistTodoListPointerType>::IntermediateType mPtr;
@@ -7854,7 +8567,7 @@ public:
   virtual void ExtractSuccessfulCallResult(JSContext* aCx, dom::Optional<dom::UniFFIScaffoldingValue>& aDest, ErrorResult& aError) override {
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiTodolistFnMethodTodolistGetEntries : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiTodolistFnMethodTodolistGetEntries : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kTodolistTodoListPointerType>::IntermediateType mPtr;
@@ -7894,7 +8607,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiTodolistFnMethodTodolistGetFirst : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiTodolistFnMethodTodolistGetFirst : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kTodolistTodoListPointerType>::IntermediateType mPtr;
@@ -7934,7 +8647,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiTodolistFnMethodTodolistGetItems : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiTodolistFnMethodTodolistGetItems : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kTodolistTodoListPointerType>::IntermediateType mPtr;
@@ -7974,7 +8687,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiTodolistFnMethodTodolistGetLast : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiTodolistFnMethodTodolistGetLast : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kTodolistTodoListPointerType>::IntermediateType mPtr;
@@ -8014,7 +8727,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiTodolistFnMethodTodolistGetLastEntry : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiTodolistFnMethodTodolistGetLastEntry : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kTodolistTodoListPointerType>::IntermediateType mPtr;
@@ -8054,7 +8767,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiTodolistFnMethodTodolistMakeDefault : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiTodolistFnMethodTodolistMakeDefault : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kTodolistTodoListPointerType>::IntermediateType mPtr;
@@ -8085,7 +8798,7 @@ public:
   virtual void ExtractSuccessfulCallResult(JSContext* aCx, dom::Optional<dom::UniFFIScaffoldingValue>& aDest, ErrorResult& aError) override {
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiTodolistFnConstructorTodolistNew : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiTodolistFnConstructorTodolistNew : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
 
@@ -8119,7 +8832,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiTraitInterfacesFnFuncMakeBuggyCalculator : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiTraitInterfacesFnFuncMakeBuggyCalculator : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
 
@@ -8153,7 +8866,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiTraitInterfacesFnFuncMakeCalculator : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiTraitInterfacesFnFuncMakeCalculator : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
 
@@ -8187,7 +8900,7 @@ public:
     );
   }
 };
-class ScaffoldingCallHandlerUniffiUniffiTraitInterfacesFnMethodCalcAdd : public UniffiHandlerBase {
+class ScaffoldingCallHandlerUniffiUniffiTraitInterfacesFnMethodCalcAdd : public UniffiSyncCallHandler {
 private:
   // PrepareRustArgs stores the resulting arguments in these fields
   typename ScaffoldingObjectConverter<&kUniffiTraitInterfacesCalcPointerType>::IntermediateType mPtr;
@@ -8241,7 +8954,7 @@ public:
 };
 #endif /* MOZ_UNIFFI_FIXTURES */
 
-UniquePtr<UniffiHandlerBase> GetHandler(uint64_t aId) {
+UniquePtr<UniffiSyncCallHandler> GetSyncCallHandler(uint64_t aId) {
   switch (aId) {
 
     case 0: {
@@ -8254,458 +8967,497 @@ UniquePtr<UniffiHandlerBase> GetHandler(uint64_t aId) {
       return MakeUnique<ScaffoldingCallHandlerUniffiRelevancyFnFuncScore>();
     }
     case 3: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiRelevancyFnMethodRelevancystoreCalculateMetrics>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiRelevancyFnMethodRelevancystoreBanditInit>();
     }
     case 4: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiRelevancyFnMethodRelevancystoreClose>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiRelevancyFnMethodRelevancystoreBanditSelect>();
     }
     case 5: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiRelevancyFnMethodRelevancystoreIngest>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiRelevancyFnMethodRelevancystoreBanditUpdate>();
     }
     case 6: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiRelevancyFnMethodRelevancystoreInterrupt>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiRelevancyFnMethodRelevancystoreCalculateMetrics>();
     }
     case 7: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiRelevancyFnMethodRelevancystoreUserInterestVector>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiRelevancyFnMethodRelevancystoreClose>();
     }
     case 8: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiRelevancyFnConstructorRelevancystoreNew>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiRelevancyFnMethodRelevancystoreIngest>();
     }
     case 9: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiRemoteSettingsFnMethodRemotesettingsDownloadAttachmentToPath>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiRelevancyFnMethodRelevancystoreInterrupt>();
     }
     case 10: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiRemoteSettingsFnMethodRemotesettingsGetRecords>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiRelevancyFnMethodRelevancystoreUserInterestVector>();
     }
     case 11: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiRemoteSettingsFnMethodRemotesettingsGetRecordsSince>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiRelevancyFnConstructorRelevancystoreNew>();
     }
     case 12: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiRemoteSettingsFnConstructorRemotesettingsNew>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiRemoteSettingsFnMethodRemotesettingsDownloadAttachmentToPath>();
     }
     case 13: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiSuggestFnFuncRawSuggestionUrlMatches>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiRemoteSettingsFnMethodRemotesettingsGetRecords>();
     }
     case 14: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststoreClear>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiRemoteSettingsFnMethodRemotesettingsGetRecordsSince>();
     }
     case 15: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststoreClearDismissedSuggestions>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiRemoteSettingsFnConstructorRemotesettingsNew>();
     }
     case 16: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststoreDismissSuggestion>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiRemoteSettingsFnMethodRemotesettingsclientCollectionName>();
     }
     case 17: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststoreFetchGlobalConfig>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiRemoteSettingsFnMethodRemotesettingsclientGetAttachment>();
     }
     case 18: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststoreFetchProviderConfig>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiRemoteSettingsFnMethodRemotesettingsclientGetRecords>();
     }
     case 19: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststoreIngest>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiRemoteSettingsFnMethodRemotesettingsclientGetRecordsMap>();
     }
     case 20: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststoreInterrupt>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiRemoteSettingsFnMethodRemotesettingsserviceMakeClient>();
     }
     case 21: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststoreQuery>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiRemoteSettingsFnMethodRemotesettingsserviceSync>();
     }
     case 22: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststoreQueryWithMetrics>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiRemoteSettingsFnMethodRemotesettingsserviceUpdateConfig>();
     }
     case 23: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiSuggestFnConstructorSuggeststoreNew>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiRemoteSettingsFnConstructorRemotesettingsserviceNew>();
     }
     case 24: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststorebuilderBuild>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiSuggestFnFuncRawSuggestionUrlMatches>();
     }
     case 25: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststorebuilderCachePath>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststoreClear>();
     }
     case 26: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststorebuilderDataPath>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststoreClearDismissedSuggestions>();
     }
     case 27: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststorebuilderLoadExtension>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststoreDismissSuggestion>();
     }
     case 28: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststorebuilderRemoteSettingsBucketName>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststoreFetchGeonames>();
     }
     case 29: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststorebuilderRemoteSettingsServer>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststoreFetchGlobalConfig>();
     }
     case 30: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiSuggestFnConstructorSuggeststorebuilderNew>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststoreFetchProviderConfig>();
     }
     case 31: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiTabsFnMethodRemotecommandstoreAddRemoteCommand>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststoreIngest>();
     }
     case 32: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiTabsFnMethodRemotecommandstoreAddRemoteCommandAt>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststoreInterrupt>();
     }
     case 33: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiTabsFnMethodRemotecommandstoreGetUnsentCommands>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststoreQuery>();
     }
     case 34: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiTabsFnMethodRemotecommandstoreRemoveRemoteCommand>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststoreQueryWithMetrics>();
     }
     case 35: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiTabsFnMethodRemotecommandstoreSetPendingCommandSent>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiSuggestFnConstructorSuggeststoreNew>();
     }
     case 36: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedengineApply>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststorebuilderBuild>();
     }
     case 37: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedengineEnsureCurrentSyncId>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststorebuilderCachePath>();
     }
     case 38: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedengineLastSync>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststorebuilderDataPath>();
     }
     case 39: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedenginePrepareForSync>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststorebuilderLoadExtension>();
     }
     case 40: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedengineReset>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststorebuilderRemoteSettingsBucketName>();
     }
     case 41: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedengineResetSyncId>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiSuggestFnMethodSuggeststorebuilderRemoteSettingsServer>();
     }
     case 42: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedengineSetLastSync>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiSuggestFnConstructorSuggeststorebuilderNew>();
     }
     case 43: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedengineSetUploaded>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiTabsFnMethodRemotecommandstoreAddRemoteCommand>();
     }
     case 44: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedengineStoreIncoming>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiTabsFnMethodRemotecommandstoreAddRemoteCommandAt>();
     }
     case 45: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedengineSyncFinished>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiTabsFnMethodRemotecommandstoreGetUnsentCommands>();
     }
     case 46: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedengineSyncId>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiTabsFnMethodRemotecommandstoreRemoveRemoteCommand>();
     }
     case 47: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedengineSyncStarted>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiTabsFnMethodRemotecommandstoreSetPendingCommandSent>();
     }
     case 48: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedengineWipe>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedengineApply>();
     }
     case 49: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiTabsFnMethodTabsstoreBridgedEngine>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedengineEnsureCurrentSyncId>();
     }
     case 50: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiTabsFnMethodTabsstoreCloseConnection>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedengineLastSync>();
     }
     case 51: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiTabsFnMethodTabsstoreGetAll>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedenginePrepareForSync>();
     }
     case 52: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiTabsFnMethodTabsstoreNewRemoteCommandStore>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedengineReset>();
     }
     case 53: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiTabsFnMethodTabsstoreRegisterWithSyncManager>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedengineResetSyncId>();
     }
     case 54: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiTabsFnMethodTabsstoreSetLocalTabs>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedengineSetLastSync>();
     }
     case 55: {
+      return MakeUnique<ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedengineSetUploaded>();
+    }
+    case 56: {
+      return MakeUnique<ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedengineStoreIncoming>();
+    }
+    case 57: {
+      return MakeUnique<ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedengineSyncFinished>();
+    }
+    case 58: {
+      return MakeUnique<ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedengineSyncId>();
+    }
+    case 59: {
+      return MakeUnique<ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedengineSyncStarted>();
+    }
+    case 60: {
+      return MakeUnique<ScaffoldingCallHandlerUniffiTabsFnMethodTabsbridgedengineWipe>();
+    }
+    case 61: {
+      return MakeUnique<ScaffoldingCallHandlerUniffiTabsFnMethodTabsstoreBridgedEngine>();
+    }
+    case 62: {
+      return MakeUnique<ScaffoldingCallHandlerUniffiTabsFnMethodTabsstoreCloseConnection>();
+    }
+    case 63: {
+      return MakeUnique<ScaffoldingCallHandlerUniffiTabsFnMethodTabsstoreGetAll>();
+    }
+    case 64: {
+      return MakeUnique<ScaffoldingCallHandlerUniffiTabsFnMethodTabsstoreNewRemoteCommandStore>();
+    }
+    case 65: {
+      return MakeUnique<ScaffoldingCallHandlerUniffiTabsFnMethodTabsstoreRegisterWithSyncManager>();
+    }
+    case 66: {
+      return MakeUnique<ScaffoldingCallHandlerUniffiTabsFnMethodTabsstoreSetLocalTabs>();
+    }
+    case 67: {
       return MakeUnique<ScaffoldingCallHandlerUniffiTabsFnConstructorTabsstoreNew>();
     }
 
 #ifdef MOZ_UNIFFI_FIXTURES
-    case 56: {
+    case 68: {
       return MakeUnique<ScaffoldingCallHandlerUniffiArithmeticalFnFuncAdd>();
     }
-    case 57: {
+    case 69: {
       return MakeUnique<ScaffoldingCallHandlerUniffiArithmeticalFnFuncDiv>();
     }
-    case 58: {
+    case 70: {
       return MakeUnique<ScaffoldingCallHandlerUniffiArithmeticalFnFuncEqual>();
     }
-    case 59: {
+    case 71: {
       return MakeUnique<ScaffoldingCallHandlerUniffiArithmeticalFnFuncSub>();
     }
-    case 60: {
+    case 72: {
       return MakeUnique<ScaffoldingCallHandlerUniffiUniffiCustomTypesFnFuncGetCustomTypesDemo>();
     }
-    case 61: {
+    case 73: {
       return MakeUnique<ScaffoldingCallHandlerUniffiUniffiFixtureExternalTypesFnFuncGradient>();
     }
-    case 62: {
+    case 74: {
       return MakeUnique<ScaffoldingCallHandlerUniffiUniffiFixtureExternalTypesFnFuncIntersection>();
     }
-    case 63: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiFixtureCallbacksFnFuncLogEvenNumbers>();
-    }
-    case 64: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiFixtureCallbacksFnFuncLogEvenNumbersMainThread>();
-    }
-    case 65: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiGeometryFnFuncGradient>();
-    }
-    case 66: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiGeometryFnFuncIntersection>();
-    }
-    case 67: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiFixtureRefcountsFnFuncGetJsRefcount>();
-    }
-    case 68: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiFixtureRefcountsFnFuncGetSingleton>();
-    }
-    case 69: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiFixtureRefcountsFnMethodSingletonobjectMethod>();
-    }
-    case 70: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnFuncCopieCarte>();
-    }
-    case 71: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnFuncCopieDictionnaire>();
-    }
-    case 72: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnFuncCopieEnumeration>();
-    }
-    case 73: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnFuncCopieEnumerations>();
-    }
-    case 74: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnFuncSwitcheroo>();
-    }
     case 75: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonBoolean>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiFixtureCallbacksFnFuncCallLogRepeat>();
     }
     case 76: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonEnum>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiFixtureCallbacksFnFuncLogEvenNumbers>();
     }
     case 77: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonF32>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiFixtureCallbacksFnFuncLogEvenNumbersMainThread>();
     }
     case 78: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonF64>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiGeometryFnFuncGradient>();
     }
     case 79: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonI16Dec>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiGeometryFnFuncIntersection>();
     }
     case 80: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonI16Hex>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiFixtureRefcountsFnFuncGetJsRefcount>();
     }
     case 81: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonI32Dec>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiFixtureRefcountsFnFuncGetSingleton>();
     }
     case 82: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonI32Hex>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiFixtureRefcountsFnMethodSingletonobjectMethod>();
     }
     case 83: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonI64Dec>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnFuncCopieCarte>();
     }
     case 84: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonI64Hex>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnFuncCopieDictionnaire>();
     }
     case 85: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonI8Dec>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnFuncCopieEnumeration>();
     }
     case 86: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonI8Hex>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnFuncCopieEnumerations>();
     }
     case 87: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonNull>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnFuncSwitcheroo>();
     }
     case 88: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonSequence>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonBoolean>();
     }
     case 89: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonString>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonEnum>();
     }
     case 90: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonU16Dec>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonF32>();
     }
     case 91: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonU16Hex>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonF64>();
     }
     case 92: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonU32Dec>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonI16Dec>();
     }
     case 93: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonU32Hex>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonI16Hex>();
     }
     case 94: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonU32Oct>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonI32Dec>();
     }
     case 95: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonU64Dec>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonI32Hex>();
     }
     case 96: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonU64Hex>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonI64Dec>();
     }
     case 97: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonU8Dec>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonI64Hex>();
     }
     case 98: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonU8Hex>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonI8Dec>();
     }
     case 99: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonZero>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonI8Hex>();
     }
     case 100: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnConstructorOptionneurNew>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonNull>();
     }
     case 101: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueBoolean>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonSequence>();
     }
     case 102: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueDouble>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonString>();
     }
     case 103: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueFloat>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonU16Dec>();
     }
     case 104: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueI16>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonU16Hex>();
     }
     case 105: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueI32>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonU32Dec>();
     }
     case 106: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueI64>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonU32Hex>();
     }
     case 107: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueI8>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonU32Oct>();
     }
     case 108: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueNombres>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonU64Dec>();
     }
     case 109: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueNombresSignes>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonU64Hex>();
     }
     case 110: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueOptionneurDictionnaire>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonU8Dec>();
     }
     case 111: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueString>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonU8Hex>();
     }
     case 112: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueU16>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodOptionneurSinonZero>();
     }
     case 113: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueU32>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnConstructorOptionneurNew>();
     }
     case 114: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueU64>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueBoolean>();
     }
     case 115: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueU8>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueDouble>();
     }
     case 116: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnConstructorRetourneurNew>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueFloat>();
     }
     case 117: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodStringifierToStringBoolean>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueI16>();
     }
     case 118: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodStringifierToStringDouble>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueI32>();
     }
     case 119: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodStringifierToStringFloat>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueI64>();
     }
     case 120: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodStringifierToStringI16>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueI8>();
     }
     case 121: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodStringifierToStringI32>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueNombres>();
     }
     case 122: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodStringifierToStringI64>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueNombresSignes>();
     }
     case 123: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodStringifierToStringI8>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueOptionneurDictionnaire>();
     }
     case 124: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodStringifierToStringU16>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueString>();
     }
     case 125: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodStringifierToStringU32>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueU16>();
     }
     case 126: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodStringifierToStringU64>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueU32>();
     }
     case 127: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodStringifierToStringU8>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueU64>();
     }
     case 128: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodStringifierWellKnownString>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodRetourneurIdentiqueU8>();
     }
     case 129: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnConstructorStringifierNew>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnConstructorRetourneurNew>();
     }
     case 130: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiSpritesFnFuncTranslate>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodStringifierToStringBoolean>();
     }
     case 131: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiSpritesFnMethodSpriteGetPosition>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodStringifierToStringDouble>();
     }
     case 132: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiSpritesFnMethodSpriteMoveBy>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodStringifierToStringFloat>();
     }
     case 133: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiSpritesFnMethodSpriteMoveTo>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodStringifierToStringI16>();
     }
     case 134: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiSpritesFnConstructorSpriteNew>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodStringifierToStringI32>();
     }
     case 135: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiSpritesFnConstructorSpriteNewRelativeTo>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodStringifierToStringI64>();
     }
     case 136: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiTodolistFnFuncCreateEntryWith>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodStringifierToStringI8>();
     }
     case 137: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiTodolistFnFuncGetDefaultList>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodStringifierToStringU16>();
     }
     case 138: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiTodolistFnFuncSetDefaultList>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodStringifierToStringU32>();
     }
     case 139: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiTodolistFnMethodTodolistAddEntries>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodStringifierToStringU64>();
     }
     case 140: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiTodolistFnMethodTodolistAddEntry>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodStringifierToStringU8>();
     }
     case 141: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiTodolistFnMethodTodolistAddItem>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnMethodStringifierWellKnownString>();
     }
     case 142: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiTodolistFnMethodTodolistAddItems>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiRondpointFnConstructorStringifierNew>();
     }
     case 143: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiTodolistFnMethodTodolistClearItem>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiSpritesFnFuncTranslate>();
     }
     case 144: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiTodolistFnMethodTodolistGetEntries>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiSpritesFnMethodSpriteGetPosition>();
     }
     case 145: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiTodolistFnMethodTodolistGetFirst>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiSpritesFnMethodSpriteMoveBy>();
     }
     case 146: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiTodolistFnMethodTodolistGetItems>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiSpritesFnMethodSpriteMoveTo>();
     }
     case 147: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiTodolistFnMethodTodolistGetLast>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiSpritesFnConstructorSpriteNew>();
     }
     case 148: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiTodolistFnMethodTodolistGetLastEntry>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiSpritesFnConstructorSpriteNewRelativeTo>();
     }
     case 149: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiTodolistFnMethodTodolistMakeDefault>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiTodolistFnFuncCreateEntryWith>();
     }
     case 150: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiTodolistFnConstructorTodolistNew>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiTodolistFnFuncGetDefaultList>();
     }
     case 151: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiTraitInterfacesFnFuncMakeBuggyCalculator>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiTodolistFnFuncSetDefaultList>();
     }
     case 152: {
-      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiTraitInterfacesFnFuncMakeCalculator>();
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiTodolistFnMethodTodolistAddEntries>();
     }
     case 153: {
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiTodolistFnMethodTodolistAddEntry>();
+    }
+    case 154: {
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiTodolistFnMethodTodolistAddItem>();
+    }
+    case 155: {
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiTodolistFnMethodTodolistAddItems>();
+    }
+    case 156: {
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiTodolistFnMethodTodolistClearItem>();
+    }
+    case 157: {
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiTodolistFnMethodTodolistGetEntries>();
+    }
+    case 158: {
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiTodolistFnMethodTodolistGetFirst>();
+    }
+    case 159: {
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiTodolistFnMethodTodolistGetItems>();
+    }
+    case 160: {
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiTodolistFnMethodTodolistGetLast>();
+    }
+    case 161: {
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiTodolistFnMethodTodolistGetLastEntry>();
+    }
+    case 162: {
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiTodolistFnMethodTodolistMakeDefault>();
+    }
+    case 163: {
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiTodolistFnConstructorTodolistNew>();
+    }
+    case 164: {
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiTraitInterfacesFnFuncMakeBuggyCalculator>();
+    }
+    case 165: {
+      return MakeUnique<ScaffoldingCallHandlerUniffiUniffiTraitInterfacesFnFuncMakeCalculator>();
+    }
+    case 166: {
       return MakeUnique<ScaffoldingCallHandlerUniffiUniffiTraitInterfacesFnMethodCalcAdd>();
     }
 #endif /* MOZ_UNIFFI_FIXTURES */
@@ -8728,52 +9480,60 @@ Maybe<already_AddRefed<UniFFIPointer>> ReadPointer(const GlobalObject& aGlobal, 
       break;
     }
     case 2: {
-      type = &kSuggestSuggestStorePointerType;
+      type = &kRemoteSettingsRemoteSettingsClientPointerType;
       break;
     }
     case 3: {
-      type = &kSuggestSuggestStoreBuilderPointerType;
+      type = &kRemoteSettingsRemoteSettingsServicePointerType;
       break;
     }
     case 4: {
-      type = &kTabsRemoteCommandStorePointerType;
+      type = &kSuggestSuggestStorePointerType;
       break;
     }
     case 5: {
-      type = &kTabsTabsBridgedEnginePointerType;
+      type = &kSuggestSuggestStoreBuilderPointerType;
       break;
     }
     case 6: {
+      type = &kTabsRemoteCommandStorePointerType;
+      break;
+    }
+    case 7: {
+      type = &kTabsTabsBridgedEnginePointerType;
+      break;
+    }
+    case 8: {
       type = &kTabsTabsStorePointerType;
       break;
     }
 
 #ifdef MOZ_UNIFFI_FIXTURES
-    case 7: {
+    case 9: {
       type = &kRefcountsSingletonObjectPointerType;
       break;
     }
-    case 8: {
+    case 10: {
       type = &kRondpointOptionneurPointerType;
       break;
     }
-    case 9: {
+    case 11: {
       type = &kRondpointRetourneurPointerType;
       break;
     }
-    case 10: {
+    case 12: {
       type = &kRondpointStringifierPointerType;
       break;
     }
-    case 11: {
+    case 13: {
       type = &kSpritesSpritePointerType;
       break;
     }
-    case 12: {
+    case 14: {
       type = &kTodolistTodoListPointerType;
       break;
     }
-    case 13: {
+    case 15: {
       type = &kUniffiTraitInterfacesCalcPointerType;
       break;
     }
@@ -8797,52 +9557,60 @@ bool WritePointer(const GlobalObject& aGlobal, uint64_t aId, const UniFFIPointer
       break;
     }
     case 2: {
-      type = &kSuggestSuggestStorePointerType;
+      type = &kRemoteSettingsRemoteSettingsClientPointerType;
       break;
     }
     case 3: {
-      type = &kSuggestSuggestStoreBuilderPointerType;
+      type = &kRemoteSettingsRemoteSettingsServicePointerType;
       break;
     }
     case 4: {
-      type = &kTabsRemoteCommandStorePointerType;
+      type = &kSuggestSuggestStorePointerType;
       break;
     }
     case 5: {
-      type = &kTabsTabsBridgedEnginePointerType;
+      type = &kSuggestSuggestStoreBuilderPointerType;
       break;
     }
     case 6: {
+      type = &kTabsRemoteCommandStorePointerType;
+      break;
+    }
+    case 7: {
+      type = &kTabsTabsBridgedEnginePointerType;
+      break;
+    }
+    case 8: {
       type = &kTabsTabsStorePointerType;
       break;
     }
 
 #ifdef MOZ_UNIFFI_FIXTURES
-    case 7: {
+    case 9: {
       type = &kRefcountsSingletonObjectPointerType;
       break;
     }
-    case 8: {
+    case 10: {
       type = &kRondpointOptionneurPointerType;
       break;
     }
-    case 9: {
+    case 11: {
       type = &kRondpointRetourneurPointerType;
       break;
     }
-    case 10: {
+    case 12: {
       type = &kRondpointStringifierPointerType;
       break;
     }
-    case 11: {
+    case 13: {
       type = &kSpritesSpritePointerType;
       break;
     }
-    case 12: {
+    case 14: {
       type = &kTodolistTodoListPointerType;
       break;
     }
-    case 13: {
+    case 15: {
       type = &kUniffiTraitInterfacesCalcPointerType;
       break;
     }

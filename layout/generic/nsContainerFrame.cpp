@@ -561,7 +561,9 @@ nsIFrame::FrameSearchResult nsContainerFrame::PeekOffsetCharacter(
  */
 void nsContainerFrame::PositionFrameView(nsIFrame* aKidFrame) {
   nsIFrame* parentFrame = aKidFrame->GetParent();
-  if (!aKidFrame->HasView() || !parentFrame) return;
+  if (!aKidFrame->HasView() || !parentFrame) {
+    return;
+  }
 
   nsView* view = aKidFrame->GetView();
   nsViewManager* vm = view->GetViewManager();
@@ -736,9 +738,12 @@ void nsContainerFrame::SetSizeConstraints(nsPresContext* aPresContext,
           : aPresContext->AppUnitsToDevPixels(aMaxSize.height));
 
   // MinSize has a priority over MaxSize
-  if (devMinSize.width > devMaxSize.width) devMaxSize.width = devMinSize.width;
-  if (devMinSize.height > devMaxSize.height)
+  if (devMinSize.width > devMaxSize.width) {
+    devMaxSize.width = devMinSize.width;
+  }
+  if (devMinSize.height > devMaxSize.height) {
     devMaxSize.height = devMinSize.height;
+  }
 
   nsIWidget* rootWidget = aPresContext->GetNearestWidget();
   DesktopToLayoutDeviceScale constraintsScale(MOZ_WIDGET_INVALID_SCALE);
@@ -816,6 +821,13 @@ LogicalSize nsContainerFrame::ComputeAutoSize(
     nscoord aAvailableISize, const LogicalSize& aMargin,
     const mozilla::LogicalSize& aBorderPadding,
     const StyleSizeOverrides& aSizeOverrides, ComputeSizeFlags aFlags) {
+  const bool isTableCaption = IsTableCaption();
+  // Skip table caption, which requires special sizing - see bug 1109571.
+  if (IsAbsolutelyPositionedWithDefiniteContainingBlock() && !isTableCaption) {
+    return ComputeAbsolutePosAutoSize(aRenderingContext, aWM, aCBSize,
+                                      aAvailableISize, aMargin, aBorderPadding,
+                                      aSizeOverrides, aFlags);
+  }
   LogicalSize result(aWM, 0xdeadbeef, NS_UNCONSTRAINEDSIZE);
   if (aFlags.contains(ComputeSizeFlag::ShrinkWrap)) {
     // Delegate to nsIFrame::ComputeAutoSize() for computing the shrink-wrapping
@@ -828,7 +840,7 @@ LogicalSize nsContainerFrame::ComputeAutoSize(
         aAvailableISize - aMargin.ISize(aWM) - aBorderPadding.ISize(aWM);
   }
 
-  if (IsTableCaption()) {
+  if (isTableCaption) {
     // If we're a container for font size inflation, then shrink
     // wrapping inside of us should not apply font size inflation.
     AutoMaybeDisableFontInflation an(this);
@@ -1214,7 +1226,7 @@ void nsContainerFrame::ReflowOverflowContainerChildren(
                                        aReflowInput.ComputedPhysicalSize());
       }
     }
-    ConsiderChildOverflow(aOverflowRects, frame);
+    ConsiderChildOverflow(aOverflowRects, frame, /* aAsIfScrolled = */ false);
   }
 }
 
@@ -2145,9 +2157,13 @@ void nsContainerFrame::ReparentFloatsForInlineChild(nsIFrame* aOurLineContainer,
   while (true) {
     ourBlock->ReparentFloats(aFrame, frameBlock, false);
 
-    if (!aReparentSiblings) return;
+    if (!aReparentSiblings) {
+      return;
+    }
     nsIFrame* next = aFrame->GetNextSibling();
-    if (!next) return;
+    if (!next) {
+      return;
+    }
     if (next->GetParent() == aFrame->GetParent()) {
       aFrame = next;
       continue;
@@ -2632,8 +2648,10 @@ bool nsContainerFrame::ShouldAvoidBreakInside(
 }
 
 void nsContainerFrame::ConsiderChildOverflow(OverflowAreas& aOverflowAreas,
-                                             nsIFrame* aChildFrame) {
-  if (StyleDisplay()->IsContainLayout() && SupportsContainLayoutAndPaint()) {
+                                             nsIFrame* aChildFrame,
+                                             bool aAsIfScrolled) {
+  if (StyleDisplay()->IsContainLayout() && SupportsContainLayoutAndPaint() &&
+      !aAsIfScrolled) {
     // If we have layout containment and are not a non-atomic, inline-level
     // principal box, we should only consider our child's ink overflow,
     // leaving the scrollable regions of the parent unaffected.
@@ -2649,17 +2667,72 @@ void nsContainerFrame::ConsiderChildOverflow(OverflowAreas& aOverflowAreas,
   }
 }
 
+// Map a raw StyleAlignFlags value to the used one.
+static StyleAlignFlags MapCSSAlignment(StyleAlignFlags aFlags,
+                                       const ReflowInput& aChildRI,
+                                       LogicalAxis aLogicalAxis,
+                                       WritingMode aWM) {
+  // Extract and strip the flag bits
+  StyleAlignFlags alignmentFlags = aFlags & StyleAlignFlags::FLAG_BITS;
+  aFlags &= ~StyleAlignFlags::FLAG_BITS;
+
+  if (aFlags == StyleAlignFlags::NORMAL) {
+    // "the 'normal' keyword behaves as 'start' on replaced
+    // absolutely-positioned boxes, and behaves as 'stretch' on all other
+    // absolutely-positioned boxes."
+    // https://drafts.csswg.org/css-align/#align-abspos
+    // https://drafts.csswg.org/css-align/#justify-abspos
+    aFlags = aChildRI.mFrame->IsReplaced() ? StyleAlignFlags::START
+                                           : StyleAlignFlags::STRETCH;
+  } else if (aFlags == StyleAlignFlags::FLEX_START) {
+    aFlags = StyleAlignFlags::START;
+  } else if (aFlags == StyleAlignFlags::FLEX_END) {
+    aFlags = StyleAlignFlags::END;
+  } else if (aFlags == StyleAlignFlags::LEFT ||
+             aFlags == StyleAlignFlags::RIGHT) {
+    if (aLogicalAxis == LogicalAxis::Inline) {
+      const bool isLeft = (aFlags == StyleAlignFlags::LEFT);
+      aFlags = (isLeft == aWM.IsBidiLTR()) ? StyleAlignFlags::START
+                                           : StyleAlignFlags::END;
+    } else {
+      aFlags = StyleAlignFlags::START;
+    }
+  } else if (aFlags == StyleAlignFlags::BASELINE) {
+    aFlags = StyleAlignFlags::START;
+  } else if (aFlags == StyleAlignFlags::LAST_BASELINE) {
+    aFlags = StyleAlignFlags::END;
+  }
+
+  return (aFlags | alignmentFlags);
+}
+
 StyleAlignFlags nsContainerFrame::CSSAlignmentForAbsPosChild(
     const ReflowInput& aChildRI, LogicalAxis aLogicalAxis) const {
   MOZ_ASSERT(aChildRI.mFrame->IsAbsolutelyPositioned(),
              "This method should only be called for abspos children");
-  NS_ERROR(
-      "Child classes that use css box alignment for abspos children "
-      "should provide their own implementation of this method!");
+  // For computing the static position of an absolutely positioned box,
+  // `auto` takes from parent's `align-items`.
+  StyleAlignFlags alignment =
+      (aLogicalAxis == LogicalAxis::Inline)
+          ? aChildRI.mStylePosition->UsedJustifySelf(Style())._0
+          : aChildRI.mStylePosition->UsedAlignSelf(Style())._0;
 
-  // In the unexpected/unlikely event that this implementation gets invoked,
-  // just use "start" alignment.
-  return StyleAlignFlags::START;
+  return MapCSSAlignment(alignment, aChildRI, aLogicalAxis, GetWritingMode());
+}
+
+StyleAlignFlags
+nsContainerFrame::CSSAlignmentForAbsPosChildWithinContainingBlock(
+    const ReflowInput& aChildRI, LogicalAxis aLogicalAxis) const {
+  MOZ_ASSERT(aChildRI.mFrame->IsAbsolutelyPositioned(),
+             "This method should only be called for abspos children");
+  // When determining the position of absolutely-positioned boxes,
+  // `auto` behaves as `normal`.
+  StyleAlignFlags alignment =
+      (aLogicalAxis == LogicalAxis::Inline)
+          ? aChildRI.mStylePosition->UsedJustifySelf(nullptr)._0
+          : aChildRI.mStylePosition->UsedAlignSelf(nullptr)._0;
+
+  return MapCSSAlignment(alignment, aChildRI, aLogicalAxis, GetWritingMode());
 }
 
 nsOverflowContinuationTracker::nsOverflowContinuationTracker(
