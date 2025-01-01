@@ -258,6 +258,8 @@
     <!-- Content description (not visible, for screen readers etc.) for bottom sheet handlebar save menu. -->
     <string name="browser_save_menu_handlebar_content_description">ປິດບັນທຶກເມນູ</string>
 
+    <!-- Content description (not visible, for screen readers etc.) for bottom sheet handlebar tools menu. -->
+    <string name="browser_tools_menu_handlebar_content_description">ປິດແຜ່ນເມນູເຄື່ອງມື</string>
     <!-- Browser menu label that navigates to the save sub-menu, which contains various save related menu items such as
          bookmarking a page, saving to collection, shortcut or as a PDF, and adding to home screen -->
     <string name="browser_menu_save">ບັນທຶກ</string>
@@ -268,7 +270,7 @@
     <!-- Browser menu label for turning ON reader view of the current visited page -->
     <string name="browser_menu_turn_on_reader_view">ເປີດ Reader View</string>
     <!-- Browser menu label for turning OFF reader view of the current visited page -->
-    <string name="browser_menu_turn_off_reader_view">ປິດ Reader View</string>
+    <string name="browser_menu_turn_off_reader_view">ປິດ Reader View</string>dsa
     <!-- Browser menu label for navigating to the translation feature, which provides language translation options the current visited page -->
     <string name="browser_menu_translate_page">ແປໜ້ານີ້…</string>
     <!-- Browser menu label for navigating to the Web Compat Reporter feature, which provides users the ability to send bug reports for broken sites. -->
@@ -385,6 +387,10 @@
     <string name="juno_onboarding_enable_notifications_positive_button" tools:ignore="UnusedResources">ເປີດການແຈ້ງເຕືອນ</string>
     <!-- Text for the button dismiss the screen and move on with the flow -->
     <string name="juno_onboarding_enable_notifications_negative_button" tools:ignore="UnusedResources">ບໍ່​ແມ່ນ​ຕອນ​ນີ້</string>
+
+    <!-- Title for add search widget screen used by Nimbus experiments. Nimbus experiments do not support string placeholders.
+        Note: The word "Firefox" should NOT be translated -->
+    <string name="juno_onboarding_add_search_widget_title" tools:ignore="BrandUsage,UnusedResources">ລອງໃຊ້ວິດເຈັດຄົ້ນຫາຂອງ Firefox</string>
 
     <!-- Search Widget -->
     <!-- Content description for searching with a widget. The first parameter is the name of the application.-->
@@ -673,6 +679,7 @@
     <string name="preferences_marketing_data">ຂໍ້ມູນດ້ານການຕະຫຼາດ</string>
     <!-- Preference description for marketing data collection -->
     <string name="preferences_marketing_data_description2" moz:removedIn="134" tools:ignore="UnusedResources">ແບ່ງປັນການນຳໃຊ້ຂໍ້ມູນພື້ນຖານດ້ວຍ Adjust ຜູ້ໃຫ້ສະຫນອງດ້ານການຕະຫຼາດໂທລະສັບຂອງພວກເຮົາ</string>
+
     <!-- Title for studies preferences -->
     <string name="preference_experiments_2">ການສຶກສາ</string>
     <!-- Summary for studies preferences -->
@@ -837,14 +844,14 @@
     <!-- Learn more link for studies, links to an article for more information about studies. -->
     <string name="studies_learn_more">ຮຽນຮູ້ເພີ່ມເຕີມ</string>
     <!-- Dialog message shown after removing a study -->
-    <string name="studies_restart_app">ແອັບພລິເຄຊັນຈະອອກເພື່ອນຳໃຊ້ການປ່ຽນແປງ</string>
+    <string name="studies_restart_app" moz:removedIn="135">ແອັບພລິເຄຊັນຈະອອກເພື່ອນຳໃຊ້ການປ່ຽນແປງ</string>
     <!-- Dialog button to confirm the removing a study. -->
-    <string name="studies_restart_dialog_ok">ໂອເຄ</string>
+    <string name="studies_restart_dialog_ok" moz:removedIn="135">ໂອເຄ</string>
     <!-- Dialog button text for canceling removing a study. -->
-    <string name="studies_restart_dialog_cancel">ຍົກເລີກ</string>
+    <string name="studies_restart_dialog_cancel" moz:removedIn="135">ຍົກເລີກ</string>
 
     <!-- Toast shown after turning on/off studies preferences -->
-    <string name="studies_toast_quit_application" tools:ignore="UnusedResources">ກຳລັງອອກຈາກແອັບພລິເຄຊັນເພື່ອນຳໃຊ້ການປ່ຽນແປງ…</string>
+    <string name="studies_toast_quit_application" moz:removedIn="135" tools:ignore="UnusedResources">ກຳລັງອອກຈາກແອັບພລິເຄຊັນເພື່ອນຳໃຊ້ການປ່ຽນແປງ…</string>
 
     <!-- Sessions -->
     <!-- Title for the list of tabs -->

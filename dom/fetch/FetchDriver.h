@@ -145,12 +145,8 @@ class FetchDriver final : public nsIChannelEventSink,
     mAssociatedBrowsingContextID = aID;
   }
 
-  void SetIsThirdPartyContext(const Maybe<bool> aIsThirdPartyWorker) {
-    mIsThirdPartyContext = aIsThirdPartyWorker;
-  }
-
-  void SetIsOn3PCBExceptionList(bool aIsOn3PCBExceptionList) {
-    mIsOn3PCBExceptionList = aIsOn3PCBExceptionList;
+  void SetIsThirdPartyWorker(const Maybe<bool> aIsThirdPartyWorker) {
+    mIsThirdPartyWorker = aIsThirdPartyWorker;
   }
 
  private:
@@ -187,11 +183,9 @@ class FetchDriver final : public nsIChannelEventSink,
 
   bool mIsTrackingFetch;
 
-  // Indicates whether the fetch request is from a third-party context.
-  Maybe<bool> mIsThirdPartyContext;
-
-  // Indicates whether the fetch request is on the 3PCB exception list.
-  bool mIsOn3PCBExceptionList;
+  // Indicates whether the fetch request is from a third-party worker. Nothing
+  // if the fetch request is not from a worker.
+  Maybe<bool> mIsThirdPartyWorker;
 
   RefPtr<AlternativeDataStreamListener> mAltDataListener;
   bool mOnStopRequestCalled;

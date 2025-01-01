@@ -392,7 +392,7 @@ const PREF_URLBAR_DEFAULTS = new Map([
   ["shortcuts.bookmarks", true],
   ["shortcuts.tabs", true],
   ["shortcuts.history", true],
-  ["shortcuts.actions", false],
+  ["shortcuts.actions", true],
 
   // Boolean to determine if the providers defined in `exposureResults`
   // should be displayed in search results. This can be set by a
@@ -601,7 +601,6 @@ const NIMBUS_DEFAULTS = {
   quickSuggestScoreMap: null,
   weatherKeywordsMinimumLength: null,
   weatherShowLessFrequentlyCap: null,
-  weatherSimpleUI: true,
   yelpMinKeywordLength: null,
   yelpSuggestNonPriorityIndex: null,
 };
@@ -1595,7 +1594,7 @@ class Preferences {
   _getPrefValue(pref) {
     switch (pref) {
       case "shortcuts.actions": {
-        return this.get("scotchBonnet.enableOverride") || this._readPref(pref);
+        return this.get("scotchBonnet.enableOverride") && this._readPref(pref);
       }
       case "defaultBehavior": {
         let val = 0;

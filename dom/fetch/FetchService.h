@@ -107,7 +107,6 @@ class FetchService final : public nsIObserver {
     MozPromiseRequestHolder<FetchServiceResponseEndPromise>
         mResponseEndPromiseHolder;
     RefPtr<GenericPromise::Private> mFetchParentPromise;
-    bool mIsOn3PCBExceptionList;
   };
 
   // Used for content process main thread fetch()
@@ -124,7 +123,6 @@ class FetchService final : public nsIObserver {
     uint64_t mAssociatedBrowsingContextID;
     nsCOMPtr<nsISerialEventTarget> mEventTarget;
     nsID mActorID;
-    bool mIsThirdPartyContext{false};
   };
 
   struct UnknownArgs {};

@@ -387,8 +387,9 @@ nsTArray<nsCString> TakeStartupURLs() { return std::move(StartupURLs()); }
     if (![userActivity.activityType
             isEqualToString:NSUserActivityTypeBrowsingWeb]) {
       return NO;
-    }
-  return [self openURLs:@[ userActivity.webpageURL ]];
+  }
+
+  return [self openURLs:@[userActivity.webpageURL]];
 }
 
 - (void)application:(NSApplication*)application

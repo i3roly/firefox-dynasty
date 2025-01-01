@@ -106,7 +106,6 @@ IPCResult FetchParent::RecvFetchOp(FetchOpArgs&& aArgs) {
   mNeedOnDataAvailable = aArgs.needOnDataAvailable();
   mHasCSPEventListener = aArgs.hasCSPEventListener();
   mIsThirdPartyContext = aArgs.isThirdPartyContext();
-  mIsOn3PCBExceptionList = aArgs.isOn3PCBExceptionList();
 
   if (mHasCSPEventListener) {
     mCSPEventListener =
@@ -182,21 +181,15 @@ IPCResult FetchParent::RecvFetchOp(FetchOpArgs&& aArgs) {
                self->mBackgroundEventTarget, self->mID,
                self->mIsThirdPartyContext,
                MozPromiseRequestHolder<FetchServiceResponseEndPromise>(),
-               self->mPromise, self->mIsOn3PCBExceptionList})));
+               self->mPromise})));
     } else {
       MOZ_ASSERT(self->mRequest->GetKeepalive());
       self->mResponsePromises =
-          fetchService->Fetch(AsVariant(FetchService::MainThreadFetchArgs({
-              self->mRequest.clonePtr(),
-              self->mPrincipalInfo,
-              self->mCookieJarSettings,
-              self->mNeedOnDataAvailable,
-              self->mCSPEventListener,
-              self->mAssociatedBrowsingContextID,
-              self->mBackgroundEventTarget,
-              self->mID,
-              self->mIsThirdPartyContext,
-          })));
+          fetchService->Fetch(AsVariant(FetchService::MainThreadFetchArgs(
+              {self->mRequest.clonePtr(), self->mPrincipalInfo,
+               self->mCookieJarSettings, self->mNeedOnDataAvailable,
+               self->mCSPEventListener, self->mAssociatedBrowsingContextID,
+               self->mBackgroundEventTarget, self->mID})));
     }
 
     bool isResolved =
