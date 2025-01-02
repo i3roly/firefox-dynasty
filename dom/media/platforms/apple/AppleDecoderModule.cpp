@@ -291,25 +291,18 @@ bool AppleDecoderModule::CanCreateHWDecoder(MediaCodec aCodec) {
           new AppleVTDecoder(info, nullptr, {}, nullptr, Nothing());
       rv = decoder->InitializeSession();
       type = strdup("VT");
-      if (!NS_SUCCEEDED(rv)) {
-        MOZ_LOG(
-            sPDMLog, LogLevel::Debug,
-            ("Apple HW decode failure while initializing %s decoder session", type));
-        free(type);
-        return false;
-      }
     } else {
       RefPtr<AppleVDADecoder> decoder =
           new AppleVDADecoder(info, nullptr, {}, nullptr, Nothing());
       rv = decoder->InitializeSession();
       type = strdup("VDA");
-      if (!NS_SUCCEEDED(rv)) {
-        MOZ_LOG(
-            sPDMLog, LogLevel::Debug,
-            ("Apple HW decode failure while initializing %s decoder session", type));
-        free(type);
-        return false;
-      }
+    }
+    if (!NS_SUCCEEDED(rv)) {
+      MOZ_LOG(
+          sPDMLog, LogLevel::Debug,
+          ("Apple HW decode failure while initializing %s decoder session", type));
+      free(type);
+      return false;
     }
     nsAutoCString failureReason;
     // IsHardwareAccelerated appears to return invalid results for H.264 so

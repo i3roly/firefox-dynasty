@@ -127,10 +127,10 @@ void SetupMacApplicationDelegate(bool* gRestartedByOS) {
 
   *gRestartedByOS = !!nsCocoaUtils::ShouldRestoreStateDueToLaunchAtLogin();
 
+  MOZ_ASSERT(
+      sLaunchStatus == LaunchStatus::Initial,
+      "Launch status should be in intial state when setting up delegate");
   if(nsCocoaFeatures::OnHighSierraOrLater()) {
-    MOZ_ASSERT(
-        sLaunchStatus == LaunchStatus::Initial,
-        "Launch status should be in intial state when setting up delegate");
     sLaunchStatus = LaunchStatus::DelegateIsSetup;
   }
   NS_OBJC_END_TRY_IGNORE_BLOCK;
