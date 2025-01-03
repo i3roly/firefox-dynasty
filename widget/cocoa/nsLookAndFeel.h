@@ -46,13 +46,6 @@ class nsLookAndFeel final : public nsXPLookAndFeel {
   static bool SystemWantsOverlayScrollbars();
   static bool AllowOverlayScrollbarsOverlap();
 
- private:
-  int32_t mUseOverlayScrollbars;
-  bool mUseOverlayScrollbarsCached;
-
-  int32_t mAllowOverlayScrollbarsOverlap;
-
-  bool mAllowOverlayScrollbarsOverlapCached;
 };
 
 #endif  // nsLookAndFeel_h_

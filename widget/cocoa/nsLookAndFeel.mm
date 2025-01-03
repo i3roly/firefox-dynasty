@@ -485,18 +485,10 @@ nsresult nsLookAndFeel::NativeGetInt(IntID aID, int32_t& aResult) {
       aResult = eScrollArrow_None;
       break;
     case IntID::UseOverlayScrollbars:
-      if (!mUseOverlayScrollbarsCached) {
-          mUseOverlayScrollbars = SystemWantsOverlayScrollbars() ? 1 : 0;
-          mUseOverlayScrollbarsCached = true;
-      }
-      aResult = mUseOverlayScrollbars;
+      aResult = SystemWantsOverlayScrollbars() ? 1 : 0;
       break;
     case IntID::AllowOverlayScrollbarsOverlap:
-      if (!mAllowOverlayScrollbarsOverlapCached) {
-          mAllowOverlayScrollbarsOverlap = AllowOverlayScrollbarsOverlap() ? 1 : 0;
-          mAllowOverlayScrollbarsOverlapCached = true;
-      }
-      aResult = mAllowOverlayScrollbarsOverlap;
+      aResult = AllowOverlayScrollbarsOverlap() ? 1 : 0;
       break;
     case IntID::ScrollbarDisplayOnMouseMove:
       aResult = 0;
