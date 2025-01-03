@@ -164,24 +164,34 @@ Result<Ok, LaunchError> LaunchApp(const std::vector<std::string>& argv,
       }
     }
   }
-  // Prevent the child process from inheriting any file descriptors
-  // that aren't named in `file_actions`.  (This is an Apple-specific
-  // extension to posix_spawn.)
-  err = posix_spawnattr_setflags(&spawnattr, POSIX_SPAWN_CLOEXEC_DEFAULT);
-  if (err != 0) {
-    DLOG(WARNING) << "posix_spawnattr_setflags failed";
-    return Err(LaunchError("posix_spawnattr_setflags", err));
-  }
 
-  // Exempt std{in,out,err} from being closed by POSIX_SPAWN_CLOEXEC_DEFAULT.
-  for (int fd = 0; fd <= STDERR_FILENO; ++fd) {
-    err = posix_spawn_file_actions_addinherit_np(&file_actions, fd);
+  // thanks to @kencu at macports for suggesting posix_spawn has problems on
+  // 10.7. he was close, but it turns out its the POSIX_SPAWN_CLOEXEC_DEFAULT
+  // flag on the spawn attributes. kudos to the @textmate lads for confirming it (a9397 notes):
+  // https://github.com/textmate/textmate/blob/master/Applications/TextMate/about/Changes.md
+  if (@available(macOS 10.8, *)) {
+    // Prevent the child process from inheriting any file descriptors
+    // that aren't named in `file_actions`.  (This is an Apple-specific
+    // extension to posix_spawn.)
+    err = posix_spawnattr_setflags(&spawnattr, POSIX_SPAWN_CLOEXEC_DEFAULT);
     if (err != 0) {
-      DLOG(WARNING) << "posix_spawn_file_actions_addinherit_np failed";
-      return Err(LaunchError("posix_spawn_file_actions_addinherit_np", err));
+      DLOG(WARNING) << "posix_spawnattr_setflags failed";
+      return Err(LaunchError("posix_spawnattr_setflags", err));
     }
-  }
 
+    // Exempt std{in,out,err} from being closed by POSIX_SPAWN_CLOEXEC_DEFAULT.
+    for (int fd = 0; fd <= STDERR_FILENO; ++fd) {
+      err = posix_spawn_file_actions_addinherit_np(&file_actions, fd);
+      if (err != 0) {
+        DLOG(WARNING) << "posix_spawn_file_actions_addinherit_np failed";
+        return Err(LaunchError("posix_spawn_file_actions_addinherit_np", err));
+      }
+    }
+  } else {
+    // Make sure we don't leak any FDs to the child process by marking all FDs
+    // as close-on-exec.
+    SetAllFDsToCloseOnExec();
+  }
   int pid = 0;
   int spawn_succeeded = (posix_spawnp(&pid, argv_copy[0], &file_actions,
                                       &spawnattr, argv_copy, vars.get()) == 0);
