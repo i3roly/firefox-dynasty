@@ -130,9 +130,7 @@ void SetupMacApplicationDelegate(bool* gRestartedByOS) {
   MOZ_ASSERT(
       sLaunchStatus == LaunchStatus::Initial,
       "Launch status should be in intial state when setting up delegate");
-  if(nsCocoaFeatures::OnHighSierraOrLater()) {
     sLaunchStatus = LaunchStatus::DelegateIsSetup;
-  }
   NS_OBJC_END_TRY_IGNORE_BLOCK;
 }
 
@@ -146,14 +144,6 @@ void InitializeMacApp() {
     return;
   }
   sLaunchStatus = LaunchStatus::CollectingURLs;
-  if(!nsCocoaFeatures::OnHighSierraOrLater()) {
-    AutoAutoreleasePool pool;
-    NSEvent* event = [NSApp nextEventMatchingMask:NSEventMaskAny
-                                        untilDate:nil
-                                           inMode:NSDefaultRunLoopMode
-                                          dequeue:YES];
-    if (event) [NSApp sendEvent:event];
-  }
   if (!gfxPlatform::IsHeadless()) {
     [NSApp run];
   }
