@@ -1799,7 +1799,7 @@ fuzzy(0-1,0-24000) == 1025914-1.html 1025914-1-ref.html
 == 1069716-1.html 1069716-1-ref.html
 == 1078262-1.html about:blank # bug 1656792
 test-pref(layout.testing.overlay-scrollbars.always-visible,false) == 1081072-1.html 1081072-1-ref.html
-fuzzy(15-65,100-500) fuzzy-if(useDrawSnapshot,33-33,218-218) == 1081185-1.html 1081185-1-ref.html
+fuzzy(15-65,100-500) fuzzy-if(useDrawSnapshot,0-33,0-218) == 1081185-1.html 1081185-1-ref.html
 == 1097437-1.html 1097437-1-ref.html
 == 1103258-1.html 1103258-1-ref.html # assertion crash test with layers culling test
 == 1105137-1.html 1105137-1-ref.html
@@ -2011,7 +2011,7 @@ fuzzy(0-255,0-6025) == 1415987-1.html 1415987-1-ref.html
 == 1419820-1.html 1419820-1-ref.html
 == 1420946-1.html 1420946-1-ref.html
 == 1422393.html 1422393-ref.html
-skip-if(nogpu||(winWidget&&isCoverageBuild)) == 1424177.html 1424177-ref.html
+fuzzy-if(nogpu,0-1,0-4) skip-if(winWidget&&isCoverageBuild) == 1424177.html 1424177-ref.html
 == 1424680.html 1424680-ref.html
 == 1424798-1.html 1424798-ref.html
 fuzzy-if(swgl,0-1,0-31430) == 1425243-1.html 1425243-1-ref.html

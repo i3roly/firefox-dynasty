@@ -18,11 +18,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
 import mozilla.telemetry.glean.private.NoExtras
 import org.mozilla.fenix.GleanMetrics.History
 import org.mozilla.fenix.GleanMetrics.RecentlyVisitedHomepage
 import org.mozilla.fenix.R
+import org.mozilla.fenix.compose.button.TertiaryButton
 import org.mozilla.fenix.compose.home.HomeSectionHeader
 import org.mozilla.fenix.home.bookmarks.Bookmark
 import org.mozilla.fenix.home.bookmarks.interactor.BookmarksInteractor
@@ -45,6 +47,7 @@ import org.mozilla.fenix.home.recentvisits.interactor.RecentVisitsInteractor
 import org.mozilla.fenix.home.recentvisits.view.RecentVisitMenuItem
 import org.mozilla.fenix.home.recentvisits.view.RecentlyVisited
 import org.mozilla.fenix.home.sessioncontrol.CollectionInteractor
+import org.mozilla.fenix.home.sessioncontrol.CustomizeHomeIteractor
 import org.mozilla.fenix.home.sessioncontrol.viewholders.FeltPrivacyModeInfoCard
 import org.mozilla.fenix.home.sessioncontrol.viewholders.PrivateBrowsingDescription
 import org.mozilla.fenix.home.store.HomepageState
@@ -141,6 +144,13 @@ internal fun Homepage(
                         PocketSection(
                             state = pocketState,
                             cardBackgroundColor = cardBackgroundColor,
+                            interactor = interactor,
+                        )
+                    }
+
+                    if (showCustomizeHome) {
+                        CustomizeHomeButton(
+                            buttonBackgroundColor = buttonBackgroundColor,
                             interactor = interactor,
                         )
                     }
@@ -282,7 +292,7 @@ private fun CollectionsSection(
                     Collections(
                         collections = collections,
                         expandedCollections = expandedCollections,
-                        showAddTabToCollection = showAddTabToCollection,
+                        showAddTabToCollection = showSaveTabsToCollection,
                         interactor = interactor,
                     )
                 }
@@ -290,19 +300,25 @@ private fun CollectionsSection(
         }
 
         CollectionsState.Gone -> {} // no-op. Nothing is shown where there are no collections.
-        CollectionsState.Placeholder -> {
-            CollectionsPlaceholder()
+        is CollectionsState.Placeholder -> {
+            CollectionsPlaceholder(collectionsState.showSaveTabsToCollection, interactor)
         }
     }
 }
 
 @Composable
-@Suppress("EmptyFunctionBlock")
-private fun CollectionsPlaceholder() {
+private fun CustomizeHomeButton(buttonBackgroundColor: Color, interactor: CustomizeHomeIteractor) {
+    Spacer(modifier = Modifier.height(68.dp))
+
+    TertiaryButton(
+        text = stringResource(R.string.browser_menu_customize_home_1),
+        backgroundColor = buttonBackgroundColor,
+        onClick = interactor::openCustomizeHomePage,
+    )
 }
 
 @Composable
-@Preview
+@PreviewLightDark
 private fun HomepagePreview() {
     FirefoxTheme {
         Homepage(
@@ -312,7 +328,7 @@ private fun HomepagePreview() {
                 syncedTab = FakeHomepagePreview.recentSyncedTab(),
                 bookmarks = FakeHomepagePreview.bookmarks(),
                 recentlyVisited = FakeHomepagePreview.recentHistory(),
-                collectionsState = FakeHomepagePreview.collectionState(),
+                collectionsState = CollectionsState.Placeholder(true),
                 pocketState = FakeHomepagePreview.pocketState(),
                 showTopSites = true,
                 showRecentTabs = true,

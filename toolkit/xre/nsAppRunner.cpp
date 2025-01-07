@@ -32,6 +32,7 @@
 #include "mozilla/StaticPrefs_webgl.h"
 #include "mozilla/StaticPrefs_widget.h"
 #include "mozilla/Telemetry.h"
+#include "mozilla/Try.h"
 #include "mozilla/Utf8.h"
 #include "mozilla/intl/LocaleService.h"
 #include "mozilla/JSONWriter.h"
@@ -2859,6 +2860,28 @@ static ReturnAbortOnError ShowProfileDialog(
       rv = dlgArray->QueryElementAt(1, NS_GET_IID(nsIFile),
                                     getter_AddRefs(profLD));
       NS_ENSURE_SUCCESS_LOG(rv, rv);
+
+      if (dialogReturn == nsIToolkitProfileService::launchWithProfile) {
+        int32_t newArguments;
+        rv = ioParamBlock->GetInt(2, &newArguments);
+
+        if (NS_SUCCEEDED(rv) && newArguments > 0) {
+          char** newArgv = (char**)realloc(
+              gRestartArgv, sizeof(char*) * (gRestartArgc + newArguments + 1));
+          NS_ENSURE_TRUE(newArgv, NS_ERROR_OUT_OF_MEMORY);
+
+          gRestartArgv = newArgv;
+
+          for (auto i = 0; i < newArguments; i++) {
+            char16_t* arg;
+            ioParamBlock->GetString(i, &arg);
+            gRestartArgv[gRestartArgc++] =
+                strdup(NS_ConvertUTF16toUTF8(nsDependentString(arg)).get());
+          }
+
+          gRestartArgv[gRestartArgc] = nullptr;
+        }
+      }
     }
   }
 
@@ -3448,10 +3471,7 @@ static bool CheckCompatibility(nsIFile* aProfileDir, const nsCString& aVersion,
   if (NS_FAILED(rv)) return false;
 
   nsCOMPtr<nsIFile> lf;
-  rv = NS_NewNativeLocalFile(""_ns, getter_AddRefs(lf));
-  if (NS_FAILED(rv)) return false;
-
-  rv = lf->SetPersistentDescriptor(buf);
+  rv = NS_NewLocalFileWithPersistentDescriptor(buf, getter_AddRefs(lf));
   if (NS_FAILED(rv)) return false;
 
   bool eq;
@@ -3462,10 +3482,7 @@ static bool CheckCompatibility(nsIFile* aProfileDir, const nsCString& aVersion,
     rv = parser.GetString("Compatibility", "LastAppDir", buf);
     if (NS_FAILED(rv)) return false;
 
-    rv = NS_NewNativeLocalFile(""_ns, getter_AddRefs(lf));
-    if (NS_FAILED(rv)) return false;
-
-    rv = lf->SetPersistentDescriptor(buf);
+    rv = NS_NewLocalFileWithPersistentDescriptor(buf, getter_AddRefs(lf));
     if (NS_FAILED(rv)) return false;
 
     rv = lf->Equals(aAppDir, &eq);
@@ -4287,7 +4304,9 @@ int XREMain::XRE_mainInit(bool* aExitFlag) {
     // adding this argument.  This new process, which is taking over for
     // the old one, should make itself the active application.
     ProcessSerialNumber psn;
-    if (::GetCurrentProcess(&psn) == noErr) ::SetFrontProcess(&psn);
+    if (::GetCurrentProcess(&psn) == noErr) {
+      ::SetFrontProcess(&psn);
+    }
   }
 #endif
 
@@ -4485,7 +4504,8 @@ enum struct ShouldNotProcessUpdatesReason {
   DevToolsLaunching,
   NotAnUpdatingTask,
   OtherInstanceRunning,
-  FirstStartup
+  FirstStartup,
+  MultiSessionInstallLockout
 };
 
 const char* ShouldNotProcessUpdatesReasonAsString(
@@ -4497,13 +4517,17 @@ const char* ShouldNotProcessUpdatesReasonAsString(
       return "NotAnUpdatingTask";
     case ShouldNotProcessUpdatesReason::OtherInstanceRunning:
       return "OtherInstanceRunning";
+    case ShouldNotProcessUpdatesReason::FirstStartup:
+      return "FirstStartup";
+    case ShouldNotProcessUpdatesReason::MultiSessionInstallLockout:
+      return "MultiSessionInstallLockout";
     default:
       MOZ_CRASH("impossible value for ShouldNotProcessUpdatesReason");
   }
 }
 
 Maybe<ShouldNotProcessUpdatesReason> ShouldNotProcessUpdates(
-    nsXREDirProvider& aDirProvider) {
+    nsXREDirProvider& aDirProvider, nsIFile* aUpdateRoot) {
   // Don't process updates when launched from the installer.
   // It's possible for a stale update to be present in the case of a paveover;
   // ignore it and leave the update service to discard it.
@@ -4531,6 +4555,33 @@ Maybe<ShouldNotProcessUpdatesReason> ShouldNotProcessUpdates(
     }
   }
 
+  bool otherInstance = false;
+  // At this point we have a dir provider but no XPCOM directory service.  We
+  // launch the update sync manager using that information so that it doesn't
+  // need to ask for (and fail to find) the directory service.
+  nsCOMPtr<nsIFile> anAppFile;
+  bool persistent;
+  nsresult rv = aDirProvider.GetFile(XRE_EXECUTABLE_FILE, &persistent,
+                                     getter_AddRefs(anAppFile));
+  if (NS_SUCCEEDED(rv) && anAppFile) {
+    auto updateSyncManager = new nsUpdateSyncManager(anAppFile);
+    rv = updateSyncManager->IsOtherInstanceRunning(&otherInstance);
+    if (NS_FAILED(rv)) {
+      // Unless we know that there is another instance, we default to assuming
+      // there is not one.
+      otherInstance = false;
+    }
+  }
+
+  if (otherInstance) {
+    bool msilActive = false;
+    rv = IsMultiSessionInstallLockoutActive(aUpdateRoot, msilActive);
+    if (NS_SUCCEEDED(rv) && msilActive) {
+      NS_WARNING("ShouldNotProcessUpdates(): MultiSessionInstallLockout");
+      return Some(ShouldNotProcessUpdatesReason::MultiSessionInstallLockout);
+    }
+  }
+
 #  ifdef MOZ_BACKGROUNDTASKS
   // Do not process updates if we're running a background task mode and another
   // instance is already running.  This avoids periodic maintenance updating
@@ -4554,22 +4605,6 @@ Maybe<ShouldNotProcessUpdatesReason> ShouldNotProcessUpdates(
       return Some(ShouldNotProcessUpdatesReason::NotAnUpdatingTask);
     }
 
-    // At this point we have a dir provider but no XPCOM directory service.  We
-    // launch the update sync manager using that information so that it doesn't
-    // need to ask for (and fail to find) the directory service.
-    nsCOMPtr<nsIFile> anAppFile;
-    bool persistent;
-    nsresult rv = aDirProvider.GetFile(XRE_EXECUTABLE_FILE, &persistent,
-                                       getter_AddRefs(anAppFile));
-    if (NS_FAILED(rv) || !anAppFile) {
-      // Strange, but not a reason to skip processing updates.
-      return Nothing();
-    }
-
-    auto updateSyncManager = new nsUpdateSyncManager(anAppFile);
-
-    bool otherInstance = false;
-    updateSyncManager->IsOtherInstanceRunning(&otherInstance);
     if (otherInstance) {
       NS_WARNING("ShouldNotProcessUpdates(): OtherInstanceRunning");
       return Some(ShouldNotProcessUpdatesReason::OtherInstanceRunning);
@@ -5014,47 +5049,19 @@ int XREMain::XRE_mainStartup(bool* aExitFlag) {
     }
   }
 #  endif
+  // Check for and process any available updates
+  nsCOMPtr<nsIFile> updRoot;
+  bool persistent;
+  rv = mDirProvider.GetFile(XRE_UPDATE_ROOT_DIR, &persistent,
+                            getter_AddRefs(updRoot));
+  // XRE_UPDATE_ROOT_DIR may fail. Fallback to appDir if failed
+  if (NS_FAILED(rv)) {
+    updRoot = mDirProvider.GetAppDir();
+  }
+
   Maybe<ShouldNotProcessUpdatesReason> shouldNotProcessUpdatesReason =
-      ShouldNotProcessUpdates(mDirProvider);
+      ShouldNotProcessUpdates(mDirProvider, updRoot);
   if (shouldNotProcessUpdatesReason.isNothing()) {
-    // Check for and process any available updates
-    nsCOMPtr<nsIFile> updRoot;
-    bool persistent;
-    rv = mDirProvider.GetFile(XRE_UPDATE_ROOT_DIR, &persistent,
-                              getter_AddRefs(updRoot));
-    // XRE_UPDATE_ROOT_DIR may fail. Fallback to appDir if failed
-    if (NS_FAILED(rv)) {
-      updRoot = mDirProvider.GetAppDir();
-    }
-
-    // If the MOZ_TEST_PROCESS_UPDATES environment variable already exists, then
-    // we are being called from the callback application.
-    if (EnvHasValue("MOZ_TEST_PROCESS_UPDATES")) {
-      // If the caller has asked us to log our arguments, do so.  This is used
-      // to make sure that the maintenance service successfully launches the
-      // callback application.
-      const char* logFile = nullptr;
-      if (ARG_FOUND == CheckArg("dump-args", &logFile)) {
-        FILE* logFP = fopen(logFile, "wb");
-        if (logFP) {
-          for (int i = 1; i < gRestartArgc; ++i) {
-            fprintf(logFP, "%s\n", gRestartArgv[i]);
-          }
-          fclose(logFP);
-        }
-      }
-      *aExitFlag = true;
-      return 0;
-    }
-
-    // Support for processing an update and exiting. The
-    // MOZ_TEST_PROCESS_UPDATES environment variable will be part of the
-    // updater's environment and the application that is relaunched by the
-    // updater. When the application is relaunched by the updater it will be
-    // removed below and the application will exit.
-    if (CheckArg("test-process-updates")) {
-      SaveToEnv("MOZ_TEST_PROCESS_UPDATES=1");
-    }
     nsCOMPtr<nsIFile> exeFile, exeDir;
     rv = mDirProvider.GetFile(XRE_EXECUTABLE_FILE, &persistent,
                               getter_AddRefs(exeFile));
@@ -5063,52 +5070,70 @@ int XREMain::XRE_mainStartup(bool* aExitFlag) {
     NS_ENSURE_SUCCESS(rv, 1);
     ProcessUpdates(mDirProvider.GetGREDir(), exeDir, updRoot, gRestartArgc,
                    gRestartArgv, mAppData->version);
-    if (EnvHasValue("MOZ_TEST_PROCESS_UPDATES")) {
-      SaveToEnv("MOZ_TEST_PROCESS_UPDATES=");
-      *aExitFlag = true;
-      return 0;
-    }
   } else {
-    if (CheckArg("test-process-updates") ||
-        EnvHasValue("MOZ_TEST_PROCESS_UPDATES")) {
+    if (CheckArg("test-should-not-process-updates") ||
+        EnvHasValue("MOZ_TEST_SHOULD_NOT_PROCESS_UPDATES")) {
       // Support for testing *not* processing an update.  The launched process
       // can witness this environment variable and conclude that its runtime
       // environment resulted in not processing updates.
 
-      SaveToEnv(nsPrintfCString(
-                    "MOZ_TEST_PROCESS_UPDATES=ShouldNotProcessUpdates(): %s",
-                    ShouldNotProcessUpdatesReasonAsString(
-                        shouldNotProcessUpdatesReason.value()))
+      SaveToEnv(nsPrintfCString("MOZ_TEST_SHOULD_NOT_PROCESS_UPDATES="
+                                "ShouldNotProcessUpdates(): %s",
+                                ShouldNotProcessUpdatesReasonAsString(
+                                    shouldNotProcessUpdatesReason.value()))
                     .get());
     }
   }
+  if (CheckArg("test-process-updates") ||
+      EnvHasValue("MOZ_TEST_PROCESS_UPDATES")) {
+    SaveToEnv("MOZ_TEST_PROCESS_UPDATES=");
+
+    // If the caller has asked us to log our arguments, do so.  This is used
+    // to make sure that the maintenance service successfully launches the
+    // callback application.
+    const char* logFile = nullptr;
+    if (ARG_FOUND == CheckArg("dump-args", &logFile)) {
+      FILE* logFP = fopen(logFile, "wb");
+      if (logFP) {
+        for (int i = 1; i < gRestartArgc; ++i) {
+          fprintf(logFP, "%s\n", gRestartArgv[i]);
+        }
+        fclose(logFP);
+      }
+    }
+
+    // Tests may want to know when we are done. We are about to exit, so we are
+    // done here. Write out a file to indicate this to the caller.
+    WriteUpdateCompleteTestFile(updRoot);
+
+    *aExitFlag = true;
+    return 0;
+  }
 #endif
 
-  bool useSelectedProfile;
-  rv = mProfileSvc->GetStartWithLastProfile(&useSelectedProfile);
-  NS_ENSURE_SUCCESS(rv, 1);
+  // We now know there is no existing instance using the selected profile.
 
-  // We now know there is no existing instance using the selected profile. If
-  // the profile wasn't selected by specific command line arguments and the
-  // user has chosen to show the profile manager on startup then do that.
-  if (wasDefaultSelection && !useSelectedProfile) {
-    rv = ShowProfileManager(mProfileSvc, mNativeApp);
-  } else if (profile) {
-    bool showSelector = false;
-    profile->GetShowProfileSelector(&showSelector);
-    if (showSelector) {
+  // We only ever show the profile selector if a specific profile wasn't chosen
+  // via command line arguments or environment variables.
+  if (wasDefaultSelection) {
+    if (!mProfileSvc->GetStartWithLastProfile()) {
+      // First check the old style profile manager
+      rv = ShowProfileManager(mProfileSvc, mNativeApp);
+    } else if (profile && profile->GetShowProfileSelector()) {
+      // Now check the new profile group selector
       rv = ShowProfileSelector(mProfileSvc, mNativeApp);
     } else {
       rv = NS_OK;
     }
-  }
 
-  if (rv == NS_ERROR_LAUNCHED_CHILD_PROCESS || rv == NS_ERROR_ABORT) {
-    *aExitFlag = true;
-    return 0;
-  }
-  if (NS_FAILED(rv)) {
-    return 1;
+    if (rv == NS_ERROR_LAUNCHED_CHILD_PROCESS || rv == NS_ERROR_ABORT) {
+      *aExitFlag = true;
+      return 0;
+    }
+
+    if (NS_FAILED(rv)) {
+      return 1;
+    }
   }
 
   // We always want to lock the profile even if we're actually going to reset
@@ -5265,6 +5290,17 @@ int XREMain::XRE_mainStartup(bool* aExitFlag) {
 
   CrashReporter::RecordAnnotationBool(
       CrashReporter::Annotation::StartupCacheValid, cachesOK && versionOK);
+
+#if defined(MOZ_UPDATER) && !defined(MOZ_WIDGET_ANDROID)
+  if (shouldNotProcessUpdatesReason) {
+    nsDependentCString skipStartupReason(ShouldNotProcessUpdatesReasonAsString(
+        shouldNotProcessUpdatesReason.value()));
+    mozilla::glean::update::skip_startup_update_reason.Get(skipStartupReason)
+        .Add(1);
+  } else {
+    mozilla::glean::update::skip_startup_update_reason.Get("none"_ns).Add(1);
+  }
+#endif
 
   // Every time a profile is loaded by a build with a different version,
   // it updates the compatibility.ini file saying what version last wrote

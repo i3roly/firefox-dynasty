@@ -13,6 +13,7 @@
 #include "mozilla/Components.h"
 #include "mozilla/dom/AutocompleteInfoBinding.h"
 #include "mozilla/dom/BlobImpl.h"
+#include "mozilla/dom/CustomEvent.h"
 #include "mozilla/dom/Directory.h"
 #include "mozilla/dom/DocumentOrShadowRoot.h"
 #include "mozilla/dom/ElementBinding.h"
@@ -36,6 +37,7 @@
 #include "mozilla/StaticPrefs_signon.h"
 #include "mozilla/TextUtils.h"
 #include "mozilla/Try.h"
+#include "mozilla/Unused.h"
 #include "nsAttrValueInlines.h"
 #include "nsCRTGlue.h"
 #include "nsIFilePicker.h"
@@ -346,10 +348,8 @@ UploadLastDir::ContentPrefCallback::HandleCompletion(uint16_t aReason) {
   }
 
   if (!prefStr.IsEmpty()) {
-    localFile = do_CreateInstance(NS_LOCAL_FILE_CONTRACTID);
-    if (localFile && NS_WARN_IF(NS_FAILED(localFile->InitWithPath(prefStr)))) {
-      localFile = nullptr;
-    }
+    nsresult rv = NS_NewLocalFile(prefStr, getter_AddRefs(localFile));
+    Unused << NS_WARN_IF(NS_FAILED(rv));
   }
 
   if (localFile) {
@@ -736,8 +736,8 @@ nsresult HTMLInputElement::InitColorPicker() {
 
   nsCOMPtr<Document> doc = OwnerDoc();
 
-  nsCOMPtr<nsPIDOMWindowOuter> win = doc->GetWindow();
-  if (!win) {
+  RefPtr<BrowsingContext> bc = doc->GetBrowsingContext();
+  if (!bc) {
     return NS_ERROR_FAILURE;
   }
 
@@ -759,7 +759,7 @@ nsresult HTMLInputElement::InitColorPicker() {
   nsAutoString initialValue;
   GetNonFileValueInternal(initialValue);
   nsTArray<nsString> colors = GetColorsFromList();
-  nsresult rv = colorPicker->Init(win, title, initialValue, colors);
+  nsresult rv = colorPicker->Init(bc, title, initialValue, colors);
   NS_ENSURE_SUCCESS(rv, rv);
 
   nsCOMPtr<nsIColorPickerShownCallback> callback =
@@ -2163,13 +2163,13 @@ void HTMLInputElement::MozSetFileNameArray(const Sequence<nsString>& aFileNames,
                          nsASCIICaseInsensitiveStringComparator)) {
       // Converts the URL string into the corresponding nsIFile if possible
       // A local file will be created if the URL string begins with file://
-      NS_GetFileFromURLSpec(NS_ConvertUTF16toUTF8(aFileNames[i]),
-                            getter_AddRefs(file));
+      Unused << NS_GetFileFromURLSpec(NS_ConvertUTF16toUTF8(aFileNames[i]),
+                                      getter_AddRefs(file));
     }
 
     if (!file) {
       // this is no "file://", try as local file
-      NS_NewLocalFile(aFileNames[i], getter_AddRefs(file));
+      Unused << NS_NewLocalFile(aFileNames[i], getter_AddRefs(file));
     }
 
     if (!file) {
@@ -3271,7 +3271,9 @@ void HTMLInputElement::GetEventTargetParent(EventChainPreVisitor& aVisitor) {
   // same as the original target's first non-native ancestor (we are moving
   // inside of the same element).
   //
-  // FIXME(emilio): Is this still needed now that we use Shadow DOM for this?
+  // FIXME(emilio): This seems like it shouldn't be needed now that we use
+  // Shadow DOM for this, but test_input_datetime_focus_blur_events.html fails
+  // without this.
   if (CreatesDateTimeWidget() && aVisitor.mEvent->IsTrusted() &&
       (aVisitor.mEvent->mMessage == eFocus ||
        aVisitor.mEvent->mMessage == eFocusIn ||
@@ -3362,7 +3364,7 @@ void HTMLInputElement::LegacyPreActivationBehavior(
 
     if (aVisitor.mDOMEvent) {
       if (auto* mouseEvent = aVisitor.mDOMEvent->AsMouseEvent()) {
-        CSSIntPoint pt = mouseEvent->OffsetPoint();
+        const CSSIntPoint pt = RoundedToInt(mouseEvent->OffsetPoint());
         if (auto* imageClickedPoint = static_cast<CSSIntPoint*>(
                 GetProperty(nsGkAtoms::imageClickedPoint))) {
           // Ensures that a dispatched event's clicked point is not the default
@@ -3374,10 +3376,44 @@ void HTMLInputElement::LegacyPreActivationBehavior(
   }
 }
 
+void HTMLInputElement::MaybeDispatchWillBlur(EventChainVisitor& aVisitor) {
+  if (!CreatesDateTimeWidget() || !aVisitor.mEvent->IsTrusted()) {
+    return;
+  }
+  RefPtr<Element> dateTimeBoxElement = GetDateTimeBoxElement();
+  if (!dateTimeBoxElement) {
+    return;
+  }
+  AutoJSAPI jsapi;
+  if (NS_WARN_IF(!jsapi.Init(GetOwnerGlobal()))) {
+    return;
+  }
+  if (!aVisitor.mDOMEvent) {
+    RefPtr<Event> event = EventDispatcher::CreateEvent(
+        aVisitor.mEvent->mOriginalTarget, aVisitor.mPresContext,
+        aVisitor.mEvent, u""_ns);
+    event.swap(aVisitor.mDOMEvent);
+  }
+  JS::Rooted<JS::Value> detail(jsapi.cx(), JS::NullHandleValue);
+  if (NS_WARN_IF(!ToJSValue(jsapi.cx(), aVisitor.mDOMEvent, &detail))) {
+    return;
+  }
+  // Event is dispatched to closed-shadow tree and doesn't bubble.
+  RefPtr<CustomEvent> event =
+      NS_NewDOMCustomEvent(OwnerDoc(), aVisitor.mPresContext, nullptr);
+  event->InitCustomEvent(jsapi.cx(), u"MozDateTimeWillBlur"_ns,
+                         /* CanBubble */ false,
+                         /* Cancelable */ false, detail);
+  event->SetTrusted(true);
+  dateTimeBoxElement->DispatchEvent(*event);
+}
+
 nsresult HTMLInputElement::PreHandleEvent(EventChainVisitor& aVisitor) {
   if (aVisitor.mItemFlags & NS_PRE_HANDLE_BLUR_EVENT) {
     MOZ_ASSERT(aVisitor.mEvent->mMessage == eBlur);
+    // TODO(emilio): This should probably happen only if the event is trusted?
     FireChangeEventIfNeeded();
+    MaybeDispatchWillBlur(aVisitor);
   }
   return nsGenericHTMLFormControlElementWithState::PreHandleEvent(aVisitor);
 }
@@ -5906,7 +5942,7 @@ void HTMLInputElement::ShowPicker(ErrorResult& aRv) {
     if (CreatesDateTimeWidget()) {
       if (RefPtr<Element> dateTimeBoxElement = GetDateTimeBoxElement()) {
         // Event is dispatched to closed-shadow tree and doesn't bubble.
-        RefPtr<Document> doc = dateTimeBoxElement->OwnerDoc();
+        RefPtr<Document> doc = OwnerDoc();
         nsContentUtils::DispatchTrustedEvent(doc, dateTimeBoxElement,
                                              u"MozDateTimeShowPickerForJS"_ns,
                                              CanBubble::eNo, Cancelable::eNo);

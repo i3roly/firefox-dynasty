@@ -59,7 +59,8 @@ interface nsIContentAnalysisResponse : nsISupports
     eNoAgent = 1,
     eInvalidAgentSignature = 2,
     eErrorOther = 3,
-    eOtherRequestInGroupCancelled = 4
+    eOtherRequestInGroupCancelled = 4,
+    eShutdown = 5
   };
 
   readonly attribute nsIContentAnalysisResponse_Action action;
@@ -133,6 +134,28 @@ interface nsIContentAnalysisRequest : nsISupports
     eFileTransfer = 5,
   };
   readonly attribute nsIContentAnalysisRequest_AnalysisType analysisType;
+
+  // These values must stay synchronized with ContentAnalysisRequest.Reason
+  // in analysis.proto!
+  // Indicates the exact reason the request was created
+  cenum Reason : 32 {
+    eUnknown = 0,
+    // Only possible for the eFileAttached and eBulkDataEntry AnalysisType's
+    eClipboardPaste = 1,
+    eDragAndDrop = 2,
+
+    // Only possible for the eFileAttached AnalysisType
+    eFilePickerDialog = 3,
+
+    // Only possible for the ePrint AnalysisType
+    ePrintPreviewPrint = 4,
+    eSystemDialogPrint = 5,
+
+    // Only possible for the eFileDownloaded AnalysisType
+    eNormalDownload = 6,
+    eSaveAsDownload = 7,
+  };
+  readonly attribute nsIContentAnalysisRequest_Reason reason;
 
   // Enumeration of what operation is happening, to be displayed to the user
   cenum OperationType : 32 {
@@ -279,8 +302,11 @@ interface nsIContentAnalysis : nsISupports
    *
    * @param aRequestToken
    *        The token for the request to cancel.
+   * @param aNotifyObservers
+   *        Whether to notify observers with a dlp-response event. Generally this should be
+   *        false if the observer is the one doing the cancelling, and true if not.
    */
-  void cancelContentAnalysisRequest(in ACString aRequestToken);
+  void cancelContentAnalysisRequest(in ACString aRequestToken, in boolean aNotifyObservers);
 
   /**
    * Indicates that the user has responded to a WARN dialog. aAllowContent represents

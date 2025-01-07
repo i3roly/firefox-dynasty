@@ -8,11 +8,6 @@ use std::sync::Arc;
 use super::{CommonMetricData, MetricId};
 use crate::ipc::need_ipc;
 
-#[cfg(feature = "with_gecko")]
-use super::profiler_utils::StringLikeMetricMarker;
-#[cfg(feature = "with_gecko")]
-use gecko_profiler::gecko_profiler_category;
-
 /// A text metric.
 ///
 /// Record a string value with arbitrary content. Supports non-ASCII
@@ -89,14 +84,11 @@ impl glean::traits::Text for TextMetric {
             TextMetric::Parent { id, inner } => {
                 let value = value.into();
                 #[cfg(feature = "with_gecko")]
-                if gecko_profiler::can_accept_markers() {
-                    gecko_profiler::add_marker(
-                        "Text::set",
-                        gecko_profiler_category!(Telemetry),
-                        Default::default(),
-                        StringLikeMetricMarker::new(*id, &value),
-                    );
-                }
+                gecko_profiler::lazy_add_marker!(
+                    "Text::set",
+                    super::profiler_utils::TelemetryProfilerCategory,
+                    super::profiler_utils::StringLikeMetricMarker::new(*id, &value)
+                );
                 inner.set(value);
             }
             TextMetric::Child(_) => {
@@ -166,7 +158,10 @@ mod test {
 
         metric.set("test_text_value");
 
-        assert_eq!("test_text_value", metric.test_get_value("store1").unwrap());
+        assert_eq!(
+            "test_text_value",
+            metric.test_get_value("test-ping").unwrap()
+        );
     }
 
     #[test]
@@ -193,7 +188,7 @@ mod test {
         assert!(ipc::replay_from_buf(&ipc::take_buf().unwrap()).is_ok());
 
         assert!(
-            "test_parent_value" == parent_metric.test_get_value("store1").unwrap(),
+            "test_parent_value" == parent_metric.test_get_value("test-ping").unwrap(),
             "Text metrics should only work in the parent process"
         );
     }

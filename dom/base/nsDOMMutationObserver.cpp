@@ -254,8 +254,7 @@ void nsMutationReceiver::ContentInserted(nsIContent* aChild) {
   m->mNextSibling = aChild->GetNextSibling();
 }
 
-void nsMutationReceiver::ContentRemoved(nsIContent* aChild,
-                                        nsIContent* aPreviousSibling) {
+void nsMutationReceiver::ContentWillBeRemoved(nsIContent* aChild) {
   if (!IsObservable(aChild)) {
     return;
   }
@@ -333,9 +332,8 @@ void nsMutationReceiver::ContentRemoved(nsIContent* aChild,
     m->mTarget = parent;
     m->mRemovedNodes = new nsSimpleContentList(parent);
     m->mRemovedNodes->AppendElement(aChild);
-    m->mPreviousSibling = aPreviousSibling;
-    m->mNextSibling = aPreviousSibling ? aPreviousSibling->GetNextSibling()
-                                       : parent->GetFirstChild();
+    m->mPreviousSibling = aChild->GetPreviousSibling();
+    m->mNextSibling = aChild->GetNextSibling();
   }
   // We need to schedule always, so that after microtask mTransientReceivers
   // can be cleared correctly.
@@ -372,7 +370,7 @@ void nsAnimationReceiver::RecordAnimationMutation(
   }
 
   // Record animations targeting to a pseudo element only when subtree is true.
-  if (animationTarget.mPseudoType != PseudoStyleType::NotPseudo && !Subtree()) {
+  if (!animationTarget.mPseudoRequest.IsNotPseudo() && !Subtree()) {
     return;
   }
 

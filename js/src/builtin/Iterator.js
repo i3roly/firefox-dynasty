@@ -6,17 +6,6 @@ function IteratorIdentity() {
   return this;
 }
 
-#ifdef NIGHTLY_BUILD
-/**
- *  Iterator.range ( start, end, optionOrStep )
- *
- * https://tc39.es/proposal-iterator.range/#sec-iterator.range
- */
-function IteratorRange(start, end, optionOrStep) {
-  return false;
-}
-#endif
-
 /* ECMA262 7.2.7 */
 function IteratorNext(iteratorRecord, value) {
   // Steps 1-2.
@@ -24,10 +13,10 @@ function IteratorNext(iteratorRecord, value) {
     ArgumentsLength() < 2
       ? callContentFunction(iteratorRecord.nextMethod, iteratorRecord.iterator)
       : callContentFunction(
-          iteratorRecord.nextMethod,
-          iteratorRecord.iterator,
-          value
-        );
+        iteratorRecord.nextMethod,
+        iteratorRecord.iterator,
+        value
+      );
   // Step 3.
   if (!IsObject(result)) {
     ThrowTypeError(JSMSG_OBJECT_REQUIRED, result);
@@ -974,11 +963,84 @@ function IteratorFind(predicate) {
   }
 }
 
-
 #ifdef NIGHTLY_BUILD
-/** 
+/**
+ * Iterator.concat ( ...items )
+ *
+ * https://tc39.es/proposal-iterator-sequencing/
+ */
+function IteratorConcat() {
+  // Step 1.
+  //
+  // Stored in reversed order to simplify removing processed items.
+  var index = ArgumentsLength() * 2;
+  var iterables = std_Array(index);
+
+  // Step 2.
+  for (var i = 0; i < ArgumentsLength(); i++) {
+    var item = GetArgument(i);
+
+    // Step 2.a.
+    if (!IsObject(item)) {
+      ThrowTypeError(JSMSG_OBJECT_REQUIRED, typeof item);
+    }
+
+    // Step 2.b. (Inlined GetMethod)
+    var method = item[GetBuiltinSymbol("iterator")];
+
+    // Step 2.c.
+    if (!IsCallable(method)) {
+      ThrowTypeError(JSMSG_NOT_ITERABLE, ToSource(item));
+    }
+
+    // Step 2.d.
+    DefineDataProperty(iterables, --index, item);
+    DefineDataProperty(iterables, --index, method);
+  }
+  assert(index === 0, "all items stored");
+
+  // Steps 3-5.
+  var result = NewIteratorHelper();
+  var generator = IteratorConcatGenerator(iterables);
+  UnsafeSetReservedSlot(
+    result,
+    ITERATOR_HELPER_GENERATOR_SLOT,
+    generator
+  );
+
+  // Step 6.
+  return result;
+}
+
+/**
+ * Iterator.concat ( ...items )
+ *
+ * https://tc39.es/proposal-iterator-sequencing/
+ */
+function* IteratorConcatGenerator(iterables) {
+  assert(IsArray(iterables), "iterables is an array");
+  assert(iterables.length % 2 === 0, "iterables contains pairs (item, method)");
+
+  // Step 3.a.
+  for (var i = iterables.length; i > 0;) {
+    var item = iterables[--i];
+    var method = iterables[--i];
+
+    // Remove processed items to avoid keeping them alive.
+    iterables.length -= 2;
+
+    // Steps 3.a.i-v.
+    for (var innerValue of allowContentIterWith(item, method)) {
+      // Steps 3.a.v.1-3. (Implicit through for-of loop)
+
+      yield innerValue;
+    }
+  }
+}
+
+/**
  * Iterator.zip (iterables [, options])
- * 
+ *
  * https://tc39.es/proposal-joint-iteration/#sec-iterator.zip
  */
 function IteratorZip(predicate) {
@@ -992,5 +1054,120 @@ function IteratorZip(predicate) {
  */
 function IteratorZipKeyed(predicate) {
   return false;
+}
+
+/**
+ * Iterator.range ( start, end, optionOrStep, type )
+ * 
+ * https://tc39.es/proposal-iterator.range/#sec-iterator.range
+ */
+function CreateNumericRangeIterator(start, end, optionOrStep, isNumberRange) {
+  // Step 1: If start is NaN, throw a RangeError exception.
+  if (isNumberRange && Number_isNaN(start)) {
+    ThrowRangeError(JSMSG_ITERATOR_RANGE_INVALID_START_RANGEERR);
+  }
+
+  // Step 2: If end is NaN, throw a RangeError exception.
+  if (isNumberRange && Number_isNaN(end)) {
+    ThrowRangeError(JSMSG_ITERATOR_RANGE_INVALID_END_RANGEERR);
+  }
+
+  // Step 3: If type is NUMBER-RANGE, then
+  if (isNumberRange) {
+    // Step 3.a. Assert: start is a Number.
+    assert(typeof start === 'number', "The 'start' argument must be a number");
+
+    // Step 3.b. If end is not a Number, throw a TypeError exception.
+    if (typeof end !== 'number') {
+      ThrowTypeError(JSMSG_ITERATOR_RANGE_INVALID_END);
+    }
+
+    // Step 3.c. Let zero be 0ℤ.
+    var zero = 0;
+
+    // Step 3.d. Let one be 1ℤ.
+    var one = 1;
+  }
+
+  // Step 5: If start is +∞ or -∞, throw a RangeError exception.
+  if (!Number_isFinite(start)) {
+    ThrowRangeError(JSMSG_ITERATOR_RANGE_START_INFINITY);
+  }
+
+  // Step 6: Let inclusiveEnd be false.
+  var inclusiveEnd = false;
+
+  // Step 7: If optionOrStep is undefined or null, then
+  // Step 7.a. Let step be undefined.
+  var step;
+
+  // Step 8: Else if optionOrStep is an Object, then
+  if (optionOrStep !== null && typeof optionOrStep === 'object') {
+    // Step 8.a. Let step be ? Get(optionOrStep, "step").
+    step = optionOrStep.step;
+
+    // Step 8.b. Set inclusiveEnd to ToBoolean(? Get(optionOrStep, "inclusive")).
+    // eslint-disable-next-line no-unused-vars
+    inclusiveEnd = ToBoolean(optionOrStep.inclusiveEnd);
+  }
+  // Step 9: Else if type is NUMBER-RANGE and optionOrStep is a Number, then
+  else if (isNumberRange && typeof optionOrStep === 'number') {
+    // Step 9.a. Let step be optionOrStep.
+    step = optionOrStep;
+  }
+  // Step 11: Else, throw a TypeError exception.
+  else if (optionOrStep !== undefined && optionOrStep !== null) {
+    ThrowTypeError(JSMSG_ITERATOR_RANGE_INVALID_STEP);
+  }
+
+  // Step 12: If step is undefined or null, then
+  if (step === undefined || step === null) {
+    // Step 12.a. If end > start, let step be one.
+    // Step 12.b. Else let step be -one.
+    step = end > start ? one : -one;
+  }
+
+  // Step 13: If step is NaN, throw a RangeError exception.
+  if (Number_isNaN(step)) {
+    ThrowRangeError(JSMSG_ITERATOR_RANGE_STEP_NAN);
+  }
+
+  // Step 14: If type is NUMBER-RANGE and step is not a Number, throw a TypeError exception.
+  if (isNumberRange && typeof step !== 'number') {
+    ThrowTypeError(JSMSG_ITERATOR_RANGE_STEP_NOT_NUMBER);
+  }
+
+  // Step 16: If step is +∞ or -∞, throw a RangeError exception.
+  if (!Number_isFinite(step)) {
+    ThrowRangeError(JSMSG_ITERATOR_RANGE_STEP_NOT_FINITE);
+  }
+
+  // Step 17: If step is zero and start is not end, throw a RangeError exception.
+  if (step === zero && start !== end) {
+    ThrowRangeError(JSMSG_ITERATOR_RANGE_STEP_ZERO);
+  }
+
+}
+
+/**
+ *  Iterator.range ( start, end, optionOrStep )
+ *
+ * https://tc39.es/proposal-iterator.range/#sec-iterator.range
+ */
+function IteratorRange(start, end, optionOrStep) {
+
+  // Step 1. If start is a Number, return ? CreateNumericRangeIterator(start, end, optionOrStep, NUMBER-RANGE)
+  if (typeof start === 'number') {
+    return CreateNumericRangeIterator(start, end, optionOrStep, true);
+  }
+
+  // Step 2. If start is a BigInt, return ? CreateNumericRangeIterator(start, end, optionOrStep, BIGINT-RANGE)
+  if (typeof start === 'bigint') {
+    return CreateNumericRangeIterator(start, end, optionOrStep, false);
+  }
+
+  // Step 3. Throw a TypeError exception.
+  ThrowTypeError(JSMSG_ITERATOR_RANGE_INVALID_START);
+
 }
 #endif

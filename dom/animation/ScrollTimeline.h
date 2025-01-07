@@ -77,6 +77,8 @@ class ScrollTimeline : public AnimationTimeline {
     };
     Type mType = Type::Root;
     RefPtr<Element> mElement;
+    // FIXME: Bug 1928437. We have to update mPseudoType to use
+    // PseudoStyleRequest.
     PseudoStyleType mPseudoType;
 
     // We use the owner doc of the animation target. This may be different from
@@ -118,7 +120,8 @@ class ScrollTimeline : public AnimationTimeline {
   // scroll-timeline-name property.
   static already_AddRefed<ScrollTimeline> MakeNamed(
       Document* aDocument, Element* aReferenceElement,
-      PseudoStyleType aPseudoType, const StyleScrollTimeline& aStyleTimeline);
+      const PseudoStyleRequest& aPseudoRequest,
+      const StyleScrollTimeline& aStyleTimeline);
 
   bool operator==(const ScrollTimeline& aOther) const {
     return mDocument == aOther.mDocument && mSource == aOther.mSource &&
@@ -193,7 +196,7 @@ class ScrollTimeline : public AnimationTimeline {
   bool ScrollingDirectionIsAvailable() const;
 
   void ReplacePropertiesWith(const Element* aReferenceElement,
-                             PseudoStyleType aPseudoType,
+                             const PseudoStyleRequest& aPseudoRequest,
                              const StyleScrollTimeline& aNew);
 
   void NotifyAnimationContentVisibilityChanged(Animation* aAnimation,
@@ -226,8 +229,8 @@ class ScrollTimeline : public AnimationTimeline {
 
   const ScrollContainerFrame* GetScrollContainerFrame() const;
 
-  static std::pair<const Element*, PseudoStyleType> FindNearestScroller(
-      Element* aSubject, PseudoStyleType aPseudoType);
+  static std::pair<const Element*, PseudoStyleRequest> FindNearestScroller(
+      Element* aSubject, const PseudoStyleRequest& aPseudoRequest);
 
   RefPtr<Document> mDocument;
 
@@ -250,11 +253,12 @@ class ProgressTimelineScheduler {
   ProgressTimelineScheduler() { MOZ_COUNT_CTOR(ProgressTimelineScheduler); }
   ~ProgressTimelineScheduler() { MOZ_COUNT_DTOR(ProgressTimelineScheduler); }
 
-  static ProgressTimelineScheduler* Get(const Element* aElement,
-                                        PseudoStyleType aPseudoType);
-  static ProgressTimelineScheduler& Ensure(Element* aElement,
-                                           PseudoStyleType aPseudoType);
-  static void Destroy(const Element* aElement, PseudoStyleType aPseudoType);
+  static ProgressTimelineScheduler* Get(
+      const Element* aElement, const PseudoStyleRequest& aPseudoRequest);
+  static ProgressTimelineScheduler& Ensure(
+      Element* aElement, const PseudoStyleRequest& aPseudoRequest);
+  static void Destroy(const Element* aElement,
+                      const PseudoStyleRequest& aPseudoRequest);
 
   void AddTimeline(ScrollTimeline* aScrollTimeline) {
     Unused << mTimelines.put(aScrollTimeline);

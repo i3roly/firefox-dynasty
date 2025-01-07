@@ -4,6 +4,7 @@
 #ifndef mozilla_BounceTrackingProtection_h__
 #define mozilla_BounceTrackingProtection_h__
 
+#include "BounceTrackingMapEntry.h"
 #include "BounceTrackingStorageObserver.h"
 #include "mozilla/Logging.h"
 #include "mozilla/MozPromise.h"
@@ -30,7 +31,8 @@ namespace dom {
 class WindowContext;
 }
 
-using ClearDataMozPromise = MozPromise<nsCString, uint32_t, true>;
+using ClearDataMozPromise =
+    MozPromise<RefPtr<BounceTrackingPurgeEntry>, uint32_t, true>;
 
 extern LazyLogModule gBounceTrackingProtectionLog;
 
@@ -76,6 +78,14 @@ class BounceTrackingProtection final : public nsIBounceTrackingProtection,
   [[nodiscard]] nsresult ClearExpiredUserInteractions(
       BounceTrackingStateGlobal* aStateGlobal = nullptr);
 
+  // Logs a warning to the DevTools website console if we recently purged a site
+  // matching the given principal. Purge log data is not persisted across
+  // restarts so we only know whether a purge happened during this session. For
+  // private browsing mode closing the last private browsing window clears purge
+  // information.
+  void MaybeLogPurgedWarningForSite(nsIPrincipal* aPrincipal,
+                                    BounceTrackingState* aBounceTrackingState);
+
  private:
   BounceTrackingProtection() = default;
   ~BounceTrackingProtection() = default;
@@ -120,13 +130,13 @@ class BounceTrackingProtection final : public nsIBounceTrackingProtection,
 
   // Clear state for classified bounce trackers. To be called on an interval.
   using PurgeBounceTrackersMozPromise =
-      MozPromise<nsTArray<nsCString>, nsresult, true>;
+      MozPromise<nsTArray<RefPtr<BounceTrackingPurgeEntry>>, nsresult, true>;
   RefPtr<PurgeBounceTrackersMozPromise> PurgeBounceTrackers();
 
   // Report purged trackers to the anti-tracking database via
   // nsITrackingDBService.
   static void ReportPurgedTrackersToAntiTrackingDB(
-      const nsTArray<nsCString>& aPurgedSiteHosts);
+      const nsTArray<RefPtr<BounceTrackingPurgeEntry>>& aPurgedSiteHosts);
 
   // Clear state for classified bounce trackers for a specific state global.
   // aClearPromises is populated with promises for each host that is cleared.
@@ -158,6 +168,22 @@ class BounceTrackingProtection final : public nsIBounceTrackingProtection,
   [[nodiscard]] static nsresult LogBounceTrackersClassifiedToWebConsole(
       BounceTrackingState* aBounceTrackingState,
       const nsTArray<nsCString>& aSiteHosts);
+
+  // Comparator for sorting purge log entries by purge timestamp.
+  class PurgeEntryTimeComparator {
+   public:
+    bool Equals(const BounceTrackingPurgeEntry* a,
+                const BounceTrackingPurgeEntry* b) const {
+      MOZ_ASSERT(a && b);
+      return a->PurgeTimeRefConst() == b->PurgeTimeRefConst();
+    }
+
+    bool LessThan(const BounceTrackingPurgeEntry* a,
+                  const BounceTrackingPurgeEntry* b) const {
+      MOZ_ASSERT(a && b);
+      return a->PurgeTimeRefConst() < b->PurgeTimeRefConst();
+    }
+  };
 };
 
 }  // namespace mozilla

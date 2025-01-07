@@ -19,6 +19,9 @@ data class OnboardingPageUiData(
     val secondaryButtonLabel: String? = null,
     val privacyCaption: Caption? = null,
     val addOns: List<OnboardingAddOn>? = null,
+    val toolbarOptions: List<ToolbarOption>? = null,
+    val themeOptions: List<ThemeOption>? = null,
+    val termsOfService: OnboardingTermsOfService? = null,
 ) {
     /**
      * Model for different types of Onboarding Pages.
@@ -42,6 +45,15 @@ data class OnboardingPageUiData(
         ),
         ADD_ONS(
             telemetryId = "add_ons",
+        ),
+        TOOLBAR_PLACEMENT(
+            telemetryId = "toolbar_placement",
+        ),
+        THEME_SELECTION(
+            telemetryId = "theme",
+        ),
+        TERMS_OF_SERVICE(
+            telemetryId = "terms_of_service",
         ),
     }
 }

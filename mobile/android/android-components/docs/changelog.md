@@ -4,7 +4,12 @@ title: Changelog
 permalink: /changelog/
 ---
 
-# 134.0 (In Development)
+# 135.0 (In Development)
+* **feature-prompts**
+    * 🆕 New `ToggleablePrompt` interface implemented by `AddressSelectBar`, `CreditCard` `LoginSelectBar` and `SuggestStrongPasswordBar` to inform when these are shown or hidden. [Bug 1909746](https://bugzilla.mozilla.org/show_bug.cgi?id=1909746).
+    * 🆕 New `ExpandablePrompt` interface implemented by `LoginSelectBar` to inform when it is expanded or collapsed. [Bug 1909746](https://bugzilla.mozilla.org/show_bug.cgi?id=1909746).
+
+# 134.0
 * **browser-state**
   * 🌟 Added `DownloadState.isPdf` property to indicate whether the file associated with the download is a PDF. See [Bug 1920092](https://bugzilla.mozilla.org/show_bug.cgi?id=1920092).
 

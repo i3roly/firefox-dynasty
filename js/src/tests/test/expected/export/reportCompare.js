@@ -4,9 +4,10 @@
 /*---
 description: |
   assert.sameValue
+flags:
+- noStrict
 esid: pending
 ---*/
-
 
 var a = 42;
 

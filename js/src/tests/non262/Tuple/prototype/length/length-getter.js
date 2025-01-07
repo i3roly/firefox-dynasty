@@ -5,13 +5,11 @@ description: >
 info: |
   get %Tuple%.prototype.length
 
-Tuple.prototype.length is an accessor property whose set accessor function is undefined. Its get accessor function performs the following steps:
+  Tuple.prototype.length is an accessor property whose set accessor function is undefined. Its get accessor function performs the following steps:
 
-1. Let T be ? thisTupleValue(this value).
-2. Let size be the length of T.[[Sequence]].
-3. Return size.
-
-features: [Tuple]
+  1. Let T be ? thisTupleValue(this value).
+  2. Let size be the length of T.[[Sequence]].
+  3. Return size.
 ---*/
 
 /* Section 8.2.3.2 */

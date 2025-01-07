@@ -783,6 +783,11 @@
   value: true
   mirror: always
 
+- name: apz.popups_without_remote.enabled
+  type: RelaxedAtomicBool
+  value: false
+  mirror: always
+
 # Whether to print the APZC tree for debugging.
 - name: apz.printtree
   type: RelaxedAtomicBool
@@ -2325,12 +2330,6 @@
   value: true
   mirror: always
 
-# Block multiple window.open() per single event.
-- name: dom.block_multiple_popups
-  type: bool
-  value: true
-  mirror: always
-
 # The maximum number of popup that is allowed to be opened. Set to -1 for no
 # limit.
 - name: dom.popup_maximum
@@ -2485,7 +2484,7 @@
 # Enable/disable contenteditable="plaintext-only".
 - name: dom.element.contenteditable.plaintext-only.enabled
   type: bool
-  value: @IS_NIGHTLY_BUILD@
+  value: @IS_EARLY_BETA_OR_EARLIER@
   mirror: always
 
 # Whether Dialog elements emit beforetoggle and toggle events during opening and closing.
@@ -2571,7 +2570,7 @@
 # Whether the scheduler interface will be exposed
 - name: dom.enable_web_task_scheduling
   type: RelaxedAtomicBool
-  value: @IS_NIGHTLY_BUILD@
+  value: false
   mirror: always
 
 # If this is true, it's allowed to fire "cut", "copy" and "paste" events.
@@ -2614,6 +2613,36 @@
 - name: dom.event.keypress.key.allow_lone_surrogate
   type: bool
   value: @IS_NOT_EARLY_BETA_OR_EARLIER@
+  mirror: always
+
+# Whether the result of screenX, screenY, clientX, clientY, offsetX, offsetY,
+# x and y of trusted MouseEvent and subclasses may be fractional values.
+# Enabling this may cause backward compatibility issues.
+# Note that this pref is referred only when
+# `dom.event.pointer.fractional_coordinates.enabled` is `true`.
+- name: dom.event.mouse.fractional_coordinates.trusted.enabled
+  type: bool
+  value: false
+  mirror: always
+
+# Whether the result of screenX, screenY, clientX, clientY, offsetX, offsetY,
+# x and y of untrusted MouseEvent and subclasses may be fractional values.
+# I.e., this allows web apps to use fractional values with their own DOM events
+# which have MouseEvent interface.  However, this might cause backward
+# compatibility issues if web apps initializes untrusted events with quotients.
+# Note that this pref is referred only when
+# `dom.event.pointer.fractional_coordinates.enabled` is `true`.
+- name: dom.event.mouse.fractional_coordinates.untrusted.enabled
+  type: bool
+  value: false
+  mirror: always
+
+# Whether the result of screenX, screenY, clientX, clientY, offsetX, offsetY,
+# x and y of PointerEvent may be fractional values (except `click`, `auxclick`
+# and `contextmenu`)
+- name: dom.event.pointer.fractional_coordinates.enabled
+  type: bool
+  value: true
   mirror: always
 
 # Whether wheel event target's should be grouped. When enabled, all wheel
@@ -2662,7 +2691,7 @@
 # target is removed from the DOM tree.
 - name: dom.events.mouse-pointer-boundary.keep-enter-targets-after-over-target-removed
   type: bool
-  value: @IS_EARLY_BETA_OR_EARLIER@
+  value: true
   mirror: always
 
 # Whether .offset{X,Y} for events targeted at SVG nodes returns bounds relative
@@ -3168,14 +3197,14 @@
 # Is support for key events and focus events on disabled elements enabled?
 - name: dom.forms.always_allow_key_and_focus_events.enabled
   type: bool
-  value: @IS_EARLY_BETA_OR_EARLIER@
+  value: true
   mirror: always
 
 # Whether to disable only the descendants or the parent fieldset element too
 # Note that this still allows it to be selected by `:disable`.
 - name: dom.forms.fieldset_disable_only_descendants.enabled
   type: bool
-  value: @IS_EARLY_BETA_OR_EARLIER@
+  value: true
   mirror: always
 
 # Does mousewheel-scrolling over a focused <input type="number"> or
@@ -5525,7 +5554,11 @@
 # If true, crash when a blocklisted preference is accessed in a subprocess
 - name: fission.enforceBlocklistedPrefsInSubprocesses
   type: RelaxedAtomicBool
-  value: @IS_EARLY_BETA_OR_EARLIER@
+#ifdef DEBUG
+  value: true
+#else
+  value: false
+#endif
   mirror: always
 
 #---------------------------------------------------------------------------
@@ -5705,6 +5738,13 @@
     value: false
     mirror: always
     rust: true
+
+#ifdef FUZZING_SNAPSHOT
+-   name: fuzzing.snapshot.enabled
+    type: RelaxedAtomicBool
+    value: true
+    mirror: always
+#endif
 
 # This configures a virtual authenticator for WebAuthn. The value encodes the
 # arguments to the WebDriver "Add Virtual Authenticator" extension command.
@@ -6027,7 +6067,7 @@
 
 - name: gfx.canvas.accelerated.cache-items
   type: RelaxedAtomicUint32
-  value: 2048
+  value: 8192
   mirror: always
 
 - name: gfx.canvas.accelerated.cache-size
@@ -7025,6 +7065,15 @@
   value: false
 #endif
   mirror: once
+
+#ifdef NIGHTLY_BUILD
+  # Keep this pref hidden on non-nightly builds to avoid people accidentally
+  # turning it on.
+- name: gfx.webrender.layer-compositor
+  type: bool
+  value: false
+  mirror: once
+#endif
 
 - name: gfx.webrender.scissored-cache-clears.enabled
   type: bool
@@ -8284,6 +8333,15 @@
 
 #endif  // NIGHTLY_BUILD
 
+#ifdef JS_HAS_TEMPORAL_API
+  # Experimental support for Temporal in JavaScript.
+- name: javascript.options.experimental.temporal
+  type: bool
+  value: false
+  mirror: always
+  set_spidermonkey_pref: startup
+#endif  // JS_HAS_TEMPORAL_API
+
 #ifdef ENABLE_EXPLICIT_RESOURCE_MANAGEMENT
   # Experimental support for Explicit Resource Management in JavaScript.
 -   name: javascript.options.experimental.explicit_resource_management
@@ -8295,7 +8353,7 @@
 
 -   name: javascript.options.experimental.json_parse_with_source
     type: bool
-    value: false
+    value: true
     mirror: always
     set_spidermonkey_pref: always
 
@@ -8508,7 +8566,7 @@
 # Use wasm_lazy_tiering to enable it for any module.
 -   name: javascript.options.wasm_lazy_tiering_for_gc
     type: bool
-    value: false
+    value: true
     mirror: always
     set_spidermonkey_pref: always
 
@@ -8558,14 +8616,15 @@
   mirror: always
   set_spidermonkey_pref: always
 
-# When selecting a call_ref target for speculative inlining, this is the minimum
+# When selecting call_ref targets for speculative inlining, this is the minimum
 # percentage of the total number of calls from the call site that a candidate
-# must have in order to be elegible for inlining.  Allowable: 10 .. 100 (%).
-# Setting it (eg) 75 means the hottest target must be 75% of all observed calls
-# to be considered for inlining.  Probably unwise to let this be much below 50.
+# set of targets must collectively have in order to be elegible for inlining.
+# Allowable: 10 .. 100 (%).  Setting it (eg) 75 means the targets must collectively
+# be 75% of all observed calls to be considered for inlining.  Probably unwise to
+# let this be much below 40.
 - name: javascript.options.wasm_call_ref_inlining_percent
   type: uint32_t
-  value: 50
+  value: 40
   mirror: always
   set_spidermonkey_pref: always
 
@@ -9111,6 +9170,13 @@
 #
 # Only for testing purposes.
 - name: layout.css.moz-control-character-visibility.enabled
+  type: RelaxedAtomicBool
+  value: false
+  mirror: always
+  rust: true
+
+# Whether the `-moz-user-input` property is exposed to content.
+- name: layout.css.moz-user-input.enabled
   type: RelaxedAtomicBool
   value: false
   mirror: always
@@ -9832,12 +9898,6 @@
 - name: layout.forms.reveal-password-button.enabled
   type: bool
   value: false
-  mirror: always
-
-# Enables the Reveal Password context-menu entry.
-- name: layout.forms.reveal-password-context-menu.enabled
-  type: bool
-  value: true
   mirror: always
 
 # If enabled, textareas won't include 'overflow:auto' scrollbars in their
@@ -10651,6 +10711,12 @@
   value: @IS_NOT_XP_MACOSX@
   mirror: always
 
+# How long in milliseconds before timing out to destroy en/decoders gracefully
+- name: media.gmp.coder-shutdown-timeout-ms
+  type: RelaxedAtomicUint32
+  value: 1000
+  mirror: always
+
 #if defined(XP_LINUX) && defined(MOZ_SANDBOX)
   # Whether to allow, on a Linux system that doesn't support the necessary
   # sandboxing features, loading Gecko Media Plugins unsandboxed.  However, EME
@@ -10711,6 +10777,11 @@
 #else
   value: false
 #endif
+  mirror: always
+
+- name: media.ffvpx-hw.enabled
+  type: RelaxedAtomicBool
+  value: false
   mirror: always
 
 # The codecs in the vendored ffmpeg copy are usually prefered to the other
@@ -12003,6 +12074,22 @@
 #endif
   mirror: always
 
+- name: media.webrtc.codec.video.av1.enabled
+  type: RelaxedAtomicBool
+#if defined(MOZ_AV1)
+  value: @IS_NIGHTLY_BUILD@
+#else
+  value: false
+#endif
+  mirror: always
+
+# If true, then AV1 will be used as the preferred codec for WebRTC video.
+# After the AV1 codec is enabled by default, this pref will be renamed.
+- name: media.webrtc.codec.video.av1.experimental_preferred
+  type: bool
+  value: false
+  mirror: always
+
 - name: media.webrtc.simulcast.vp9.enabled
   type: RelaxedAtomicBool
   value: false
@@ -12410,7 +12497,7 @@
 # cookieBehavior=5.
 - name: network.cookie.cookieBehavior.trackerCookieBlocking
   type: bool
-  value: true
+  value: @IS_NOT_NIGHTLY_BUILD@
   mirror: always
 
 # Whether to support CHIPS(Cookies Having Independent Partitioned State).
@@ -12460,6 +12547,11 @@
   mirror: always
 
 - name: network.cookie.sameSite.laxByDefault
+  type: RelaxedAtomicBool
+  value: false
+  mirror: always
+
+- name: network.cookie.sameSite.laxByDefaultWarningsForBeta
   type: RelaxedAtomicBool
   value: false
   mirror: always
@@ -12565,7 +12657,7 @@
   # in response to a Refresh header.
 - name: network.http.referer.sendFromRefresh
   type: bool
-  value: false
+  value: @IS_NIGHTLY_BUILD@
   mirror: always
 
 # false=real referer, true=spoof referer (use target URI as referer).
@@ -12586,6 +12678,12 @@
 - name: network.http.sendOriginHeader
   type: uint32_t
   value: 2
+  mirror: always
+
+# Include an idempotency-key header for POST requests
+- name: network.http.idempotencyKey.enabled
+  type: RelaxedAtomicBool
+  value: @IS_NIGHTLY_BUILD@
   mirror: always
 
 # Whether to respect the redirected-tainted origin flag
@@ -13391,7 +13489,11 @@
 # every page reload.
 - name: network.dns.only_refresh_on_fresh_connection
   type: RelaxedAtomicBool
+#ifdef EARLY_BETA_OR_EARLIER
+  value: false
+#else
   value: true
+#endif
   mirror: always
 
 # When true, DNS resolutions will downgrade DNS
@@ -13400,6 +13502,86 @@
 - name: network.dns.skip_ipv6_when_no_addresses
   type: RelaxedAtomicBool
   value: false
+  mirror: always
+
+# This preference specifies a list of domains for which DNS lookups will be
+# IPv4 only. Works around broken DNS servers which can't handle IPv6 lookups
+# and/or allows the user to disable IPv6 on a per-domain basis. See bug 68796.
+- name: network.dns.ipv4OnlyDomains
+  type: String
+  value: ""
+  mirror: never
+
+# This is the number of dns cache entries allowed
+- name: network.dnsCacheEntries
+  type: RelaxedAtomicUint32
+  value: 400
+  mirror: always
+
+# In the absence of OS TTLs, the DNS cache TTL value
+- name: network.dnsCacheExpiration
+  type: RelaxedAtomicUint32
+  value: 60
+  mirror: always
+
+# Get TTL; not supported on all platforms; nop on the unsupported ones.
+- name: network.dns.get-ttl
+  type: RelaxedAtomicBool
+  value: true
+  mirror: always
+
+# For testing purposes! Makes the native resolver resolve IPv4 "localhost"
+# instead of the actual given name.
+- name: network.dns.native-is-localhost
+  type: RelaxedAtomicBool
+  value: false
+  mirror: always
+
+# The grace period allows the DNS cache to use expired entries, while kicking off
+# a revalidation in the background.
+- name: network.dnsCacheExpirationGracePeriod
+  type: RelaxedAtomicUint32
+  value: 60
+  mirror: always
+
+# This preference can be used to turn off DNS prefetch.
+- name: network.dns.disablePrefetch
+  type: RelaxedAtomicBool
+  value: false
+  mirror: always
+
+# This preference controls whether .onion hostnames are
+# rejected before being given to DNS. RFC 7686
+- name: network.dns.blockDotOnion
+  type: RelaxedAtomicBool
+  value: true
+  mirror: always
+
+# These domains are treated as localhost equivalent
+- name: network.dns.localDomains
+  type: String
+  value: ""
+  mirror: never
+
+# When non empty all non-localhost DNS queries (including IP addresses)
+# resolve to this value. The value can be a name or an IP address.
+# domains mapped to localhost with localDomains stay localhost.
+- name: network.dns.forceResolve
+  type: String
+  value: ""
+  mirror: never
+
+# Contols whether or not "localhost" should resolve when offline
+- name: network.dns.offline-localhost
+  type: RelaxedAtomicBool
+  value: true
+  mirror: always
+
+# Defines how much longer resolver threads should stay idle before are shut down.
+# A negative value will keep the thread alive forever.
+- name: network.dns.resolver-thread-extra-idle-time-seconds
+  type: RelaxedAtomicInt32
+  value: 60
   mirror: always
 
 # The proxy type. See nsIProtocolProxyService.idl
@@ -14329,13 +14511,6 @@
   value: ""
   mirror: never
 
-# This is only used for testing. When true, nsHttpChannel::mPeerAddr will be
-# overridden with the address provided by DNS prefetch.
-- name: network.dns.use_override_as_peer_address
-  type: RelaxedAtomicBool
-  value: false
-  mirror: always
-
 # Whether to add additional record IPs to the cache
 - name: network.trr.add_additional_records
   type: RelaxedAtomicBool
@@ -14453,6 +14628,13 @@
   value: 16
   mirror: always
 
+# When a primary or backup half-open socket fails while another is still
+# connecting, retry with the remaining one
+- name: network.http.retry_with_another_half_open
+  type: RelaxedAtomicBool
+  value: @IS_EARLY_BETA_OR_EARLIER@
+  mirror: always
+
   # If true, HTTP response content-type headers will be parsed using the standards-compliant MimeType parser
 - name: network.standard_content_type_parsing.response_headers
   type: RelaxedAtomicBool
@@ -14546,6 +14728,13 @@
   value: false
   mirror: always
 
+# Used for testing purposes only. When true, it attaches an extra networking
+# layer to simulate different network scenarios.
+- name: network.socket.attach_mock_network_layer
+  type: RelaxedAtomicBool
+  value: false
+  mirror: always
+
 #---------------------------------------------------------------------------
 # Prefs starting with "nglayout."
 #---------------------------------------------------------------------------
@@ -14622,6 +14811,13 @@
   value: true
   mirror: always
 
+# Whether default permissions should be imported from remote settings in
+# addition to importing them from browser/app/permissions.
+- name: permissions.manager.remote.enabled
+  type: bool
+  value: @IS_EARLY_BETA_OR_EARLIER@
+  mirror: always
+
 #---------------------------------------------------------------------------
 # Prefs starting with "places."
 #---------------------------------------------------------------------------
@@ -14661,7 +14857,7 @@
 # Whether flooding prevention feature is enabled or not.
 - name: places.history.floodingPrevention.enabled
   type: bool
-  value: @IS_NIGHTLY_BUILD@
+  value: true
   mirror: always
 
 # Maximum elapsed time betwen a user interaction and a visit before starting to
@@ -15053,7 +15249,7 @@
 
 - name: privacy.resistFingerprinting.target_video_res
   type: uint32_t
-  value: 480
+  value: 1080
   mirror: always
 
 # Enable resetting the fingerprinting randomization key daily for normal windwos.
@@ -15929,7 +16125,11 @@
 # 3: Consult CRLite and enforce "Not Revoked" results, but defer to OCSP for "Revoked".
 - name: security.pki.crlite_mode
   type: RelaxedAtomicUint32
+#ifdef NIGHTLY_BUILD
+  value: 2
+#else
   value: 3
+#endif
   mirror: always
 
 # The CRLite filter channel to which the user is subscribed.
@@ -16209,6 +16409,12 @@
 - name: security.tls13.aes_256_gcm_sha384
   type: RelaxedAtomicBool
   value: true
+  mirror: always
+
+# MLS
+- name: security.mls.enabled
+  type: RelaxedAtomicBool
+  value: false
   mirror: always
 
 #---------------------------------------------------------------------------
@@ -16653,6 +16859,33 @@
 - name: ui.menu.incremental_search.timeout
   type: uint32_t
   value: 1000
+  mirror: always
+
+# If true, popups are attached to their native parent window (and move with it)
+# and can't overlap the OS chrome. Otherwise they are topmost.
+# NOTE(emilio): Comments below might not be accurate anymore.
+- name: ui.panel.default_level_parent
+  type: RelaxedAtomicBool
+#if defined(XP_WIN) || defined(XP_MACOSX)
+  # See bug 448927, on topmost panel, some IMEs are not usable on Windows.
+  # See bug 404131, topmost <panel> element wins to Dashboard on MacOSX.
+  value: true
+#else
+  # Setting default_level_parent to true makes the default level for popup
+  # windows "top" instead of "parent".  On GTK2 platform, this is implemented
+  # with override-redirect windows which is the normal way to implement
+  # temporary popup windows.  Setting this to false would make the default
+  # level "parent" which is implemented with managed windows. A problem with
+  # using managed windows is that metacity sometimes deactivates the parent
+  # window when the managed popup is shown, see bug 526941.
+  #
+  # TODO(emilio): Re-evaluate this default, the comment above is no longer
+  # true since bug 552982 (where we started looking at mNoAutohide rather than
+  # popup level to make the override-redirect vs. managed window distinction).
+  #
+  # The Android default was copied from GTK in bug 568700.
+  value: false
+#endif
   mirror: always
 
 # If true, all popups won't hide automatically on blur
@@ -17647,6 +17880,16 @@
 - name: widget.use-xdg-desktop-portal.mime-handler
   type: int32_t
   value: 2
+  mirror: always
+
+# Whether to use XDG portal for native messaging.
+# https://github.com/flatpak/xdg-desktop-portal/issues/655
+#  - 0: never
+#  - 1: always
+#  - 2: auto (true for snap and flatpak or GTK_USE_PORTAL=1, false otherwise)
+- name: widget.use-xdg-desktop-portal.native-messaging
+  type: int32_t
+  value: 0
   mirror: always
 
 # Whether to try to use XDG portal for settings / look-and-feel information.

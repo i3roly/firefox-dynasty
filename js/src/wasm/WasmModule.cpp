@@ -120,7 +120,7 @@ class Module::CompleteTier2GeneratorTaskImpl
       // that's okay.
       UniqueChars error;
       UniqueCharsVector warnings;
-      bool success = CompileCompleteTier2(bytecode_->bytes, *module_, &error,
+      bool success = CompileCompleteTier2(bytecode_->vector, *module_, &error,
                                           &warnings, &cancelled_);
       if (!cancelled_) {
         // We could try to dispatch a runnable to the thread that started this
@@ -206,7 +206,16 @@ JSObject* Module::createObject(JSContext* cx) const {
     return nullptr;
   }
 
-  if (!cx->isRuntimeCodeGenEnabled(JS::RuntimeCode::WASM, nullptr)) {
+  JS::RootedVector<JSString*> parameterStrings(cx);
+  JS::RootedVector<Value> parameterArgs(cx);
+  bool canCompileStrings = false;
+  if (!cx->isRuntimeCodeGenEnabled(JS::RuntimeCode::WASM, nullptr,
+                                   JS::CompilationType::Undefined,
+                                   parameterStrings, nullptr, parameterArgs,
+                                   NullHandleValue, &canCompileStrings)) {
+    return nullptr;
+  }
+  if (!canCompileStrings) {
     JS_ReportErrorNumberASCII(cx, GetErrorMessage, nullptr,
                               JSMSG_CSP_BLOCKED_WASM, "WebAssembly.Module");
     return nullptr;

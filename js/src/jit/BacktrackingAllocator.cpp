@@ -807,22 +807,57 @@ void LiveRange::tryToMoveDefAndUsesInto(LiveRange* other) {
   MOZ_ASSERT(&other->vreg() == &vreg());
   MOZ_ASSERT(this != other);
 
-  // Move over all uses which fit in |other|'s boundaries.
-  for (UsePositionIterator iter = usesBegin(); iter;) {
-    UsePosition* use = *iter;
-    if (other->covers(use->pos)) {
-      uses_.removeAndIncrement(iter);
-      noteRemovedUse(use);
-      other->addUse(use);
-    } else {
-      iter++;
-    }
+  // This method shouldn't be called for two non-intersecting live ranges
+  // because it's a no-op in that case.
+  MOZ_ASSERT(intersects(other));
+
+  CodePosition otherFrom = other->from();
+  CodePosition otherTo = other->to();
+
+  // The uses are sorted by position, so first skip all uses before |other|
+  // starts.
+  UsePositionIterator iter = usesBegin();
+  while (iter && iter->pos < otherFrom) {
+    iter++;
   }
+
+  // Move over all uses which fit in |other|'s boundaries.
+  while (iter && iter->pos < otherTo) {
+    UsePosition* use = *iter;
+    MOZ_ASSERT(other->covers(use->pos));
+    uses_.removeAndIncrement(iter);
+    noteRemovedUse(use);
+    other->addUse(use);
+  }
+
+  MOZ_ASSERT_IF(iter, !other->covers(iter->pos));
 
   // Distribute the definition to |other| as well, if possible.
   if (hasDefinition() && from() == other->from()) {
     other->setHasDefinition();
   }
+}
+
+void LiveRange::moveAllUsesToTheEndOf(LiveRange* other) {
+  MOZ_ASSERT(&other->vreg() == &vreg());
+  MOZ_ASSERT(this != other);
+  MOZ_ASSERT(other->contains(this));
+
+  if (uses_.empty()) {
+    return;
+  }
+
+  // Assert |other->uses_| remains sorted after adding our uses at the end.
+  MOZ_ASSERT_IF(!other->uses_.empty(),
+                SortBefore(other->uses_.back(), *uses_.begin()));
+
+  other->uses_.extendBack(std::move(uses_));
+  MOZ_ASSERT(!hasUses());
+
+  other->usesSpillWeight_ += usesSpillWeight_;
+  other->numFixedUses_ += numFixedUses_;
+  usesSpillWeight_ = 0;
+  numFixedUses_ = 0;
 }
 
 bool LiveRange::contains(LiveRange* other) const {
@@ -1006,7 +1041,7 @@ bool VirtualRegister::addInitialRange(TempAllocator& alloc, CodePosition from,
       }
 
       MOZ_ASSERT(!existing->hasDefinition());
-      existing->tryToMoveDefAndUsesInto(merged);
+      existing->moveAllUsesToTheEndOf(merged);
       MOZ_ASSERT(!existing->hasUses());
     }
 

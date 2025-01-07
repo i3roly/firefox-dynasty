@@ -51,8 +51,13 @@ async function testClipboardPaste(testMode) {
     content.document.getElementById("isEmptyPaste").checked = testMode.isEmpty;
   });
   await testPasteWithElementId("testInput", browser, testMode);
-  // Set the clipboard data again so we don't use a cached CA result
-  setClipboardData(testMode.isEmpty ? "" : CLIPBOARD_TEXT_STRING);
+  // Make sure pasting the same data twice doesn't use the cache
+  await setElementValue(browser, "testInput", "");
+  await testPasteWithElementId("testInput", browser, testMode);
+
+  await testPasteWithElementId("testTextArea", browser, testMode);
+  // Make sure pasting the same data twice doesn't use the cache
+  await setElementValue(browser, "testTextArea", "");
   await testPasteWithElementId("testTextArea", browser, testMode);
 
   BrowserTestUtils.removeTab(tab);
@@ -163,6 +168,11 @@ function assertContentAnalysisRequest(request, expectedText) {
     "request has correct analysisType"
   );
   is(
+    request.reason,
+    Ci.nsIContentAnalysisRequest.eClipboardPaste,
+    "request has correct reason"
+  );
+  is(
     request.operationTypeForDisplay,
     Ci.nsIContentAnalysisRequest.eClipboard,
     "request has correct operationTypeForDisplay"
@@ -178,6 +188,16 @@ async function getElementValue(browser, elementId) {
   return await SpecialPowers.spawn(browser, [elementId], async elementId => {
     return content.document.getElementById(elementId).value;
   });
+}
+
+async function setElementValue(browser, elementId, value) {
+  await SpecialPowers.spawn(
+    browser,
+    [elementId, value],
+    async (elementId, value) => {
+      content.document.getElementById(elementId).value = value;
+    }
+  );
 }
 
 add_task(async function testClipboardPasteWithContentAnalysisAllow() {

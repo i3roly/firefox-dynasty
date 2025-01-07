@@ -96,7 +96,7 @@ tasks:
         env:
             by-build-platform:
                 linux.*:    # linux64 and 32 get same treatment here
-                    EN_US_PACKAGE_NAME: target.tar.bz2
+                    EN_US_PACKAGE_NAME: target.tar.xz
                     EN_US_BINARY_URL:
                         artifact-reference: <build-signing/{artifact_prefix}>
                 macosx64.*:
@@ -145,5 +145,6 @@ tasks:
                 - testing/mozharness/mozharness/mozilla/l10n/locales.py
                 - testing/mozharness/scripts/desktop_l10n.py
                 - third_party/python/compare-locales/**
+                - third_party/python/moz.l10n/**
                 - toolkit/locales/**
                 - toolkit/mozapps/installer/**

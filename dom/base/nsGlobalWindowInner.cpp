@@ -176,6 +176,8 @@
 #include "mozilla/dom/TimeoutManager.h"
 #include "mozilla/dom/ToJSValue.h"
 #include "mozilla/dom/TrustedTypePolicyFactory.h"
+#include "mozilla/dom/TrustedTypeUtils.h"
+#include "mozilla/dom/TrustedTypesConstants.h"
 #include "mozilla/dom/VRDisplay.h"
 #include "mozilla/dom/VRDisplayEvent.h"
 #include "mozilla/dom/VRDisplayEventBinding.h"
@@ -185,6 +187,7 @@
 #include "mozilla/dom/WindowBinding.h"
 #include "mozilla/dom/WindowContext.h"
 #include "mozilla/dom/WindowGlobalChild.h"
+#include "mozilla/dom/WindowOrWorkerGlobalScopeBinding.h"
 #include "mozilla/dom/WindowProxyHolder.h"
 #include "mozilla/dom/WorkerCommon.h"
 #include "mozilla/dom/Worklet.h"
@@ -3101,13 +3104,12 @@ const InterfaceShimEntry kInterfaceShimMap[] = {
 bool nsGlobalWindowInner::ResolveComponentsShim(
     JSContext* aCx, JS::Handle<JSObject*> aGlobal,
     JS::MutableHandle<mozilla::Maybe<JS::PropertyDescriptor>> aDesc) {
-  // Keep track of how often this happens.
-  Telemetry::Accumulate(Telemetry::COMPONENTS_SHIM_ACCESSED_BY_CONTENT, true);
-
   // Warn once.
   nsCOMPtr<Document> doc = GetExtantDoc();
   if (doc) {
     doc->WarnOnceAbout(DeprecatedOperations::eComponents, /* asError = */ true);
+    // Keep track of how often this happens.
+    doc->SetUseCounter(eUseCounter_custom_ComponentsShimResolved);
   }
 
   // Create a fake Components object.
@@ -6141,39 +6143,25 @@ nsGlobalWindowInner* nsGlobalWindowInner::InnerForSetTimeoutOrInterval(
                              : nullptr;
 }
 
-int32_t nsGlobalWindowInner::SetTimeout(JSContext* aCx, Function& aFunction,
-                                        int32_t aTimeout,
-                                        const Sequence<JS::Value>& aArguments,
-                                        ErrorResult& aError) {
-  return SetTimeoutOrInterval(aCx, aFunction, aTimeout, aArguments, false,
-                              aError);
-}
-
-int32_t nsGlobalWindowInner::SetTimeout(JSContext* aCx,
-                                        const nsAString& aHandler,
-                                        int32_t aTimeout,
-                                        const Sequence<JS::Value>& /* unused */,
-                                        ErrorResult& aError) {
-  return SetTimeoutOrInterval(aCx, aHandler, aTimeout, false, aError);
-}
-
-int32_t nsGlobalWindowInner::SetInterval(JSContext* aCx, Function& aFunction,
-                                         const int32_t aTimeout,
-                                         const Sequence<JS::Value>& aArguments,
-                                         ErrorResult& aError) {
-  return SetTimeoutOrInterval(aCx, aFunction, aTimeout, aArguments, true,
+int32_t nsGlobalWindowInner::SetTimeout(
+    JSContext* aCx, const FunctionOrTrustedScriptOrString& aHandler,
+    int32_t aTimeout, const Sequence<JS::Value>& aArguments,
+    ErrorResult& aError) {
+  return SetTimeoutOrInterval(aCx, aHandler, aTimeout, aArguments, false,
                               aError);
 }
 
 int32_t nsGlobalWindowInner::SetInterval(
-    JSContext* aCx, const nsAString& aHandler, const int32_t aTimeout,
-    const Sequence<JS::Value>& /* unused */, ErrorResult& aError) {
-  return SetTimeoutOrInterval(aCx, aHandler, aTimeout, true, aError);
+    JSContext* aCx, const FunctionOrTrustedScriptOrString& aHandler,
+    const int32_t aTimeout, const Sequence<JS::Value>& aArguments,
+    ErrorResult& aError) {
+  return SetTimeoutOrInterval(aCx, aHandler, aTimeout, aArguments, true,
+                              aError);
 }
 
 int32_t nsGlobalWindowInner::SetTimeoutOrInterval(
-    JSContext* aCx, Function& aFunction, int32_t aTimeout,
-    const Sequence<JS::Value>& aArguments, bool aIsInterval,
+    JSContext* aCx, const FunctionOrTrustedScriptOrString& aHandler,
+    int32_t aTimeout, const Sequence<JS::Value>& aArguments, bool aIsInterval,
     ErrorResult& aError) {
   nsGlobalWindowInner* inner = InnerForSetTimeoutOrInterval(aError);
   if (!inner) {
@@ -6182,7 +6170,7 @@ int32_t nsGlobalWindowInner::SetTimeoutOrInterval(
 
   if (inner != this) {
     RefPtr<nsGlobalWindowInner> innerRef(inner);
-    return innerRef->SetTimeoutOrInterval(aCx, aFunction, aTimeout, aArguments,
+    return innerRef->SetTimeoutOrInterval(aCx, aHandler, aTimeout, aArguments,
                                           aIsInterval, aError);
   }
 
@@ -6197,58 +6185,44 @@ int32_t nsGlobalWindowInner::SetTimeoutOrInterval(
     return 0;
   }
 
-  nsTArray<JS::Heap<JS::Value>> args;
-  if (!args.AppendElements(aArguments, fallible)) {
-    aError.Throw(NS_ERROR_OUT_OF_MEMORY);
-    return 0;
+  if (aHandler.IsFunction()) {
+    nsTArray<JS::Heap<JS::Value>> args;
+    if (!args.AppendElements(aArguments, fallible)) {
+      aError.Throw(NS_ERROR_OUT_OF_MEMORY);
+      return 0;
+    }
+
+    RefPtr<TimeoutHandler> handler = new CallbackTimeoutHandler(
+        aCx, this, &aHandler.GetAsFunction(), std::move(args));
+
+    int32_t result;
+    aError = mTimeoutManager->SetTimeout(handler, aTimeout, aIsInterval,
+                                         Timeout::Reason::eTimeoutOrInterval,
+                                         &result);
+    return result;
   }
 
-  RefPtr<TimeoutHandler> handler =
-      new CallbackTimeoutHandler(aCx, this, &aFunction, std::move(args));
-
-  int32_t result;
-  aError =
-      mTimeoutManager->SetTimeout(handler, aTimeout, aIsInterval,
-                                  Timeout::Reason::eTimeoutOrInterval, &result);
-  return result;
-}
-
-int32_t nsGlobalWindowInner::SetTimeoutOrInterval(JSContext* aCx,
-                                                  const nsAString& aHandler,
-                                                  int32_t aTimeout,
-                                                  bool aIsInterval,
-                                                  ErrorResult& aError) {
-  nsGlobalWindowInner* inner = InnerForSetTimeoutOrInterval(aError);
-  if (!inner) {
-    return -1;
-  }
-
-  if (inner != this) {
-    RefPtr<nsGlobalWindowInner> innerRef(inner);
-    return innerRef->SetTimeoutOrInterval(aCx, aHandler, aTimeout, aIsInterval,
-                                          aError);
-  }
-
-  DebuggerNotificationDispatch(
-      this, aIsInterval ? DebuggerNotificationType::SetInterval
-                        : DebuggerNotificationType::SetTimeout);
-
-  if (!GetContextInternal() || !HasJSGlobal()) {
-    // This window was already closed, or never properly initialized,
-    // don't let a timer be scheduled on such a window.
-    aError.Throw(NS_ERROR_NOT_INITIALIZED);
+  constexpr nsLiteralString sinkSetTimeout = u"Window setTimeout"_ns;
+  constexpr nsLiteralString sinkSetInterval = u"Window setInterval"_ns;
+  Maybe<nsAutoString> compliantStringHolder;
+  nsCOMPtr<nsIGlobalObject> pinnedGlobal = this;
+  const nsAString* compliantString =
+      TrustedTypeUtils::GetTrustedTypesCompliantString(
+          aHandler, aIsInterval ? sinkSetInterval : sinkSetTimeout,
+          kTrustedTypesOnlySinkGroup, *pinnedGlobal, compliantStringHolder,
+          aError);
+  if (aError.Failed()) {
     return 0;
   }
 
   bool allowEval = false;
-  aError = CSPEvalChecker::CheckForWindow(aCx, this, aHandler, &allowEval);
+  aError =
+      CSPEvalChecker::CheckForWindow(aCx, this, *compliantString, &allowEval);
   if (NS_WARN_IF(aError.Failed()) || !allowEval) {
     return 0;
   }
-
   RefPtr<TimeoutHandler> handler =
-      new WindowScriptTimeoutHandler(aCx, this, aHandler);
-
+      new WindowScriptTimeoutHandler(aCx, this, *compliantString);
   int32_t result;
   aError =
       mTimeoutManager->SetTimeout(handler, aTimeout, aIsInterval,

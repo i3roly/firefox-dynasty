@@ -68,16 +68,26 @@
   }
 
   &[originaltype="loginsFooter"] {
-    justify-content: center;
-    color: FieldText;
+    background-color: transparent;
+    color: currentColor;
     min-height: 2.6666em;
-    border-top: 1px solid rgba(38,38,38,.15);
-    background-color: hsla(0,0%,80%,.35); /* match arrowpanel-dimmed */
+    position: relative;
+    padding-inline-start: 28px;
 
     &:hover,
     &[selected] {
       background-color: hsla(0,0%,80%,.5); /* match arrowpanel-dimmed-further */
     }
+  }
+
+  &[originaltype="loginsFooter"]::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    inset-inline-start: 50%;
+    transform: translateX(-50%);
+    width: 95%;
+    border-top: 1px solid var(--panel-separator-color);
   }
 
   &[originaltype="insecureWarning"] {
@@ -115,10 +125,19 @@
   > .two-line-wrapper {
     box-sizing: border-box;
     display: flex;
+    align-items: center;
     flex-direction: row;
     gap: 8px;
     margin: 0;
     min-width: 0;
+
+    > .ac-site-icon {
+      margin-left: 6px;
+    }
+
+    > .ac-site-icon[src=""] {
+      display: none;
+    }
 
     > .labels-wrapper {
       /* The text should flex while the icon should not */
@@ -134,7 +153,7 @@
 
       .line2-label {
         padding-top: 2px !important;
-        opacity: .6;
+        color: var(--text-color-deemphasized);
       }
     }
   }
@@ -143,7 +162,7 @@
   &[originaltype="importableLearnMore"] > .ac-title,
   > .two-line-wrapper > .labels-wrapper > .line2-label {
     padding-top: 2px !important;
-    opacity: .6;
+    color: var(--text-color-deemphasized);
   }
 
   /* Login form autocompletion (with and without origin showing) and generated passwords */
@@ -168,7 +187,7 @@
     /* Login form autocompletion */
     > .two-line-wrapper {
       padding: 4px;
-      padding-inline-start: 0;
+      padding-inline-start: 6px;
     }
 
   &[originaltype="action"] > .two-line-wrapper {
@@ -216,7 +235,7 @@
     background-color: var(--status-background-color);
     color: var(--status-text-color);
     width: 100%;
-    border-bottom: 1px solid rgba(38,38,38,.15);
+    border-bottom: 1px solid var(--panel-separator-color);
     font-size: calc(10 / 12 * 1em);
   }
 
@@ -239,16 +258,16 @@
   /* Insecure field warning */
   &[originaltype="insecureWarning"] {
     background-color: var(--arrowpanel-dimmed);
+    color: inherit;
     border-bottom: 1px solid var(--panel-separator-color);
     padding-block: 4px;
 
     &[selected] {
       background-color: var(--arrowpanel-dimmed-further);
-      color: -moz-DialogText;
+      color: inherit;
     }
 
     > .ac-title {
-      color: var(--grey-60);
       font-size: 1em;
     }
 
@@ -256,14 +275,8 @@
       font-weight: 600;
     }
 
-    &[selected] > .ac-title {
-      color: inherit;
-    }
-
     > .ac-site-icon {
       list-style-image: url(chrome://global/skin/icons/security-broken.svg);
-      -moz-context-properties: fill;
-      fill: var(--grey-60);
     }
   }
 }

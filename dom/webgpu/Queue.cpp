@@ -125,13 +125,13 @@ void Queue::WriteBuffer(const Buffer& aBuffer, uint64_t aBufferOffset,
   });
 }
 
-void Queue::WriteTexture(const dom::GPUImageCopyTexture& aDestination,
+void Queue::WriteTexture(const dom::GPUTexelCopyTextureInfo& aDestination,
                          const dom::ArrayBufferViewOrArrayBuffer& aData,
-                         const dom::GPUImageDataLayout& aDataLayout,
+                         const dom::GPUTexelCopyBufferLayout& aDataLayout,
                          const dom::GPUExtent3D& aSize, ErrorResult& aRv) {
-  ffi::WGPUImageCopyTexture copyView = {};
+  ffi::WGPUTexelCopyTextureInfo copyView = {};
   CommandEncoder::ConvertTextureCopyViewToFFI(aDestination, &copyView);
-  ffi::WGPUImageDataLayout dataLayout = {};
+  ffi::WGPUTexelCopyBufferLayout dataLayout = {};
   CommandEncoder::ConvertTextureDataLayoutToFFI(aDataLayout, &dataLayout);
   dataLayout.offset = 0;  // our Shmem has the contents starting from 0.
   ffi::WGPUExtent3d extent = {};
@@ -214,8 +214,8 @@ static WebGLTexelFormat ToWebGLTexelFormat(dom::GPUTextureFormat aFormat) {
 }
 
 void Queue::CopyExternalImageToTexture(
-    const dom::GPUImageCopyExternalImage& aSource,
-    const dom::GPUImageCopyTextureTagged& aDestination,
+    const dom::GPUCopyExternalImageSourceInfo& aSource,
+    const dom::GPUCopyExternalImageDestInfo& aDestination,
     const dom::GPUExtent3D& aCopySize, ErrorResult& aRv) {
   const auto dstFormat = ToWebGLTexelFormat(aDestination.mTexture->Format());
   if (dstFormat == WebGLTexelFormat::FormatNotSupportingAnyConversion) {
@@ -420,8 +420,8 @@ void Queue::CopyExternalImageToTexture(
     return;
   }
 
-  ffi::WGPUImageDataLayout dataLayout = {0, &dstStrideVal, &dstHeight};
-  ffi::WGPUImageCopyTexture copyView = {};
+  ffi::WGPUTexelCopyBufferLayout dataLayout = {0, &dstStrideVal, &dstHeight};
+  ffi::WGPUTexelCopyTextureInfo copyView = {};
   CommandEncoder::ConvertTextureCopyViewToFFI(aDestination, &copyView);
   ipc::ByteBuf bb;
   ffi::wgpu_queue_write_texture(copyView, dataLayout, extent, ToFFI(&bb));

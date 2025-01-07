@@ -5,7 +5,13 @@
 
 #include <gtk/gtk.h>
 
+#ifdef MOZ_X11
+#  include "X11UndefineNone.h"
+#endif
+
 #include "mozilla/Maybe.h"
+#include "mozilla/dom/BrowsingContext.h"
+#include "mozilla/dom/CanonicalBrowsingContext.h"
 #include "mozilla/dom/HTMLInputElement.h"
 #include "nsColor.h"
 #include "nsColorPicker.h"
@@ -13,6 +19,7 @@
 #include "nsIWidget.h"
 #include "WidgetUtils.h"
 #include "nsPIDOMWindow.h"
+#include "gfxPlatform.h"
 
 using mozilla::dom::HTMLInputElement;
 
@@ -61,12 +68,13 @@ GtkColorSelection* nsColorPicker::WidgetGetColorSelection(GtkWidget* widget) {
 }
 #endif
 
-NS_IMETHODIMP nsColorPicker::Init(mozIDOMWindowProxy* aParent,
-                                  const nsAString& title,
-                                  const nsAString& initialColor,
-                                  const nsTArray<nsString>& aDefaultColors) {
-  auto* parent = nsPIDOMWindowOuter::From(aParent);
-  mParentWidget = mozilla::widget::WidgetUtils::DOMWindowToWidget(parent);
+NS_IMETHODIMP nsColorPicker::Init(
+    mozilla::dom::BrowsingContext* aBrowsingContext, const nsAString& title,
+    const nsAString& initialColor, const nsTArray<nsString>& aDefaultColors) {
+  MOZ_ASSERT(aBrowsingContext, "Null browsingContext passed to color picker!");
+
+  mParentWidget =
+      aBrowsingContext->Canonical()->GetParentProcessWidgetContaining();
   mTitle = title;
   mInitialColor = initialColor;
   mDefaultColors.Assign(aDefaultColors);
@@ -76,6 +84,11 @@ NS_IMETHODIMP nsColorPicker::Init(mozIDOMWindowProxy* aParent,
 
 NS_IMETHODIMP nsColorPicker::Open(
     nsIColorPickerShownCallback* aColorPickerShownCallback) {
+  // Don't attempt to open a real color-picker in headless mode.
+  if (gfxPlatform::IsHeadless()) {
+    return NS_ERROR_NOT_AVAILABLE;
+  }
+
   auto maybeColor = HTMLInputElement::ParseSimpleColor(mInitialColor);
   if (maybeColor.isNothing()) {
     return NS_ERROR_FAILURE;

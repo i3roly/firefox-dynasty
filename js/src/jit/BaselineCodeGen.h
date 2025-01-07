@@ -38,7 +38,7 @@ class BaselineCodeGen {
   Handler handler;
 
   CompileRuntime* runtime;
-  StackMacroAssembler masm;
+  MacroAssembler& masm;
 
   typename Handler::FrameInfoT& frame;
 
@@ -67,8 +67,8 @@ class BaselineCodeGen {
 #endif
 
   template <typename... HandlerArgs>
-  explicit BaselineCodeGen(JSContext* cx, TempAllocator& alloc,
-                           HandlerArgs&&... args);
+  explicit BaselineCodeGen(TempAllocator& alloc, MacroAssembler& masmArg,
+                           CompileRuntime* runtimeArg, HandlerArgs&&... args);
 
   template <typename T>
   void pushArg(const T& t) {
@@ -271,6 +271,7 @@ class BaselineCodeGen {
 };
 
 using RetAddrEntryVector = js::Vector<RetAddrEntry, 16, SystemAllocPolicy>;
+using AllocSiteIndexVector = js::Vector<uint32_t, 16, SystemAllocPolicy>;
 
 // Interface used by BaselineCodeGen for BaselineCompiler.
 class BaselineCompilerHandler {
@@ -282,6 +283,7 @@ class BaselineCompilerHandler {
 #endif
   FixedList<Label> labels_;
   RetAddrEntryVector retAddrEntries_;
+  AllocSiteIndexVector allocSiteIndices_;
 
   // Native code offsets for OSR at JSOp::LoopHead ops.
   using OSREntryVector =
@@ -370,6 +372,13 @@ class BaselineCompilerHandler {
   JSObject* globalThis() const { return globalThis_; }
 
   uint32_t baseWarmUpThreshold() const { return baseWarmUpThreshold_; }
+
+  void maybeDisableIon();
+
+  [[nodiscard]] bool addAllocSiteIndex(uint32_t entryIndex) {
+    return allocSiteIndices_.append(entryIndex);
+  }
+  void createAllocSites();
 };
 
 using BaselineCompilerCodeGen = BaselineCodeGen<BaselineCompilerHandler>;
@@ -389,12 +398,16 @@ class BaselineCompiler final : private BaselineCompilerCodeGen {
   BaselinePerfSpewer perfSpewer_;
 
  public:
-  BaselineCompiler(JSContext* cx, TempAllocator& alloc, JSScript* script,
-                   JSObject* globalLexical, JSObject* globalThis,
-                   uint32_t baseWarmUpThreshold);
+  BaselineCompiler(JSContext* cx, TempAllocator& alloc, MacroAssembler& masm,
+                   JSScript* script, JSObject* globalLexical,
+                   JSObject* globalThis, uint32_t baseWarmUpThreshold);
   [[nodiscard]] bool init();
 
+  static bool prepareToCompile(JSContext* cx, Handle<JSScript*> script,
+                               bool compileDebugInstrumentation);
   MethodStatus compile(JSContext* cx);
+
+  bool finishCompile(JSContext* cx);
 
   bool compileDebugInstrumentation() const {
     return handler.compileDebugInstrumentation();
@@ -405,6 +418,8 @@ class BaselineCompiler final : private BaselineCompilerCodeGen {
   void setIonCompileable(bool value) { handler.setIonCompileable(value); }
 
  private:
+  bool compileImpl();
+
   bool emitBody();
 
   [[nodiscard]] bool emitDebugTrap();
@@ -522,7 +537,8 @@ class BaselineInterpreterGenerator final : private BaselineInterpreterCodeGen {
   BaselineInterpreterPerfSpewer perfSpewer_;
 
  public:
-  explicit BaselineInterpreterGenerator(JSContext* cx, TempAllocator& alloc);
+  explicit BaselineInterpreterGenerator(JSContext* cx, TempAllocator& alloc,
+                                        MacroAssembler& masm);
 
   [[nodiscard]] bool generate(JSContext* cx, BaselineInterpreter& interpreter);
 

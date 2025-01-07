@@ -64,9 +64,11 @@ impl DenominatorMetric {
 #[inherent]
 impl Counter for DenominatorMetric {
     pub fn add(&self, amount: i32) {
-        match self {
-            DenominatorMetric::Parent { inner, .. } => {
+        #[allow(unused)]
+        let id = match self {
+            DenominatorMetric::Parent { id, inner } => {
                 inner.add(amount);
+                *id
             }
             DenominatorMetric::Child(c) => {
                 with_ipc_payload(move |payload| {
@@ -76,7 +78,18 @@ impl Counter for DenominatorMetric {
                         payload.denominators.insert(c.0, amount);
                     }
                 });
+                c.0
             }
+        };
+
+        #[cfg(feature = "with_gecko")]
+        if gecko_profiler::can_accept_markers() {
+            gecko_profiler::add_marker(
+                "Counter::add",
+                super::profiler_utils::TelemetryProfilerCategory,
+                Default::default(),
+                super::profiler_utils::IntLikeMetricMarker::new(id, None, amount),
+            );
         }
     }
 
@@ -114,7 +127,7 @@ mod test {
         let metric = &metrics::test_only_ipc::an_external_denominator;
         metric.add(1);
 
-        assert_eq!(1, metric.test_get_value("store1").unwrap());
+        assert_eq!(1, metric.test_get_value("test-ping").unwrap());
     }
 
     #[test]
@@ -150,7 +163,7 @@ mod test {
 
         assert_eq!(
             45,
-            parent_metric.test_get_value("store1").unwrap(),
+            parent_metric.test_get_value("test-ping").unwrap(),
             "Values from the 'processes' should be summed"
         );
     }

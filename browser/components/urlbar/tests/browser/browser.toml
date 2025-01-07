@@ -108,6 +108,8 @@ skip-if = [
 
 ["browser_action_searchengine_alias.js"]
 
+["browser_action_tabgroups.js"]
+
 ["browser_add_search_engine.js"]
 support-files = [
   "add_search_engine_0.xml",
@@ -200,6 +202,8 @@ support-files = [
 ["browser_content_opener.js"]
 
 ["browser_contextualsearch.js"]
+
+["browser_contextualsearch_install.js"]
 
 ["browser_copy_and_paste_first_result.js"]
 
@@ -309,6 +313,8 @@ support-files = [
 ["browser_keyword_override.js"]
 
 ["browser_keyword_select_and_type.js"]
+
+["browser_l10nCache.js"]
 
 ["browser_less_common_selection_manipulations.js"]
 
@@ -422,6 +428,8 @@ https_first_disabled = true
 
 ["browser_restrict_keywords_autofill.js"]
 
+["browser_restrict_keywords_autofill_locales.js"]
+
 ["browser_resultSpan.js"]
 
 ["browser_result_menu.js"]
@@ -443,9 +451,24 @@ support-files = ["dummy_page.html"]
 
 ["browser_searchHistoryLimit.js"]
 
+["browser_searchModeSwitcher_appProvidedEngines.js"]
+tags = "persisted-search"
+
 ["browser_searchModeSwitcher_basic.js"]
 
+["browser_searchModeSwitcher_dynamicUnifiedSearchButton.js"]
+support-files = ["has-a-link.html"]
+
+["browser_searchModeSwitcher_emptyInput.js"]
+
 ["browser_searchModeSwitcher_keyNavigation.js"]
+
+["browser_searchModeSwitcher_opensearchInstall.js"]
+
+["browser_searchModeSwitcher_telemetry.js"]
+skip-if = [
+  "os == 'mac' && os_version == '11.20' && opt", # Bug 1938244
+]
 
 ["browser_searchMode_alias_replacement.js"]
 support-files = [
@@ -689,6 +712,9 @@ tags = "search-telemetry"
 
 ["browser_urlbar_telemetry_persisted.js"]
 tags = "search-telemetry"
+skip-if = [
+  "os == 'linux' && os_version == '18.04' && processor == 'x86_64'",
+] # bug 1934362
 
 ["browser_urlbar_telemetry_places.js"]
 https_first_disabled = true

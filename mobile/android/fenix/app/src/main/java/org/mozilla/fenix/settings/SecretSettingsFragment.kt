@@ -102,9 +102,21 @@ class SecretSettingsFragment : PreferenceFragmentCompat() {
             onPreferenceChangeListener = SharedPreferenceUpdater()
         }
 
+        requirePreference<SwitchPreference>(R.string.pref_key_mars_api_enabled).apply {
+            isVisible = Config.channel.isNightlyOrDebug
+            isChecked = context.settings().marsAPIEnabled
+            onPreferenceChangeListener = SharedPreferenceUpdater()
+        }
+
         requirePreference<SwitchPreference>(R.string.pref_key_pocket_content_recommendations).apply {
             isVisible = Config.channel.isNightlyOrDebug
             isChecked = context.settings().showContentRecommendations
+            onPreferenceChangeListener = SharedPreferenceUpdater()
+        }
+
+        requirePreference<SwitchPreference>(R.string.pref_key_enable_unified_trust_panel).apply {
+            isVisible = Config.channel.isNightlyOrDebug
+            isChecked = context.settings().enableUnifiedTrustPanel
             onPreferenceChangeListener = SharedPreferenceUpdater()
         }
 

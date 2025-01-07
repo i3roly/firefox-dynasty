@@ -121,11 +121,6 @@ urlbar:
           `restrict_keyword_bookmarks`,
           `restrict_keyword_history`,
           `restrict_keyword_tabs`,
-          `rs_adm_nonsponsored`,
-          `rs_adm_sponsored`,
-          `rs_amo`,
-          `rs_mdn`,
-          `rs_pocket`,
           `rust_adm_nonsponsored`,
           `rust_adm_sponsored`,
           `rust_amo`,
@@ -272,11 +267,6 @@ urlbar:
           `restrict_keyword_bookmarks`,
           `restrict_keyword_history`,
           `restrict_keyword_tabs`,
-          `rs_adm_nonsponsored`,
-          `rs_adm_sponsored`,
-          `rs_amo`,
-          `rs_mdn`,
-          `rs_pocket`,
           `rust_adm_nonsponsored`,
           `rust_adm_sponsored`,
           `rust_amo`,
@@ -397,11 +387,6 @@ urlbar:
           `restrict_keyword_bookmarks`,
           `restrict_keyword_history`,
           `restrict_keyword_tabs`,
-          `rs_adm_nonsponsored`,
-          `rs_adm_sponsored`,
-          `rs_amo`,
-          `rs_mdn`,
-          `rs_pocket`,
           `rust_adm_nonsponsored`,
           `rust_adm_sponsored`,
           `rust_amo`,
@@ -576,11 +561,12 @@ urlbar:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1866204#c8
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1892377#c2
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1912174#c8
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1933863#c5
     data_sensitivity:
       - interaction
     notification_emails:
       - fx-search-telemetry@mozilla.com
-    expires: 136
+    expires: 140
 
   pref_max_results:
     lifetime: application
@@ -1120,7 +1106,7 @@ suggest_relevance:
     notification_emails:
       - disco-team@mozilla.com
       - najiang@mozilla.com
-    expires: 136
+    expires: 139
     data_sensitivity:
       - technical
   outcome:
@@ -1140,7 +1126,7 @@ suggest_relevance:
     notification_emails:
       - disco-team@mozilla.com
       - najiang@mozilla.com
-    expires: 136
+    expires: 139
     data_sensitivity:
       - technical
 
@@ -2205,3 +2191,39 @@ urlbar.quickaction:
       - fx-search-telemetry@mozilla.com
     expires: never
     telemetry_mirror: QUICKACTION_PICKED
+
+urlbar.unifiedsearchbutton:
+  opened:
+    type: counter
+    description: >
+      Counts how many times Unified Search Button popup is opened.
+      This metric was generated to correspond to the Legacy Telemetry
+      scalar urlbar.unifiedsearchbutton.opened.
+    bugs:
+      - https://bugzil.la/1936673
+    data_reviews:
+      - https://bugzil.la/1936673
+    notification_emails:
+      - fx-search-telemetry@mozilla.com
+    expires: never
+    telemetry_mirror: URLBAR_UNIFIEDSEARCHBUTTON_OPENED
+
+  picked:
+    type: labeled_counter
+    description: >
+      Counts how many times Unified Search Button items were selected.
+      The key is followings.
+      * builtin_search: Builtin search engine.
+      * addon_search: Addon search engine.
+      * local_search: Local search engine such as Bookmarks.
+      * settings: Settings menu.
+      This metric was generated to correspond to the Legacy Telemetry
+      scalar urlbar.unifiedsearchbutton.picked.
+    bugs:
+      - https://bugzil.la/1936673
+    data_reviews:
+      - https://bugzil.la/1936673
+    notification_emails:
+      - fx-search-telemetry@mozilla.com
+    expires: never
+    telemetry_mirror: URLBAR_UNIFIEDSEARCHBUTTON_PICKED

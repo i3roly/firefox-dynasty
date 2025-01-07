@@ -583,6 +583,9 @@ void GMPChild::ActorDestroy(ActorDestroyReason aWhy) {
   if (mGMPLoader) {
     mGMPLoader->Shutdown();
   }
+
+  ShutdownPlatformAPI();
+
   if (AbnormalShutdown == aWhy) {
     NS_WARNING("Abnormal shutdown of GMP process!");
     ProcessChild::QuickExit();
@@ -614,8 +617,6 @@ void GMPChild::ProcessingError(Result aCode, const char* aReason) {
       MOZ_CRASH("aborting because of MsgPayloadError");
     case MsgProcessingError:
       MOZ_CRASH("aborting because of MsgProcessingError");
-    case MsgRouteError:
-      MOZ_CRASH("aborting because of MsgRouteError");
     case MsgValueError:
       MOZ_CRASH("aborting because of MsgValueError");
     default:

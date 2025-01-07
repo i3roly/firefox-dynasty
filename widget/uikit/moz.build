@@ -12,7 +12,13 @@ with Files("*TextInput*"):
 
 EXPORTS.mozilla.widget += [
     "EventDispatcher.h",
+    "GeckoViewSupport.h",
+    "IOSView.h",
     "nsWindow.h",
+]
+
+EXPORTS.GeckoView += [
+    "GeckoViewSwiftSupport.h",
 ]
 
 SOURCES += [

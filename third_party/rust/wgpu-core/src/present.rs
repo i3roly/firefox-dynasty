@@ -47,8 +47,6 @@ pub enum SurfaceError {
     AlreadyAcquired,
     #[error("Texture has been destroyed")]
     TextureDestroyed,
-    #[error("Acquired frame is still referenced")]
-    StillReferenced,
 }
 
 #[derive(Clone, Debug, Error)]
@@ -94,8 +92,6 @@ pub enum ConfigureSurfaceError {
         requested: hal::TextureUses,
         available: hal::TextureUses,
     },
-    #[error("Gpu got stuck :(")]
-    StuckGpu,
 }
 
 impl From<WaitIdleError> for ConfigureSurfaceError {
@@ -103,7 +99,6 @@ impl From<WaitIdleError> for ConfigureSurfaceError {
         match e {
             WaitIdleError::Device(d) => ConfigureSurfaceError::Device(d),
             WaitIdleError::WrongSubmissionIndex(..) => unreachable!(),
-            WaitIdleError::StuckGpu => ConfigureSurfaceError::StuckGpu,
         }
     }
 }
@@ -158,12 +153,16 @@ impl Surface {
                     usage: config.usage,
                     view_formats: config.view_formats,
                 };
-                let hal_usage = conv::map_texture_usage(config.usage, config.format.into());
                 let format_features = wgt::TextureFormatFeatures {
                     allowed_usages: wgt::TextureUsages::RENDER_ATTACHMENT,
                     flags: wgt::TextureFormatFeatureFlags::MULTISAMPLE_X4
                         | wgt::TextureFormatFeatureFlags::MULTISAMPLE_RESOLVE,
                 };
+                let hal_usage = conv::map_texture_usage(
+                    config.usage,
+                    config.format.into(),
+                    format_features.flags,
+                );
                 let clear_view_desc = hal::TextureViewDescriptor {
                     label: hal_label(
                         Some("(wgpu internal) clear surface texture view"),

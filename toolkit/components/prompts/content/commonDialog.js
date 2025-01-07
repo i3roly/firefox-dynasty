@@ -111,6 +111,10 @@ function commonDialogOnLoad() {
     focusTarget: window,
   };
 
+  if (args.isExtra1Secondary) {
+    dialog.setAttribute("extra1-is-secondary", true);
+  }
+
   Dialog = new CommonDialog(args, ui);
   window.addEventListener("dialogclosing", function (aEvent) {
     if (aEvent.detail?.abort) {
@@ -164,6 +168,7 @@ function commonDialogOnLoad() {
               requestToken: Services.uuid.generateUUID().toString(),
               resources: [],
               analysisType: Ci.nsIContentAnalysisRequest.eBulkDataEntry,
+              reason: Ci.nsIContentAnalysisRequest.eClipboardPaste,
               operationTypeForDisplay: Ci.nsIContentAnalysisRequest.eClipboard,
               url: lazy.gContentAnalysis.getURIForBrowsingContext(
                 args.owningBrowsingContext

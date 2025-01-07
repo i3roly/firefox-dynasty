@@ -11,6 +11,12 @@
                 - "--disable-e10s"
                 - "--disable-fission"
 
+confirm-failure:
+    description: "{description} with confirm failures enabled"
+    component: "Testing::General"
+    expiration: "never"
+    suffix: "cf"
+
 headless:
     description: "{description} without a window"
     component: "Firefox::Headless"
@@ -511,6 +517,7 @@ os-integration:
         $eval: >-
             "debug" in task["test-platform"]
             && !("macosx" in task["test-platform"])
+            && !("android-hw" in task["test-platform"])
     merge:
         worker:
             env:
@@ -528,3 +535,18 @@ async-event-dispatching:
         mozharness:
             extra-options:
                 - "--setpref=remote.events.async.enabled=true"
+
+vertical-tabs:
+    description: "{description} limited to tests identified as being applicable to also run with vertical tabs enabled"
+    component: "Firefox::Tabbed Browser"
+    expiration: "2025-05-01"
+    suffix: "vt"
+    mozinfo: "vertical_tab"
+    merge:
+        worker:
+            env:
+                MOZHARNESS_TEST_TAG:
+                    - "vertical-tabs"
+        mozharness:
+            extra-options:
+                - "--setpref=sidebar.verticalTabs=true"

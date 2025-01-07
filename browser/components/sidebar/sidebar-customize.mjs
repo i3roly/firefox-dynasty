@@ -27,6 +27,7 @@ export class SidebarCustomize extends SidebarPage {
       VISIBILITY_SETTING_PREF,
       "always-show"
     );
+    this.boundObserve = (...args) => this.observe(...args);
   }
 
   static properties = {
@@ -47,6 +48,7 @@ export class SidebarCustomize extends SidebarPage {
     this.getWindow().addEventListener("SidebarItemAdded", this);
     this.getWindow().addEventListener("SidebarItemChanged", this);
     this.getWindow().addEventListener("SidebarItemRemoved", this);
+    Services.prefs.addObserver(VISIBILITY_SETTING_PREF, this.boundObserve);
   }
 
   disconnectedCallback() {
@@ -54,6 +56,22 @@ export class SidebarCustomize extends SidebarPage {
     this.getWindow().removeEventListener("SidebarItemAdded", this);
     this.getWindow().removeEventListener("SidebarItemChanged", this);
     this.getWindow().removeEventListener("SidebarItemRemoved", this);
+    Services.prefs.removeObserver(VISIBILITY_SETTING_PREF, this.boundObserve);
+  }
+
+  observe(subject, topic, prefName) {
+    switch (topic) {
+      case "nsPref:changed":
+        switch (prefName) {
+          case VISIBILITY_SETTING_PREF:
+            this.visibility = Services.prefs.getStringPref(
+              VISIBILITY_SETTING_PREF,
+              "always-show"
+            );
+            break;
+        }
+        break;
+    }
   }
 
   get sidebarLauncher() {
@@ -210,17 +228,18 @@ export class SidebarCustomize extends SidebarPage {
         </moz-fieldset>
         ${when(
           extensions.length,
-          () => html`<div class="customize-group">
-            <h4
-              class="customize-extensions-heading"
-              data-l10n-id="sidebar-customize-extensions-header"
-            ></h4>
-            <div role="list" class="extensions">
-              ${extensions.map((extension, index) =>
-                this.extensionTemplate(extension, index)
-              )}
-            </div>
-          </div>`
+          () =>
+            html`<div class="customize-group">
+              <h4
+                class="customize-extensions-heading"
+                data-l10n-id="sidebar-customize-extensions-header"
+              ></h4>
+              <div role="list" class="extensions">
+                ${extensions.map((extension, index) =>
+                  this.extensionTemplate(extension, index)
+                )}
+              </div>
+            </div>`
         )}
         <div class="customize-group">
           <moz-radio-group

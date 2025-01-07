@@ -16,8 +16,10 @@ import urllib.parse
 from copy import deepcopy
 from pathlib import Path
 from statistics import median
+from typing import Any, Dict, Literal
 from xmlrpc.client import Fault
 
+from failedplatform import FailedPlatform
 from yaml import load
 
 try:
@@ -30,7 +32,7 @@ import mozci.push
 import requests
 from manifestparser import ManifestParser
 from manifestparser.toml import add_skip_if, alphabetize_toml_str, sort_paths
-from mozci.task import TestTask
+from mozci.task import Optional, TestTask
 from mozci.util.taskcluster import get_task
 
 from taskcluster.exceptions import TaskclusterRestFailure
@@ -201,6 +203,21 @@ class Skipfails(object):
         self._subtest_rx = None
         self.lmp = None
         self.failure_types = None
+        self.failed_platforms: Dict[str, FailedPlatform] = {}
+        self.platform_permutations: Dict[
+            str,  # Manifest
+            Dict[
+                str,  # OS
+                Dict[
+                    str,  # OS Version
+                    Dict[
+                        str,  # Processor
+                        # Test variants for each build type
+                        Dict[str, list[str]],
+                    ],
+                ],
+            ],
+        ] = {}
 
     def _initialize_bzapi(self):
         """Lazily initializes the Bugzilla API (returns True on success)"""
@@ -246,7 +263,7 @@ class Skipfails(object):
     def full_path(self, filename):
         """Returns full path for the relative filename"""
 
-        return os.path.join(self.topsrcdir, os.path.normpath(filename))
+        return os.path.join(self.topsrcdir, os.path.normpath(filename.split(":")[-1]))
 
     def isdir(self, filename):
         """Returns True if filename is a directory"""
@@ -306,52 +323,38 @@ class Skipfails(object):
                         pixels = []
                         status = FAIL
                         lineno = failures[manifest][LL][label][PP][path].get(LINENO, 0)
-                        for task_id in failures[manifest][LL][label][PP][path][RUNS]:
+                        runs: Dict[str, Dict[str, Any]] = failures[manifest][LL][label][
+                            PP
+                        ][path][RUNS]
+                        # skip_failure only needs to run against one task for each path
+                        first_task_id = next(iter(runs))
+                        for task_id in runs:
                             if kind == Kind.TOML:
-                                break  # just use the first task_id
+                                break
                             elif kind == Kind.LIST:
-                                difference = failures[manifest][LL][label][PP][path][
-                                    RUNS
-                                ][task_id].get(DIFFERENCE, 0)
+                                difference = runs[task_id].get(DIFFERENCE, 0)
                                 if difference > 0:
                                     differences.append(difference)
-                                pixel = failures[manifest][LL][label][PP][path][RUNS][
-                                    task_id
-                                ].get(PIXELS, 0)
+                                pixel = runs[task_id].get(PIXELS, 0)
                                 if pixel > 0:
                                     pixels.append(pixel)
-                                status = failures[manifest][LL][label][PP][path][RUNS][
-                                    task_id
-                                ].get(STATUS, FAIL)
+                                status = runs[task_id].get(STATUS, FAIL)
                             elif kind == Kind.WPT:
                                 filename = os.path.basename(path)
                                 anyjs[filename] = False
-                                if (
-                                    QUERY
-                                    in failures[manifest][LL][label][PP][path][RUNS][
-                                        task_id
-                                    ]
-                                ):
-                                    query = failures[manifest][LL][label][PP][path][
-                                        RUNS
-                                    ][task_id][QUERY]
+                                if QUERY in runs[task_id]:
+                                    query = runs[task_id][QUERY]
                                     anyjs[filename + query] = False
                                 else:
                                     query = None
-                                if (
-                                    ANYJS
-                                    in failures[manifest][LL][label][PP][path][RUNS][
-                                        task_id
-                                    ]
-                                ):
+                                if ANYJS in runs[task_id]:
                                     any_filename = os.path.basename(
-                                        failures[manifest][LL][label][PP][path][RUNS][
-                                            task_id
-                                        ][ANYJS]
+                                        runs[task_id][ANYJS]
                                     )
                                     anyjs[any_filename] = False
                                     if query is not None:
                                         anyjs[any_filename + query] = False
+
                         self.skip_failure(
                             manifest,
                             kind,
@@ -363,7 +366,7 @@ class Skipfails(object):
                             status,
                             label,
                             classification,
-                            task_id,
+                            first_task_id,
                             try_url,
                             revision,
                             repo,
@@ -440,12 +443,21 @@ class Skipfails(object):
         }
 
         for task in tasks:  # add explicit failures
+            # strip chunk number - this finds failures across different chunks
+            try:
+                parts = task.label.split("-")
+                int(parts[-1])
+                config = "-".join(parts[:-1])
+            except ValueError:
+                config = task.label
+
             try:
                 if len(task.results) == 0:
                     continue  # ignore aborted tasks
                 failure_types = task.failure_types  # call magic property once
-                if self.failure_types is not None:
-                    self.failure_types[task.id] = failure_types
+                if self.failure_types is None:
+                    self.failure_types = {}
+                self.failure_types[task.id] = failure_types
                 self.vinfo(f"Getting failure_types from task: {task.id}")
                 for manifest in failure_types:
                     mm = manifest
@@ -469,13 +481,17 @@ class Skipfails(object):
                             )
                             continue
                     if kind != Kind.WPT:
-                        if mm not in manifest_paths:
-                            manifest_paths[mm] = []
                         if mm not in ff:
                             ff[mm] = deepcopy(manifest_)
                             ff[mm][KIND] = kind
                         if ll not in ff[mm][LL]:
                             ff[mm][LL][ll] = deepcopy(label_)
+
+                    if mm not in manifest_paths:
+                        manifest_paths[mm] = {}
+                    if config not in manifest_paths[mm]:
+                        manifest_paths[mm][config] = []
+
                     for path_type in failure_types[manifest]:
                         path, _type = path_type
                         query = None
@@ -508,9 +524,8 @@ class Skipfails(object):
                                 path = DEF  # refers to the manifest itself
                             allpaths = [path]
                         for path in allpaths:
-                            if path in manifest_paths[mm]:
-                                continue  # duplicate path for this task
-                            manifest_paths[mm].append(path)
+                            if path not in manifest_paths[mm].get(config, []):
+                                manifest_paths[mm][config].append(path)
                             self.vinfo(
                                 f"Getting failure info in manifest: {mm}, path: {path}"
                             )
@@ -518,6 +533,8 @@ class Skipfails(object):
                                 ff[mm][LL][ll][PP][path] = deepcopy(path_)
                             if task.id not in ff[mm][LL][ll][PP][path][RUNS]:
                                 ff[mm][LL][ll][PP][path][RUNS][task.id] = deepcopy(run_)
+                            else:
+                                continue
                             ff[mm][LL][ll][PP][path][RUNS][task.id][RR] = False
                             if query is not None:
                                 ff[mm][LL][ll][PP][path][RUNS][task.id][QUERY] = query
@@ -559,6 +576,13 @@ class Skipfails(object):
 
         for task in tasks:  # add results
             try:
+                parts = task.label.split("-")
+                int(parts[-1])
+                config = "-".join(parts[:-1])
+            except ValueError:
+                config = task.label
+
+            try:
                 if len(task.results) == 0:
                     continue  # ignore aborted tasks
                 self.vinfo(f"Getting results from task: {task.id}")
@@ -585,6 +609,8 @@ class Skipfails(object):
                             continue
                     if mm not in manifest_paths:
                         continue
+                    if config not in manifest_paths[mm]:
+                        continue
                     if mm not in ff:
                         ff[mm] = deepcopy(manifest_)
                     if ll not in ff[mm][LL]:
@@ -594,8 +620,17 @@ class Skipfails(object):
                         ff[mm][LL][ll][DURATIONS][task.id] = result.duration or 0
                         if ff[mm][LL][ll][OPT] is None:
                             ff[mm][LL][ll][OPT] = self.get_opt_for_task(task.id)
-                    for path in manifest_paths[mm]:  # all known paths
-                        self.vinfo(f"Getting result for manifest: {mm}, path: {path}")
+                    for path in manifest_paths[mm][config]:  # all known paths
+                        # path can be one of any paths that have failed for the manifest/config
+                        # ensure the path is in the specific task failure data
+                        if path not in [
+                            path
+                            for path, type in self.failure_types.get(task.id, {}).get(
+                                mm, [("", "")]
+                            )
+                        ]:
+                            result.ok = True
+
                         if path not in ff[mm][LL][ll][PP]:
                             ff[mm][LL][ll][PP][path] = deepcopy(path_)
                         if task.id not in ff[mm][LL][ll][PP][path][RUNS]:
@@ -801,62 +836,29 @@ class Skipfails(object):
             )
             self._bzapi.update_bugs([id], updateinfo)
 
-    def skip_failure(
+    def generate_bugzilla_comment(
         self,
-        manifest,
-        kind,
-        path,
-        anyjs,
-        differences,
-        pixels,
-        lineno,
-        status,
-        label,
-        classification,
-        task_id,
-        try_url,
-        revision,
-        repo,
-        meta_bug_id=None,
+        manifest: str,
+        kind: str,
+        path: str,
+        anyjs: Optional[Dict[str, bool]],
+        lineno: int,
+        label: str,
+        classification: str,
+        task_id: Optional[str],
+        try_url: str,
+        revision: str,
+        repo: str,
+        skip_if: str,
+        filename: str,
+        meta_bug_id: Optional[str] = None,
     ):
-        """
-        Skip a failure (for TOML, WPT and REFTEST manifests)
-        For wpt anyjs is a dictionary mapping from alternate basename to
-        a boolean (indicating if the basename has been handled in the manifest)
-        """
-
-        self.vinfo(f"\n\n===== Skip failure in manifest: {manifest} =====")
-        self.vinfo(f"    path: {path}")
-        if task_id is None:
-            skip_if = "true"
-        else:
-            skip_if = self.task_to_skip_if(task_id, kind)
-        if skip_if is None:
-            self.warning(
-                f"Unable to calculate skip-if condition from manifest={manifest} from failure label={label}"
-            )
-            return
-        if kind == Kind.TOML:
-            filename = DEF
-        elif kind == Kind.WPT:
-            _path, manifest, _query, _anyjs = self.wpt_paths(path)
-            filename = os.path.basename(path)
-        elif kind == Kind.LIST:
-            filename = path
-            if status == PASS:
-                self.info(f"Unexpected status: {status}")
-            if status == PASS or classification == Classification.DISABLE_INTERMITTENT:
-                zero = True  # refest lower ranges should include zero
-            else:
-                zero = False
         bug_reference = ""
         if classification == Classification.DISABLE_MANIFEST:
             comment = "Disabled entire manifest due to crash result"
         elif classification == Classification.DISABLE_TOO_LONG:
             comment = "Disabled entire manifest due to excessive run time"
         else:
-            if kind == Kind.TOML:
-                filename = self.get_filename_in_manifest(manifest, path)
             comment = f'Disabled test due to failures in test file: "{filename}"'
             if classification == Classification.SECONDARY:
                 comment += " (secondary)"
@@ -864,7 +866,7 @@ class Skipfails(object):
                     bug_reference = " (secondary)"
         if kind != Kind.LIST:
             self.vinfo(f"filename: {filename}")
-        if kind == Kind.WPT and len(anyjs) > 1:
+        if kind == Kind.WPT and anyjs is not None and len(anyjs) > 1:
             comment += "\nAdditional WPT wildcard paths:"
             for p in sorted(anyjs.keys()):
                 if p != filename:
@@ -915,10 +917,11 @@ class Skipfails(object):
                     )
                 else:
                     bug = self.create_bug(bug_summary, description, product, component)
-                    bugid = bug.id
-                    self.vinfo(
-                        f'Created Bug {bugid} {product}::{component} : "{bug_summary}"'
-                    )
+                    if bug is not None:
+                        bugid = bug.id
+                        self.vinfo(
+                            f'Created Bug {bugid} {product}::{component} : "{bug_summary}"'
+                        )
             elif len(bugs) == 1:
                 bugid = bugs[0].id
                 product = bugs[0].product
@@ -933,17 +936,18 @@ class Skipfails(object):
                 comments = bugs[0].getcomments()
                 for i in range(len(comments)):
                     text = comments[i]["text"]
-                    m = self._attach_rx.findall(text)
-                    if len(m) == 1:
-                        a_task_id = m[0][1]
-                        attachments[a_task_id] = m[0][0]
-                        if a_task_id == task_id:
-                            self.vinfo(
-                                f"  Bug {bugid} already has the compressed log attached for this task"
-                            )
+                    attach_rx = self._attach_rx
+                    if attach_rx is not None:
+                        m = attach_rx.findall(text)
+                        if len(m) == 1:
+                            a_task_id = m[0][1]
+                            attachments[a_task_id] = m[0][0]
+                            if a_task_id == task_id:
+                                self.vinfo(
+                                    f"  Bug {bugid} already has the compressed log attached for this task"
+                                )
             else:
-                self.error(f'More than one bug found for summary: "{bug_summary}"')
-                return
+                raise Exception(f'More than one bug found for summary: "{bug_summary}"')
         bug_reference = f"Bug {bugid}" + bug_reference
         extra = self.get_extra(task_id)
         json.dumps(extra)
@@ -953,9 +957,83 @@ class Skipfails(object):
             )
         else:
             comment += f"\nskip-if condition: {skip_if} # {bug_reference}"
+        return (comment, bug_reference, bugid, attachments)
+
+    def resolve_failure_filename(self, path: str, kind: str, manifest: str) -> str:
+        filename = DEF
+        if kind == Kind.TOML:
+            filename = self.get_filename_in_manifest(manifest.split(":")[-1], path)
+        elif kind == Kind.WPT:
+            filename = os.path.basename(path)
+        elif kind == Kind.LIST:
+            filename = path
+        return filename
+
+    def resolve_failure_manifest(self, path: str, kind: str, manifest: str) -> str:
+        if kind == Kind.WPT:
+            _path, resolved_manifest, _query, _anyjs = self.wpt_paths(path)
+            if resolved_manifest:
+                return resolved_manifest
+            raise Exception(f"Could not resolve WPT manifest for path {path}")
+        return manifest
+
+    def skip_failure(
+        self,
+        manifest: str,
+        kind: str,
+        path: str,
+        anyjs: Optional[Dict[str, bool]],
+        differences: list[int],
+        pixels: list[int],
+        lineno: int,
+        status: str,
+        label: str,
+        classification: str,
+        task_id: Optional[str],
+        try_url: str,
+        revision: str,
+        repo: str,
+        meta_bug_id: Optional[str] = None,
+    ):
+        """
+        Skip a failure (for TOML, WPT and REFTEST manifests)
+        For wpt anyjs is a dictionary mapping from alternate basename to
+        a boolean (indicating if the basename has been handled in the manifest)
+        """
+
+        self.vinfo(f"\n\n===== Skip failure in manifest: {manifest} =====")
+        self.vinfo(f"    path: {path}")
+        skip_if: Optional[str]
+        if task_id is None:
+            skip_if = "true"
+        else:
+            skip_if = self.task_to_skip_if(manifest, task_id, kind, path)
+        if skip_if is None:
+            raise Exception(
+                f"Unable to calculate skip-if condition from manifest={manifest} from failure label={label}"
+            )
+
+        filename = self.resolve_failure_filename(path, kind, manifest)
+        manifest = self.resolve_failure_manifest(path, kind, manifest)
         manifest_path = self.full_path(manifest)
         manifest_str = ""
         additional_comment = ""
+        comment, bug_reference, bugid, attachments = self.generate_bugzilla_comment(
+            manifest,
+            kind,
+            path,
+            anyjs,
+            lineno,
+            label,
+            classification,
+            task_id,
+            try_url,
+            revision,
+            repo,
+            skip_if,
+            filename,
+            meta_bug_id,
+        )
         if kind == Kind.WPT:
             if os.path.exists(manifest_path):
                 manifest_str = io.open(manifest_path, "r", encoding="utf-8").read()
@@ -967,23 +1045,43 @@ class Skipfails(object):
             )
         elif kind == Kind.TOML:
             mp = ManifestParser(use_toml=True, document=True)
-            mp.read(manifest_path)
+            try:
+                mp.read(manifest_path)
+            except IOError:
+                raise Exception(f"Unable to find path: {manifest_path}")
+
             document = mp.source_documents[manifest_path]
-            additional_comment = add_skip_if(document, filename, skip_if, bug_reference)
+            try:
+                additional_comment = add_skip_if(
+                    document,
+                    filename,
+                    skip_if,
+                    bug_reference,
+                )
+            except Exception:
+                # Note: this fails to find a comment at the desired index
+                # Note: manifestparser len(skip_if) yields: TypeError: object of type 'bool' has no len()
+                additional_comment = ""
+
             manifest_str = alphabetize_toml_str(document)
         elif kind == Kind.LIST:
             if lineno == 0:
                 self.error(
                     f"cannot determine line to edit in manifest: {manifest_path}"
                 )
-            # elif skip_if.find("winWidget") >= 0 and skip_if.find("!is64Bit") >= 0:
-            #     self.error(
-            #         "Skipping failures for Windows 32-bit are temporarily disabled"
-            #     )
             elif not os.path.exists(manifest_path):
                 self.error(f"manifest does not exist: {manifest_path}")
             else:
                 manifest_str = io.open(manifest_path, "r", encoding="utf-8").read()
+                if status == PASS:
+                    self.info(f"Unexpected status: {status}")
+                if (
+                    status == PASS
+                    or classification == Classification.DISABLE_INTERMITTENT
+                ):
+                    zero = True  # refest lower ranges should include zero
+                else:
+                    zero = False
                 manifest_str, additional_comment = self.reftest_add_fuzzy_if(
                     manifest_str,
                     filename,
@@ -1058,6 +1156,30 @@ class Skipfails(object):
             self.tasks[task_id] = task
         return task
 
+    def get_pretty_os_name(self, os: str):
+        pretty = os
+        if pretty == "windows":
+            pretty = "win"
+        elif pretty == "macosx":
+            pretty = "mac"
+        return pretty
+
+    def get_pretty_os_version(self, os_version: str):
+        # Ubuntu/macos version numbers
+        if len(os_version) == 4:
+            return os_version[0:2] + "." + os_version[2:4]
+        return os_version
+
+    def get_pretty_arch(self, arch: str):
+        if arch == "x86" or arch.find("32") >= 0:
+            bits = "32"
+            arch = "x86"
+        else:
+            bits = "64"
+            if arch not in ("aarch64", "ppc", "arm7"):
+                arch = "x86_64"
+        return (arch, bits)
+
     def get_extra(self, task_id):
         """Calculate extra for task task_id"""
 
@@ -1080,26 +1202,15 @@ class Skipfails(object):
             opt = False
             debug = False
             if "name" in platform_os:
-                os = platform_os["name"]
-                if os == "windows":
-                    os = "win"
-                if os == "macosx":
-                    os = "mac"
+                os = self.get_pretty_os_name(platform_os["name"])
             if "version" in platform_os:
-                os_version = self.new_version or platform_os["version"]
-                if len(os_version) == 4:
-                    os_version = os_version[0:2] + "." + os_version[2:4]
+                os_version = self.get_pretty_os_version(
+                    self.new_version or platform_os["version"]
+                )
             if "build" in platform_os:
                 build = platform_os["build"]
             if "arch" in platform:
-                arch = platform["arch"]
-                if arch == "x86" or arch.find("32") >= 0:
-                    bits = "32"
-                    arch = "x86"
-                else:
-                    bits = "64"
-                    if arch != "aarch64" and arch != "ppc":
-                        arch = "x86_64"
+                arch, bits = self.get_pretty_arch(platform["arch"])
             if "display" in platform:
                 display = platform["display"]
             if "runtime" in test_setting:
@@ -1139,110 +1250,166 @@ class Skipfails(object):
         extra = self.get_extra(task_id)
         return extra["opt"]
 
-    def task_to_skip_if(self, task_id, kind):
+    def _fetch_platform_permutations(self):
+        self.info("Fetching platform permutations...")
+        import taskcluster
+
+        url: Optional[str] = None
+        index = taskcluster.Index(
+            {
+                "rootUrl": "https://firefox-ci-tc.services.mozilla.com",
+            }
+        )
+        route = "gecko.v2.mozilla-central.latest.source.test-info-all"
+        queue = taskcluster.Queue(
+            {
+                "rootUrl": "https://firefox-ci-tc.services.mozilla.com",
+            }
+        )
+
+        # Typing from findTask is wrong, so we need to convert to Any
+        result: Optional[Dict[str, Any]] = index.findTask(route)
+        if result is not None:
+            task_id: str = result["taskId"]
+            result = queue.listLatestArtifacts(task_id)
+            if result is not None and task_id is not None:
+                artifact_list: list[Dict[Literal["name"], str]] = result["artifacts"]
+                for artifact in artifact_list:
+                    artifact_name = artifact["name"]
+                    if artifact_name.endswith("test-info-testrun-matrix.json"):
+                        url = queue.buildUrl(
+                            "getLatestArtifact", task_id, artifact_name
+                        )
+                        break
+
+        if url is not None:
+            response = requests.get(url, headers={"User-agent": "mach-test-info/1.0"})
+            self.platform_permutations = response.json()
+        else:
+            self.info("Failed fetching platform permutations...")
+
+    def _get_list_skip_if(self, extra):
+        aa = "&&"
+        nn = "!"
+
+        os = extra.get("os")
+        build_types = extra.get("build_types", [])
+        runtimes = extra.get("runtimes", [])
+
+        skip_if = None
+        if os == "linux":
+            skip_if = "gtkWidget"
+        elif os == "win":
+            skip_if = "winWidget"
+        elif os == "mac":
+            skip_if = "cocoaWidget"
+        elif os == "android":
+            skip_if = "Android"
+        else:
+            self.error(f"cannot calculate skip-if for unknown OS: '{os}'")
+        os = extra.get("os")
+        if skip_if is not None:
+            debug = "debug" in build_types
+            ccov = "ccov" in build_types
+            asan = "asan" in build_types
+            tsan = "tsan" in build_types
+            optimized = (not debug) and (not ccov) and (not asan) and (not tsan)
+            skip_if += aa
+            if optimized:
+                skip_if += "optimized"
+            elif debug:
+                skip_if += "isDebugBuild"
+            elif ccov:
+                skip_if += "isCoverageBuild"
+            elif asan:
+                skip_if += "AddressSanitizer"
+            elif tsan:
+                skip_if += "ThreadSanitizer"
+            # See implicit VARIANT_DEFAULTS in
+            # https://searchfox.org/mozilla-central/source/layout/tools/reftest/manifest.sys.mjs#30
+            fission = "no-fission" not in runtimes
+            snapshot = "snapshot" in runtimes
+            swgl = "swgl" in runtimes
+            if not self.implicit_vars and fission:
+                skip_if += aa + "fission"
+            elif not fission:  # implicit default: fission
+                skip_if += aa + nn + "fission"
+            if extra.get("bits") is not None:
+                if extra["bits"] == "32":
+                    skip_if += aa + nn + "is64Bit"  # override implicit is64Bit
+                elif not self.implicit_vars and os == "winWidget":
+                    skip_if += aa + "is64Bit"
+            if not self.implicit_vars and not swgl:
+                skip_if += aa + nn + "swgl"
+            elif swgl:  # implicit default: !swgl
+                skip_if += aa + "swgl"
+            if os == "gtkWidget":
+                if not self.implicit_vars and not snapshot:
+                    skip_if += aa + nn + "useDrawSnapshot"
+                elif snapshot:  # implicit default: !useDrawSnapshot
+                    skip_if += aa + "useDrawSnapshot"
+        return skip_if
+
+    def task_to_skip_if(
+        self, manifest: str, task_id: str, kind: str, file_path: str
+    ) -> str:
         """Calculate the skip-if condition for failing task task_id"""
 
         if kind == Kind.WPT:
             qq = '"'
             aa = " and "
-            nn = "not "
-        elif kind == Kind.LIST:
-            qq = "'"
-            aa = "&&"
-            nn = "!"
         else:
             qq = "'"
             aa = " && "
-            nn = "!"
         eq = " == "
-        arch = "processor"
-        version = "os_version"
         extra = self.get_extra(task_id)
         skip_if = None
         os = extra.get("os")
+        os_version = extra.get("os_version")
         if os is not None:
             if kind == Kind.LIST:
-                if os == "linux":
-                    skip_if = "gtkWidget"
-                elif os == "win":
-                    skip_if = "winWidget"
-                elif os == "mac":
-                    skip_if = "cocoaWidget"
-                elif os == "android":
-                    skip_if = "Android"
-                else:
-                    self.error(f"cannot calculate skip-if for unknown OS: '{os}'")
-                    return None
-            elif extra.get("os_version") is not None:
-                if (
-                    extra.get("build") is not None
-                    and os == "win"
-                    and extra["os_version"] == "11"
-                    and extra["build"] == "2009"
-                ):
-                    skip_if = "win11_2009"  # mozinfo.py:137
-                else:
-                    skip_if = "os" + eq + qq + os + qq
-                    skip_if += aa + version + eq + qq + extra["os_version"] + qq
-            if kind != Kind.LIST and extra.get("arch") is not None:
-                skip_if += aa + arch + eq + qq + extra["arch"] + qq
-            # since we always give arch/processor, bits are not required
-            # if extra["bits"] is not None:
-            #     skip_if += aa + "bits" + eq + extra["bits"]
-            debug = extra.get("debug", False)
-            runtimes = extra.get("runtimes", [])
-            fission = "no-fission" not in runtimes
-            snapshot = "snapshot" in runtimes
-            swgl = "swgl" in runtimes
+                skip_if = self._get_list_skip_if(extra)
+            elif (
+                os_version is not None
+                and extra.get("build") is not None
+                and os == "win"
+                and os_version == "11"
+                and extra["build"] == "2009"
+            ):
+                skip_if = "win11_2009"  # mozinfo.py:137
+                os_version = "11.2009"
+            elif os_version is not None:
+                skip_if = "os" + eq + qq + os + qq
+                skip_if += aa + "os_version" + eq + qq + os_version + qq
+
+        processor = extra.get("arch")
+        if skip_if is not None and kind != Kind.LIST:
+            if processor is not None:
+                skip_if += aa + "processor" + eq + qq + processor + qq
+
+            failure_key = os + os_version + processor + manifest + file_path
+            if self.failed_platforms.get(failure_key) is None:
+                if not self.platform_permutations:
+                    self._fetch_platform_permutations()
+                permutations = (
+                    self.platform_permutations.get(manifest, {})
+                    .get(os, {})
+                    .get(os_version, {})
+                    .get(processor, None)
+                )
+                # Pushes to try made with --full may schedule tests not handled here. We ignore those
+                if permutations is not None:
+                    self.failed_platforms[failure_key] = FailedPlatform(
+                        self.platform_permutations[manifest][os][os_version][processor]
+                    )
+
             build_types = extra.get("build_types", [])
-            asan = "asan" in build_types
-            ccov = "ccov" in build_types
-            tsan = "tsan" in build_types
-            optimized = (not debug) and (not ccov) and (not asan) and (not tsan)
-            skip_if += aa
-            if kind == Kind.LIST:
-                if optimized:
-                    skip_if += "optimized"
-                elif debug:
-                    skip_if += "isDebugBuild"
-                elif ccov:
-                    skip_if += "isCoverageBuild"
-                elif asan:
-                    skip_if += "AddressSanitizer"
-                elif tsan:
-                    skip_if += "ThreadSanitizer"
-                # See implicit VARIANT_DEFAULTS in
-                # https://searchfox.org/mozilla-central/source/layout/tools/reftest/manifest.sys.mjs#30
-                if not self.implicit_vars and fission:
-                    skip_if += aa + "fission"
-                elif not fission:  # implicit default: fission
-                    skip_if += aa + nn + "fission"
-                if extra.get("bits") is not None:
-                    if extra["bits"] == "32":
-                        skip_if += aa + nn + "is64Bit"  # override implicit is64Bit
-                    elif not self.implicit_vars and os == "winWidget":
-                        skip_if += aa + "is64Bit"
-                if not self.implicit_vars and not swgl:
-                    skip_if += aa + nn + "swgl"
-                elif swgl:  # implicit default: !swgl
-                    skip_if += aa + "swgl"
-                if os == "gtkWidget":
-                    if not self.implicit_vars and not snapshot:
-                        skip_if += aa + nn + "useDrawSnapshot"
-                    elif snapshot:  # implicit default: !useDrawSnapshot
-                        skip_if += aa + "useDrawSnapshot"
-            else:
-                if not debug:
-                    skip_if += nn
-                skip_if += "debug"
-                if extra.get("display") is not None:
-                    skip_if += aa + "display" + eq + qq + extra["display"] + qq
-                for runtime in extra.get("runtimes", []):
-                    skip_if += aa + runtime
-                for build_type in extra.get("build_types", []):
-                    # note: lite will not evaluate on non-android platforms
-                    if build_type not in ["debug", "lite", "opt", "shippable"]:
-                        skip_if += aa + build_type
+            failed_platform = self.failed_platforms.get(failure_key, None)
+            if failed_platform is not None:
+                test_variants = extra.get("runtimes", [])
+                skip_if += failed_platform.get_skip_string(
+                    aa, build_types, test_variants
+                )
         return skip_if
 
     def get_file_info(self, path, product="Testing", component="General"):
@@ -1259,7 +1426,7 @@ class Skipfails(object):
             component = cp.component
         return product, component
 
-    def get_filename_in_manifest(self, manifest, path):
+    def get_filename_in_manifest(self, manifest: str, path: str) -> str:
         """return relative filename for path in manifest"""
 
         filename = os.path.basename(path)
@@ -1500,7 +1667,7 @@ class Skipfails(object):
             except Fault:
                 pass  # Fault expected: Failed to fetch key 9372091 from network storage: The specified key does not exist.
 
-    def get_wpt_path_meta(self, shortpath):
+    def get_wpt_path_meta(self, shortpath: str):
         if shortpath.startswith(WPT0):
             path = shortpath
             meta = shortpath.replace(WPT0, WPT_META0, 1)
@@ -1519,7 +1686,9 @@ class Skipfails(object):
             meta = WPT_META1 + shortpath
         return (path, meta)
 
-    def wpt_paths(self, shortpath):
+    def wpt_paths(
+        self, shortpath: str
+    ) -> tuple[Optional[str], Optional[str], Optional[str], Optional[str]]:
         """
         Analyzes the WPT short path for a test and returns
         (path, manifest, query, anyjs) where
@@ -1528,8 +1697,8 @@ class Skipfails(object):
         query is the test file query paramters (or None)
         anyjs is the html test file as reported by mozci (or None)
         """
-        query = None
-        anyjs = None
+        query: Optional[str] = None
+        anyjs: Optional[str] = None
         i = shortpath.find("?")
         if i > 0:
             query = shortpath[i:]
@@ -1810,7 +1979,7 @@ class Skipfails(object):
                 ] == path and task_id in self.error_summary[manifest][allmods].get(
                     RUNS, {}
                 ):
-                    allpaths.append(allmods)
+                    allpaths.append(path)
             if len(allpaths) > 0:
                 return allpaths  # cached (including self tests)
         error_url = f"https://firefox-ci-tc.services.mozilla.com/api/queue/v1/task/{task_id}/artifacts/public/test_info/reftest_errorsummary.log"
@@ -1880,5 +2049,5 @@ class Skipfails(object):
             if status != FAIL:
                 self.error_summary[group][allmods][RUNS][task_id][STATUS] = status
             if test == path:
-                allpaths.append(allmods)
+                allpaths.append(test)
         return allpaths

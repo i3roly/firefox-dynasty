@@ -74,7 +74,12 @@ https_first_disabled = true
 
 ["browser_html_detail_permissions.js"]
 
+["browser_html_detail_permissions_userScripts.js"]
+
 ["browser_html_detail_view.js"]
+skip-if = [
+  "os == 'linux' && os_version == '18.04' && !debug && processor == 'x84_64'", # Bug 1782601
+]
 
 ["browser_html_discover_view.js"]
 https_first_disabled = true
@@ -133,6 +138,8 @@ https_first_disabled = true
 ["browser_page_options_updates.js"]
 
 ["browser_permission_prompt.js"]
+
+["browser_permission_prompt_userScripts.js"]
 
 ["browser_reinstall.js"]
 

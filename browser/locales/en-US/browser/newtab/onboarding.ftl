@@ -357,6 +357,18 @@ onboarding-new-tabs-title = Tell us where you’d like your tabs
 # Setup screen for vertical tabs - "Switch it up" refers to switching between horizontal and vertical tabs.
 onboarding-new-tabs-subtitle = Switch it up whenever you want in the sidebar settings.
 
+# Setup screen for vertical tabs - too many tabs variation
+onboarding-many-tabs-title = Your tabs, your way
+
+# Setup screen for vertical tabs - subtitle for too many tabs variation
+onboarding-many-tabs-subtitle = Keep a lot of tabs open? Try your tabs on the side for a more streamlined view. Or keep it classic with tabs on the top. Switch anytime.
+
+# Setup screen for vertical tabs - focused variation
+onboarding-focused-tabs-title = Choose your tab layout
+
+# Setup screen for vertical tabs - subtitle for focused variation
+onboarding-focused-tabs-subtitle = For a streamlined view that can help you stay focused, try your tabs on the side. Or keep it classic with tabs on the top. Switch anytime.
+
 # Text underneath an image used for selecting browser tabs to appear on the side of the browser.
 onboarding-new-vertical-tabs-label = Tabs on the side
 
@@ -418,3 +430,18 @@ onboarding-checklist-pin = Pin { -brand-short-name } to taskbar
 onboarding-checklist-import = Import from previous browser
 onboarding-checklist-extension = Add an extension
 onboarding-checklist-sign-up = Sign up or sign in to your account
+
+## Tab Groups feature onboarding strings
+
+tab-groups-onboarding-feature-callout-title = Try tab groups for less clutter, more focus
+tab-groups-onboarding-feature-callout-subtitle = Get organized by dragging one tab on top of another to create your first group.
+
+## Multi Profiles feature onboarding messages
+
+multi-profile-spotlight-title = Say hello to { -brand-product-name } profiles
+multi-profile-spotlight-body = Easily switch between browsing for work and fun. Profiles keep your browsing info, including search history and passwords, totally separate so you can stay organized.
+multi-profile-spotlight-cta = Create a profile
+
+multi-profile-callout-title = Create different profiles for work and fun
+multi-profile-callout-subtitle = Profiles let you keep your browsing info, like search history and passwords, totally separate.
+multi-profile-callout-cta = Create a profile

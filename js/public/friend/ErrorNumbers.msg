@@ -228,6 +228,7 @@ MSG_DEF(JSMSG_BAD_ARROW_ARGS,          0, JSEXN_SYNTAXERR, "invalid arrow-functi
 MSG_DEF(JSMSG_BAD_CLASS_MEMBER_DEF,    0, JSEXN_SYNTAXERR, "bad class member definition")
 MSG_DEF(JSMSG_BAD_COALESCE_MIXING,     0, JSEXN_SYNTAXERR, "cannot use `??` unparenthesized within `||` and `&&` expressions")
 MSG_DEF(JSMSG_BAD_CONST_DECL,          0, JSEXN_SYNTAXERR, "missing = in const declaration")
+MSG_DEF(JSMSG_BAD_USING_DECL,          0, JSEXN_SYNTAXERR, "missing = in using declaration")
 MSG_DEF(JSMSG_BAD_CONSTRUCTOR_DEF,     0, JSEXN_SYNTAXERR, "a class constructor definition must be a plain public method")
 MSG_DEF(JSMSG_BAD_CONTINUE,            0, JSEXN_SYNTAXERR, "continue must be inside loop")
 MSG_DEF(JSMSG_BAD_DESTRUCT_ASS,        0, JSEXN_SYNTAXERR, "invalid destructuring assignment operator")
@@ -330,7 +331,7 @@ MSG_DEF(JSMSG_NAMED_IMPORTS_OR_NAMESPACE_IMPORT, 0, JSEXN_SYNTAXERR, "expected n
 MSG_DEF(JSMSG_NO_BINDING_NAME,        0, JSEXN_SYNTAXERR, "missing binding name")
 MSG_DEF(JSMSG_NO_EXPORT_NAME,          0, JSEXN_SYNTAXERR, "missing export name")
 MSG_DEF(JSMSG_NO_IMPORT_NAME,          0, JSEXN_SYNTAXERR, "missing import name")
-MSG_DEF(JSMSG_NO_VARIABLE_NAME,        0, JSEXN_SYNTAXERR, "missing variable name")
+MSG_DEF(JSMSG_NO_VARIABLE_NAME,        1, JSEXN_SYNTAXERR, "missing variable name, got {0}")
 MSG_DEF(JSMSG_PAREN_AFTER_ARGS,        0, JSEXN_SYNTAXERR, "missing ) after argument list")
 MSG_DEF(JSMSG_PAREN_AFTER_CATCH,       0, JSEXN_SYNTAXERR, "missing ) after catch")
 MSG_DEF(JSMSG_PAREN_AFTER_COND,        0, JSEXN_SYNTAXERR, "missing ) after condition")
@@ -634,7 +635,7 @@ MSG_DEF(JSMSG_INVALID_LOCALE_MATCHER,  1, JSEXN_RANGEERR, "invalid locale matche
 MSG_DEF(JSMSG_INVALID_OPTION_VALUE,    2, JSEXN_RANGEERR, "invalid value {1} for option {0}")
 MSG_DEF(JSMSG_INVALID_TIME_ZONE,       1, JSEXN_RANGEERR, "invalid time zone in DateTimeFormat(): {0}")
 MSG_DEF(JSMSG_INVALID_DATETIME_OPTION, 2, JSEXN_TYPEERR, "can't set option {0} when {1} is used")
-MSG_DEF(JSMSG_INVALID_DATETIME_STYLE,  2, JSEXN_TYPEERR, "can't set option {0} in Date.{1}()")
+MSG_DEF(JSMSG_INVALID_DATETIME_STYLE,  2, JSEXN_TYPEERR, "can't set option {0} for {1} formats")
 MSG_DEF(JSMSG_UNDEFINED_CURRENCY,      0, JSEXN_TYPEERR, "undefined currency in NumberFormat() with currency style")
 MSG_DEF(JSMSG_UNDEFINED_UNIT,          0, JSEXN_TYPEERR, "undefined unit in NumberFormat() with unit style")
 MSG_DEF(JSMSG_UNDEFINED_DATE,          2, JSEXN_TYPEERR, "undefined {0}-date in DateTimeFormat.{1}()")
@@ -652,6 +653,7 @@ MSG_DEF(JSMSG_INTL_DURATION_INVALID_SIGN, 0, JSEXN_RANGEERR, "duration elements 
 MSG_DEF(JSMSG_INTL_DURATION_INVALID_LIMIT, 0, JSEXN_RANGEERR, "duration elements must be below valid limits")
 MSG_DEF(JSMSG_INTL_DURATION_MISSING_UNIT, 0, JSEXN_TYPEERR, "Duration-like objects must have at least one duration unit")
 MSG_DEF(JSMSG_INTL_DURATION_UNEXPECTED_STRING, 0, JSEXN_RANGEERR, "duration can't be a string")
+MSG_DEF(JSMSG_INVALID_FORMAT_OPTIONS,  1, JSEXN_TYPEERR, "can't format {0} using the requested options")
 
 // RegExp
 MSG_DEF(JSMSG_BAD_CLASS_RANGE,         0, JSEXN_SYNTAXERR, "invalid range in character class")
@@ -752,7 +754,7 @@ MSG_DEF(JSMSG_CANT_DEFINE_WINDOW_ELEMENT, 0, JSEXN_TYPEERR, "can't define elemen
 MSG_DEF(JSMSG_CANT_DELETE_WINDOW_ELEMENT, 0, JSEXN_TYPEERR, "can't delete elements from a Window object")
 MSG_DEF(JSMSG_CANT_DEFINE_WINDOW_NAMED_PROPERTY, 1, JSEXN_TYPEERR, "can't define property {0} on window's named properties object")
 MSG_DEF(JSMSG_CANT_DELETE_WINDOW_NAMED_PROPERTY, 1, JSEXN_TYPEERR, "can't delete property {0} from window's named properties object")
-MSG_DEF(JSMSG_CANT_PREVENT_EXTENSIONS,   0, JSEXN_TYPEERR, "can't prevent extensions on this proxy object")
+MSG_DEF(JSMSG_CANT_PREVENT_EXTENSIONS,   0, JSEXN_TYPEERR, "can't prevent extensions on this object")
 MSG_DEF(JSMSG_CANT_DEFINE_WINDOW_NC,     0, JSEXN_TYPEERR, "can't define non-configurable property on WindowProxy")
 MSG_DEF(JSMSG_NO_NAMED_SETTER,           2, JSEXN_TYPEERR, "{0} doesn't have a named property setter for '{1}'")
 MSG_DEF(JSMSG_NO_INDEXED_SETTER,         2, JSEXN_TYPEERR, "{0} doesn't have an indexed property setter for '{1}'")
@@ -988,5 +990,17 @@ MSG_DEF(JSMSG_ERROR_WAS_SUPPRESSED, 0, IF_EXPLICIT_RESOURCE_MANAGEMENT(JSEXN_SUP
 
 // DisposableStack
 MSG_DEF(JSMSG_DISPOSABLE_STACK_DISPOSED, 0, JSEXN_REFERENCEERR, "DisposableStack has already been disposed")
+
+// Iterator.range
+MSG_DEF(JSMSG_ITERATOR_RANGE_INVALID_START, 0, JSEXN_TYPEERR, "The 'start' argument must be a number or BigInt")
+MSG_DEF(JSMSG_ITERATOR_RANGE_INVALID_START_RANGEERR, 0, JSEXN_RANGEERR, "The 'start' argument cannot be NaN")
+MSG_DEF(JSMSG_ITERATOR_RANGE_INVALID_END_RANGEERR, 0, JSEXN_RANGEERR, "The 'end' argument cannot be NaN")
+MSG_DEF(JSMSG_ITERATOR_RANGE_INVALID_END, 0, JSEXN_TYPEERR, "The 'end' argument must be a number or BigInt")
+MSG_DEF(JSMSG_ITERATOR_RANGE_START_INFINITY, 0, JSEXN_RANGEERR, "The 'start' argument must be a finite number")
+MSG_DEF(JSMSG_ITERATOR_RANGE_STEP_NAN, 0, JSEXN_RANGEERR, "The 'step' argument must not be NaN")
+MSG_DEF(JSMSG_ITERATOR_RANGE_STEP_NOT_NUMBER, 0, JSEXN_TYPEERR, "The 'step' argument must be a number")
+MSG_DEF(JSMSG_ITERATOR_RANGE_STEP_NOT_FINITE, 0, JSEXN_RANGEERR, "The 'step' argument must be a finite number")
+MSG_DEF(JSMSG_ITERATOR_RANGE_STEP_ZERO, 0, JSEXN_RANGEERR, "The 'step' argument must not be zero when 'start' is not equal to 'end'")
+MSG_DEF(JSMSG_ITERATOR_RANGE_INVALID_STEP, 0, JSEXN_TYPEERR, "The 'step' or options argument must be a valid number, BigInt, or an Object with valid properties")
 
 //clang-format on

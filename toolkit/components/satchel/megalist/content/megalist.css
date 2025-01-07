@@ -70,7 +70,7 @@ virtualized-list {
     > .menuPopup {
       position: absolute;
       inset-inline-end: 0;
-      box-shadow: 0px 8px 16px 0px rgba(0, 0, 0, 0.2);
+      box-shadow: 0 8px 16px 0 rgba(0, 0, 0, 0.2);
       z-index: 1;
       background-color: var(--in-content-table-background);
       padding: 4px;
@@ -351,5 +351,30 @@ login-form {
 
   > moz-button {
     width: 100%
+  }
+}
+
+.no-logins-card-content {
+  display: flex;
+  flex-direction: column;
+
+  > img {
+    align-self: center;
+  }
+}
+
+.alert-card {
+  display: flex;
+  flex-direction: column;
+  margin-block: var(--space-medium);
+
+  > ul {
+    list-style-type: none;
+    padding-inline: var(--space-small);
+    margin-block: var(--space-small);
+
+    > li:not(:last-child) {
+      margin-block-end: var(--space-medium);
+    }
   }
 }

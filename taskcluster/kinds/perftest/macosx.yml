@@ -170,8 +170,9 @@ livesites:
         symbol: perftest({symbol})
     attributes:
         batch: false
-        cron: true
+        cron: false
     perftest:
+        # broken: bug 1933712
         - [cloudflare, netwerk/test/perf/perftest_http3_cloudflareblog.js]
         # broken: bug 1678588
         # - [fb-scroll, netwerk/test/perf/perftest_http3_facebook_scroll.js]
@@ -345,7 +346,6 @@ ml-perf:
         fetch:
             - ort.wasm
             - ort.jsep.wasm
-            - ort-training.wasm
             - xenova-all-minilm-l6-v2
     description: Run ML Models Perf Tests
     treeherder:
@@ -365,12 +365,36 @@ ml-perf:
             --output $MOZ_FETCHES_DIR/../artifacts
             toolkit/components/ml/tests/browser/browser_ml_engine_perf.js
 
+ml-summarizer-perf:
+    fetches:
+        fetch:
+            - ort.wasm
+            - ort.jsep.wasm
+            - qwen2.5-0.5-instruct
+            - distilbart-cnn-12-6
+    description: Run ML Models Perf Tests
+    treeherder:
+        symbol: perftest(mac-ml-sum-perf)
+        tier: 2
+    attributes:
+        batch: false
+        cron: false
+    run-on-projects: [autoland, mozilla-central]
+    run:
+        command: >-
+            mkdir -p $MOZ_FETCHES_DIR/../artifacts &&
+            cd $MOZ_FETCHES_DIR &&
+            python3 python/mozperftest/mozperftest/runner.py
+            --mochitest-binary ${MOZ_FETCHES_DIR}/target.dmg
+            --flavor mochitest
+            --output $MOZ_FETCHES_DIR/../artifacts
+            toolkit/components/ml/tests/browser/browser_ml_summarizer_perf.js
+
 ml-multi-perf:
     fetches:
         fetch:
             - ort.wasm
             - ort.jsep.wasm
-            - ort-training.wasm
             - xenova-all-minilm-l6-v2
             - mozilla-ner
             - mozilla-intent
@@ -392,12 +416,36 @@ ml-multi-perf:
             --output $MOZ_FETCHES_DIR/../artifacts
             toolkit/components/ml/tests/browser/browser_ml_engine_multi_perf.js
 
+ml-perf-suggest-ft:
+    fetches:
+        fetch:
+            - ort.wasm
+            - ort.jsep.wasm
+            - mozilla-ner
+            - mozilla-intent
+    description: Run ML Suggest Feature
+    treeherder:
+        symbol: perftest(mac-ml-perf-suggest-ft)
+        tier: 2
+    attributes:
+        batch: false
+        cron: false
+    run-on-projects: [autoland, mozilla-central]
+    run:
+        command: >-
+            mkdir -p $MOZ_FETCHES_DIR/../artifacts &&
+            cd $MOZ_FETCHES_DIR &&
+            python3 python/mozperftest/mozperftest/runner.py
+            --mochitest-binary ${MOZ_FETCHES_DIR}/target.dmg
+            --flavor mochitest
+            --output $MOZ_FETCHES_DIR/../artifacts
+            toolkit/components/ml/tests/browser/browser_ml_suggest_feature_perf.js
+
 ml-perf-suggest-inf:
     fetches:
         fetch:
             - ort.wasm
             - ort.jsep.wasm
-            - ort-training.wasm
             - mozilla-ner
             - mozilla-intent
     description: Run ML Suggest Inference Model
@@ -418,21 +466,21 @@ ml-perf-suggest-inf:
             --output $MOZ_FETCHES_DIR/../artifacts
             toolkit/components/ml/tests/browser/browser_ml_suggest_inference.js
 
-ml-perf-suggest-int:
+ml-perf-autofill:
     fetches:
         fetch:
             - ort.wasm
             - ort.jsep.wasm
             - ort-training.wasm
-            - mozilla-intent
-    description: Run ML Suggest Intent Model
+            - mozilla-autofill
+    description: Run ML Autofill Model
     treeherder:
-        symbol: perftest(mac-ml-perf-suggest-int)
+        symbol: perftest(mac-ml-perf-autofill)
         tier: 2
     attributes:
         batch: false
         cron: false
-    run-on-projects: []
+    run-on-projects: [autoland, mozilla-central]
     run:
         command: >-
             mkdir -p $MOZ_FETCHES_DIR/../artifacts &&
@@ -441,29 +489,4 @@ ml-perf-suggest-int:
             --mochitest-binary ${MOZ_FETCHES_DIR}/target.dmg
             --flavor mochitest
             --output $MOZ_FETCHES_DIR/../artifacts
-            toolkit/components/ml/tests/browser/browser_ml_suggest_intent_perf.js
-
-ml-perf-suggest-ner:
-    fetches:
-        fetch:
-            - ort.wasm
-            - ort.jsep.wasm
-            - ort-training.wasm
-            - mozilla-ner
-    description: Run ML Suggest NER Model
-    treeherder:
-        symbol: perftest(mac-ml-perf-suggest-ner)
-        tier: 2
-    attributes:
-        batch: false
-        cron: false
-    run-on-projects: []
-    run:
-        command: >-
-            mkdir -p $MOZ_FETCHES_DIR/../artifacts &&
-            cd $MOZ_FETCHES_DIR &&
-            python3 python/mozperftest/mozperftest/runner.py
-            --mochitest-binary ${MOZ_FETCHES_DIR}/target.dmg
-            --flavor mochitest
-            --output $MOZ_FETCHES_DIR/../artifacts
-            toolkit/components/ml/tests/browser/browser_ml_suggest_ner_perf.js
+            toolkit/components/ml/tests/browser/browser_ml_autofill_perf.js

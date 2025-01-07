@@ -8,6 +8,7 @@
 
 #include "mozilla/ArrayUtils.h"             // mozilla::ArrayEqual
 #include "mozilla/OperatorNewExtensions.h"  // mozilla::KnownNotNull
+#include "mozilla/RefPtr.h"                 // RefPtr
 #include "mozilla/ScopeExit.h"              // mozilla::MakeScopeExit
 #include "mozilla/Try.h"                    // MOZ_TRY
 
@@ -18,9 +19,14 @@
 
 #include "ds/LifoAlloc.h"                 // LifoAlloc
 #include "frontend/CompilationStencil.h"  // CompilationStencil, ExtensibleCompilationStencil
-#include "frontend/ScriptIndex.h"  // ScriptIndex
-#include "vm/Scope.h"              // SizeOfParserScopeData
-#include "vm/StencilEnums.h"       // js::ImmutableScriptFlagsEnum
+#include "frontend/FrontendContext.h"  // FrontendContext, AutoReportFrontendContext
+#include "frontend/ScriptIndex.h"      // ScriptIndex
+#include "js/CompileOptions.h"         // JS::ReadOnlyDecodeOptions
+#include "js/experimental/JSStencil.h"  // ScriptIndex
+#include "js/Transcoding.h"  // JS::TranscodeBuffer, JS::TranscodeRange, JS::TranscodeResult
+#include "vm/JSScript.h"      // ScriptSource
+#include "vm/Scope.h"         // SizeOfParserScopeData
+#include "vm/StencilEnums.h"  // js::ImmutableScriptFlagsEnum
 
 using namespace js;
 using namespace js::frontend;
@@ -1466,33 +1472,41 @@ XDRResult XDRStencilEncoder::codeStencil(
   return codeStencil(stencil.source, stencil);
 }
 
-void StencilIncrementalEncoderPtr::reset() {
-  if (merger_) {
-    js_delete(merger_);
+static JS::TranscodeResult EncodeStencilImpl(
+    JS::FrontendContext* fc, const frontend::CompilationStencil* initial,
+    JS::TranscodeBuffer& buffer) {
+  XDRStencilEncoder encoder(fc, buffer);
+  XDRResult res = encoder.codeStencil(*initial);
+  if (res.isErr()) {
+    return res.unwrapErr();
   }
-  merger_ = nullptr;
+  return JS::TranscodeResult::Ok;
 }
 
-bool StencilIncrementalEncoderPtr::setInitial(
-    JSContext* cx,
-    UniquePtr<frontend::ExtensibleCompilationStencil>&& initial) {
-  MOZ_ASSERT(!merger_);
-
+JS::TranscodeResult JS::EncodeStencil(JSContext* cx, JS::Stencil* stencil,
+                                      JS::TranscodeBuffer& buffer) {
   AutoReportFrontendContext fc(cx);
-  merger_ = fc.getAllocator()->new_<frontend::CompilationStencilMerger>();
-  if (!merger_) {
-    return false;
+
+  const CompilationStencil* initial;
+  UniquePtr<CompilationStencil> merged;
+  if (stencil->canLazilyParse()) {
+    merged.reset(stencil->getMerged(&fc));
+    if (!merged) {
+      return TranscodeResult::Throw;
+    }
+    initial = merged.get();
+  } else {
+    initial = stencil->getInitial();
   }
 
-  return merger_->setInitial(
-      &fc,
-      std::forward<UniquePtr<frontend::ExtensibleCompilationStencil>>(initial));
+  return EncodeStencilImpl(&fc, initial, buffer);
 }
 
-bool StencilIncrementalEncoderPtr::addDelazification(
-    JSContext* cx, const frontend::CompilationStencil& delazification) {
+JS::TranscodeResult js::EncodeStencil(JSContext* cx,
+                                      frontend::CompilationStencil* stencil,
+                                      JS::TranscodeBuffer& buffer) {
   AutoReportFrontendContext fc(cx);
-  return merger_->addDelazification(&fc, delazification);
+  return EncodeStencilImpl(&fc, stencil, buffer);
 }
 
 XDRResult XDRStencilDecoder::codeStencil(
@@ -1526,6 +1540,59 @@ XDRResult XDRStencilDecoder::codeStencil(
   MOZ_TRY(frontend::StencilXDR::codeCompilationStencil(this, stencil));
 
   return Ok();
+}
+
+JS::TranscodeResult JS::DecodeStencil(JSContext* cx,
+                                      const JS::ReadOnlyDecodeOptions& options,
+                                      const JS::TranscodeRange& range,
+                                      JS::Stencil** stencilOut) {
+  AutoReportFrontendContext fc(cx);
+  return JS::DecodeStencil(&fc, options, range, stencilOut);
+}
+
+JS::TranscodeResult JS::DecodeStencil(JS::FrontendContext* fc,
+                                      const JS::ReadOnlyDecodeOptions& options,
+                                      const JS::TranscodeRange& range,
+                                      JS::Stencil** stencilOut) {
+  RefPtr<CompilationStencil> stencil;
+  JS::TranscodeResult result =
+      js::DecodeStencil(fc, options, range, getter_AddRefs(stencil));
+  if (result != TranscodeResult::Ok) {
+    return result;
+  }
+
+  RefPtr stencils =
+      fc->getAllocator()->new_<frontend::InitialStencilAndDelazifications>();
+  if (!stencils) {
+    return TranscodeResult::Throw;
+  }
+  if (!stencils->init(fc, stencil.get())) {
+    return TranscodeResult::Throw;
+  }
+  stencils.forget(stencilOut);
+  return TranscodeResult::Ok;
+}
+
+JS::TranscodeResult js::DecodeStencil(
+    JS::FrontendContext* fc, const JS::ReadOnlyDecodeOptions& options,
+    const JS::TranscodeRange& range,
+    frontend::CompilationStencil** stencilOut) {
+  RefPtr<ScriptSource> source = fc->getAllocator()->new_<ScriptSource>();
+  if (!source) {
+    return JS::TranscodeResult::Throw;
+  }
+  RefPtr<CompilationStencil> stencil =
+      fc->getAllocator()->new_<CompilationStencil>(source);
+  if (!stencil) {
+    return JS::TranscodeResult::Throw;
+  }
+  XDRStencilDecoder decoder(fc, range);
+  XDRResult res = decoder.codeStencil(options, *stencil);
+  if (res.isErr()) {
+    return res.unwrapErr();
+  }
+  stencil.forget(stencilOut);
+  return JS::TranscodeResult::Ok;
 }
 
 template /* static */ XDRResult StencilXDR::codeCompilationStencil(

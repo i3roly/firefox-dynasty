@@ -342,7 +342,29 @@ export class EngineURL {
    *   The submission data containing the URL and post data for the URL.
    */
   getSubmission(searchTerms, queryCharset) {
-    var url = ParamSubstitution(this.template, searchTerms, queryCharset);
+    let escapedSearchTerms = "";
+    try {
+      escapedSearchTerms = Services.textToSubURI.ConvertAndEscape(
+        queryCharset,
+        searchTerms
+      );
+    } catch (ex) {
+      lazy.logConsole.warn(
+        "getSubmission: Falling back to default queryCharset!"
+      );
+      escapedSearchTerms = Services.textToSubURI.ConvertAndEscape(
+        lazy.SearchUtils.DEFAULT_QUERY_CHARSET,
+        searchTerms
+      );
+    }
+
+    // textToSubURI encodes spaces with '+' but we want to use %20 if the search
+    // terms are part of the URL. We only use '+' if they are a query parameter.
+    let url = ParamSubstitution(
+      this.template,
+      escapedSearchTerms.replace("+", "%20"),
+      queryCharset
+    );
 
     // Create an application/x-www-form-urlencoded representation of our params
     // (name=value&name=value&name=value)
@@ -350,7 +372,11 @@ export class EngineURL {
     for (let param of this.params) {
       // QueryPreferenceParameters might not have a preferenced saved, or a valid value.
       if (param.value != null) {
-        let value = ParamSubstitution(param.value, searchTerms, queryCharset);
+        let value = ParamSubstitution(
+          param.value,
+          escapedSearchTerms,
+          queryCharset
+        );
         dataArray.push(param.name + "=" + value);
       }
     }
@@ -373,7 +399,7 @@ export class EngineURL {
       var stringStream = Cc[
         "@mozilla.org/io/string-input-stream;1"
       ].createInstance(Ci.nsIStringInputStream);
-      stringStream.data = dataString;
+      stringStream.setByteStringData(dataString);
 
       postData = Cc["@mozilla.org/network/mime-input-stream;1"].createInstance(
         Ci.nsIMIMEInputStream
@@ -442,9 +468,6 @@ export class SearchEngine {
   _loadPath = null;
   // The engine's description
   _description = "";
-  // Set to true if the engine has a preferred icon (an icon that should not be
-  // overridden by a non-preferred icon).
-  _hasPreferredIcon = null;
   // The engine's name.
   _name = null;
   // The name of the charset used to submit the search terms.
@@ -517,20 +540,19 @@ export class SearchEngine {
    * Add an icon to the icon map used by getIconURL().
    * Icon must be square.
    *
+   * @param {string} iconURL
+   *   String with the icon's URI.
    * @param {number} size
    *   Width and height of the icon.
-   * @param {string} uriSpec
-   *   String with the icon's URI.
+   * @param {boolean} override
+   *   Whether the new URI should override an existing one.
    */
-  _addIconToMap(size, uriSpec) {
-    if (size == 16) {
-      // The 16x16 icon is stored in _iconURL, we don't need to store it twice.
-      return;
-    }
-
+  _addIconToMap(iconURL, size, override = true) {
     // Use an object instead of a Map() because it needs to be serializable.
     this._iconMapObj = this._iconMapObj || {};
-    this._iconMapObj[size] = uriSpec;
+    if (!(size in this._iconMapObj) || override) {
+      this._iconMapObj[size] = iconURL;
+    }
   }
 
   /**
@@ -543,14 +565,13 @@ export class SearchEngine {
    *   or data scheme. Icons with HTTP[S] schemes will be
    *   downloaded and converted to data URIs for storage in the engine
    *   XML files, if the engine is not built-in.
-   * @param {boolean} isPreferred
-   *   Whether or not this icon is to be preferred. Preferred icons can
-   *   override non-preferred icons.
    * @param {number} [size]
    *   Width and height of the icon.
+   * @param {boolean} [override]
+   *   Whether the new URI should override an existing one.
    */
-  _setIcon(iconURL, isPreferred, size) {
-    var uri = lazy.SearchUtils.makeURI(iconURL);
+  async _setIcon(iconURL, size, override = true) {
+    let uri = lazy.SearchUtils.makeURI(iconURL);
 
     // Ignore bad URIs
     if (!uri) {
@@ -565,80 +586,83 @@ export class SearchEngine {
     );
     // Only accept remote icons from http[s]
     switch (uri.scheme) {
-      // Fall through to the data case
-      case "moz-extension":
       case "data":
-        if (!this._hasPreferredIcon || isPreferred) {
-          this._iconURI = uri;
-
-          this._hasPreferredIcon = isPreferred;
-        }
-
-        if (size) {
-          this._addIconToMap(size, iconURL);
-        }
-        break;
-      case "http":
-      case "https": {
-        let iconLoadCallback = function (byteArray, contentType) {
-          // This callback may run after we've already set a preferred icon,
-          // so check again.
-          if (this._hasPreferredIcon && !isPreferred) {
-            return;
-          }
-
-          if (!byteArray) {
-            lazy.logConsole.warn("iconLoadCallback: load failed");
-            return;
-          }
-
-          if (byteArray.length > lazy.SearchUtils.MAX_ICON_SIZE) {
-            try {
-              lazy.logConsole.debug("iconLoadCallback: rescaling icon");
-              [byteArray, contentType] = rescaleIcon(byteArray, contentType);
-            } catch (ex) {
-              lazy.logConsole.error(
-                "Unable to set icon for the search engine:",
-                ex
-              );
-              return;
-            }
-          }
-
-          let dataURL =
-            "data:" +
-            contentType +
-            ";base64," +
-            btoa(String.fromCharCode(...byteArray));
-
-          this._iconURI = lazy.SearchUtils.makeURI(dataURL);
-
-          if (size) {
-            this._addIconToMap(size, iconURL);
-          }
-
-          if (this._engineAddedToStore) {
-            lazy.SearchUtils.notifyAction(
-              this,
-              lazy.SearchUtils.MODIFIED_TYPE.ICON_CHANGED
+      case "moz-extension": {
+        if (!size) {
+          let byteArray, contentType;
+          try {
+            [byteArray, contentType] = await lazy.SearchUtils.fetchIcon(uri);
+          } catch {
+            lazy.logConsole.warn(
+              `Failed to load icon of search engine ${this.name}.`
             );
+            return;
           }
-          this._hasPreferredIcon = isPreferred;
-        };
 
-        let chan = lazy.SearchUtils.makeChannel(
-          uri,
-          Ci.nsIContentPolicy.TYPE_IMAGE
-        );
-        let listener = new lazy.SearchUtils.LoadListener(
-          chan,
-          /^image\//,
-          iconLoadCallback.bind(this)
-        );
-        chan.notificationCallbacks = listener;
-        chan.asyncOpen(listener);
+          let byteString = String.fromCharCode(...byteArray);
+          size = lazy.SearchUtils.decodeSize(byteString, contentType);
+          if (!size) {
+            lazy.logConsole.warn(
+              `Failed to decode size of icon for search engine ${this.name}.`,
+              "Assuming 16x16."
+            );
+            size = 16;
+          }
+        }
+
+        this._addIconToMap(iconURL, size, override);
         break;
       }
+      case "http":
+      case "https": {
+        let byteArray, contentType;
+        try {
+          [byteArray, contentType] = await lazy.SearchUtils.fetchIcon(uri);
+        } catch {
+          lazy.logConsole.warn(
+            `Failed to load icon of search engine ${this.name}.`
+          );
+          return;
+        }
+
+        if (byteArray.length > lazy.SearchUtils.MAX_ICON_SIZE) {
+          try {
+            lazy.logConsole.debug(
+              `Rescaling icon for search engine ${this.name}.`
+            );
+            [byteArray, contentType] = rescaleIcon(byteArray, contentType);
+          } catch (ex) {
+            lazy.logConsole.error(
+              `Unable to rescale  icon for search engine ${this.name}:`,
+              ex
+            );
+            return;
+          }
+        }
+
+        let byteString = String.fromCharCode(...byteArray);
+        if (!size) {
+          size = lazy.SearchUtils.decodeSize(byteString, contentType);
+          if (!size) {
+            lazy.logConsole.warn(
+              `Failed to decode size of icon for search engine ${this.name}.`,
+              "Assuming 16x16."
+            );
+            size = 16;
+          }
+        }
+
+        let dataURL = "data:" + contentType + ";base64," + btoa(byteString);
+        this._addIconToMap(dataURL, size, override);
+        break;
+      }
+    }
+
+    if (this._engineAddedToStore) {
+      lazy.SearchUtils.notifyAction(
+        this,
+        lazy.SearchUtils.MODIFIED_TYPE.ICON_CHANGED
+      );
     }
   }
 
@@ -693,7 +717,7 @@ export class SearchEngine {
   }
 
   /**
-   * Initialize this engine object.
+   * Initialize this engine object using a WebExtension style object.
    *
    * @param {object} details
    *   The details of the engine.
@@ -730,7 +754,9 @@ export class SearchEngine {
 
     this._description = details.description;
     if (details.iconURL) {
-      this._setIcon(details.iconURL, true);
+      this._setIcon(details.iconURL).catch(e =>
+        lazy.logConsole.log("Error while setting search engine icon:", e)
+      );
     }
     this._setUrls(details);
   }
@@ -906,10 +932,8 @@ export class SearchEngine {
     this.#id = json.id ?? this.#id;
     this._name = json._name;
     this._description = json.description;
-    this._hasPreferredIcon = json._hasPreferredIcon == undefined;
     this._queryCharset =
       json.queryCharset || lazy.SearchUtils.DEFAULT_QUERY_CHARSET;
-    this._iconURI = lazy.SearchUtils.makeURI(json._iconURL);
     this._iconMapObj = json._iconMapObj || null;
     this._metaData = json._metaData || {};
     this._orderHint = json._orderHint || null;
@@ -945,7 +969,6 @@ export class SearchEngine {
       "_name",
       "_loadPath",
       "description",
-      "_iconURL",
       "_iconMapObj",
       "_metaData",
       "_urls",
@@ -962,9 +985,6 @@ export class SearchEngine {
       }
     }
 
-    if (!this._hasPreferredIcon) {
-      json._hasPreferredIcon = this._hasPreferredIcon;
-    }
     if (this.queryCharset != lazy.SearchUtils.DEFAULT_QUERY_CHARSET) {
       json.queryCharset = this.queryCharset;
     }
@@ -1111,13 +1131,6 @@ export class SearchEngine {
     }
   }
 
-  get _iconURL() {
-    if (!this._iconURI) {
-      return "";
-    }
-    return this._iconURI.spec;
-  }
-
   // Where the engine is being loaded from: will return the URI's spec if the
   // engine is being downloaded and does not yet have a file. This is only used
   // for logging and error messages.
@@ -1208,22 +1221,7 @@ export class SearchEngine {
       lazy.logConsole.warn("getSubmission: searchTerms is empty!");
     }
 
-    var submissionData = "";
-    try {
-      submissionData = Services.textToSubURI.ConvertAndEscape(
-        this.queryCharset,
-        searchTerms
-      );
-    } catch (ex) {
-      lazy.logConsole.warn(
-        "getSubmission: Falling back to default queryCharset!"
-      );
-      submissionData = Services.textToSubURI.ConvertAndEscape(
-        lazy.SearchUtils.DEFAULT_QUERY_CHARSET,
-        searchTerms
-      );
-    }
-    return url.getSubmission(submissionData, this.queryCharset);
+    return url.getSubmission(searchTerms, this.queryCharset);
   }
 
   /**
@@ -1251,26 +1249,24 @@ export class SearchEngine {
    * @param {nsIURI} uri
    *   A URI that may or may not be from a search result matching the engine.
    *
-   * @param {boolean?} skipParamMatching
-   *   Whether to skip the step to match the parameters of the input URI with
-   *   the URI generated by the Engine. If not provided, it is assumed the
-   *   step should not be skipped.
-   *
    * @returns {string}
    *   A string representing the termsParameterName value of the URI,
    *   or an empty string if the URI isn't matched to the engine.
    */
-  searchTermFromResult(uri, skipParamMatching) {
+  searchTermFromResult(uri) {
     let url = this._getURLOfType(lazy.SearchUtils.URL_TYPE.SEARCH);
     if (!url) {
       return "";
     }
 
-    // The engine URL and URI should have the same scheme, host, and path.
-    if (
-      uri.spec.split("?")[0].toLowerCase() !=
-      url.template.split("?")[0].toLowerCase()
-    ) {
+    // To avoid unnecessarily comparing search parameters, start by ensuring
+    // that the origin and path of both URLs are identical.
+    // Note that URIs encode the path as percent encoded characters, while the
+    // path of the URL from search config is not percent encoded. Thus, we
+    // convert both strings into URL objects to ensure consistent comparisons.
+    let url1 = new URL(url.template);
+    let url2 = new URL(uri.spec);
+    if (url1.origin != url2.origin || url1.pathname != url2.pathname) {
       return "";
     }
 
@@ -1288,32 +1284,29 @@ export class SearchEngine {
       }
     } else {
       // Try checking the template for the presence of query params.
-      engineParams = new URL(url.template).searchParams;
+      engineParams = url1.searchParams;
     }
 
-    let uriParams = new URLSearchParams(uri.query);
+    let uriParams = url2.searchParams;
     if (
-      !skipParamMatching &&
       new Set([...uriParams.keys()]).size !=
-        new Set([...engineParams.keys()]).size
+      new Set([...engineParams.keys()]).size
     ) {
       return "";
     }
 
     let termsParameterName = this.searchUrlQueryParamName;
 
-    if (!skipParamMatching) {
-      for (let [name, value] of uriParams.entries()) {
-        // Don't check the name matching the search
-        // query because its value will differ.
-        if (name == termsParameterName) {
-          continue;
-        }
-        // All params of an input must have a matching
-        // key and value in the list of engine parameters.
-        if (!engineParams.getAll(name).includes(value)) {
-          return "";
-        }
+    for (let [name, value] of uriParams.entries()) {
+      // Don't check the name matching the search
+      // query because its value will differ.
+      if (name == termsParameterName) {
+        continue;
+      }
+      // All params of an input must have a matching
+      // key and value in the list of engine parameters.
+      if (!engineParams.getAll(name).includes(value)) {
+        return "";
       }
     }
 
@@ -1408,7 +1401,8 @@ export class SearchEngine {
   }
 
   /**
-   * Retrieves the icon URL for this search engine, if any.
+   * Returns the icon URL for the search engine closest to the preferred width
+   * or undefined if the engine has no icons.
    *
    * @param {number} preferredWidth
    *   Width of the requested icon. If not specified, it is assumed that
@@ -1416,24 +1410,23 @@ export class SearchEngine {
    * @returns {Promise<string|undefined>}
    */
   async getIconURL(preferredWidth) {
-    // XPCOM interfaces pass optional number parameters as 0 and can't be
-    // handled in the same way.
-    if (!preferredWidth) {
-      preferredWidth = 16;
-    }
-
-    if (preferredWidth == 16) {
-      return this._iconURL || undefined;
-    }
+    // XPCOM interfaces pass optional number parameters as 0.
+    preferredWidth ||= 16;
 
     if (!this._iconMapObj) {
       return undefined;
     }
 
-    if (preferredWidth in this._iconMapObj) {
-      return this._iconMapObj[preferredWidth];
+    let availableWidths = Object.keys(this._iconMapObj).map(k => parseInt(k));
+    if (!availableWidths.length) {
+      return undefined;
     }
-    return undefined;
+
+    let bestWidth = lazy.SearchUtils.chooseIconSize(
+      preferredWidth,
+      availableWidths
+    );
+    return this._iconMapObj[bestWidth];
   }
 
   /**

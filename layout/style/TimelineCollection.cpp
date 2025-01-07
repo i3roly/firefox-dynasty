@@ -41,8 +41,8 @@ void TimelineCollection<TimelineType>::Destroy() {
 
 template <class TimelineType>
 /* static */ TimelineCollection<TimelineType>*
-TimelineCollection<TimelineType>::Get(const dom::Element* aElement,
-                                      const PseudoStyleType aPseudoType) {
+TimelineCollection<TimelineType>::Get(
+    const dom::Element* aElement, const PseudoStyleRequest& aPseudoRequest) {
   MOZ_ASSERT(aElement);
   auto* data = aElement->GetAnimationData();
   if (!data) {
@@ -50,11 +50,11 @@ TimelineCollection<TimelineType>::Get(const dom::Element* aElement,
   }
 
   if constexpr (std::is_same_v<TimelineType, dom::ScrollTimeline>) {
-    return data->GetScrollTimelineCollection(aPseudoType);
+    return data->GetScrollTimelineCollection(aPseudoRequest);
   }
 
   if constexpr (std::is_same_v<TimelineType, dom::ViewTimeline>) {
-    return data->GetViewTimelineCollection(aPseudoType);
+    return data->GetViewTimelineCollection(aPseudoRequest);
   }
 
   return nullptr;

@@ -11,11 +11,15 @@ const {
 
 const lazy = {};
 
-ChromeUtils.defineESModuleGetters(lazy, {
-  NetUtil: "resource://gre/modules/NetUtil.sys.mjs",
-  NetworkUtils:
-    "resource://devtools/shared/network-observer/NetworkUtils.sys.mjs",
-});
+ChromeUtils.defineESModuleGetters(
+  lazy,
+  {
+    NetUtil: "resource://gre/modules/NetUtil.sys.mjs",
+    NetworkUtils:
+      "resource://devtools/shared/network-observer/NetworkUtils.sys.mjs",
+  },
+  { global: "contextual" }
+);
 
 loader.lazyRequireGetter(
   this,
@@ -119,7 +123,7 @@ class NetworkContentActor extends Actor {
         const bodyStream = Cc[
           "@mozilla.org/io/string-input-stream;1"
         ].createInstance(Ci.nsIStringInputStream);
-        bodyStream.setData(body, body.length);
+        bodyStream.setByteStringData(body);
         channel.explicitSetUploadStream(bodyStream, null, -1, method, false);
       }
 

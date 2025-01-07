@@ -13,6 +13,7 @@
 #include "mozilla/HashFunctions.h"  // mozilla::HashStringKnownLength
 #include "mozilla/RangedPtr.h"
 
+#include <charconv>
 #include <iterator>
 #include <string.h>
 
@@ -662,10 +663,8 @@ static MOZ_ALWAYS_INLINE JSAtom* AllocateNewPermanentAtomNonStaticValidLength(
   return atom;
 }
 
-JSAtom* js::AtomizeString(JSContext* cx, JSString* str) {
-  if (str->isAtom()) {
-    return &str->asAtom();
-  }
+JSAtom* js::AtomizeStringSlow(JSContext* cx, JSString* str) {
+  MOZ_ASSERT(!str->isAtom());
 
   if (str->isAtomRef()) {
     return str->atom();
@@ -908,11 +907,13 @@ JSAtom* js::AtomizeUTF8Chars(JSContext* cx, const char* utf8Chars,
 bool js::IndexToIdSlow(JSContext* cx, uint32_t index, MutableHandleId idp) {
   MOZ_ASSERT(index > JS::PropertyKey::IntMax);
 
-  char16_t buf[UINT32_CHAR_BUFFER_LENGTH];
-  RangedPtr<char16_t> end(std::end(buf), buf, std::end(buf));
-  RangedPtr<char16_t> start = BackfillIndexInCharBuffer(index, end);
+  char buf[UINT32_CHAR_BUFFER_LENGTH];
 
-  JSAtom* atom = AtomizeChars(cx, start.get(), end - start);
+  auto result = std::to_chars(buf, buf + std::size(buf), index, 10);
+  MOZ_ASSERT(result.ec == std::errc());
+
+  size_t length = result.ptr - buf;
+  JSAtom* atom = Atomize(cx, buf, length);
   if (!atom) {
     return false;
   }
@@ -1001,12 +1002,7 @@ JSAtom* js::ToAtom(JSContext* cx,
     return ToAtomSlow<allowGC>(cx, v);
   }
 
-  JSString* str = v.toString();
-  if (str->isAtom()) {
-    return &str->asAtom();
-  }
-
-  JSAtom* atom = AtomizeString(cx, str);
+  JSAtom* atom = AtomizeString(cx, v.toString());
   if (!atom && !allowGC) {
     MOZ_ASSERT(cx->isThrowingOutOfMemory());
     cx->recoverFromOutOfMemory();

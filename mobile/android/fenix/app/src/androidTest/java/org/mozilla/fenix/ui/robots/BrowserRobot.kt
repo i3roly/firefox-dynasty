@@ -199,6 +199,27 @@ class BrowserRobot {
         }
     }
 
+    fun verifyTextFragmentsPageContent(expectedText: String) {
+        for (i in 1..RETRY_COUNT) {
+            Log.i(TAG, "verifyTextFragmentsPageContent: Started try #$i")
+            try {
+                assertUIObjectExists(
+                    itemWithResId("$packageName:id/engineView")
+                        .getChild(UiSelector().textContains(expectedText)),
+                )
+
+                break
+            } catch (e: AssertionError) {
+                Log.i(TAG, "verifyTextFragmentsPageContent: AssertionError caught, executing fallback methods")
+                navigationToolbar {
+                }.openThreeDotMenu {
+                }.refreshPage {
+                    waitForPageToLoad()
+                }
+            }
+        }
+    }
+
     fun verifyTabCrashReporterView() {
         assertUIObjectExists(itemWithResId("$packageName:id/crash_tab_image"))
         assertUIObjectExists(itemWithText(getStringResource(R.string.tab_crash_title_2)))
@@ -369,6 +390,22 @@ class BrowserRobot {
             }.editBookmarkPage {
                 setParentFolder(folder!!)
                 saveEditBookmark()
+            }
+        }
+    }
+
+    fun createBookmark(composeTestRule: ComposeTestRule, url: Uri, folder: String? = null) {
+        navigationToolbar {
+        }.enterURLAndEnterToBrowser(url) {
+            // needs to wait for the right url to load before saving a bookmark
+            verifyUrl(url.toString())
+        }.openThreeDotMenu {
+        }.bookmarkPage {
+        }.takeIf { !folder.isNullOrBlank() }?.let {
+            it.openThreeDotMenu {
+            }.editBookmarkPage(composeTestRule) {
+                setParentFolder(folder!!)
+                navigateUp()
             }
         }
     }
@@ -933,18 +970,8 @@ class BrowserRobot {
         }
     }
 
-    fun verifySurveyButton() = assertUIObjectExists(itemContainingText(getStringResource(R.string.preferences_take_survey)))
-
     fun verifySurveyButtonDoesNotExist() =
         assertUIObjectIsGone(itemWithText(getStringResource(R.string.preferences_take_survey)))
-
-    fun verifySurveyNoThanksButton() =
-        assertUIObjectExists(
-            itemContainingText(getStringResource(R.string.preferences_not_take_survey)),
-        )
-
-    fun verifyHomeScreenSurveyCloseButton() =
-        assertUIObjectExists(itemWithDescription("Close"))
 
     fun clickOpenLinksInAppsDismissCFRButton() {
         Log.i(TAG, "clickOpenLinksInAppsDismissCFRButton: Trying to click the open links in apps banner \"Dismiss\" button")
@@ -1093,8 +1120,20 @@ class BrowserRobot {
             return ThreeDotMenuMainRobot.Transition()
         }
 
+        fun openThreeDotMenuFromRedesignedToolbar(interact: RedesignedMainMenuRobot.() -> Unit): RedesignedMainMenuRobot.Transition {
+            Log.i(TAG, "openThreeDotMenuFromRedesignedToolbar: Trying to click main menu button")
+            itemWithDescription(getStringResource(R.string.content_description_menu)).click()
+            Log.i(TAG, "openThreeDotMenuFromRedesignedToolbar: Clicked main menu button")
+
+            RedesignedMainMenuRobot().interact()
+            return RedesignedMainMenuRobot.Transition()
+        }
+
         fun openNavigationToolbar(interact: NavigationToolbarRobot.() -> Unit): NavigationToolbarRobot.Transition {
-            clickPageObject(navURLBar())
+            navURLBar().waitForExists(waitingTime)
+            Log.i(TAG, "openNavigationToolbar: Trying to click the address bar.")
+            navURLBar().click()
+            Log.i(TAG, "openNavigationToolbar: Clicked the address bar.")
             Log.i(TAG, "openNavigationToolbar: Waiting for $waitingTime ms for for search bar to exist")
             searchBar().waitForExists(waitingTime)
             Log.i(TAG, "openNavigationToolbar: Waited for $waitingTime ms for for search bar to exist")
@@ -1186,12 +1225,7 @@ class BrowserRobot {
             clickPageObject(itemWithDescription("Home screen"))
             Log.i(TAG, "goToHomescreen: Waiting for $waitingTime ms for for home screen layout or jump back in contextual hint to exist")
             mDevice.findObject(UiSelector().resourceId("$packageName:id/homeLayout"))
-                .waitForExists(waitingTime) ||
-                mDevice.findObject(
-                    UiSelector().text(
-                        getStringResource(R.string.onboarding_home_screen_jump_back_contextual_hint_2),
-                    ),
-                ).waitForExists(waitingTime)
+                .waitForExists(waitingTime)
             Log.i(TAG, "goToHomescreen: Waited for $waitingTime ms for for home screen layout or jump back in contextual hint to exist")
 
             HomeScreenRobot().interact()
@@ -1205,12 +1239,7 @@ class BrowserRobot {
             }
             Log.i(TAG, "goToHomescreenWithRedesignedToolbar: Waiting for $waitingTime ms for for home screen layout or jump back in contextual hint to exist")
             mDevice.findObject(UiSelector().resourceId("$packageName:id/homeLayout"))
-                .waitForExists(waitingTime) ||
-                mDevice.findObject(
-                    UiSelector().text(
-                        getStringResource(R.string.onboarding_home_screen_jump_back_contextual_hint_2),
-                    ),
-                ).waitForExists(waitingTime)
+                .waitForExists(waitingTime)
             Log.i(TAG, "goToHomescreenWithRedesignedToolbar: Waited for $waitingTime ms for for home screen layout or jump back in contextual hint to exist")
 
             HomeScreenRobot().interact()
@@ -1222,12 +1251,7 @@ class BrowserRobot {
 
             Log.i(TAG, "goToHomescreenWithComposeTopSites: Waiting for $waitingTime ms for for home screen layout or jump back in contextual hint to exist")
             mDevice.findObject(UiSelector().resourceId("$packageName:id/homeLayout"))
-                .waitForExists(waitingTime) ||
-                mDevice.findObject(
-                    UiSelector().text(
-                        getStringResource(R.string.onboarding_home_screen_jump_back_contextual_hint_2),
-                    ),
-                ).waitForExists(waitingTime)
+                .waitForExists(waitingTime)
             Log.i(TAG, "goToHomescreenWithComposeTopSites: Waited for $waitingTime ms for for home screen layout or jump back in contextual hint to exist")
 
             ComposeTopSitesRobot(composeTestRule).interact()
@@ -1309,8 +1333,24 @@ class BrowserRobot {
         }
 
         fun clickRequestStorageAccessButton(interact: SitePermissionsRobot.() -> Unit): SitePermissionsRobot.Transition {
-            // Clicks the "request storage access" button from the "cross-site-cookies.html" local asset
-            clickPageObject(itemContainingText("requestStorageAccess()"))
+            for (i in 1..RETRY_COUNT) {
+                Log.i(TAG, "clickRequestStorageAccessButton: Started try #$i")
+                try {
+                    // Clicks the "request storage access" button from the "cross-site-cookies.html" local asset
+                    clickPageObject(itemContainingText("requestStorageAccess()"))
+                    assertUIObjectExists(
+                        itemWithResId("$packageName:id/deny_button"),
+                        itemWithResId("$packageName:id/allow_button"),
+                    )
+
+                    break
+                } catch (e: AssertionError) {
+                    Log.i(TAG, "clickRequestStorageAccessButton: AssertionError caught, executing fallback methods")
+                    if (i == RETRY_COUNT) {
+                        throw e
+                    }
+                }
+            }
 
             SitePermissionsRobot().interact()
             return SitePermissionsRobot.Transition()
@@ -1386,30 +1426,6 @@ class BrowserRobot {
 
             DownloadRobot().interact()
             return DownloadRobot.Transition()
-        }
-
-        fun clickSurveyButton(interact: BrowserRobot.() -> Unit): BrowserRobot.Transition {
-            surveyButton().waitForExists(waitingTime)
-            surveyButton().click()
-
-            BrowserRobot().interact()
-            return Transition()
-        }
-
-        fun clickNoThanksSurveyButton(interact: BrowserRobot.() -> Unit): BrowserRobot.Transition {
-            surveyNoThanksButton().waitForExists(waitingTime)
-            surveyNoThanksButton().click()
-
-            BrowserRobot().interact()
-            return Transition()
-        }
-
-        fun clickHomeScreenSurveyCloseButton(interact: BrowserRobot.() -> Unit): BrowserRobot.Transition {
-            homescreenSurveyCloseButton().waitForExists(waitingTime)
-            homescreenSurveyCloseButton().click()
-
-            BrowserRobot().interact()
-            return Transition()
         }
 
         fun clickShareButtonFromRedesignedToolbar(interact: ShareOverlayRobot.() -> Unit): ShareOverlayRobot.Transition {
@@ -1512,6 +1528,9 @@ fun clickContextMenuItem(item: String) {
     Log.i(TAG, "clickContextMenuItem: Trying to click context menu item: $item")
     mDevice.findObject(text(item)).click()
     Log.i(TAG, "clickContextMenuItem: Clicked context menu item: $item")
+    Log.i(TAG, "clickContextMenuItem: Waiting for $waitingTimeShort ms for $packageName window to be updated")
+    mDevice.waitForWindowUpdate(packageName, waitingTimeShort)
+    Log.i(TAG, "clickContextMenuItem: Waiting for $waitingTimeShort ms for $packageName window to be updated")
 }
 
 fun setPageObjectText(webPageItem: UiObject, text: String) {
@@ -1583,12 +1602,3 @@ private fun contextMenuShareLink() =
 // Open in external app option
 private fun contextMenuOpenInExternalApp() =
     itemContainingText(getStringResource(R.string.mozac_feature_contextmenu_open_link_in_external_app))
-
-private fun surveyButton() =
-    itemContainingText(getStringResource(R.string.preferences_take_survey))
-
-private fun surveyNoThanksButton() =
-    itemContainingText(getStringResource(R.string.preferences_not_take_survey))
-
-private fun homescreenSurveyCloseButton() =
-    itemWithDescription("Close")

@@ -62,9 +62,11 @@ impl NumeratorMetric {
 #[inherent]
 impl Numerator for NumeratorMetric {
     pub fn add_to_numerator(&self, amount: i32) {
-        match self {
-            NumeratorMetric::Parent { inner, .. } => {
+        #[allow(unused)]
+        let id = match self {
+            NumeratorMetric::Parent { id, inner } => {
                 inner.add_to_numerator(amount);
+                *id
             }
             NumeratorMetric::Child(c) => {
                 with_ipc_payload(move |payload| {
@@ -74,7 +76,18 @@ impl Numerator for NumeratorMetric {
                         payload.numerators.insert(c.0, amount);
                     }
                 });
+                c.0
             }
+        };
+
+        #[cfg(feature = "with_gecko")]
+        if gecko_profiler::can_accept_markers() {
+            gecko_profiler::add_marker(
+                "Rate::addToNumerator",
+                super::profiler_utils::TelemetryProfilerCategory,
+                Default::default(),
+                super::profiler_utils::IntLikeMetricMarker::new(id, None, amount),
+            );
         }
     }
 
@@ -112,7 +125,7 @@ mod test {
         let metric = &metrics::test_only_ipc::rate_with_external_denominator;
         metric.add_to_numerator(1);
 
-        assert_eq!(1, metric.test_get_value("store1").unwrap().numerator);
+        assert_eq!(1, metric.test_get_value("test-ping").unwrap().numerator);
     }
 
     #[test]
@@ -145,7 +158,7 @@ mod test {
         assert!(ipc::replay_from_buf(&ipc::take_buf().unwrap()).is_ok());
 
         assert!(
-            45 == parent_metric.test_get_value("store1").unwrap().numerator,
+            45 == parent_metric.test_get_value("test-ping").unwrap().numerator,
             "Values from the 'processes' should be summed"
         );
     }

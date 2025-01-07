@@ -15,7 +15,10 @@ const { NonPrivateTabs } = ChromeUtils.importESModule(
 
 add_setup(async () => {
   await SpecialPowers.pushPrefEnv({
-    set: [["sidebar.verticalTabs", false]],
+    set: [
+      ["sidebar.verticalTabs", false],
+      ["sidebar.visibility", "always-show"],
+    ],
   });
   Services.telemetry.clearScalars();
   SessionStoreTestUtils.init(this, window);
@@ -29,10 +32,13 @@ registerCleanupFunction(async () => {
 });
 
 function getTelemetryScalars(names) {
-  return TestUtils.waitForCondition(() => {
-    const scalars = TelemetryTestUtils.getProcessScalars("parent");
-    return names.every(name => Object.hasOwn(scalars, name)) && scalars;
-  }, `Scalars are present in Telemetry data: ${names.join(", ")}`);
+  return TestUtils.waitForCondition(
+    () => {
+      const scalars = TelemetryTestUtils.getProcessScalars("parent");
+      return names.every(name => Object.hasOwn(scalars, name)) && scalars;
+    },
+    `Scalars are present in Telemetry data: ${names.join(", ")}`
+  );
 }
 
 function checkTelemetryScalar(name, value) {
@@ -46,13 +52,13 @@ function getExpectedElements(win, tabstripOrientation = "horizontal") {
   const sizeMode = win.document.documentElement.getAttribute("sizemode");
   let selectors;
 
-  // NOTE: TabsInTitlebar behaviour isn't under test here. We just want to assert on
+  // NOTE: CustomTitlebar behaviour isn't under test here. We just want to assert on
   // the right stuff being visible whatever the case for the given window.
 
   if (tabstripOrientation == "horizontal") {
     selectors = ["#TabsToolbar"];
 
-    if (win.TabsInTitlebar.enabled) {
+    if (win.CustomTitlebar.enabled) {
       selectors.push("#TabsToolbar .titlebar-buttonbox-container");
       if (sizeMode == "normal") {
         selectors.push("#TabsToolbar .titlebar-spacer");
@@ -62,11 +68,8 @@ function getExpectedElements(win, tabstripOrientation = "horizontal") {
   }
 
   selectors = ["#vertical-tabs"];
-  if (win.TabsInTitlebar.enabled) {
+  if (win.CustomTitlebar.enabled) {
     selectors.push("#nav-bar .titlebar-buttonbox-container");
-    if (sizeMode == "normal") {
-      selectors.push("#nav-bar .titlebar-spacer");
-    }
   }
   return selectors;
 }
@@ -89,7 +92,7 @@ add_task(async function test_toggle_vertical_tabs() {
   );
   info(`sizemode: ${document.documentElement.getAttribute("sizemode")}`);
   info(
-    `tabsintitlebar: ${document.documentElement.getAttribute("tabsintitlebar")}`
+    `customtitlebar: ${document.documentElement.getAttribute("customtitlebar")}`
   );
 
   const expectedElementsWhenHorizontal = getExpectedElements(
@@ -407,4 +410,35 @@ add_task(async function test_vertical_tabs_overflow() {
     "vertical-tabs-newtab-button",
     1
   );
+});
+
+add_task(async function test_vertical_tabs_expanded() {
+  await SpecialPowers.pushPrefEnv({
+    set: [
+      ["sidebar.revamp", true],
+      ["sidebar.verticalTabs", true],
+    ],
+  });
+  await SidebarController.setUIState({ expanded: true });
+
+  info("Disable revamped sidebar.");
+  Services.prefs.setBoolPref("sidebar.revamp", false);
+  await TestUtils.waitForCondition(
+    () => BrowserTestUtils.isHidden(document.getElementById("sidebar-main")),
+    "Sidebar launcher is hidden."
+  );
+
+  info("Enable revamped sidebar and vertical tabs.");
+  Services.prefs.setBoolPref("sidebar.revamp", true);
+  Services.prefs.setBoolPref("sidebar.verticalTabs", true);
+  await TestUtils.waitForCondition(
+    () => BrowserTestUtils.isVisible(document.getElementById("sidebar-main")),
+    "Sidebar launcher is shown."
+  );
+  ok(
+    gBrowser.tabContainer.hasAttribute("expanded"),
+    "Tab container is expanded."
+  );
+
+  await SpecialPowers.popPrefEnv();
 });

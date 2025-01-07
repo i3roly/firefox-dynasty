@@ -101,6 +101,13 @@ Detailed Docs
 
 .. __: /toolkit/components/messaging-system/docs
 
+* If interested in messaging experimentation through Nimbus, see `Messaging System: Experimenter Onboarding`__.
+
+.. __: https://mozilla-hub.atlassian.net/wiki/spaces/FIREFOX/pages/233406786/OMC+Experimenter+Onboarding
+
+
+
+
 .. In theory, we ought to be able to use the :glob: directive here to
 .. automatically generate the list below. For unknown reasons, however,
 .. `mach doc` _sometimes_ gets confused and refuses to find patterns like
@@ -108,10 +115,13 @@ Detailed Docs
 .. toctree::
   :maxdepth: 2
 
+  building-and-testing
   debugging-docs
+  frequency-caps
   first-run
   messaging-glossary
   remote_cfr
   targeting-attributes
   targeting-guide
   telemetry
+  skylight

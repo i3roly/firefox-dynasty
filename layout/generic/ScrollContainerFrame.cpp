@@ -3404,7 +3404,7 @@ void ScrollContainerFrame::AppendScrollPartsTo(nsDisplayListBuilder* aBuilder,
   AutoTArray<nsIFrame*, 3> scrollParts;
   for (nsIFrame* kid : PrincipalChildList()) {
     if (kid == mScrolledFrame ||
-        (kid->IsAbsPosContainingBlock() || overlayScrollbars) != aPositioned) {
+        (overlayScrollbars || kid->IsAbsPosContainingBlock()) != aPositioned) {
       continue;
     }
 
@@ -3418,7 +3418,7 @@ void ScrollContainerFrame::AppendScrollPartsTo(nsDisplayListBuilder* aBuilder,
   // This means that we will build scroll bar layers for out of budget
   // will-change: scroll position.
   const mozilla::layers::ScrollableLayerGuid::ViewID scrollTargetId =
-      IsScrollingActive()
+      aBuilder->BuildCompositorHitTestInfo() && IsScrollingActive()
           ? nsLayoutUtils::FindOrCreateIDFor(mScrolledFrame->GetContent())
           : mozilla::layers::ScrollableLayerGuid::NULL_SCROLL_ID;
 
@@ -4203,9 +4203,13 @@ void ScrollContainerFrame::BuildDisplayList(nsDisplayListBuilder* aBuilder,
   // We want to call SetContainsNonMinimalDisplayPort if
   // mWillBuildScrollableLayer is true for any reason other than having a
   // minimal display port.
-  if (aBuilder->IsPaintingToWindow()) {
-    if (DisplayPortUtils::HasNonMinimalDisplayPort(GetContent()) ||
-        mZoomableByAPZ || nsContentUtils::HasScrollgrab(GetContent())) {
+  if (mWillBuildScrollableLayer && aBuilder->IsPaintingToWindow()) {
+    // Since mWillBuildScrollableLayer = HasDisplayPort || mZoomableByAPZ we can
+    // simplify this check to avoid getting the display port again.
+    if (mZoomableByAPZ ||
+        !GetContent()->GetProperty(nsGkAtoms::MinimalDisplayPort)) {
+      MOZ_ASSERT(DisplayPortUtils::HasNonMinimalDisplayPort(GetContent()) ||
+                 mZoomableByAPZ);
       aBuilder->SetContainsNonMinimalDisplayPort();
     }
   }
@@ -4537,9 +4541,7 @@ bool ScrollContainerFrame::DecideScrollableLayer(
   // the compositor can find the scrollable layer for async scrolling.
   // If the element is marked 'scrollgrab', also force building of a layer
   // so that APZ can implement scroll grabbing.
-  mWillBuildScrollableLayer = hasDisplayPort ||
-                              nsContentUtils::HasScrollgrab(content) ||
-                              mZoomableByAPZ;
+  mWillBuildScrollableLayer = hasDisplayPort || mZoomableByAPZ;
   return mWillBuildScrollableLayer;
 }
 
@@ -5994,8 +5996,7 @@ bool ScrollContainerFrame::IsScrollingActive() const {
 
   nsIContent* content = GetContent();
   return mHasBeenScrolledRecently || IsAlwaysActive() ||
-         DisplayPortUtils::HasDisplayPort(content) ||
-         nsContentUtils::HasScrollgrab(content);
+         DisplayPortUtils::HasDisplayPort(content);
 }
 
 void ScrollContainerFrame::FinishReflowForScrollbar(
@@ -8065,9 +8066,9 @@ void ScrollContainerFrame::ScheduleScrollAnimations() {
     return;
   }
 
-  const auto [element, type] =
+  const auto [element, request] =
       AnimationUtils::GetElementPseudoPair(elementOrPseudo);
-  const auto* scheduler = ProgressTimelineScheduler::Get(element, type);
+  const auto* scheduler = ProgressTimelineScheduler::Get(element, request);
   if (!scheduler) {
     // We don't have scroll timelines associated with this frame.
     return;

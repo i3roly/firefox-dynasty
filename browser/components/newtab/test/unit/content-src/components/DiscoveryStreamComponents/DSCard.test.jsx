@@ -55,9 +55,9 @@ describe("<DSCard>", () => {
   it("should render a SafeAnchor", () => {
     wrapper.setProps({ url: "https://foo.com" });
 
-    assert.equal(wrapper.children().at(1).type(), SafeAnchor);
+    assert.equal(wrapper.children().at(0).type(), SafeAnchor);
     assert.propertyVal(
-      wrapper.children().at(1).props(),
+      wrapper.children().at(0).props(),
       "url",
       "https://foo.com"
     );
@@ -65,7 +65,7 @@ describe("<DSCard>", () => {
 
   it("should pass onLinkClick prop", () => {
     assert.propertyVal(
-      wrapper.children().at(1).props(),
+      wrapper.children().at(0).props(),
       "onLinkClick",
       wrapper.instance().onLinkClick
     );
@@ -283,6 +283,7 @@ describe("<DSCard>", () => {
             fetchTimestamp: DEFAULT_PROPS.fetchTimestamp,
             firstVisibleTimestamp: DEFAULT_PROPS.firstVisibleTimestamp,
             scheduled_corpus_item_id: undefined,
+            corpus_item_id: undefined,
             recommended_at: undefined,
             received_rank: undefined,
             topic: undefined,
@@ -335,6 +336,7 @@ describe("<DSCard>", () => {
             fetchTimestamp: DEFAULT_PROPS.fetchTimestamp,
             firstVisibleTimestamp: DEFAULT_PROPS.firstVisibleTimestamp,
             scheduled_corpus_item_id: undefined,
+            corpus_item_id: undefined,
             recommended_at: undefined,
             received_rank: undefined,
             topic: undefined,
@@ -396,6 +398,7 @@ describe("<DSCard>", () => {
             fetchTimestamp: DEFAULT_PROPS.fetchTimestamp,
             firstVisibleTimestamp: DEFAULT_PROPS.firstVisibleTimestamp,
             scheduled_corpus_item_id: undefined,
+            corpus_item_id: undefined,
             recommended_at: undefined,
             received_rank: undefined,
             topic: undefined,
@@ -578,6 +581,7 @@ describe("<DSCard>", () => {
             fetchTimestamp: undefined,
             firstVisibleTimestamp: DEFAULT_PROPS.firstVisibleTimestamp,
             scheduled_corpus_item_id: undefined,
+            corpus_item_id: undefined,
             recommended_at: undefined,
             received_rank: undefined,
             topic: undefined,
@@ -610,13 +614,19 @@ describe("<DSCard>", () => {
   describe("DSCard onThumbsUpClick", () => {
     it("should update state.onThumbsUpClick for onThumbsUpClick", () => {
       wrapper.setState({ isThumbsUpActive: false });
-      wrapper.instance().onThumbsUpClick();
+      wrapper.instance().onThumbsUpClick({
+        stopPropagation: () => {},
+        preventDefault: () => {},
+      });
       assert.isTrue(wrapper.instance().state.isThumbsUpActive);
     });
 
     it("should not fire telemetry for onThumbsUpClick is clicked twice", () => {
       wrapper.setState({ isThumbsUpActive: true });
-      wrapper.instance().onThumbsUpClick();
+      wrapper.instance().onThumbsUpClick({
+        stopPropagation: () => {},
+        preventDefault: () => {},
+      });
 
       // state.isThumbsUpActive remains in active state
       assert.isTrue(wrapper.instance().state.isThumbsUpActive);
@@ -624,7 +634,10 @@ describe("<DSCard>", () => {
     });
 
     it("should fire telemetry for onThumbsUpClick", () => {
-      wrapper.instance().onThumbsUpClick();
+      wrapper.instance().onThumbsUpClick({
+        stopPropagation: () => {},
+        preventDefault: () => {},
+      });
 
       assert.calledTwice(dispatch);
 
@@ -655,7 +668,10 @@ describe("<DSCard>", () => {
         dispatch,
       });
 
-      wrapper.instance().onThumbsDownClick();
+      wrapper.instance().onThumbsDownClick({
+        stopPropagation: () => {},
+        preventDefault: () => {},
+      });
 
       assert.calledThrice(dispatch);
 
@@ -681,7 +697,10 @@ describe("<DSCard>", () => {
 
     it("should update state.onThumbsDownClick for onThumbsDownClick", () => {
       wrapper.setState({ isThumbsDownActive: false });
-      wrapper.instance().onThumbsDownClick();
+      wrapper.instance().onThumbsDownClick({
+        stopPropagation: () => {},
+        preventDefault: () => {},
+      });
       assert.isTrue(wrapper.instance().state.isThumbsDownActive);
     });
   });

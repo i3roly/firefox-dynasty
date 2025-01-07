@@ -21,7 +21,7 @@ let ignoreList = [
   },
   {
     sourceName:
-      /\b(scrollbars|xul|html|mathml|ua|forms|svg|manageDialog|formautofill)\.css$/i,
+      /\b(scrollbars|xul|html|mathml|ua|EditorOverride|contenteditable|forms|svg|manageDialog|formautofill)\.css$/i,
     errorMessage: /Unknown property.*-moz-/i,
     isFromDevTools: false,
   },
@@ -162,6 +162,13 @@ let propNameAllowlist = [
   { propName: "--tab-group-color-gray", isFromDevTools: false },
   { propName: "--tab-group-color-gray-invert", isFromDevTools: false },
   { propName: "--tab-group-color-gray-pale", isFromDevTools: false },
+
+  /* Allow design tokens in devtools without all variables being used there */
+  { sourceName: /\/design-system\/tokens-.*\.css$/, isFromDevTools: true },
+
+  /* Temporary exceptions for unused variables in pdf.js */
+  { propName: "--toggle-background-color-disabled", isFromDevTools: false },
+  { propName: "--toggle-border-color-disabled", isFromDevTools: false },
 ];
 
 // Add suffix to stylesheets' URI so that we always load them here and
@@ -297,6 +304,7 @@ function messageIsCSSError(msg) {
 
 let imageURIsToReferencesMap = new Map();
 let customPropsToReferencesMap = new Map();
+let customPropsDefinitionFileMap = new Map();
 
 function neverMatches(mediaList) {
   const perPlatformMediaQueryMap = {
@@ -381,6 +389,12 @@ function processCSSRules(container) {
         }
         if (!customPropsToReferencesMap.has(prop)) {
           customPropsToReferencesMap.set(prop, undefined);
+          if (!customPropsDefinitionFileMap.has(prop)) {
+            customPropsDefinitionFileMap.set(prop, new Set());
+          }
+          customPropsDefinitionFileMap
+            .get(prop)
+            .add(container.href || container.parentStyleSheet.href);
         }
       }
     }
@@ -408,6 +422,16 @@ function chromeFileExists(aURI) {
     }
   }
   return available > 0;
+}
+
+function shouldIgnorePropSource(item, prop) {
+  if (!item.sourceName || !customPropsDefinitionFileMap.has(prop)) {
+    return false;
+  }
+  return customPropsDefinitionFileMap
+    .get(prop)
+    .values()
+    .some(f => item.sourceName.test(f));
 }
 
 add_task(async function checkAllTheCSS() {
@@ -533,7 +557,10 @@ add_task(async function checkAllTheCSS() {
     if (!refCount) {
       let ignored = false;
       for (let item of propNameAllowlist) {
-        if (item.propName == prop && isDevtools == item.isFromDevTools) {
+        if (
+          isDevtools == item.isFromDevTools &&
+          (item.propName == prop || shouldIgnorePropSource(item, prop))
+        ) {
           item.used = true;
           if (
             !item.platforms ||

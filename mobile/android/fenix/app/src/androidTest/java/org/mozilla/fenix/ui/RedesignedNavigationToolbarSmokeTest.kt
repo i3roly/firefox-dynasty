@@ -1,3 +1,6 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 @file:Suppress("DEPRECATION")
 
 package org.mozilla.fenix.ui
@@ -17,6 +20,7 @@ import org.mozilla.fenix.helpers.AppAndSystemHelper.enableOrDisableBackGestureNa
 import org.mozilla.fenix.helpers.AppAndSystemHelper.grantSystemPermission
 import org.mozilla.fenix.helpers.DataGenerationHelper.createCustomTabIntent
 import org.mozilla.fenix.helpers.HomeActivityIntentTestRule
+import org.mozilla.fenix.helpers.MatcherHelper.itemWithResIdAndText
 import org.mozilla.fenix.helpers.MatcherHelper.itemWithText
 import org.mozilla.fenix.helpers.TestAssetHelper
 import org.mozilla.fenix.helpers.TestAssetHelper.waitingTimeLong
@@ -40,6 +44,8 @@ class RedesignedNavigationToolbarSmokeTest : TestSetup() {
                 isNavigationToolbarEnabled = true,
                 isNavigationBarCFREnabled = false,
                 isSetAsDefaultBrowserPromptEnabled = false,
+                isMenuRedesignEnabled = true,
+                isMenuRedesignCFREnabled = false,
             ),
         ) { it.activity }
 
@@ -113,8 +119,8 @@ class RedesignedNavigationToolbarSmokeTest : TestSetup() {
         val helpPageUrl = "mozilla.org"
 
         homeScreen {
-        }.openThreeDotMenuFromRedesignedToolbar {
-        }.openHelp {
+        }.openThreeDotMenuFromRedesignedToolbar() {
+        }.openHelp(composeTestRule) {
         }.openSiteSecuritySheet {
             clickQuickActionSheetClearSiteData()
             verifyClearSiteDataPrompt(helpPageUrl)
@@ -147,8 +153,8 @@ class RedesignedNavigationToolbarSmokeTest : TestSetup() {
         }.closeTabDrawer {
         }.goToHomescreenWithRedesignedToolbar {
             verifyExistingTopSitesList()
-        }.openThreeDotMenuFromRedesignedToolbar {
-            verifySettingsButton()
+        }.openThreeDotMenuFromRedesignedToolbar() {
+            verifySettingsButton(composeTestRule)
         }
     }
 
@@ -190,6 +196,7 @@ class RedesignedNavigationToolbarSmokeTest : TestSetup() {
         }.enterURLAndEnterToBrowser(genericURL.url) {
             clickPageObject(itemWithText("PDF form file"))
             waitForPageToLoad()
+            clickPageObject(itemWithResIdAndText("android:id/button2", "CANCEL"))
             fillPdfForm("Firefox")
         }.clickShareButtonFromRedesignedToolbar {
         }.clickSaveAsPDF {
@@ -234,32 +241,6 @@ class RedesignedNavigationToolbarSmokeTest : TestSetup() {
         }
     }
 
-    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2767072
-    // Verifies the main menu of a custom tab with a custom menu item
-    @SmokeTest
-    @Test
-    fun verifyCustomTabMenuItemsTest() {
-        val customMenuItem = "TestMenuItem"
-        val customTabPage = TestAssetHelper.getGenericAsset(mockWebServer, 1)
-
-        intentReceiverActivityTestRule.launchActivity(
-            createCustomTabIntent(
-                customTabPage.url.toString(),
-                customMenuItem,
-            ),
-        )
-
-        customTabScreen {
-            verifyCustomTabCloseButton()
-        }.openMainMenuFromRedesignedToolbar {
-            verifyPoweredByTextIsDisplayed()
-            verifyCustomMenuItem(customMenuItem)
-            verifyDesktopSiteButtonExists()
-            verifyRequestDesktopSiteToggleState(isEnabled = false)
-            verifyFindInPageButtonExists()
-        }
-    }
-
     // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/2767071
     // The test opens a link in a custom tab then sends it to the browser
     @SmokeTest
@@ -285,8 +266,8 @@ class RedesignedNavigationToolbarSmokeTest : TestSetup() {
     @Test
     fun verifyToolbarWithAddressBarAtTheTopTest() {
         homeScreen {
-        }.openThreeDotMenuFromRedesignedToolbar {
-        }.openSettings {
+        }.openThreeDotMenuFromRedesignedToolbar() {
+        }.openSettings(composeTestRule) {
         }.openCustomizeSubMenu {
             verifyAddressBarPositionPreference("Top")
         }
@@ -311,8 +292,8 @@ class RedesignedNavigationToolbarSmokeTest : TestSetup() {
         }
 
         homeScreen {
-        }.openThreeDotMenuFromRedesignedToolbar {
-        }.openSettings {
+        }.openThreeDotMenuFromRedesignedToolbar() {
+        }.openSettings(composeTestRule) {
         }.openCustomizeSubMenu {
             verifyAddressBarPositionPreference("Bottom")
         }
@@ -342,8 +323,8 @@ class RedesignedNavigationToolbarSmokeTest : TestSetup() {
         }.enterURLAndEnterToBrowser(genericURL.url) {
         }.goToHomescreenWithRedesignedToolbar {
             verifyHomeScreen()
-        }.openThreeDotMenuFromRedesignedToolbar {
-        }.openSettings {
+        }.openThreeDotMenuFromRedesignedToolbar() {
+        }.openSettings(composeTestRule) {
         }.openCustomizeSubMenu {
             clickBottomToolbarToggle()
             verifyAddressBarPositionPreference("Bottom")

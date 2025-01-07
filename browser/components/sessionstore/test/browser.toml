@@ -37,7 +37,11 @@ prefs = [
   "gfx.font_rendering.fallback.async=false",
   "browser.sessionstore.closedTabsFromAllWindows=true",
   "browser.sessionstore.closedTabsFromClosedWindows=true",
+  # Override the test default, allowing the session restore infobar to be shown if necessary
+  "browser.startup.couldRestoreSession.count=0",
 ]
+
+["browser_1933485_tab_groups_history.js"]
 
 ["browser_aboutPrivateBrowsing.js"]
 
@@ -56,6 +60,10 @@ support-files = ["file_async_flushes.html"]
 run-if = ["crashreporter"]
 
 ["browser_async_remove_tab.js"]
+skip-if = [
+  "os == 'linux' && os_version == '18.04' && processor == 'x86_64' && opt", # Bug 1787024
+  "win11_2009", # Bug 1787024
+]
 
 ["browser_async_window_flushing.js"]
 https_first_disabled = true
@@ -203,6 +211,8 @@ skip-if = ["ccov"] # Bug 1625525
 
 ["browser_privatetabs.js"]
 
+["browser_purge_domaindata.js"]
+
 ["browser_purge_shistory.js"]
 
 ["browser_remoteness_flip_on_restore.js"]
@@ -282,9 +292,23 @@ tags = "os_integration"
 
 ["browser_tab_groups_empty.js"]
 
+["browser_tab_groups_restore_closed_in_closed_window.js"]
+
+["browser_tab_groups_restore_closed_in_open_window.js"]
+
 ["browser_tab_groups_restore_multiple.js"]
 
+["browser_tab_groups_restore_saved.js"]
+
 ["browser_tab_groups_restore_simple.js"]
+
+["browser_tab_groups_save_on_removeAllTabsBut.js"]
+
+["browser_tab_groups_save_on_removeTabsToTheEnd.js"]
+
+["browser_tab_groups_save_on_removeTabsToTheStart.js"]
+
+["browser_tab_groups_save_on_window_close.js"]
 
 ["browser_tab_groups_saved.js"]
 

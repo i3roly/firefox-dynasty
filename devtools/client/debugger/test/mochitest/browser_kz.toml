@@ -20,6 +20,7 @@ support-files = [
 prefs = [
  "dom.ipc.processPrelaunch.enabled=false", # Disable randomly spawning processes during tests. After enabling windowless service workers, a process spawning will trigger an update of the service workers list which can fail the test if it occurs during shutdown (unhandled promise rejection).
  "devtools.debugger.features.javascript-tracing=true", # This pref has to be set before the process starts
+ "javascript.options.experimental.explicit_resource_management=true", # This pref has to be set before the process starts
 ]
 
 ["browser_dbg-keyboard-navigation.js"]
@@ -113,7 +114,6 @@ fail-if = ["a11y_checks"] # Bug 1849028 clicked element may not be focusable and
 ["browser_dbg-pretty-print-console.js"]
 
 ["browser_dbg-pretty-print-flow.js"]
-fail-if = ["a11y_checks"] # Bug 1849028 clicked element may not be focusable and/or labeled
 
 ["browser_dbg-pretty-print-inline-scripts.js"]
 skip-if = ["a11y_checks"] # Bug 1858041 and 1849028 intermittent a11y_checks results (fails on Try, passes on Autoland)
@@ -123,11 +123,14 @@ skip-if = ["a11y_checks"] # Bug 1858041 and 1849028 intermittent a11y_checks res
 ["browser_dbg-pretty-print-paused.js"]
 
 ["browser_dbg-pretty-print-sourcemap.js"]
+skip-if = [
+  "os == 'linux' && os_version == '18.04' && processor == 'x86_64'", # Bug 1817966
+  "win11_2009 && ccov", # Bug 1817966
+]
 
 ["browser_dbg-pretty-print.js"]
 
 ["browser_dbg-preview-frame.js"]
-fail-if = ["a11y_checks"] # Bug 1849028 clicked element may not be focusable and/or labeled
 skip-if = ["os == 'win'"]
 
 ["browser_dbg-preview-getter.js"]
@@ -147,6 +150,7 @@ skip-if = [
   "os == 'win'",
   "os == 'linux' && os_version == '18.04' && processor == 'x86_64'",
   "os == 'mac' && os_version == '10.15' && processor == 'x86_64' && opt",
+  "os == 'mac' && os_version == '14.70' && processor == 'x86_64'",  # perma fail on opt, high frequency fail on debug
 ]
 
 ["browser_dbg-project-root.js"]
@@ -272,7 +276,6 @@ fail-if = ["a11y_checks"] # Bug 1849028 clicked element may not be focusable and
 ["browser_dbg-sources-project-search.js"]
 
 ["browser_dbg-state-based-panels.js"]
-fail-if = ["a11y_checks"] # Bug 1849028 clicked element may not be focusable and/or labeled
 
 ["browser_dbg-step-in-navigate.js"]
 
@@ -290,7 +293,6 @@ skip-if = ["os == 'win'"]
 ["browser_dbg-tabs-pretty-print.js"]
 
 ["browser_dbg-tabs-without-urls-selected.js"]
-fail-if = ["a11y_checks"] # Bug 1849028 clicked element may not be focusable and/or labeled
 
 ["browser_dbg-tabs-without-urls.js"]
 
@@ -306,16 +308,8 @@ fail-if = ["a11y_checks"] # Bug 1849028 clicked element may not be focusable and
 skip-if = ["true"] # Bug 1814093
 
 ["browser_dbg-windowless-service-workers-reload.js"]
-skip-if = [
-  "os == 'linux' && os_version == '18.04' && processor == 'x86_64'", # Bug 1767716
-  "win11_2009 && opt", # Bug 1767716
-]
 
 ["browser_dbg-windowless-service-workers.js"]
-skip-if = [
-  "os == 'linux' && os_version == '18.04' && processor == 'x86_64'", # Bug 1732486, # Bug 1767717
-  "win11_2009 && opt", # Bug 1767717
-]
 
 ["browser_dbg-windowless-workers-early-breakpoint.js"]
 

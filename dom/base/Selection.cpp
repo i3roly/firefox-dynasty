@@ -4477,8 +4477,7 @@ JSObject* Selection::WrapObject(JSContext* aCx,
 // AutoHideSelectionChanges
 AutoHideSelectionChanges::AutoHideSelectionChanges(
     const nsFrameSelection* aFrame)
-    : AutoHideSelectionChanges(
-          aFrame ? aFrame->GetSelection(SelectionType::eNormal) : nullptr) {}
+    : AutoHideSelectionChanges(aFrame ? &aFrame->NormalSelection() : nullptr) {}
 
 bool Selection::HasSameRootOrSameComposedDoc(const nsINode& aNode) {
   nsINode* root = aNode.SubtreeRoot();

@@ -299,6 +299,12 @@ class RootCompiler {
   // lives here on the root compiler.
   uint32_t loopDepth_;
 
+  // The current stack of bytecode offsets of the caller functions of the
+  // function currently being inlined.
+  BytecodeOffsetVector inlinedCallerOffsets_;
+  // A copy of the above stack for efficient sharing.
+  SharedBytecodeOffsetVector inlinedCallerOffsetsVector_;
+
   // Accumulated inlining statistics for this function.
   InliningStats inliningStats_;
   // The remaining inlining budget, in terms of bytecode bytes. This may go
@@ -349,12 +355,18 @@ class RootCompiler {
 
   [[nodiscard]] bool generate();
 
+  const ShareableBytecodeOffsetVector* inlinedCallerOffsets() {
+    return inlinedCallerOffsetsVector_.get();
+  }
+
   // Add a compile info for an inlined function. This keeps the inlined
   // function's compile info alive for the outermost function's
   // compilation.
-  [[nodiscard]] CompileInfo* addInlineCall(
+  [[nodiscard]] CompileInfo* startInlineCall(
+      uint32_t callerFuncIndex, BytecodeOffset callerOffset,
       uint32_t calleeFuncIndex, uint32_t numLocals, size_t inlineeBytecodeSize,
       InliningHeuristics::CallKind callKind);
+  void finishInlineCall();
 
   // Add a try note and return the index.
   [[nodiscard]] bool addTryNote(uint32_t* tryNoteIndex) {
@@ -505,8 +517,13 @@ class FunctionCompiler {
 
   MBasicBlock* getCurBlock() const { return curBlock_; }
   BytecodeOffset bytecodeOffset() const { return iter_.bytecodeOffset(); }
-  BytecodeOffset bytecodeIfNotAsmJS() const {
-    return codeMeta().isAsmJS() ? BytecodeOffset() : iter_.bytecodeOffset();
+  TrapSiteDesc trapSiteDesc() {
+    return TrapSiteDesc(wasm::BytecodeOffset(bytecodeOffset()),
+                        rootCompiler_.inlinedCallerOffsets());
+  }
+  TrapSiteDesc trapSiteDescWithCallSiteLineNumber() {
+    return TrapSiteDesc(wasm::BytecodeOffset(readCallSiteLineOrBytecode()),
+                        rootCompiler_.inlinedCallerOffsets());
   }
   FeatureUsage featureUsage() const { return iter_.featureUsage(); }
 
@@ -915,16 +932,15 @@ class FunctionCompiler {
     // A call to c++ builtin requires instance pointer.
 #if defined(JS_CODEGEN_X86) || defined(JS_CODEGEN_ARM)
     if (type == MIRType::Int64) {
-      auto* ins =
-          MWasmBuiltinDivI64::New(alloc(), lhs, rhs, instancePointer_, unsignd,
-                                  trapOnError, bytecodeOffset());
+      auto* ins = MWasmBuiltinDivI64::New(alloc(), lhs, rhs, instancePointer_,
+                                          unsignd, trapOnError, trapSiteDesc());
       curBlock_->add(ins);
       return ins;
     }
 #endif
 
     auto* ins = MDiv::New(alloc(), lhs, rhs, type, unsignd, trapOnError,
-                          bytecodeOffset(), mustPreserveNaN(type));
+                          trapSiteDesc(), mustPreserveNaN(type));
     curBlock_->add(ins);
     return ins;
   }
@@ -957,9 +973,8 @@ class FunctionCompiler {
     // A call to c++ builtin requires instance pointer.
 #if defined(JS_CODEGEN_X86) || defined(JS_CODEGEN_ARM)
     if (type == MIRType::Int64) {
-      auto* ins =
-          MWasmBuiltinModI64::New(alloc(), lhs, rhs, instancePointer_, unsignd,
-                                  trapOnError, bytecodeOffset());
+      auto* ins = MWasmBuiltinModI64::New(alloc(), lhs, rhs, instancePointer_,
+                                          unsignd, trapOnError, trapSiteDesc());
       curBlock_->add(ins);
       return ins;
     }
@@ -975,7 +990,7 @@ class FunctionCompiler {
     }
 
     auto* ins = MMod::New(alloc(), lhs, rhs, type, unsignd, trapOnError,
-                          bytecodeOffset());
+                          trapSiteDesc());
     curBlock_->add(ins);
     return ins;
   }
@@ -1087,7 +1102,7 @@ class FunctionCompiler {
     if (inDeadCode()) {
       return nullptr;
     }
-    auto* ins = T::New(alloc(), op, flags, bytecodeOffset());
+    auto* ins = T::New(alloc(), op, flags, trapSiteDesc());
     curBlock_->add(ins);
     return ins;
   }
@@ -1098,7 +1113,7 @@ class FunctionCompiler {
       return nullptr;
     }
     auto* ins = MWasmBuiltinTruncateToInt64::New(alloc(), op, instancePointer_,
-                                                 flags, bytecodeOffset());
+                                                 flags, trapSiteDesc());
     curBlock_->add(ins);
     return ins;
   }
@@ -1135,7 +1150,7 @@ class FunctionCompiler {
     }
 
     auto* ins = MWasmTrapIfNull::New(
-        alloc(), ref, wasm::Trap::NullPointerDereference, bytecodeOffset());
+        alloc(), ref, wasm::Trap::NullPointerDereference, trapSiteDesc());
 
     curBlock_->add(ins);
     return true;
@@ -1546,7 +1561,7 @@ class FunctionCompiler {
     auto target = memoryIndex == 0 ? MWasmBoundsCheck::Memory0
                                    : MWasmBoundsCheck::Unknown;
     auto* ins = MWasmBoundsCheck::New(alloc(), actualBase, boundsCheckLimit,
-                                      bytecodeOffset(), target);
+                                      trapSiteDesc(), target);
     curBlock_->add(ins);
     actualBase = ins;
 
@@ -1594,7 +1609,7 @@ class FunctionCompiler {
     // Emit the alignment check if necessary; it traps if it fails.
     if (alignmentCheck) {
       curBlock_->add(MWasmAlignmentCheck::New(
-          alloc(), *base, access->byteSize(), bytecodeOffset()));
+          alloc(), *base, access->byteSize(), trapSiteDesc()));
     }
 
     // Emit the bounds check if necessary; it traps if it fails.  This may
@@ -1652,7 +1667,7 @@ class FunctionCompiler {
     if (offset == 0) {
       return base;
     }
-    auto* ins = MWasmAddOffset::New(alloc(), base, offset, bytecodeOffset());
+    auto* ins = MWasmAddOffset::New(alloc(), base, offset, trapSiteDesc());
     curBlock_->add(ins);
     access->clearOffset();
     return ins;
@@ -1835,7 +1850,7 @@ class FunctionCompiler {
     }
 
     MemoryAccessDesc access(addr.memoryIndex, viewType, addr.align, addr.offset,
-                            bytecodeIfNotAsmJS(),
+                            trapSiteDesc(),
                             hugeMemoryEnabled(addr.memoryIndex));
 
     // Generate better code (on x86)
@@ -1872,7 +1887,7 @@ class FunctionCompiler {
     // Generate better code (on x86) by loading as a double with an
     // operation that sign extends directly.
     MemoryAccessDesc access(addr.memoryIndex, Scalar::Float64, addr.align,
-                            addr.offset, bytecodeIfNotAsmJS(),
+                            addr.offset, trapSiteDesc(),
                             hugeMemoryEnabled(addr.memoryIndex));
     access.setWidenSimd128Load(op);
     return load(addr.base, &access, ValType::V128);
@@ -1885,7 +1900,7 @@ class FunctionCompiler {
     }
 
     MemoryAccessDesc access(addr.memoryIndex, viewType, addr.align, addr.offset,
-                            bytecodeIfNotAsmJS(),
+                            trapSiteDesc(),
                             hugeMemoryEnabled(addr.memoryIndex));
     access.setZeroExtendSimd128Load();
     return load(addr.base, &access, ValType::V128);
@@ -1899,7 +1914,7 @@ class FunctionCompiler {
     }
 
     MemoryAccessDesc access(addr.memoryIndex, Scalar::Simd128, addr.align,
-                            addr.offset, bytecodeIfNotAsmJS(),
+                            addr.offset, trapSiteDesc(),
                             hugeMemoryEnabled(addr.memoryIndex));
     MDefinition* memoryBase = maybeLoadMemoryBase(access.memoryIndex());
     MDefinition* base = addr.base;
@@ -1924,7 +1939,7 @@ class FunctionCompiler {
       return;
     }
     MemoryAccessDesc access(addr.memoryIndex, Scalar::Simd128, addr.align,
-                            addr.offset, bytecodeIfNotAsmJS(),
+                            addr.offset, trapSiteDesc(),
                             hugeMemoryEnabled(addr.memoryIndex));
     MDefinition* memoryBase = maybeLoadMemoryBase(access.memoryIndex());
     MDefinition* base = addr.base;
@@ -2097,7 +2112,7 @@ class FunctionCompiler {
     // masking
     auto* length = loadTableLength(tableIndex);
     auto* check = MWasmBoundsCheck::New(
-        alloc(), address, length, bytecodeOffset(), MWasmBoundsCheck::Unknown);
+        alloc(), address, length, trapSiteDesc(), MWasmBoundsCheck::Unknown);
     curBlock_->add(check);
     if (JitOptions.spectreIndexMasking) {
       address = check;
@@ -2117,7 +2132,7 @@ class FunctionCompiler {
     // masking
     auto* length = loadTableLength(tableIndex);
     auto* check = MWasmBoundsCheck::New(
-        alloc(), address, length, bytecodeOffset(), MWasmBoundsCheck::Unknown);
+        alloc(), address, length, trapSiteDesc(), MWasmBoundsCheck::Unknown);
     curBlock_->add(check);
     if (JitOptions.spectreIndexMasking) {
       address = check;
@@ -2150,7 +2165,7 @@ class FunctionCompiler {
       return;
     }
     curBlock_->add(
-        MWasmInterruptCheck::New(alloc(), instancePointer_, bytecodeOffset()));
+        MWasmInterruptCheck::New(alloc(), instancePointer_, trapSiteDesc()));
   }
 
   // Perform a post-write barrier to update the generational store buffer. This
@@ -2525,23 +2540,31 @@ class FunctionCompiler {
   }
 
   [[nodiscard]]
-  bool shouldInlineCall(InliningHeuristics::CallKind kind, uint32_t funcIndex) {
-    // We only support this mode when lazy tiering. This is currently a
+  CallRefHint auditInlineableCallees(InliningHeuristics::CallKind kind,
+                                     CallRefHint hints) {
+    // Takes candidates for inlining as provided in `hints`, and returns a
+    // subset (or all) of them for which inlining is approved.  To indicate
+    // that they are all disallowed, return an empty CallRefHint.
+
+    MOZ_ASSERT_IF(kind == InliningHeuristics::CallKind::Direct,
+                  hints.length() == 1);
+
+    // We only support inlining when lazy tiering. This is currently a
     // requirement because we need the full module bytecode and function
     // definition ranges, which are not available in other modes.
     if (compilerEnv().mode() != CompileMode::LazyTiering) {
-      return false;
+      return CallRefHint();
     }
 
-    // We can't inline an imported function.
-    if (codeMeta().funcIsImport(funcIndex)) {
-      return false;
-    }
+    // We don't support asm.js and inlining. asm.js also doesn't support
+    // baseline, which is required for lazy tiering, so we should never get
+    // here. The biggest complication for asm.js is getting correct stack
+    // traces with inlining.
+    MOZ_ASSERT(!codeMeta().isAsmJS());
 
-    // We do not support inlining a callee which uses tail calls
-    FeatureUsage funcFeatureUsage = codeMeta().funcDefFeatureUsage(funcIndex);
-    if (funcFeatureUsage & FeatureUsage::ReturnCall) {
-      return false;
+    // If we were given no candidates, give up now.
+    if (hints.empty()) {
+      return CallRefHint();
     }
 
     // We can't inline if we've exceeded our per-root-function inlining
@@ -2551,17 +2574,43 @@ class FunctionCompiler {
     // if a budget overshoot happens, so we will have performed slightly more
     // inlining than allowed by the initial setting of `availableBudget`.  The
     // size of this overshoot is however very limited -- it can't exceed the
-    // size of one function body that is inlined.  And that is limited by
-    // InliningHeuristics::isSmallEnoughToInline.
+    // size of three function bodies that are inlined (3 because that's what
+    // CallRefHint can hold).  And the max size of an inlineable function body
+    // is limited by InliningHeuristics::isSmallEnoughToInline.
     if (rootCompiler_.inliningBudget() < 0) {
-      return false;
+      return CallRefHint();
     }
 
-    // Ask the heuristics system if we're allowed to inline a function of this
-    // size and kind at the current inlining depth.
-    uint32_t inlineeBodySize = codeMeta().funcDefRange(funcIndex).size;
-    return InliningHeuristics::isSmallEnoughToInline(kind, inliningDepth(),
-                                                     inlineeBodySize);
+    // Check each candidate in turn, and add all acceptable ones to `filtered`.
+    // It is important that `filtered` retains the same ordering as `hints`.
+    CallRefHint filtered;
+    for (uint32_t i = 0; i < hints.length(); i++) {
+      uint32_t funcIndex = hints.get(i);
+
+      // We can't inline an imported function.
+      if (codeMeta().funcIsImport(funcIndex)) {
+        continue;
+      }
+
+      // We do not support inlining a callee which uses tail calls
+      FeatureUsage funcFeatureUsage = codeMeta().funcDefFeatureUsage(funcIndex);
+      if (funcFeatureUsage & FeatureUsage::ReturnCall) {
+        continue;
+      }
+
+      // Ask the heuristics system if we're allowed to inline a function of
+      // this size and kind at the current inlining depth.
+      uint32_t inlineeBodySize = codeMeta().funcDefRange(funcIndex).size;
+      if (!InliningHeuristics::isSmallEnoughToInline(kind, inliningDepth(),
+                                                     inlineeBodySize)) {
+        continue;
+      }
+
+      filtered.append(funcIndex);
+    }
+
+    // Whatever ends up in `filtered` is approved for inlining.
+    return filtered;
   }
 
   [[nodiscard]]
@@ -2681,7 +2730,8 @@ class FunctionCompiler {
     MOZ_ASSERT(!inDeadCode());
 
     CallCompileState callState;
-    CallSiteDesc desc(lineOrBytecode, CallSiteDesc::Func);
+    CallSiteDesc desc(lineOrBytecode, rootCompiler_.inlinedCallerOffsets(),
+                      CallSiteKind::Func);
     ResultType resultType = ResultType::Vector(funcType.results());
     auto callee = CalleeDesc::function(funcIndex);
     ArgTypeVector argTypes(funcType);
@@ -2702,7 +2752,7 @@ class FunctionCompiler {
 
     CallCompileState callState;
     callState.returnCall = true;
-    CallSiteDesc desc(lineOrBytecode, CallSiteDesc::ReturnFunc);
+    CallSiteDesc desc(lineOrBytecode, CallSiteKind::ReturnFunc);
     auto callee = CalleeDesc::function(funcIndex);
     ArgTypeVector argTypes(funcType);
 
@@ -2732,7 +2782,7 @@ class FunctionCompiler {
 
     CallCompileState callState;
     callState.returnCall = true;
-    CallSiteDesc desc(lineOrBytecode, CallSiteDesc::Import);
+    CallSiteDesc desc(lineOrBytecode, CallSiteKind::Import);
     auto callee = CalleeDesc::import(globalDataOffset);
     ArgTypeVector argTypes(funcType);
 
@@ -2772,7 +2822,7 @@ class FunctionCompiler {
     callee =
         CalleeDesc::wasmTable(codeMeta(), table, tableIndex, callIndirectId);
 
-    CallSiteDesc desc(lineOrBytecode, CallSiteDesc::Indirect);
+    CallSiteDesc desc(lineOrBytecode, CallSiteKind::Indirect);
     ArgTypeVector argTypes(funcType);
 
     if (!emitCallArgs(funcType, args, &callState)) {
@@ -2834,7 +2884,8 @@ class FunctionCompiler {
       }
     }
 
-    CallSiteDesc desc(lineOrBytecode, CallSiteDesc::Indirect);
+    CallSiteDesc desc(lineOrBytecode, rootCompiler_.inlinedCallerOffsets(),
+                      CallSiteKind::Indirect);
     ArgTypeVector argTypes(funcType);
     ResultType resultType = ResultType::Vector(funcType.results());
 
@@ -2850,7 +2901,8 @@ class FunctionCompiler {
     MOZ_ASSERT(!inDeadCode());
 
     CallCompileState callState;
-    CallSiteDesc desc(lineOrBytecode, CallSiteDesc::Import);
+    CallSiteDesc desc(lineOrBytecode, rootCompiler_.inlinedCallerOffsets(),
+                      CallSiteKind::Import);
     auto callee = CalleeDesc::import(instanceDataOffset);
     ArgTypeVector argTypes(funcType);
     ResultType resultType = ResultType::Vector(funcType.results());
@@ -2871,7 +2923,8 @@ class FunctionCompiler {
 
     MOZ_ASSERT(builtin.failureMode == FailureMode::Infallible);
 
-    CallSiteDesc desc(lineOrBytecode, CallSiteDesc::Symbolic);
+    CallSiteDesc desc(lineOrBytecode, rootCompiler_.inlinedCallerOffsets(),
+                      CallSiteKind::Symbolic);
     auto callee = CalleeDesc::builtin(builtin.identity);
 
     auto* ins =
@@ -2950,7 +3003,8 @@ class FunctionCompiler {
       return true;
     }
 
-    CallSiteDesc desc(lineOrBytecode, CallSiteDesc::Symbolic);
+    CallSiteDesc desc(lineOrBytecode, rootCompiler_.inlinedCallerOffsets(),
+                      CallSiteKind::Symbolic);
     if (builtin.failureMode != FailureMode::Infallible &&
         !beginCatchableCall(callState)) {
       return false;
@@ -3140,7 +3194,8 @@ class FunctionCompiler {
 
     CallCompileState callState;
     CalleeDesc callee = CalleeDesc::wasmFuncRef();
-    CallSiteDesc desc(lineOrBytecode, CallSiteDesc::FuncRef);
+    CallSiteDesc desc(lineOrBytecode, rootCompiler_.inlinedCallerOffsets(),
+                      CallSiteKind::FuncRef);
     ArgTypeVector argTypes(funcType);
     ResultType resultType = ResultType::Vector(funcType.results());
 
@@ -3154,11 +3209,12 @@ class FunctionCompiler {
                      uint32_t lineOrBytecode, const DefVector& args,
                      DefVector* results) {
     MOZ_ASSERT(!inDeadCode());
+    MOZ_ASSERT(!isInlined());
 
     CallCompileState callState;
     callState.returnCall = true;
     CalleeDesc callee = CalleeDesc::wasmFuncRef();
-    CallSiteDesc desc(lineOrBytecode, CallSiteDesc::FuncRef);
+    CallSiteDesc desc(lineOrBytecode, CallSiteKind::FuncRef);
     ArgTypeVector argTypes(funcType);
 
     if (!emitCallArgs(funcType, args, &callState)) {
@@ -3177,7 +3233,7 @@ class FunctionCompiler {
 
   [[nodiscard]] MDefinition* stringCast(MDefinition* string) {
     auto* ins = MWasmTrapIfAnyRefIsNotJSString::New(
-        alloc(), string, wasm::Trap::BadCast, bytecodeOffset());
+        alloc(), string, wasm::Trap::BadCast, trapSiteDesc());
     if (!ins) {
       return ins;
     }
@@ -3196,7 +3252,7 @@ class FunctionCompiler {
 
   [[nodiscard]] MDefinition* stringLength(MDefinition* string) {
     auto* ins = MWasmAnyRefJSStringLength::New(
-        alloc(), string, wasm::Trap::BadCast, bytecodeOffset());
+        alloc(), string, wasm::Trap::BadCast, trapSiteDesc());
     if (!ins) {
       return nullptr;
     }
@@ -3362,7 +3418,7 @@ class FunctionCompiler {
     }
 
     auto* ins =
-        MWasmTrap::New(alloc(), wasm::Trap::Unreachable, bytecodeOffset());
+        MWasmTrap::New(alloc(), wasm::Trap::Unreachable, trapSiteDesc());
     curBlock_->end(ins);
     curBlock_ = nullptr;
   }
@@ -4705,9 +4761,9 @@ class FunctionCompiler {
     MNarrowingOp narrowingOp = fieldStoreInfoToMIR(type);
 
     if (!type.isRefRepr()) {
-      MaybeTrapSiteInfo maybeTrap;
+      MaybeTrapSiteDesc maybeTrap;
       if (needsTrapInfo) {
-        maybeTrap.emplace(getTrapSiteInfo());
+        maybeTrap.emplace(trapSiteDesc());
       }
       auto* store = MWasmStoreFieldKA::New(
           alloc(), keepAlive, base, offset, fieldIndex, value, narrowingOp,
@@ -4732,7 +4788,7 @@ class FunctionCompiler {
     // Store the new value
     auto* store = MWasmStoreFieldRefKA::New(
         alloc(), instancePointer_, keepAlive, base, offset, fieldIndex, value,
-        AliasSet::Store(aliasBitset), mozilla::Some(getTrapSiteInfo()),
+        AliasSet::Store(aliasBitset), mozilla::Some(trapSiteDesc()),
         preBarrierKind);
     if (!store) {
       return false;
@@ -4761,7 +4817,7 @@ class FunctionCompiler {
     MNarrowingOp narrowingOp = fieldStoreInfoToMIR(type);
 
     if (!type.isRefRepr()) {
-      MaybeTrapSiteInfo maybeTrap;
+      MaybeTrapSiteDesc maybeTrap;
       Scale scale = scaleFromFieldType(type);
       auto* store = MWasmStoreElementKA::New(
           alloc(), keepAlive, base, index, value, narrowingOp, scale,
@@ -4780,7 +4836,7 @@ class FunctionCompiler {
     // Store the new value
     auto* store = MWasmStoreElementRefKA::New(
         alloc(), instancePointer_, keepAlive, base, index, value,
-        AliasSet::Store(aliasBitset), mozilla::Some(getTrapSiteInfo()),
+        AliasSet::Store(aliasBitset), mozilla::Some(trapSiteDesc()),
         preBarrierKind);
     if (!store) {
       return false;
@@ -4804,9 +4860,9 @@ class FunctionCompiler {
     MIRType mirType;
     MWideningOp mirWideningOp;
     fieldLoadInfoToMIR(type, fieldWideningOp, &mirType, &mirWideningOp);
-    MaybeTrapSiteInfo maybeTrap;
+    MaybeTrapSiteDesc maybeTrap;
     if (needsTrapInfo) {
-      maybeTrap.emplace(getTrapSiteInfo());
+      maybeTrap.emplace(trapSiteDesc());
     }
 
     auto* load = MWasmLoadFieldKA::New(alloc(), keepAlive, base, offset,
@@ -4835,7 +4891,7 @@ class FunctionCompiler {
     Scale scale = scaleFromFieldType(type);
     auto* load = MWasmLoadElementKA::New(
         alloc(), keepAlive, base, index, mirType, mirWideningOp, scale,
-        AliasSet::Load(aliasBitset), mozilla::Some(getTrapSiteInfo()));
+        AliasSet::Load(aliasBitset), mozilla::Some(trapSiteDesc()));
     if (!load) {
       return nullptr;
     }
@@ -4888,7 +4944,7 @@ class FunctionCompiler {
 
     auto* structObject = MWasmNewStructObject::New(
         alloc(), instancePointer_, typeDefData, typeDef.structType(), isOutline,
-        zeroFields, allocKind, bytecodeOffset());
+        zeroFields, allocKind, trapSiteDesc());
     if (!structObject) {
       return nullptr;
     }
@@ -4922,7 +4978,7 @@ class FunctionCompiler {
           alloc(), structObject, WasmStructObject::offsetOfOutlineData(),
           MIRType::Pointer, MWideningOp::None,
           AliasSet::Load(AliasSet::WasmStructOutlineDataPointer),
-          mozilla::Some(getTrapSiteInfo()));
+          mozilla::Some(trapSiteDesc()));
       if (!load) {
         return false;
       }
@@ -4972,7 +5028,7 @@ class FunctionCompiler {
           alloc(), structObject, WasmStructObject::offsetOfOutlineData(),
           MIRType::Pointer, MWideningOp::None,
           AliasSet::Load(AliasSet::WasmStructOutlineDataPointer),
-          mozilla::Some(getTrapSiteInfo()));
+          mozilla::Some(trapSiteDesc()));
       if (!loadOOLptr) {
         return nullptr;
       }
@@ -5042,7 +5098,7 @@ class FunctionCompiler {
         alloc(), arrayObject, WasmArrayObject::offsetOfNumElements(),
         MIRType::Int32, MWideningOp::None,
         AliasSet::Load(AliasSet::WasmArrayNumElements),
-        mozilla::Some(getTrapSiteInfo()));
+        mozilla::Some(trapSiteDesc()));
     if (!numElements) {
       return nullptr;
     }
@@ -5060,7 +5116,7 @@ class FunctionCompiler {
         alloc(), arrayObject, WasmArrayObject::offsetOfData(),
         MIRType::WasmArrayData, MWideningOp::None,
         AliasSet::Load(AliasSet::WasmArrayDataPointer),
-        mozilla::Some(getTrapSiteInfo()));
+        mozilla::Some(trapSiteDesc()));
     if (!data) {
       return nullptr;
     }
@@ -5085,7 +5141,7 @@ class FunctionCompiler {
 
     auto* arrayObject = MWasmNewArrayObject::New(
         alloc(), instancePointer_, numElements, typeDefData, elemSize,
-        zeroFields, bytecodeOffset());
+        zeroFields, trapSiteDesc());
     if (!arrayObject) {
       return nullptr;
     }
@@ -5120,7 +5176,7 @@ class FunctionCompiler {
 
     // Create a bounds check.
     auto* boundsCheck =
-        MWasmBoundsCheck::New(alloc(), index, numElements, bytecodeOffset(),
+        MWasmBoundsCheck::New(alloc(), index, numElements, trapSiteDesc(),
                               MWasmBoundsCheck::Target::Unknown);
     if (!boundsCheck) {
       return nullptr;
@@ -5304,14 +5360,14 @@ class FunctionCompiler {
 
     // Create the bounds checks.
     MInstruction* dstBoundsCheck = MWasmBoundsCheckRange32::New(
-        alloc(), dstArrayIndex, numElements, dstNumElements, bytecodeOffset());
+        alloc(), dstArrayIndex, numElements, dstNumElements, trapSiteDesc());
     if (!dstBoundsCheck) {
       return false;
     }
     curBlock_->add(dstBoundsCheck);
 
     MInstruction* srcBoundsCheck = MWasmBoundsCheckRange32::New(
-        alloc(), srcArrayIndex, numElements, srcNumElements, bytecodeOffset());
+        alloc(), srcArrayIndex, numElements, srcNumElements, trapSiteDesc());
     if (!srcBoundsCheck) {
       return false;
     }
@@ -5411,7 +5467,7 @@ class FunctionCompiler {
 
     // Create a bounds check.
     auto* boundsCheck = MWasmBoundsCheckRange32::New(
-        alloc(), index, numElements, actualNumElements, bytecodeOffset());
+        alloc(), index, numElements, actualNumElements, trapSiteDesc());
     if (!boundsCheck) {
       return false;
     }
@@ -5434,7 +5490,7 @@ class FunctionCompiler {
       return false;
     }
 
-    auto* trap = MWasmTrap::New(alloc(), trapKind, bytecodeOffset());
+    auto* trap = MWasmTrap::New(alloc(), trapKind, trapSiteDesc());
     if (!trap) {
       return false;
     }
@@ -5598,14 +5654,10 @@ class FunctionCompiler {
   // Return the current bytecode offset.
   uint32_t readBytecodeOffset() { return iter_.lastOpcodeOffset(); }
 
-  TrapSiteInfo getTrapSiteInfo() {
-    return TrapSiteInfo(wasm::BytecodeOffset(readBytecodeOffset()));
-  }
-
   CallRefHint readCallRefHint() {
     // We don't track anything if we're not using lazy tiering
     if (compilerEnv().mode() != CompileMode::LazyTiering) {
-      return CallRefHint::unknown();
+      return CallRefHint();
     }
 
     CallRefMetricsRange rangeInModule =
@@ -5835,7 +5887,7 @@ class FunctionCompiler {
   bool emitBrOnNonNull();
   bool emitSpeculativeInlineCallRef(uint32_t bytecodeOffset,
                                     const FuncType& funcType,
-                                    uint32_t expectedFuncIndex,
+                                    CallRefHint expectedFuncIndices,
                                     MDefinition* actualCalleeFunc,
                                     const DefVector& args, DefVector* results);
   bool emitCallRef();
@@ -5885,8 +5937,7 @@ MDefinition* FunctionCompiler::unary<MWasmBuiltinTruncateToInt32>(
     return nullptr;
   }
   auto* ins = MWasmBuiltinTruncateToInt32::New(
-      alloc(), op, instancePointer_,
-      BytecodeOffset(readCallSiteLineOrBytecode()));
+      alloc(), op, instancePointer_, trapSiteDescWithCallSiteLineNumber());
   curBlock_->add(ins);
   return ins;
 }
@@ -6331,8 +6382,9 @@ bool FunctionCompiler::emitInlineCall(const FuncType& funcType,
     return false;
   }
 
-  CompileInfo* compileInfo = rootCompiler().addInlineCall(
-      this->funcIndex(), locals.length(), funcRange.size, callKind);
+  CompileInfo* compileInfo = rootCompiler().startInlineCall(
+      this->funcIndex(), bytecodeOffset(), funcIndex, locals.length(),
+      funcRange.size, callKind);
   if (!compileInfo) {
     return false;
   }
@@ -6354,6 +6406,7 @@ bool FunctionCompiler::emitInlineCall(const FuncType& funcType,
   }
 
   calleeCompiler.finish();
+  rootCompiler_.finishInlineCall();
 
   return finishInlinedCallDirect(calleeCompiler, results);
 }
@@ -6397,7 +6450,12 @@ bool FunctionCompiler::emitCall(bool asmJSFuncDef) {
     }
   } else {
     const auto callKind = InliningHeuristics::CallKind::Direct;
-    if (shouldInlineCall(callKind, funcIndex)) {
+    // Make up a single-entry CallRefHint and enquire about its inlineability.
+    CallRefHint hints;
+    hints.append(funcIndex);
+    hints = auditInlineableCallees(callKind, hints);
+    if (!hints.empty()) {
+      // Inlining of `funcIndex` was approved.
       if (!emitInlineCall(funcType, funcIndex, callKind, args, &results)) {
         return false;
       }
@@ -6955,8 +7013,7 @@ bool FunctionCompiler::emitLoad(ValType type, Scalar::Type viewType) {
   }
 
   MemoryAccessDesc access(addr.memoryIndex, viewType, addr.align, addr.offset,
-                          bytecodeIfNotAsmJS(),
-                          hugeMemoryEnabled(addr.memoryIndex));
+                          trapSiteDesc(), hugeMemoryEnabled(addr.memoryIndex));
   auto* ins = load(addr.base, &access, type);
   if (!inDeadCode() && !ins) {
     return false;
@@ -6975,8 +7032,7 @@ bool FunctionCompiler::emitStore(ValType resultType, Scalar::Type viewType) {
   }
 
   MemoryAccessDesc access(addr.memoryIndex, viewType, addr.align, addr.offset,
-                          bytecodeIfNotAsmJS(),
-                          hugeMemoryEnabled(addr.memoryIndex));
+                          trapSiteDesc(), hugeMemoryEnabled(addr.memoryIndex));
 
   store(addr.base, &access, value);
   return true;
@@ -6992,8 +7048,7 @@ bool FunctionCompiler::emitTeeStore(ValType resultType, Scalar::Type viewType) {
 
   MOZ_ASSERT(isMem32(addr.memoryIndex));  // asm.js opcode
   MemoryAccessDesc access(addr.memoryIndex, viewType, addr.align, addr.offset,
-                          bytecodeIfNotAsmJS(),
-                          hugeMemoryEnabled(addr.memoryIndex));
+                          trapSiteDesc(), hugeMemoryEnabled(addr.memoryIndex));
 
   store(addr.base, &access, value);
   return true;
@@ -7018,8 +7073,7 @@ bool FunctionCompiler::emitTeeStoreWithCoercion(ValType resultType,
 
   MOZ_ASSERT(isMem32(addr.memoryIndex));  // asm.js opcode
   MemoryAccessDesc access(addr.memoryIndex, viewType, addr.align, addr.offset,
-                          bytecodeIfNotAsmJS(),
-                          hugeMemoryEnabled(addr.memoryIndex));
+                          trapSiteDesc(), hugeMemoryEnabled(addr.memoryIndex));
 
   store(addr.base, &access, value);
   return true;
@@ -7164,7 +7218,7 @@ bool FunctionCompiler::emitAtomicCmpXchg(ValType type, Scalar::Type viewType) {
   }
 
   MemoryAccessDesc access(addr.memoryIndex, viewType, addr.align, addr.offset,
-                          bytecodeOffset(), hugeMemoryEnabled(addr.memoryIndex),
+                          trapSiteDesc(), hugeMemoryEnabled(addr.memoryIndex),
                           Synchronization::Full());
   auto* ins =
       atomicCompareExchangeHeap(addr.base, &access, type, oldValue, newValue);
@@ -7183,7 +7237,7 @@ bool FunctionCompiler::emitAtomicLoad(ValType type, Scalar::Type viewType) {
   }
 
   MemoryAccessDesc access(addr.memoryIndex, viewType, addr.align, addr.offset,
-                          bytecodeOffset(), hugeMemoryEnabled(addr.memoryIndex),
+                          trapSiteDesc(), hugeMemoryEnabled(addr.memoryIndex),
                           Synchronization::Load());
   auto* ins = load(addr.base, &access, type);
   if (!inDeadCode() && !ins) {
@@ -7203,7 +7257,7 @@ bool FunctionCompiler::emitAtomicRMW(ValType type, Scalar::Type viewType,
   }
 
   MemoryAccessDesc access(addr.memoryIndex, viewType, addr.align, addr.offset,
-                          bytecodeOffset(), hugeMemoryEnabled(addr.memoryIndex),
+                          trapSiteDesc(), hugeMemoryEnabled(addr.memoryIndex),
                           Synchronization::Full());
   auto* ins = atomicBinopHeap(op, addr.base, &access, type, value);
   if (!inDeadCode() && !ins) {
@@ -7222,7 +7276,7 @@ bool FunctionCompiler::emitAtomicStore(ValType type, Scalar::Type viewType) {
   }
 
   MemoryAccessDesc access(addr.memoryIndex, viewType, addr.align, addr.offset,
-                          bytecodeOffset(), hugeMemoryEnabled(addr.memoryIndex),
+                          trapSiteDesc(), hugeMemoryEnabled(addr.memoryIndex),
                           Synchronization::Store());
   store(addr.base, &access, value);
   return true;
@@ -7245,10 +7299,10 @@ bool FunctionCompiler::emitWait(ValType type, uint32_t byteSize) {
     return true;
   }
 
-  MemoryAccessDesc access(
-      addr.memoryIndex, type == ValType::I32 ? Scalar::Int32 : Scalar::Int64,
-      addr.align, addr.offset, BytecodeOffset(bytecodeOffset),
-      hugeMemoryEnabled(addr.memoryIndex));
+  MemoryAccessDesc access(addr.memoryIndex,
+                          type == ValType::I32 ? Scalar::Int32 : Scalar::Int64,
+                          addr.align, addr.offset, trapSiteDesc(),
+                          hugeMemoryEnabled(addr.memoryIndex));
   MDefinition* ptr = computeEffectiveAddress(addr.base, &access);
   if (!ptr) {
     return false;
@@ -7297,7 +7351,7 @@ bool FunctionCompiler::emitNotify() {
   }
 
   MemoryAccessDesc access(addr.memoryIndex, Scalar::Int32, addr.align,
-                          addr.offset, BytecodeOffset(bytecodeOffset),
+                          addr.offset, trapSiteDesc(),
                           hugeMemoryEnabled(addr.memoryIndex));
   MDefinition* ptr = computeEffectiveAddress(addr.base, &access);
   if (!ptr) {
@@ -7330,7 +7384,7 @@ bool FunctionCompiler::emitAtomicXchg(ValType type, Scalar::Type viewType) {
   }
 
   MemoryAccessDesc access(addr.memoryIndex, viewType, addr.align, addr.offset,
-                          bytecodeOffset(), hugeMemoryEnabled(addr.memoryIndex),
+                          trapSiteDesc(), hugeMemoryEnabled(addr.memoryIndex),
                           Synchronization::Full());
   MDefinition* ins = atomicExchangeHeap(addr.base, &access, type, value);
   if (!inDeadCode() && !ins) {
@@ -7427,7 +7481,7 @@ bool FunctionCompiler::emitMemCopyInline(uint32_t memoryIndex, MDefinition* dst,
 #ifdef ENABLE_WASM_SIMD
   for (uint32_t i = 0; i < numCopies16; i++) {
     MemoryAccessDesc access(memoryIndex, Scalar::Simd128, 1, offset,
-                            bytecodeOffset(), hugeMemoryEnabled(memoryIndex));
+                            trapSiteDesc(), hugeMemoryEnabled(memoryIndex));
     auto* loadValue = load(src, &access, ValType::V128);
     if (!loadValue || !loadedValues.append(loadValue)) {
       return false;
@@ -7440,7 +7494,7 @@ bool FunctionCompiler::emitMemCopyInline(uint32_t memoryIndex, MDefinition* dst,
 #ifdef JS_64BIT
   for (uint32_t i = 0; i < numCopies8; i++) {
     MemoryAccessDesc access(memoryIndex, Scalar::Int64, 1, offset,
-                            bytecodeOffset(), hugeMemoryEnabled(memoryIndex));
+                            trapSiteDesc(), hugeMemoryEnabled(memoryIndex));
     auto* loadValue = load(src, &access, ValType::I64);
     if (!loadValue || !loadedValues.append(loadValue)) {
       return false;
@@ -7452,7 +7506,7 @@ bool FunctionCompiler::emitMemCopyInline(uint32_t memoryIndex, MDefinition* dst,
 
   for (uint32_t i = 0; i < numCopies4; i++) {
     MemoryAccessDesc access(memoryIndex, Scalar::Uint32, 1, offset,
-                            bytecodeOffset(), hugeMemoryEnabled(memoryIndex));
+                            trapSiteDesc(), hugeMemoryEnabled(memoryIndex));
     auto* loadValue = load(src, &access, ValType::I32);
     if (!loadValue || !loadedValues.append(loadValue)) {
       return false;
@@ -7463,7 +7517,7 @@ bool FunctionCompiler::emitMemCopyInline(uint32_t memoryIndex, MDefinition* dst,
 
   if (numCopies2) {
     MemoryAccessDesc access(memoryIndex, Scalar::Uint16, 1, offset,
-                            bytecodeOffset(), hugeMemoryEnabled(memoryIndex));
+                            trapSiteDesc(), hugeMemoryEnabled(memoryIndex));
     auto* loadValue = load(src, &access, ValType::I32);
     if (!loadValue || !loadedValues.append(loadValue)) {
       return false;
@@ -7474,7 +7528,7 @@ bool FunctionCompiler::emitMemCopyInline(uint32_t memoryIndex, MDefinition* dst,
 
   if (numCopies1) {
     MemoryAccessDesc access(memoryIndex, Scalar::Uint8, 1, offset,
-                            bytecodeOffset(), hugeMemoryEnabled(memoryIndex));
+                            trapSiteDesc(), hugeMemoryEnabled(memoryIndex));
     auto* loadValue = load(src, &access, ValType::I32);
     if (!loadValue || !loadedValues.append(loadValue)) {
       return false;
@@ -7490,7 +7544,7 @@ bool FunctionCompiler::emitMemCopyInline(uint32_t memoryIndex, MDefinition* dst,
     offset -= sizeof(uint8_t);
 
     MemoryAccessDesc access(memoryIndex, Scalar::Uint8, 1, offset,
-                            bytecodeOffset(), hugeMemoryEnabled(memoryIndex));
+                            trapSiteDesc(), hugeMemoryEnabled(memoryIndex));
     auto* value = loadedValues.popCopy();
     store(dst, &access, value);
   }
@@ -7499,7 +7553,7 @@ bool FunctionCompiler::emitMemCopyInline(uint32_t memoryIndex, MDefinition* dst,
     offset -= sizeof(uint16_t);
 
     MemoryAccessDesc access(memoryIndex, Scalar::Uint16, 1, offset,
-                            bytecodeOffset(), hugeMemoryEnabled(memoryIndex));
+                            trapSiteDesc(), hugeMemoryEnabled(memoryIndex));
     auto* value = loadedValues.popCopy();
     store(dst, &access, value);
   }
@@ -7508,7 +7562,7 @@ bool FunctionCompiler::emitMemCopyInline(uint32_t memoryIndex, MDefinition* dst,
     offset -= sizeof(uint32_t);
 
     MemoryAccessDesc access(memoryIndex, Scalar::Uint32, 1, offset,
-                            bytecodeOffset(), hugeMemoryEnabled(memoryIndex));
+                            trapSiteDesc(), hugeMemoryEnabled(memoryIndex));
     auto* value = loadedValues.popCopy();
     store(dst, &access, value);
   }
@@ -7518,7 +7572,7 @@ bool FunctionCompiler::emitMemCopyInline(uint32_t memoryIndex, MDefinition* dst,
     offset -= sizeof(uint64_t);
 
     MemoryAccessDesc access(memoryIndex, Scalar::Int64, 1, offset,
-                            bytecodeOffset(), hugeMemoryEnabled(memoryIndex));
+                            trapSiteDesc(), hugeMemoryEnabled(memoryIndex));
     auto* value = loadedValues.popCopy();
     store(dst, &access, value);
   }
@@ -7529,7 +7583,7 @@ bool FunctionCompiler::emitMemCopyInline(uint32_t memoryIndex, MDefinition* dst,
     offset -= sizeof(V128);
 
     MemoryAccessDesc access(memoryIndex, Scalar::Simd128, 1, offset,
-                            bytecodeOffset(), hugeMemoryEnabled(memoryIndex));
+                            trapSiteDesc(), hugeMemoryEnabled(memoryIndex));
     auto* value = loadedValues.popCopy();
     store(dst, &access, value);
   }
@@ -7691,7 +7745,7 @@ bool FunctionCompiler::emitMemFillInline(uint32_t memoryIndex,
     offset -= sizeof(uint8_t);
 
     MemoryAccessDesc access(memoryIndex, Scalar::Uint8, 1, offset,
-                            bytecodeOffset(), hugeMemoryEnabled(memoryIndex));
+                            trapSiteDesc(), hugeMemoryEnabled(memoryIndex));
     store(start, &access, val);
   }
 
@@ -7699,7 +7753,7 @@ bool FunctionCompiler::emitMemFillInline(uint32_t memoryIndex,
     offset -= sizeof(uint16_t);
 
     MemoryAccessDesc access(memoryIndex, Scalar::Uint16, 1, offset,
-                            bytecodeOffset(), hugeMemoryEnabled(memoryIndex));
+                            trapSiteDesc(), hugeMemoryEnabled(memoryIndex));
     store(start, &access, val2);
   }
 
@@ -7707,7 +7761,7 @@ bool FunctionCompiler::emitMemFillInline(uint32_t memoryIndex,
     offset -= sizeof(uint32_t);
 
     MemoryAccessDesc access(memoryIndex, Scalar::Uint32, 1, offset,
-                            bytecodeOffset(), hugeMemoryEnabled(memoryIndex));
+                            trapSiteDesc(), hugeMemoryEnabled(memoryIndex));
     store(start, &access, val4);
   }
 
@@ -7716,7 +7770,7 @@ bool FunctionCompiler::emitMemFillInline(uint32_t memoryIndex,
     offset -= sizeof(uint64_t);
 
     MemoryAccessDesc access(memoryIndex, Scalar::Int64, 1, offset,
-                            bytecodeOffset(), hugeMemoryEnabled(memoryIndex));
+                            trapSiteDesc(), hugeMemoryEnabled(memoryIndex));
     store(start, &access, val8);
   }
 #endif
@@ -7726,7 +7780,7 @@ bool FunctionCompiler::emitMemFillInline(uint32_t memoryIndex,
     offset -= sizeof(V128);
 
     MemoryAccessDesc access(memoryIndex, Scalar::Simd128, 1, offset,
-                            bytecodeOffset(), hugeMemoryEnabled(memoryIndex));
+                            trapSiteDesc(), hugeMemoryEnabled(memoryIndex));
     store(start, &access, val16);
   }
 #endif
@@ -8311,71 +8365,93 @@ bool FunctionCompiler::emitBrOnNonNull() {
   return brOnNonNull(relativeDepth, values, type, condition);
 }
 
-// Speculatively inline a call_ref that is likely to target the expected
+// Speculatively inline a call_refs that are likely to target the expected
 // function index in this module. A fallback for if the actual callee is not
-// the speculated expected callee is always generated. This leads to a control
-// flow diamond that is roughly:
+// any of the speculated expected callees is always generated. This leads to a
+// control flow chain that is roughly:
 //
-// if (ref.func $expectedFuncIndex) == actualCalleeFunc:
-//   (call_inline $expectedFuncIndex)
+// if (ref.func $expectedFuncIndex_1) == actualCalleeFunc:
+//   (call_inline $expectedFuncIndex1)
+// else if (ref.func $expectedFuncIndex_2) == actualCalleeFunc:
+//   (call_inline $expectedFuncIndex2)
+// ...
 // else:
 //   (call_ref actualCalleeFunc)
+//
 bool FunctionCompiler::emitSpeculativeInlineCallRef(
     uint32_t bytecodeOffset, const FuncType& funcType,
-    uint32_t expectedFuncIndex, MDefinition* actualCalleeFunc,
+    CallRefHint expectedFuncIndices, MDefinition* actualCalleeFunc,
     const DefVector& args, DefVector* results) {
+  // There must be at least one speculative target.
+  MOZ_ASSERT(!expectedFuncIndices.empty());
+
   // Perform an up front null check on the callee function reference.
   if (!refAsNonNull(actualCalleeFunc)) {
     return false;
   }
 
-  // Load the cached value of `ref.func $expectedFuncIndex` for comparing
-  // against `actualCalleeFunc`. This cached value may be null if the `ref.func`
-  // for the expected function has not been executed in this runtime session.
-  //
-  // This is okay because we have done a null check on the `actualCalleeFunc`
-  // already and so comparing it against a null expected callee func will
-  // return false and fall back to the general case. This can only happen if
-  // we've deserialized a cached module in a different session, and then run
-  // the code without ever acquiring a reference to the expected function. In
-  // that case, the expected callee could never be the target of this call_ref,
-  // so performing the fallback path is the right thing to do anyways.
-  MDefinition* expectedCalleeFunc = loadCachedRefFunc(expectedFuncIndex);
-  if (!expectedCalleeFunc) {
+  constexpr size_t numElseBlocks = CallRefHint::NUM_ENTRIES + 1;
+  Vector<MBasicBlock*, numElseBlocks, SystemAllocPolicy> elseBlocks;
+  if (!elseBlocks.reserve(numElseBlocks)) {
     return false;
   }
 
-  // Check if the callee funcref we have is equals to the expected callee
-  // funcref we're inlining.
-  MDefinition* isExpectedCallee =
-      compare(actualCalleeFunc, expectedCalleeFunc, JSOp::Eq,
-              MCompare::Compare_WasmAnyRef);
-  if (!isExpectedCallee) {
-    return false;
-  }
+  for (uint32_t i = 0; i < expectedFuncIndices.length(); i++) {
+    uint32_t funcIndex = expectedFuncIndices.get(i);
 
-  // Start the 'then' block which will have the inlined code
-  MBasicBlock* elseBlock;
-  if (!branchAndStartThen(isExpectedCallee, &elseBlock)) {
-    return false;
-  }
+    // Load the cached value of `ref.func $expectedFuncIndex` for comparing
+    // against `actualCalleeFunc`. This cached value may be null if the
+    // `ref.func` for the expected function has not been executed in this
+    // runtime session.
+    //
+    // This is okay because we have done a null check on the `actualCalleeFunc`
+    // already and so comparing it against a null expected callee func will
+    // return false and fall back to the general case. This can only happen if
+    // we've deserialized a cached module in a different session, and then run
+    // the code without ever acquiring a reference to the expected function. In
+    // that case, the expected callee could never be the target of this
+    // call_ref, so performing the fallback path is the right thing to do
+    // anyways.
+    MDefinition* expectedCalleeFunc = loadCachedRefFunc(funcIndex);
+    if (!expectedCalleeFunc) {
+      return false;
+    }
 
-  // Inline the expected callee as we do with direct calls
-  DefVector inlineResults;
-  if (!emitInlineCall(funcType, expectedFuncIndex,
-                      InliningHeuristics::CallKind::CallRef, args,
-                      &inlineResults)) {
-    return false;
-  }
+    // Check if the callee funcref we have is equals to the expected callee
+    // funcref we're inlining.
+    MDefinition* isExpectedCallee =
+        compare(actualCalleeFunc, expectedCalleeFunc, JSOp::Eq,
+                MCompare::Compare_WasmAnyRef);
+    if (!isExpectedCallee) {
+      return false;
+    }
 
-  // Push the results for joining with the 'else' block
-  if (!pushDefs(inlineResults)) {
-    return false;
-  }
+    // Start a 'then' block, which will have the inlined code
+    MBasicBlock* elseBlock;
+    if (!branchAndStartThen(isExpectedCallee, &elseBlock)) {
+      return false;
+    }
 
-  // Switch to the 'else' block which will have the fallback `call_ref`
-  if (!switchToElse(elseBlock, &elseBlock)) {
-    return false;
+    // Inline the expected callee as we do with direct calls
+    DefVector inlineResults;
+    if (!emitInlineCall(funcType, funcIndex,
+                        InliningHeuristics::CallKind::CallRef, args,
+                        &inlineResults)) {
+      return false;
+    }
+
+    // Push the results for joining with the 'else' block
+    if (!pushDefs(inlineResults)) {
+      return false;
+    }
+
+    // Switch to the 'else' block which will have, either the check for the
+    // next target, or the fallback `call_ref` if we're out of targets.
+    if (!switchToElse(elseBlock, &elseBlock)) {
+      return false;
+    }
+
+    elseBlocks.infallibleAppend(elseBlock);
   }
 
   DefVector callResults;
@@ -8389,8 +8465,14 @@ bool FunctionCompiler::emitSpeculativeInlineCallRef(
     return false;
   }
 
-  // Join the two branches together
-  return joinIfElse(elseBlock, results);
+  // Join the various branches together
+  for (uint32_t i = elseBlocks.length() - 1; i != 0; i--) {
+    DefVector results;
+    if (!joinIfElse(elseBlocks[i], &results) || !pushDefs(results)) {
+      return false;
+    }
+  }
+  return joinIfElse(elseBlocks[0], results);
 }
 
 bool FunctionCompiler::emitCallRef() {
@@ -8413,13 +8495,14 @@ bool FunctionCompiler::emitCallRef() {
 
   const FuncType& funcType = codeMeta().types->type(funcTypeIndex).funcType();
 
-  if (hint.isInlineFunc() &&
-      shouldInlineCall(InliningHeuristics::CallKind::CallRef,
-                       hint.inlineFuncIndex())) {
+  // Ask the inlining heuristics which entries in `hint` we are allowed to
+  // inline.
+  CallRefHint approved =
+      auditInlineableCallees(InliningHeuristics::CallKind::CallRef, hint);
+  if (!approved.empty()) {
     DefVector results;
-    if (!emitSpeculativeInlineCallRef(bytecodeOffset, funcType,
-                                      hint.inlineFuncIndex(), callee, args,
-                                      &results)) {
+    if (!emitSpeculativeInlineCallRef(bytecodeOffset, funcType, approved,
+                                      callee, args, &results)) {
       return false;
     }
     iter().setResults(results.length(), results);
@@ -10375,7 +10458,8 @@ bool RootCompiler::generate() {
   return true;
 }
 
-CompileInfo* RootCompiler::addInlineCall(
+CompileInfo* RootCompiler::startInlineCall(
+    uint32_t callerFuncIndex, BytecodeOffset callerOffset,
     uint32_t calleeFuncIndex, uint32_t numLocals, size_t inlineeBytecodeSize,
     InliningHeuristics::CallKind callKind) {
   // Update the inlining counters accordingly.
@@ -10397,12 +10481,27 @@ CompileInfo* RootCompiler::addInlineCall(
 #ifdef JS_JITSPEW
     if (inliningBudget_ <= 0) {
       JS_LOG(wasmPerf, mozilla::LogLevel::Info,
-             "CM=..%06lx  RC::addInlineCall     "
+             "CM=..%06lx  RC::startInlineCall     "
              "Inlining budget for fI=%u exceeded",
-             0xFFFFFF & (unsigned long)uintptr_t(&codeMeta_), calleeFuncIndex);
+             0xFFFFFF & (unsigned long)uintptr_t(&codeMeta_), callerFuncIndex);
     }
 #endif
   }
+
+  // Add the callers offset to the stack of inlined caller offsets
+  if (!inlinedCallerOffsets_.append(callerOffset)) {
+    return nullptr;
+  }
+
+  // Cache a copy of the current stack of inlined caller offsets that can be
+  // shared across all call sites
+  MutableBytecodeOffsetVector inlinedCallerOffsetsVector =
+      js_new<ShareableBytecodeOffsetVector>();
+  if (!inlinedCallerOffsetsVector ||
+      !inlinedCallerOffsetsVector->appendAll(inlinedCallerOffsets_)) {
+    return nullptr;
+  }
+  inlinedCallerOffsetsVector_ = inlinedCallerOffsetsVector;
 
   UniqueCompileInfo compileInfo = MakeUnique<CompileInfo>(numLocals);
   if (!compileInfo || !compileInfos_.append(std::move(compileInfo))) {
@@ -10410,6 +10509,8 @@ CompileInfo* RootCompiler::addInlineCall(
   }
   return compileInfos_[compileInfos_.length() - 1].get();
 }
+
+void RootCompiler::finishInlineCall() { inlinedCallerOffsets_.popBack(); }
 
 bool wasm::IonCompileFunctions(const CodeMetadata& codeMeta,
                                const CompilerEnvironment& compilerEnv,
@@ -10491,11 +10592,12 @@ bool wasm::IonCompileFunctions(const CodeMetadata& codeMeta,
 
       CodeGenerator codegen(&rootCompiler.mirGen(), lir, &masm);
 
-      BytecodeOffset prologueTrapOffset(func.lineOrBytecode);
+      TrapSiteDesc prologueTrapSiteDesc(
+          wasm::BytecodeOffset(func.lineOrBytecode));
       FuncOffsets offsets;
       ArgTypeVector args(codeMeta.getFuncType(func.index));
       if (!codegen.generateWasm(CallIndirectId::forFunc(codeMeta, func.index),
-                                prologueTrapOffset, args, trapExitLayout,
+                                prologueTrapSiteDesc, args, trapExitLayout,
                                 trapExitLayoutNumWords, &offsets,
                                 &code->stackMaps, &d)) {
         return false;

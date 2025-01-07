@@ -132,9 +132,6 @@ MACH_COMMANDS = {
     "jsshell-bench": MachCommandReference("testing/mach_commands.py"),
     "jstestbrowser": MachCommandReference("layout/tools/reftest/mach_commands.py"),
     "jstests": MachCommandReference("testing/mach_commands.py"),
-    "l10n-cross-channel": MachCommandReference(
-        "tools/compare-locales/mach_commands.py"
-    ),
     "lint": MachCommandReference("tools/lint/mach_commands.py"),
     "logspam": MachCommandReference("tools/mach_commands.py"),
     "mach-commands": MachCommandReference("python/mach/mach/commands/commandinfo.py"),
@@ -461,7 +458,7 @@ def load_commands_from_file(path: Union[str, Path], module_name=None):
 
     try:
         load_source(module_name, str(path))
-    except IOError as e:
+    except OSError as e:
         if e.errno != errno.ENOENT:
             raise
 
@@ -475,7 +472,7 @@ def load_commands_from_spec(
 
     Takes a dictionary mapping command names to their metadata.
     """
-    modules = set(spec[command].module for command in spec)
+    modules = {spec[command].module for command in spec}
 
     for path in modules:
         try:

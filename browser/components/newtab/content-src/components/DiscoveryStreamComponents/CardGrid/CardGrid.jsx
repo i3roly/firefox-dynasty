@@ -8,6 +8,7 @@ import { DSDismiss } from "content-src/components/DiscoveryStreamComponents/DSDi
 import { TopicsWidget } from "../TopicsWidget/TopicsWidget.jsx";
 import { ListFeed } from "../ListFeed/ListFeed.jsx";
 import { SafeAnchor } from "../SafeAnchor/SafeAnchor";
+import { AdBanner } from "../AdBanner/AdBanner.jsx";
 import { FluentOrText } from "../../FluentOrText/FluentOrText.jsx";
 import { actionCreators as ac, actionTypes as at } from "common/Actions.mjs";
 import React, { useEffect, useState, useRef, useCallback } from "react";
@@ -26,6 +27,10 @@ const PREF_LIST_FEED_SELECTED_FEED =
   "discoverystream.contextualContent.selectedFeed";
 const PREF_FAKESPOT_ENABLED =
   "discoverystream.contextualContent.fakespot.enabled";
+const PREF_BILLBOARD_ENABLED = "newtabAdSize.billboard";
+const PREF_LEADERBOARD_ENABLED = "newtabAdSize.leaderboard";
+const PREF_LEADERBOARD_POSITION = "newtabAdSize.leaderboard.position";
+const PREF_BILLBOARD_POSITION = "newtabAdSize.billboard.position";
 const INTERSECTION_RATIO = 0.5;
 const VISIBLE = "visible";
 const VISIBILITY_CHANGE_EVENT = "visibilitychange";
@@ -353,6 +358,8 @@ export class _CardGrid extends React.PureComponent {
     const spocsStartupCacheEnabled = prefs[PREF_SPOCS_STARTUPCACHE_ENABLED];
     const listFeedEnabled = prefs[PREF_LIST_FEED_ENABLED];
     const listFeedSelectedFeed = prefs[PREF_LIST_FEED_SELECTED_FEED];
+    const billboardEnabled = prefs[PREF_BILLBOARD_ENABLED];
+    const leaderboardEnabled = prefs[PREF_LEADERBOARD_ENABLED];
     // filter out recs that should be in ListFeed
     const recs = this.props.data.recommendations
       .filter(item => !item.feedName)
@@ -410,6 +417,7 @@ export class _CardGrid extends React.PureComponent {
             firstVisibleTimestamp={this.props.firstVisibleTimestamp}
             mayHaveThumbsUpDown={mayHaveThumbsUpDown}
             mayHaveSectionsCards={mayHaveSectionsCards}
+            corpus_item_id={rec.corpus_item_id}
             scheduled_corpus_item_id={rec.scheduled_corpus_item_id}
             recommended_at={rec.recommended_at}
             received_rank={rec.received_rank}
@@ -466,6 +474,39 @@ export class _CardGrid extends React.PureComponent {
             this.props.data.recommendations,
             listFeedSelectedFeed
           )
+        );
+      }
+    }
+
+    // if a banner ad is enabled and we have any available, place them in the grid
+    const { spocs } = this.props.DiscoveryStream;
+    if ((billboardEnabled || leaderboardEnabled) && spocs.data.newtab_spocs) {
+      // Only render one AdBanner in the grid -
+      // Prioritize rendering a leaderboard if it exists,
+      // otherwise render a billboard
+      const spocToRender =
+        spocs.data.newtab_spocs.items.find(
+          ({ format }) => format === "leaderboard" && leaderboardEnabled
+        ) ||
+        spocs.data.newtab_spocs.items.find(
+          ({ format }) => format === "billboard" && billboardEnabled
+        );
+
+      if (spocToRender) {
+        const row =
+          spocToRender.format === "leaderboard"
+            ? prefs[PREF_LEADERBOARD_POSITION]
+            : prefs[PREF_BILLBOARD_POSITION];
+
+        cards.push(
+          <AdBanner
+            spoc={spocToRender}
+            key={`dscard-${spocToRender.id}`}
+            dispatch={this.props.dispatch}
+            type={this.props.type}
+            firstVisibleTimestamp={this.props.firstVisibleTimestamp}
+            row={row}
+          />
         );
       }
     }

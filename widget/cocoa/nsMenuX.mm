@@ -132,7 +132,8 @@ nsMenuX::nsMenuX(nsMenuParentX* aParent, nsMenuGroupOwnerX* aMenuGroupOwner,
   // menu gets selected, which is bad.
   RebuildMenu();
 
-  if (IsXULWindowMenu(mContent)) {
+  bool isXULWindowMenu = IsXULWindowMenu(mContent);
+  if (isXULWindowMenu) {
     // Let the OS know that this is our Window menu.
     NSApp.windowsMenu = mNativeMenu;
   }
@@ -140,6 +141,9 @@ nsMenuX::nsMenuX(nsMenuParentX* aParent, nsMenuGroupOwnerX* aMenuGroupOwner,
   mIcon = MakeUnique<nsMenuItemIconX>(this);
 
   if (mVisible) {
+    if (!isXULWindowMenu) {
+      SetRebuild(true);
+    }
     SetupIcon();
   }
 
@@ -1064,8 +1068,8 @@ void nsMenuX::ObserveAttributeChanged(dom::Document* aDocument,
 }
 
 void nsMenuX::ObserveContentRemoved(dom::Document* aDocument,
-                                    nsIContent* aContainer, nsIContent* aChild,
-                                    nsIContent* aPreviousSibling) {
+                                    nsIContent* aContainer,
+                                    nsIContent* aChild) {
   if (gConstructingMenu) {
     return;
   }

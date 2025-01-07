@@ -362,7 +362,11 @@ def add_extra_options(config, tests):
                 )
 
         if "android-hw-p6" in test_platform or "android-hw-s24" in test_platform:
-            extra_options.append("--power-test")
+            if "--power-test" not in extra_options:
+                extra_options.append("--power-test")
+        elif "android-hw-a55" in test_platform and "tp6" in test["test-name"]:
+            if "--power-test" not in extra_options:
+                extra_options.append("--power-test")
         elif "windows" in test_platform and any(
             t in test["test-name"] for t in ("speedometer3", "tp6")
         ):
@@ -389,7 +393,7 @@ def modify_mozharness_configs(config, tests):
         elif "linux" in test_platform:
             mozharness["config"] = ["raptor/linux_external_browser_config.py"]
         elif "android" in test_platform:
-            test["target"] = "target.tar.bz2"
+            test["target"] = "target.tar.xz"
             mozharness["config"] = ["raptor/android_hw_external_browser_config.py"]
 
         yield test

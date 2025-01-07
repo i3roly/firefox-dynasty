@@ -16,6 +16,7 @@ version = "0.1.0"
 authors = ["sync-team@mozilla.com"]
 build = "build.rs"
 exclude = ["/android"]
+autolib = false
 autobins = false
 autoexamples = false
 autotests = false
@@ -94,3 +95,6 @@ features = ["build"]
 
 [features]
 default = []
+
+[lints.clippy]
+empty-line-after-doc-comments = "allow"

@@ -211,7 +211,8 @@ class EditorDOMPointBase final {
   template <typename ContentNodeType>
   ContentNodeType* ContainerAs() const {
     MOZ_ASSERT(mParent);
-    MOZ_DIAGNOSTIC_ASSERT(ContentNodeType::FromNode(mParent));
+    MOZ_DIAGNOSTIC_ASSERT(
+        ContentNodeType::FromNode(static_cast<const nsINode*>(mParent)));
     return static_cast<ContentNodeType*>(GetContainer());
   }
 
@@ -642,6 +643,10 @@ class EditorDOMPointBase final {
     }
     SetToEndOf(parentNode);
   }
+  void SetAfterContainer() {
+    MOZ_ASSERT(mParent);
+    SetAfter(mParent);
+  }
   template <typename ContainerType>
   static SelfType After(
       const ContainerType& aContainer,
@@ -703,6 +708,11 @@ class EditorDOMPointBase final {
     if (!IsEndOfContainer()) {
       return NextPoint<EditorDOMPointType>();
     }
+    return AfterContainer<EditorDOMPointType>();
+  }
+  template <typename EditorDOMPointType = SelfType>
+  EditorDOMPointType AfterContainer() const {
+    MOZ_ASSERT(IsInContentNode());
     return EditorDOMPointType::After(*ContainerAs<nsIContent>());
   }
   template <typename EditorDOMPointType = SelfType>
@@ -1355,6 +1365,80 @@ class EditorDOMRangeBase final {
     mStart = std::move(aStart);
     mEnd = std::move(aEnd);
   }
+  template <typename PT, typename CT>
+  void MergeWith(const EditorDOMPointBase<PT, CT>& aPoint) {
+    MOZ_ASSERT(aPoint.IsSet());
+    if (!IsPositioned()) {
+      SetStartAndEnd(aPoint, aPoint);
+      return;
+    }
+    MOZ_ASSERT(nsContentUtils::GetClosestCommonInclusiveAncestor(
+        GetClosestCommonInclusiveAncestor(), aPoint.GetContainer()));
+    if (mEnd.EqualsOrIsBefore(aPoint)) {
+      SetEnd(aPoint);
+      return;
+    }
+    if (aPoint.IsBefore(mStart)) {
+      SetStart(aPoint);
+      return;
+    }
+  }
+  void MergeWith(PointType&& aPoint) {
+    MOZ_ASSERT(aPoint.IsSet());
+    if (!IsPositioned()) {
+      SetStartAndEnd(aPoint, aPoint);
+      return;
+    }
+    MOZ_ASSERT(GetClosestCommonInclusiveAncestor());
+    MOZ_ASSERT(nsContentUtils::GetClosestCommonInclusiveAncestor(
+        GetClosestCommonInclusiveAncestor(), aPoint.GetContainer()));
+    if (mEnd.EqualsOrIsBefore(aPoint)) {
+      SetEnd(std::move(aPoint));
+      return;
+    }
+    if (aPoint.IsBefore(mStart)) {
+      SetStart(std::move(aPoint));
+      return;
+    }
+  }
+  template <typename PT, typename CT>
+  void MergeWith(const EditorDOMRangeBase<EditorDOMPointBase<PT, CT>>& aRange) {
+    MOZ_ASSERT(aRange.IsPositioned());
+    MOZ_ASSERT(aRange.GetClosestCommonInclusiveAncestor());
+    if (!IsPositioned()) {
+      SetStartAndEnd(aRange.mStart, aRange.mEnd);
+      return;
+    }
+    MOZ_ASSERT(GetClosestCommonInclusiveAncestor());
+    MOZ_ASSERT(nsContentUtils::GetClosestCommonInclusiveAncestor(
+        GetClosestCommonInclusiveAncestor(),
+        aRange.GetClosestCommonInclusiveAncestor()));
+    if (mEnd.IsBefore(aRange.mEnd)) {
+      SetEnd(aRange.mEnd);
+    }
+    if (aRange.mStart.IsBefore(mStart)) {
+      SetStart(aRange.mStart);
+    }
+  }
+  void MergeWith(SelfType&& aRange) {
+    MOZ_ASSERT(aRange.IsPositioned());
+    MOZ_ASSERT(aRange.GetClosestCommonInclusiveAncestor());
+    if (!IsPositioned()) {
+      SetStartAndEnd(std::move(aRange.mStart), std::move(aRange.mEnd));
+      return;
+    }
+    MOZ_ASSERT(GetClosestCommonInclusiveAncestor());
+    MOZ_ASSERT(nsContentUtils::GetClosestCommonInclusiveAncestor(
+        GetClosestCommonInclusiveAncestor(),
+        aRange.GetClosestCommonInclusiveAncestor()));
+    if (mEnd.IsBefore(aRange.mEnd)) {
+      SetEnd(std::move(aRange.mEnd));
+    }
+    if (aRange.mStart.IsBefore(mStart)) {
+      SetStart(std::move(aRange.mStart));
+    }
+    aRange.Clear();
+  }
   void Clear() {
     mStart.Clear();
     mEnd.Clear();
@@ -1371,6 +1455,9 @@ class EditorDOMRangeBase final {
   bool IsPositionedAndValid() const {
     return mStart.IsSetAndValid() && mEnd.IsSetAndValid() &&
            mStart.EqualsOrIsBefore(mEnd);
+  }
+  bool IsPositionedAndValidInComposedDoc() const {
+    return IsPositionedAndValid() && mStart.GetContainer()->IsInComposedDoc();
   }
   template <typename OtherPointType>
   MOZ_NEVER_INLINE_DEBUG bool Contains(const OtherPointType& aPoint) const {

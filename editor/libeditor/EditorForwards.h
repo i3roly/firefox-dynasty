@@ -69,6 +69,12 @@ using EditorRawDOMPoint = EditorDOMPointBase<nsINode*, nsIContent*>;
 using EditorDOMPointInText = EditorDOMPointBase<RefPtr<dom::Text>, nsIContent*>;
 using EditorRawDOMPointInText = EditorDOMPointBase<dom::Text*, nsIContent*>;
 
+template <typename CT>
+class EditorLineBreakBase;  // EditorLineBreak.h
+
+using EditorLineBreak = EditorLineBreakBase<nsCOMPtr<nsIContent>>;
+using EditorRawLineBreak = EditorLineBreakBase<nsIContent*>;
+
 /******************************************************************************
  * classes
  ******************************************************************************/
@@ -92,10 +98,12 @@ class CaretPoint;                       // EditorUtils.h
 class ChangeAttributeTransaction;       // ChangeAttributeTransaction.h
 class ChangeStyleTransaction;           // ChangeStyleTransaction.h
 class CompositionTransaction;           // CompositionTransaction.h
+class CreateLineBreakResult;            // EditorLineBreak.h
 class CSSEditUtils;                     // CSSEditUtils.h
 class DeleteContentTransactionBase;     // DeleteContentTransactionBase.h
 class DeleteMultipleRangesTransaction;  // DeleteMultipleRangesTransaction.h
 class DeleteNodeTransaction;            // DeleteNodeTransaction.h
+class DeleteRangeResult;                // HTMLEditHelpers.h
 class DeleteRangeTransaction;           // DeleteRangeTransaction.h
 class DeleteTextTransaction;            // DeleteTextTransaction.h
 class EditActionResult;                 // EditorUtils.h

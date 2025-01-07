@@ -212,6 +212,14 @@ export const listing = [
       "api",
       "operation",
       "device",
+      "all_limits_and_features"
+    ]
+  },
+  {
+    "file": [
+      "api",
+      "operation",
+      "device",
       "lost"
     ]
   },
@@ -502,6 +510,14 @@ export const listing = [
       "operation",
       "sampling",
       "lod_clamp"
+    ]
+  },
+  {
+    "file": [
+      "api",
+      "operation",
+      "sampling",
+      "sampler_texture"
     ]
   },
   {
@@ -1116,6 +1132,16 @@ export const listing = [
       "encoding",
       "cmds",
       "render",
+      "indirect_multi_draw"
+    ]
+  },
+  {
+    "file": [
+      "api",
+      "validation",
+      "encoding",
+      "cmds",
+      "render",
       "setIndexBuffer"
     ]
   },
@@ -1301,6 +1327,13 @@ export const listing = [
       "api",
       "validation",
       "layout_shader_compat"
+    ]
+  },
+  {
+    "file": [
+      "api",
+      "validation",
+      "non_filterable_texture"
     ]
   },
   {
@@ -1679,6 +1712,14 @@ export const listing = [
       "encoding",
       "programmable",
       "pipeline_bind_group_compat"
+    ]
+  },
+  {
+    "file": [
+      "compat",
+      "api",
+      "validation",
+      "pipeline_creation"
     ]
   },
   {
@@ -3233,6 +3274,16 @@ export const listing = [
       "expression",
       "call",
       "builtin",
+      "subgroupShuffle"
+    ]
+  },
+  {
+    "file": [
+      "shader",
+      "execution",
+      "expression",
+      "call",
+      "builtin",
       "tan"
     ]
   },
@@ -3394,6 +3445,16 @@ export const listing = [
       "call",
       "builtin",
       "textureStore"
+    ]
+  },
+  {
+    "file": [
+      "shader",
+      "execution",
+      "expression",
+      "call",
+      "builtin",
+      "texture_utils"
     ]
   },
   {

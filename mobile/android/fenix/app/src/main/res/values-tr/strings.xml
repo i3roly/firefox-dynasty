@@ -369,7 +369,7 @@
     <!-- Browser menu label for turning OFF reader view of the current visited page -->
     <string name="browser_menu_turn_off_reader_view">Okuyucu görünümünü kapat</string>
     <!-- Browser menu button that reopens a private tab as a regular tab -->
-    <string name="browser_menu_open_in_normal_tab">Gizli olmayan sekmeye taşı</string>dsa
+    <string name="browser_menu_open_in_normal_tab">Gizli olmayan sekmeye taşı</string>
     <!-- Browser menu label for navigating to the translation feature, which provides language translation options the current visited page -->
     <string name="browser_menu_translate_page">Sayfayı çevir…</string>
     <!-- Browser menu label for navigating to the Web Compat Reporter feature, which provides users the ability to send bug reports for broken sites. -->
@@ -453,6 +453,11 @@
     <!-- Content description (not visible, for screen readers etc.): Search engine icon.
     The parameter is the search engine name (for example: DuckDuckGo). -->
     <string name="search_engine_icon_content_description_1">Arama motoru: %s</string>
+
+    <!-- Content description (not visible, for screen readers etc.) of the search engine selector from the search toolbar.
+    The parameter is the search engine name (for example: DuckDuckGo).
+    The colon character (in "%s:") is intended to have the screen reader make a small pause between the search engine name and the description of the button. -->
+    <string name="search_engine_selector_content_description">%s: arama motoru seçimi</string>
 
     <!-- Home onboarding -->
     <!-- Home onboarding dialog welcome screen title text. -->
@@ -615,7 +620,7 @@
     <!-- Onboarding label for 'Save and continue' button, used by Nimbus experiments. -->
     <string name="onboarding_save_and_continue_button">Kaydet ve devam et</string>
     <!-- Onboarding toolbar selection card label for 'skip' button, used by Nimbus experiments. -->
-    <string name="onboarding_customize_toolbar_skip_button">Atla</string>
+    <string name="onboarding_customize_toolbar_skip_button" tools:ignore="UnusedResources">Atla</string>
     <!-- Onboarding toolbar selection card label for 'top' option, used by Nimbus experiments. -->
     <string name="onboarding_customize_toolbar_top_option">Üstte</string>
     <!-- Onboarding toolbar selection card label for 'bottom' option, used by Nimbus experiments. -->
@@ -624,6 +629,13 @@
     <!-- Onboarding toolbar selection card content description for the toolbar placement image. %1$s is placeholder for either 'top' or 'bottom'. -->
     <string name="onboarding_customize_toolbar_placement_content_description" moz:removedIn="135" tools:ignore="UnusedResources">%1$s araç çubuğunun görüntüsü</string>
 
+    <!-- Onboarding toolbar selection card content description for the toolbar placement image. -->
+    <string name="onboarding_customize_toolbar_placement_bottom_content_description">Alt araç çubuğunun görüntüsü</string>
+    <string name="onboarding_customize_toolbar_placement_top_content_description">Üst araç çubuğunun görüntüsü</string>
+
+    <!-- Onboarding toolbar selection card label for 'Not now' button, used by Nimbus experiments. -->
+    <string name="onboarding_customize_toolbar_not_now_button">Şimdi değil</string>
+
     <!-- Onboarding header for the theme selection card, used by Nimbus experiments. -->
     <string name="onboarding_customize_theme_title" tools:ignore="UnusedResources">Bir tema seçin</string>
     <!-- Onboarding sub header for theme selection card, used by Nimbus experiments. -->
@@ -631,7 +643,7 @@
     <!-- Onboarding label for 'Save and start browsing' button, used by Nimbus experiments. -->
     <string name="onboarding_save_and_start_button">Kaydet ve gezinmeye başla</string>
     <!-- Onboarding theme selection card label for 'skip' button, used by Nimbus experiments. -->
-    <string name="onboarding_customize_theme_skip_button">Geç</string>
+    <string name="onboarding_customize_theme_skip_button" tools:ignore="UnusedResources">Geç</string>
     <!-- Onboarding theme selection card label for 'dark' option, used by Nimbus experiments. -->
     <string name="onboarding_customize_theme_dark_option">Koyu</string>
     <!-- Onboarding theme selection card label for 'light' option, used by Nimbus experiments. -->
@@ -641,6 +653,9 @@
 
     <!-- Onboarding theme selection card content description for the theme selection image. %1$s is placeholder for either 'system', 'light' or 'dark'. -->
     <string name="onboarding_customize_theme_content_description">%1$s temanın görüntüsü</string>
+
+    <!-- Onboarding theme selection card label for 'Not now' button, used by Nimbus experiments. -->
+    <string name="onboarding_customize_theme_not_now_button">Şimdi değil</string>
 
     <!-- Search Widget -->
     <!-- Content description for searching with a widget. The first parameter is the name of the application.-->
@@ -1053,8 +1068,12 @@
     <!-- Learn more link for marketing data preference -->
     <string name="preferences_marketing_data_learn_more">Pazarlama verileri ile ilgili daha fazla bilgi alın</string>
 
+    <!-- Preference switch title for automatically submitting crash reports -->
+    <string name="preferences_automatically_send_crashes_title">Çökme raporlarını otomatik olarak gönder</string>
     <string name="preferences_automatically_submit_crashes_title" moz:removedIn="136" tools:ignore="UnusedResources">Çökme raporlarını otomatik olarak gönder</string>
 
+    <!-- Preference switch description for automatically submitting crash reports -->
+    <string name="preferences_automatically_send_crashes_description">Bu sayede tarayıcıyla ilgili sorunları tanılayıp düzeltebiliriz. Raporlar kişisel veya hassas veriler içerebilir.</string>
     <string name="preferences_automatically_submit_crashes_description" moz:removedIn="136" tools:ignore="UnusedResources">Çökme yaşandıktan sonra uygulama açılırken çökme verilerini Mozilla ile otomatik olarak paylaşır</string>
 
     <!-- Title for studies preferences -->
@@ -2045,10 +2064,10 @@
     <string name="browser_toolbar_long_press_popup_paste_and_go">Yapıştır ve git</string>
     <!-- Paste the text in the clipboard -->
     <string name="browser_toolbar_long_press_popup_paste">Yapıştır</string>
-  
+
     <!-- Snackbar message shown after an URL has been copied to clipboard. -->
     <string name="browser_toolbar_url_copied_to_clipboard_snackbar">Adres panoya kopyalandı</string>
-  
+
     <!-- Title text for the Add To Homescreen dialog -->
     <string name="add_to_homescreen_title">Ana ekrana ekle</string>
     <!-- Cancel button text for the Add to Homescreen dialog -->

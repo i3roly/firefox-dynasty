@@ -569,6 +569,7 @@ dependencies {
     implementation ComponentsDependencies.thirdparty_sentry
 
     implementation project(':compose-awesomebar')
+    implementation project(':compose-base')
     implementation project(':compose-cfr')
 
     implementation project(':concept-awesomebar')
@@ -628,7 +629,7 @@ dependencies {
     implementation project(':feature-webcompat-reporter')
 
     implementation project(':service-pocket')
-    implementation project(':service-contile')
+    implementation project(':service-mars')
     implementation project(':service-digitalassetlinks')
     implementation project(':service-sync-autofill')
     implementation project(':service-sync-logins')
@@ -741,7 +742,7 @@ dependencies {
     testImplementation project(':support-test-libstate')
     testImplementation ComponentsDependencies.androidx_test_junit
     testImplementation ComponentsDependencies.androidx_work_testing
-    testImplementation ComponentsDependencies.mozilla_appservices_full_megazord_forUnitTests
+    testImplementation ComponentsDependencies.mozilla_appservices_full_megazord_libsForTests
     testImplementation (ComponentsDependencies.testing_robolectric) {
         exclude group: 'org.apache.maven'
     }

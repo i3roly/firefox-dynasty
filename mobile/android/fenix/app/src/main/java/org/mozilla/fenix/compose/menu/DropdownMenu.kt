@@ -33,14 +33,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
+import mozilla.components.compose.base.Divider
 import org.mozilla.fenix.R
-import org.mozilla.fenix.compose.Divider
 import org.mozilla.fenix.compose.button.PrimaryButton
 import org.mozilla.fenix.compose.menu.MenuItem.FixedItem.Level
 import org.mozilla.fenix.compose.text.Text
@@ -104,6 +105,8 @@ private fun DropdownMenuContent(
                                 onDismissRequest()
                                 it.onClick()
                             },
+                            modifier = Modifier
+                                .testTag(it.testTag),
                             content = {
                                 TextMenuItemContent(item = it)
                             },
@@ -114,20 +117,24 @@ private fun DropdownMenuContent(
                                 onDismissRequest()
                                 it.onClick()
                             },
+                            modifier = Modifier
+                                .testTag(it.testTag),
                             content = {
                                 IconMenuItemContent(item = it)
                             },
                         )
 
                         is MenuItem.CheckableItem -> FlexibleDropdownMenuItem(
-                            modifier = Modifier.selectable(
-                                selected = it.isChecked,
-                                role = Role.Button,
-                                onClick = {
-                                    onDismissRequest()
-                                    it.onClick()
-                                },
-                            ),
+                            modifier = Modifier
+                                .selectable(
+                                    selected = it.isChecked,
+                                    role = Role.Button,
+                                    onClick = {
+                                        onDismissRequest()
+                                        it.onClick()
+                                    },
+                                )
+                                .testTag(it.testTag),
                             onClick = {
                                 onDismissRequest()
                                 it.onClick()

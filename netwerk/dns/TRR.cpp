@@ -50,8 +50,9 @@
 namespace mozilla {
 namespace net {
 
-NS_IMPL_ISUPPORTS(TRR, nsIHttpPushListener, nsIInterfaceRequestor,
-                  nsIStreamListener, nsIRunnable, nsITimerCallback)
+NS_IMPL_ISUPPORTS_INHERITED(TRR, Runnable, nsIHttpPushListener,
+                            nsIInterfaceRequestor, nsIStreamListener,
+                            nsITimerCallback)
 
 // when firing off a normal A or AAAA query
 TRR::TRR(AHostResolver* aResolver, nsHostRecord* aRec, enum TrrType aType)
@@ -352,7 +353,7 @@ nsresult TRR::SendHTTPRequest() {
         LOG(("TRR::SendHTTPRequest use conn info:%s\n",
              trrConnInfo->HashKey().get()));
       } else {
-        MOZ_DIAGNOSTIC_ASSERT(false);
+        MOZ_DIAGNOSTIC_CRASH("host not equal to trrConnInfo origin");
       }
     } else {
       TRRService::Get()->InitTRRConnectionInfo();

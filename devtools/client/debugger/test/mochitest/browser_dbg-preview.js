@@ -104,6 +104,36 @@ add_task(async function () {
     },
   ]);
 
+  // javascript.options.experimental.explicit_resource_management is set to true, but it's
+  // only supported on Nightly at the moment, so only check for SuppressedError if
+  // they're supported.
+  if (AppConstants.ENABLE_EXPLICIT_RESOURCE_MANAGEMENT) {
+    info("Check that preview works in a script with `using` keyword");
+
+    const onPaused = waitForPaused(dbg);
+    dbg.commands.scriptCommand.execute(
+      `
+      {
+        using erm = {
+          [Symbol.dispose]() {},
+          foo: 42
+        };
+        console.log(erm.foo);
+        debugger;
+      }`,
+      {}
+    );
+
+    await onPaused;
+    await assertPreviews(dbg, [
+      // assignment
+      { line: 3, column: 16, expression: "erm", result: "Object" },
+      { line: 7, column: 26, expression: "foo", result: "42" },
+    ]);
+    await resume(dbg);
+  }
+
+  await selectSource(dbg, "preview.js");
   await testHoveringInvalidTargetTokens(dbg);
 
   info(

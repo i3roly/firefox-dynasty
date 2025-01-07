@@ -155,12 +155,8 @@ typedef void* nsNativeWidget;
 #define MOZ_WIDGET_INVALID_SCALE 0.0
 
 // Must be kept in sync with xpcom/rust/xpcom/src/interfaces/nonidl.rs
-#define NS_IWIDGET_IID                               \
-  {                                                  \
-    0x06396bf6, 0x2dd8, 0x45e5, {                    \
-      0xac, 0x45, 0x75, 0x26, 0x53, 0xb1, 0xc9, 0x80 \
-    }                                                \
-  }
+#define NS_IWIDGET_IID \
+  {0x06396bf6, 0x2dd8, 0x45e5, {0xac, 0x45, 0x75, 0x26, 0x53, 0xb1, 0xc9, 0x80}}
 
 /**
  * Cursor types.
@@ -517,14 +513,8 @@ class nsIWidget : public nsISupports {
    */
   bool Destroyed() const { return mOnDestroyCalled; }
 
-  /**
-   * Reparent a widget
-   *
-   * Change the widget's parent. Null parents are allowed.
-   *
-   * @param     aNewParent   new parent
-   */
-  void SetParent(nsIWidget* aNewParent);
+  /** Clear the widget's parent. */
+  void ClearParent();
 
   /**
    * Return the parent Widget of this Widget or nullptr if this is a
@@ -535,8 +525,8 @@ class nsIWidget : public nsISupports {
    */
   nsIWidget* GetParent() const { return mParent; }
 
-  /** Gets called when mParent changes after creation. */
-  virtual void DidChangeParent(nsIWidget* aOldParent) {}
+  /** Gets called when mParent is cleared. */
+  virtual void DidClearParent(nsIWidget* aOldParent) {}
 
   /**
    * Return the top level Widget of this Widget
@@ -870,24 +860,15 @@ class nsIWidget : public nsISupports {
    */
   virtual LayoutDeviceIntRect GetClientBounds() = 0;
 
-  /**
-   * Sets the non-client area dimensions of the window. Pass -1 to restore
-   * the system default frame size for that border. Pass zero to remove
-   * a border, or pass a specific value adjust a border. Units are in
-   * pixels. (DPI dependent)
-   *
-   * Platform notes:
-   *  Windows: shrinking top non-client height will remove application
-   *  icon and window title text. Glass desktops will refuse to set
-   *  dimensions between zero and size < system default.
-   */
-  virtual nsresult SetNonClientMargins(const LayoutDeviceIntMargin&) = 0;
+  /** Whether to extend the client area into the titlebar. */
+  virtual void SetCustomTitlebar(bool) {}
 
   /**
    * Sets the region around the edges of the window that can be dragged to
    * resize the window. All four sides of the window will get the same margin.
    */
-  virtual void SetResizeMargin(mozilla::LayoutDeviceIntCoord aResizeMargin) = 0;
+  virtual void SetResizeMargin(mozilla::LayoutDeviceIntCoord) {}
+
   /**
    * Get the client offset from the window origin.
    *
@@ -1185,6 +1166,7 @@ class nsIWidget : public nsISupports {
    * @param aOpaqueRegion the region of the window that is opaque.
    */
   virtual void UpdateOpaqueRegion(const LayoutDeviceIntRegion& aOpaqueRegion) {}
+  virtual LayoutDeviceIntRegion GetOpaqueRegionForTesting() const { return {}; }
 
   /**
    * Informs the widget about the region of the window that is draggable.

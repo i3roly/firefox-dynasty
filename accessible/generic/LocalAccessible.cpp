@@ -872,13 +872,15 @@ nsresult LocalAccessible::HandleAccEvent(AccEvent* aEvent) {
           break;
 
         case nsIAccessibleEvent::EVENT_HIDE:
-          ipcDoc->SendHideEvent(id, aEvent->IsFromUserInput());
+          ipcDoc->AppendMutationEventData(
+              HideEventData{id, aEvent->IsFromUserInput()});
           break;
 
         case nsIAccessibleEvent::EVENT_INNER_REORDER:
         case nsIAccessibleEvent::EVENT_REORDER:
           if (IsTable()) {
-            SendCache(CacheDomain::Table, CacheUpdateType::Update);
+            SendCache(CacheDomain::Table, CacheUpdateType::Update,
+                      /*aAppendEventData*/ true);
           }
 
 #if defined(XP_WIN)
@@ -897,7 +899,8 @@ nsresult LocalAccessible::HandleAccEvent(AccEvent* aEvent) {
           // reorder events on the application acc aren't necessary to tell the
           // parent about new top level documents.
           if (!aEvent->GetAccessible()->IsApplication()) {
-            ipcDoc->SendEvent(id, aEvent->GetEventType());
+            ipcDoc->AppendMutationEventData(
+                ReorderEventData{id, aEvent->GetEventType()});
           }
           break;
         case nsIAccessibleEvent::EVENT_STATE_CHANGE: {
@@ -917,10 +920,10 @@ nsresult LocalAccessible::HandleAccEvent(AccEvent* aEvent) {
         case nsIAccessibleEvent::EVENT_TEXT_INSERTED:
         case nsIAccessibleEvent::EVENT_TEXT_REMOVED: {
           AccTextChangeEvent* event = downcast_accEvent(aEvent);
-          const nsString& text = event->ModifiedText();
-          ipcDoc->SendTextChangeEvent(
-              id, text, event->GetStartOffset(), event->GetLength(),
-              event->IsTextInserted(), event->IsFromUserInput());
+          ipcDoc->AppendMutationEventData(TextChangeEventData{
+              id, event->ModifiedText(), event->GetStartOffset(),
+              event->GetLength(), event->IsTextInserted(),
+              event->IsFromUserInput()});
           break;
         }
         case nsIAccessibleEvent::EVENT_SELECTION:
@@ -1162,11 +1165,6 @@ already_AddRefed<AccAttributes> LocalAccessible::NativeAttributes() {
   if (Name(name) != eNameFromSubtree && !name.IsVoid()) {
     attributes->SetAttribute(nsGkAtoms::explicit_name, true);
   }
-
-  // Group attributes (level/setsize/posinset)
-  GroupPos groupPos = GroupPosition();
-  nsAccUtils::SetAccGroupAttrs(attributes, groupPos.level, groupPos.setSize,
-                               groupPos.posInSet);
 
   bool hierarchical = false;
   uint32_t itemCount = AccGroupInfo::TotalItemCount(this, &hierarchical);
@@ -1417,7 +1415,7 @@ void LocalAccessible::DOMAttributeChanged(int32_t aNameSpaceID,
   if (aAttribute == nsGkAtoms::aria_label) {
     // A valid aria-labelledby would take precedence so an aria-label change
     // won't change the name.
-    IDRefsIterator iter(mDoc, elm, nsGkAtoms::aria_labelledby);
+    AssociatedElementsIterator iter(mDoc, elm, nsGkAtoms::aria_labelledby);
     if (!iter.NextElem()) {
       mDoc->FireDelayedEvent(nsIAccessibleEvent::EVENT_NAME_CHANGE, this);
     }
@@ -1427,7 +1425,7 @@ void LocalAccessible::DOMAttributeChanged(int32_t aNameSpaceID,
   if (aAttribute == nsGkAtoms::aria_description) {
     // A valid aria-describedby would take precedence so an aria-description
     // change won't change the description.
-    IDRefsIterator iter(mDoc, elm, nsGkAtoms::aria_describedby);
+    AssociatedElementsIterator iter(mDoc, elm, nsGkAtoms::aria_describedby);
     if (!iter.NextElem()) {
       mDoc->FireDelayedEvent(nsIAccessibleEvent::EVENT_DESCRIPTION_CHANGE,
                              this);
@@ -1443,7 +1441,7 @@ void LocalAccessible::DOMAttributeChanged(int32_t aNameSpaceID,
       // The subtrees of the new aria-describedby targets might be used to
       // compute the description for this. Therefore, we need to set
       // the eHasDescriptionDependent flag on all Accessibles in these subtrees.
-      IDRefsIterator iter(mDoc, elm, nsGkAtoms::aria_describedby);
+      AssociatedElementsIterator iter(mDoc, elm, nsGkAtoms::aria_describedby);
       while (LocalAccessible* target = iter.Next()) {
         target->ModifySubtreeContextFlags(eHasDescriptionDependent, true);
       }
@@ -1462,7 +1460,7 @@ void LocalAccessible::DOMAttributeChanged(int32_t aNameSpaceID,
       // The subtrees of the new aria-labelledby targets might be used to
       // compute the name for this. Therefore, we need to set
       // the eHasNameDependent flag on all Accessibles in these subtrees.
-      IDRefsIterator iter(mDoc, elm, nsGkAtoms::aria_labelledby);
+      AssociatedElementsIterator iter(mDoc, elm, nsGkAtoms::aria_labelledby);
       while (LocalAccessible* target = iter.Next()) {
         target->ModifySubtreeContextFlags(eHasNameDependent, true);
       }
@@ -2168,8 +2166,8 @@ Relation LocalAccessible::RelationByType(RelationType aType) const {
   // defined on.
   switch (aType) {
     case RelationType::LABELLED_BY: {
-      Relation rel(
-          new IDRefsIterator(mDoc, mContent, nsGkAtoms::aria_labelledby));
+      Relation rel(new AssociatedElementsIterator(mDoc, mContent,
+                                                  nsGkAtoms::aria_labelledby));
       if (mContent->IsHTMLElement()) {
         rel.AppendIter(new HTMLLabelIterator(Document(), this));
       }
@@ -2182,15 +2180,16 @@ Relation LocalAccessible::RelationByType(RelationType aType) const {
       Relation rel(new RelatedAccIterator(Document(), mContent,
                                           nsGkAtoms::aria_labelledby));
       if (mContent->IsXULElement(nsGkAtoms::label)) {
-        rel.AppendIter(new IDRefsIterator(mDoc, mContent, nsGkAtoms::control));
+        rel.AppendIter(
+            new AssociatedElementsIterator(mDoc, mContent, nsGkAtoms::control));
       }
 
       return rel;
     }
 
     case RelationType::DESCRIBED_BY: {
-      Relation rel(
-          new IDRefsIterator(mDoc, mContent, nsGkAtoms::aria_describedby));
+      Relation rel(new AssociatedElementsIterator(mDoc, mContent,
+                                                  nsGkAtoms::aria_describedby));
       if (mContent->IsXULElement()) {
         rel.AppendIter(new XULDescriptionIterator(Document(), mContent));
       }
@@ -2206,7 +2205,8 @@ Relation LocalAccessible::RelationByType(RelationType aType) const {
       // which only affects accessibility, by allowing the description to be
       // tied to a control.
       if (mContent->IsXULElement(nsGkAtoms::description)) {
-        rel.AppendIter(new IDRefsIterator(mDoc, mContent, nsGkAtoms::control));
+        rel.AppendIter(
+            new AssociatedElementsIterator(mDoc, mContent, nsGkAtoms::control));
       }
 
       return rel;
@@ -2285,15 +2285,15 @@ Relation LocalAccessible::RelationByType(RelationType aType) const {
                                              nsGkAtoms::aria_controls));
 
     case RelationType::CONTROLLER_FOR: {
-      Relation rel(
-          new IDRefsIterator(mDoc, mContent, nsGkAtoms::aria_controls));
+      Relation rel(new AssociatedElementsIterator(mDoc, mContent,
+                                                  nsGkAtoms::aria_controls));
       rel.AppendIter(new HTMLOutputIterator(Document(), mContent));
       return rel;
     }
 
     case RelationType::FLOWS_TO:
-      return Relation(
-          new IDRefsIterator(mDoc, mContent, nsGkAtoms::aria_flowto));
+      return Relation(new AssociatedElementsIterator(mDoc, mContent,
+                                                     nsGkAtoms::aria_flowto));
 
     case RelationType::FLOWS_FROM:
       return Relation(
@@ -2443,9 +2443,10 @@ Relation LocalAccessible::RelationByType(RelationType aType) const {
 
     case RelationType::DETAILS: {
       if (mContent->IsElement() &&
-          mContent->AsElement()->HasAttr(nsGkAtoms::aria_details)) {
-        return Relation(
-            new IDRefsIterator(mDoc, mContent, nsGkAtoms::aria_details));
+          nsAccUtils::HasARIAAttr(mContent->AsElement(),
+                                  nsGkAtoms::aria_details)) {
+        return Relation(new AssociatedElementsIterator(
+            mDoc, mContent, nsGkAtoms::aria_details));
       }
       if (LocalAccessible* target = GetPopoverTargetDetailsRelation()) {
         return Relation(target);
@@ -2472,8 +2473,8 @@ Relation LocalAccessible::RelationByType(RelationType aType) const {
     }
 
     case RelationType::ERRORMSG:
-      return Relation(
-          new IDRefsIterator(mDoc, mContent, nsGkAtoms::aria_errormessage));
+      return Relation(new AssociatedElementsIterator(
+          mDoc, mContent, nsGkAtoms::aria_errormessage));
 
     case RelationType::ERRORMSG_FOR:
       return Relation(
@@ -3319,7 +3320,8 @@ AccGroupInfo* LocalAccessible::GetOrCreateGroupInfo() {
 }
 
 void LocalAccessible::SendCache(uint64_t aCacheDomain,
-                                CacheUpdateType aUpdateType) {
+                                CacheUpdateType aUpdateType,
+                                bool aAppendEventData) {
   if (!IPCAccessibilityActive() || !Document()) {
     return;
   }
@@ -3349,7 +3351,12 @@ void LocalAccessible::SendCache(uint64_t aCacheDomain,
   }
   nsTArray<CacheData> data;
   data.AppendElement(CacheData(ID(), fields));
-  ipcDoc->SendCache(aUpdateType, data);
+  if (aAppendEventData) {
+    ipcDoc->AppendMutationEventData(
+        CacheEventData{std::move(aUpdateType), std::move(data)});
+  } else {
+    ipcDoc->SendCache(aUpdateType, data);
+  }
 
   if (profiler_thread_is_being_profiled_for_markers()) {
     nsAutoCString updateTypeStr;
@@ -3994,7 +4001,7 @@ already_AddRefed<AccAttributes> LocalAccessible::BundleFieldsForCache(
       }
       if (mContent->AsElement()->HasAttr(nsGkAtoms::headers)) {
         nsTArray<uint64_t> headers;
-        IDRefsIterator iter(mDoc, mContent, nsGkAtoms::headers);
+        AssociatedElementsIterator iter(mDoc, mContent, nsGkAtoms::headers);
         while (LocalAccessible* cell = iter.Next()) {
           if (cell->IsTableCell()) {
             headers.AppendElement(cell->ID());
@@ -4065,11 +4072,12 @@ already_AddRefed<AccAttributes> LocalAccessible::BundleFieldsForCache(
         // relation, so using RelationByType here is fine.
         rel = RelationByType(RelationType::DETAILS);
       } else {
-        // We use an IDRefsIterator here instead of calling RelationByType
-        // directly because we only want to cache explicit relations. Implicit
-        // relations (e.g. LABEL_FOR exposed on the target of aria-labelledby)
-        // will be computed and stored separately in the parent process.
-        rel.AppendIter(new IDRefsIterator(mDoc, mContent, relAtom));
+        // We use an AssociatedElementsIterator here instead of calling
+        // RelationByType directly because we only want to cache explicit
+        // relations. Implicit relations (e.g. LABEL_FOR exposed on the target
+        // of aria-labelledby) will be computed and stored separately in the
+        // parent process.
+        rel.AppendIter(new AssociatedElementsIterator(mDoc, mContent, relAtom));
       }
 
       while (LocalAccessible* acc = rel.LocalNext()) {
@@ -4185,21 +4193,37 @@ void LocalAccessible::MaybeQueueCacheUpdateForStyleChanges() {
   if (nsIFrame* frame = GetFrame()) {
     const ComputedStyle* newStyle = frame->Style();
 
-    nsAutoCString oldOverflow, newOverflow;
-    mOldComputedStyle->GetComputedPropertyValue(eCSSProperty_overflow,
-                                                oldOverflow);
-    newStyle->GetComputedPropertyValue(eCSSProperty_overflow, newOverflow);
+    const auto overflowProps =
+        nsCSSPropertyIDSet({eCSSProperty_overflow_x, eCSSProperty_overflow_y});
 
-    if (oldOverflow != newOverflow) {
-      if (oldOverflow.Equals("hidden"_ns) || newOverflow.Equals("hidden"_ns)) {
-        mDoc->QueueCacheUpdate(this, CacheDomain::Style);
-      }
-      if (oldOverflow.Equals("auto"_ns) || newOverflow.Equals("auto"_ns) ||
-          oldOverflow.Equals("scroll"_ns) || newOverflow.Equals("scroll"_ns)) {
-        // We cache a (0,0) scroll position for frames that have overflow
-        // styling which means they _could_ become scrollable, even if the
-        // content within them doesn't currently scroll.
-        mDoc->QueueCacheUpdate(this, CacheDomain::ScrollPosition);
+    for (nsCSSPropertyID overflowProp : overflowProps) {
+      nsAutoCString oldOverflow, newOverflow;
+      mOldComputedStyle->GetComputedPropertyValue(overflowProp, oldOverflow);
+      newStyle->GetComputedPropertyValue(overflowProp, newOverflow);
+
+      if (oldOverflow != newOverflow) {
+        if (oldOverflow.Equals("hidden"_ns) ||
+            newOverflow.Equals("hidden"_ns)) {
+          mDoc->QueueCacheUpdate(this, CacheDomain::Style);
+        }
+        if (oldOverflow.Equals("auto"_ns) || newOverflow.Equals("auto"_ns) ||
+            oldOverflow.Equals("scroll"_ns) ||
+            newOverflow.Equals("scroll"_ns)) {
+          // We cache a (0,0) scroll position for frames that have overflow
+          // styling which means they _could_ become scrollable, even if the
+          // content within them doesn't currently scroll.
+          mDoc->QueueCacheUpdate(this, CacheDomain::ScrollPosition);
+        }
+      } else {
+        ScrollContainerFrame* scrollContainerFrame = do_QueryFrame(frame);
+        if (!scrollContainerFrame && (newOverflow.Equals("auto"_ns) ||
+                                      newOverflow.Equals("scroll"_ns))) {
+          // A document's body element can lose its scroll frame if the root
+          // element (eg. <html>) is restyled to overflow scroll/auto. In that
+          // case we will not get any useful notifications for the body element
+          // except for a reframe to a non-scrolling frame.
+          mDoc->QueueCacheUpdate(this, CacheDomain::ScrollPosition);
+        }
       }
     }
 

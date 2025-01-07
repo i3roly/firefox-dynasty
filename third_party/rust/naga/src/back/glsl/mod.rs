@@ -258,6 +258,7 @@ bitflags::bitflags! {
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serialize", derive(serde::Serialize))]
 #[cfg_attr(feature = "deserialize", derive(serde::Deserialize))]
+#[cfg_attr(feature = "deserialize", serde(default))]
 pub struct Options {
     /// The GLSL version to be used.
     pub version: Version,
@@ -977,6 +978,7 @@ impl<'a, W: Write> Writer<'a, W> {
             crate::ArraySize::Constant(size) => {
                 write!(self.out, "{size}")?;
             }
+            crate::ArraySize::Pending(_) => unreachable!(),
             crate::ArraySize::Dynamic => (),
         }
 
@@ -1332,7 +1334,8 @@ impl<'a, W: Write> Writer<'a, W> {
                     crate::MathFunction::Pack4xI8
                     | crate::MathFunction::Pack4xU8
                     | crate::MathFunction::Unpack4xI8
-                    | crate::MathFunction::Unpack4xU8 => {
+                    | crate::MathFunction::Unpack4xU8
+                    | crate::MathFunction::QuantizeToF16 => {
                         self.need_bake_expressions.insert(arg);
                     }
                     crate::MathFunction::ExtractBits => {
@@ -3495,6 +3498,48 @@ impl<'a, W: Write> Writer<'a, W> {
                     Mf::Inverse => "inverse",
                     Mf::Transpose => "transpose",
                     Mf::Determinant => "determinant",
+                    Mf::QuantizeToF16 => match *ctx.resolve_type(arg, &self.module.types) {
+                        TypeInner::Scalar { .. } => {
+                            write!(self.out, "unpackHalf2x16(packHalf2x16(vec2(")?;
+                            self.write_expr(arg, ctx)?;
+                            write!(self.out, "))).x")?;
+                            return Ok(());
+                        }
+                        TypeInner::Vector {
+                            size: crate::VectorSize::Bi,
+                            ..
+                        } => {
+                            write!(self.out, "unpackHalf2x16(packHalf2x16(")?;
+                            self.write_expr(arg, ctx)?;
+                            write!(self.out, "))")?;
+                            return Ok(());
+                        }
+                        TypeInner::Vector {
+                            size: crate::VectorSize::Tri,
+                            ..
+                        } => {
+                            write!(self.out, "vec3(unpackHalf2x16(packHalf2x16(")?;
+                            self.write_expr(arg, ctx)?;
+                            write!(self.out, ".xy)), unpackHalf2x16(packHalf2x16(")?;
+                            self.write_expr(arg, ctx)?;
+                            write!(self.out, ".zz)).x)")?;
+                            return Ok(());
+                        }
+                        TypeInner::Vector {
+                            size: crate::VectorSize::Quad,
+                            ..
+                        } => {
+                            write!(self.out, "vec4(unpackHalf2x16(packHalf2x16(")?;
+                            self.write_expr(arg, ctx)?;
+                            write!(self.out, ".xy)), unpackHalf2x16(packHalf2x16(")?;
+                            self.write_expr(arg, ctx)?;
+                            write!(self.out, ".zw)))")?;
+                            return Ok(());
+                        }
+                        _ => unreachable!(
+                            "Correct TypeInner for QuantizeToF16 should be already validated"
+                        ),
+                    },
                     // bits
                     Mf::CountTrailingZeros => {
                         match *ctx.resolve_type(arg, &self.module.types) {
@@ -4415,6 +4460,7 @@ impl<'a, W: Write> Writer<'a, W> {
                     .expect("Bad array size")
                 {
                     proc::IndexableLength::Known(count) => count,
+                    proc::IndexableLength::Pending => unreachable!(),
                     proc::IndexableLength::Dynamic => return Ok(()),
                 };
                 self.write_type(base)?;

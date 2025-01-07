@@ -28,18 +28,25 @@ async function showDialog(dialogOptions) {
   return win;
 }
 
+async function dialogClosed(browser) {
+  await TestUtils.waitForCondition(
+    () => !browser.ownerGlobal.gDialogBox?.isOpen,
+    "Waiting for dialog to close"
+  );
+}
+
 add_task(async function test_specialAction() {
   const sandbox = sinon.createSandbox();
   let message = (await PanelTestProvider.getMessages()).find(
     m => m.id === "MULTISTAGE_SPOTLIGHT_MESSAGE"
   );
   let dispatchStub = sandbox.stub();
-  let browser = BrowserWindowTracker.getTopWindow().gBrowser.selectedBrowser;
+  let browser = gBrowser.selectedBrowser;
   let specialActionStub = sandbox.stub(SpecialMessageActions, "handleAction");
 
   let win = await showDialog({ message, browser, dispatchStub });
   await waitForClick("button.primary", win);
-  win.close();
+  await win.close();
 
   Assert.equal(
     specialActionStub.callCount,
@@ -62,7 +69,7 @@ add_task(async function test_embedded_import() {
   let message = (await PanelTestProvider.getMessages()).find(
     m => m.id === "IMPORT_SETTINGS_EMBEDDED"
   );
-  let browser = BrowserWindowTracker.getTopWindow().gBrowser.selectedBrowser;
+  let browser = gBrowser.selectedBrowser;
   let win = await showDialog({ message, browser });
   let migrationWizardReady = BrowserTestUtils.waitForEvent(
     win,
@@ -85,6 +92,103 @@ add_task(async function test_embedded_import() {
   Assert.equal(panelList.tagName, "PANEL-LIST");
   Assert.equal(panelList.firstChild.tagName, "PANEL-ITEM");
 
+  await win.close();
+  await SpecialPowers.popPrefEnv();
+});
+
+add_task(async function test_embedded_browser() {
+  const TEST_SCREEN = {
+    id: "EMBEDDED_BROWSER",
+    content: {
+      tiles: {
+        type: "embedded_browser",
+        data: {
+          style: {
+            width: "100%",
+            height: "200px",
+          },
+          url: "https://example.com/",
+        },
+      },
+    },
+  };
+  let message = (await PanelTestProvider.getMessages()).find(
+    m => m.id === "MULTISTAGE_SPOTLIGHT_MESSAGE"
+  );
+  message.content.screens[0] = TEST_SCREEN;
+
+  let browser = gBrowser.selectedBrowser;
+  let win = await showDialog({ message, browser });
+
+  await TestUtils.waitForCondition(() =>
+    win.document.querySelector("div.embedded-browser-container")
+  );
+
+  const embeddedBrowser = win.document.querySelector(
+    "div.embedded-browser-container browser"
+  );
+  Assert.ok(embeddedBrowser, "Embedded browser rendered");
+
+  await TestUtils.waitForCondition(
+    () => !embeddedBrowser.browsingContext.webProgress.isLoadingDocument
+  );
+  Assert.ok(embeddedBrowser.currentURI, "Should have a currentURI set.");
+
+  Assert.equal(
+    embeddedBrowser.currentURI.spec,
+    TEST_SCREEN.content.tiles.data.url,
+    "Embedded browser rendered with configured URL"
+  );
+  Assert.equal(
+    embeddedBrowser.style.height,
+    TEST_SCREEN.content.tiles.data.style.height,
+    "Embedded browser rendered with configured height"
+  );
+  Assert.equal(
+    embeddedBrowser.style.width,
+    TEST_SCREEN.content.tiles.data.style.width,
+    "Embedded browser rendered with configured width"
+  );
+
   win.close();
   await SpecialPowers.popPrefEnv();
+});
+
+add_task(async function test_disableEscClose() {
+  const sandbox = sinon.createSandbox();
+  let message = (await PanelTestProvider.getMessages()).find(
+    m => m.id === "MULTISTAGE_SPOTLIGHT_MESSAGE"
+  );
+  message.content.disableEscClose = true;
+
+  let browser = gBrowser.selectedBrowser;
+  let stub = sandbox.stub();
+  let win = await showDialog({ message, browser, stub });
+
+  await TestUtils.waitForCondition(() =>
+    win.document.querySelector("button.dismiss-button")
+  );
+
+  EventUtils.synthesizeKey(
+    "KEY_Escape",
+    { key: "Escape", code: "Escape" },
+    win
+  );
+
+  Assert.ok(
+    browser?.ownerGlobal.gDialogBox.isOpen,
+    "Spotlight does not close with ESC key with 'disableEscClose' set to true"
+  );
+
+  win.document.querySelector("button.dismiss-button").click();
+
+  await dialogClosed(browser);
+
+  Assert.ok(
+    true,
+    "Spotlight closes on dismiss button click with 'disableEscClose' set to true"
+  );
+
+  await win.close();
+  sandbox.restore();
 });

@@ -21,6 +21,7 @@
 #include "mozilla/dom/ScriptSettings.h"
 #include "mozilla/IOInterposer.h"
 #include "mozilla/Preferences.h"
+#include "mozilla/Unused.h"
 #include "mozilla/Utf8.h"  // mozilla::Utf8Unit
 #include "nsServiceManagerUtils.h"
 #include "nsComponentManagerUtils.h"
@@ -40,7 +41,7 @@
 #include "nsJSUtils.h"
 #include "xpcpublic.h"
 #include "xpcprivate.h"
-#include "BackstagePass.h"
+#include "SystemGlobal.h"
 #include "nsIScriptSecurityManager.h"
 #include "nsIPrincipal.h"
 #include "nsJSUtils.h"
@@ -129,12 +130,13 @@ class XPCShellDirProvider : public nsIDirectoryServiceProvider2 {
 };
 
 #ifdef XP_WIN
-class MOZ_STACK_CLASS AutoAudioSession {
- public:
-  AutoAudioSession() { widget::StartAudioSession(); }
+class MOZ_STACK_CLASS
+AutoAudioSession{public : AutoAudioSession(){widget::StartAudioSession();
+}
 
-  ~AutoAudioSession() { widget::StopAudioSession(); }
-};
+~AutoAudioSession() { widget::StopAudioSession(); }
+}
+;
 #endif
 
 #define EXITCODE_RUNTIME_ERROR 3
@@ -181,7 +183,7 @@ static bool GetLocationProperty(JSContext* cx, unsigned argc, Value* vp) {
 #  endif
 
     nsCOMPtr<nsIFile> location;
-    nsresult rv = NS_NewLocalFile(filenameString, getter_AddRefs(location));
+    Unused << NS_NewLocalFile(filenameString, getter_AddRefs(location));
 
     if (!location && gWorkingDirectory) {
       // could be a relative path, try appending it to the cwd
@@ -189,7 +191,7 @@ static bool GetLocationProperty(JSContext* cx, unsigned argc, Value* vp) {
       nsAutoString absolutePath(*gWorkingDirectory);
       absolutePath.Append(filenameString);
 
-      rv = NS_NewLocalFile(absolutePath, getter_AddRefs(location));
+      Unused << NS_NewLocalFile(absolutePath, getter_AddRefs(location));
     }
 
     if (location) {
@@ -199,7 +201,7 @@ static bool GetLocationProperty(JSContext* cx, unsigned argc, Value* vp) {
         location->Normalize();
       RootedObject locationObj(cx);
       RootedObject scope(cx, JS::CurrentGlobalOrNull(cx));
-      rv = nsXPConnect::XPConnect()->WrapNative(
+      nsresult rv = nsXPConnect::XPConnect()->WrapNative(
           cx, scope, location, NS_GET_IID(nsIFile), locationObj.address());
       if (NS_SUCCEEDED(rv) && locationObj) {
         args.rval().setObject(*locationObj);
@@ -1272,7 +1274,7 @@ int XRE_XPCShellMain(int argc, char** argv, char** envp,
     shellSecurityCallbacks = *scb;
     JS_SetSecurityCallbacks(cx, &shellSecurityCallbacks);
 
-    auto backstagePass = MakeRefPtr<BackstagePass>();
+    auto systemGlobal = MakeRefPtr<SystemGlobal>();
 
     // Make the default XPCShell global use a fresh zone (rather than the
     // System Zone) to improve cross-zone test coverage.
@@ -1287,7 +1289,7 @@ int XRE_XPCShellMain(int argc, char** argv, char** envp,
 
     JS::Rooted<JSObject*> glob(cx);
     rv = xpc::InitClassesWithNewWrappedGlobal(
-        cx, static_cast<nsIGlobalObject*>(backstagePass), systemprincipal, 0,
+        cx, static_cast<nsIGlobalObject*>(systemGlobal), systemprincipal, 0,
         options, &glob);
     if (NS_FAILED(rv)) {
       return 1;
@@ -1339,7 +1341,7 @@ int XRE_XPCShellMain(int argc, char** argv, char** envp,
       }
       appStartup->DoneStartingUp();
 
-      backstagePass->SetGlobalObject(glob);
+      systemGlobal->SetGlobalObject(glob);
 
       JSAutoRealm ar(cx, glob);
 
@@ -1371,7 +1373,7 @@ int XRE_XPCShellMain(int argc, char** argv, char** envp,
 #endif
           // We are almost certainly going to run script here, so we need an
           // AutoEntryScript. This is Gecko-specific and not in any spec.
-          AutoEntryScript aes(backstagePass, "xpcshell argument processing");
+          AutoEntryScript aes(systemGlobal, "xpcshell argument processing");
 
           // If an exception is thrown, we'll set our return code
           // appropriately, and then let the AutoEntryScript destructor report

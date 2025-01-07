@@ -31,6 +31,7 @@
 #include "TexUnpackBlob.h"
 #include "WebGLBuffer.h"
 #include "WebGLContext.h"
+#include "WebGLFormats.h"
 #include "WebGLContextUtils.h"
 #include "WebGLFramebuffer.h"
 #include "WebGLTexelConversions.h"
@@ -538,7 +539,7 @@ static bool EnsureImageDataInitializedForUpload(
       hasUninitialized |= isSliceUninit[z];
     }
     if (!hasUninitialized) {
-      imageInfo->mUninitializedSlices = Nothing();
+      imageInfo->mUninitializedSlices.reset();
     }
     return true;
   }
@@ -913,7 +914,7 @@ void WebGLTexture::TexStorage(TexTarget target, uint32_t levels,
   ////////////////////////////////////
   // Update our specification data.
 
-  auto uninitializedSlices = Some(std::vector<bool>(size.z, true));
+  std::vector<bool> uninitializedSlices(size.z, true);
   const webgl::ImageInfo newInfo{dstUsage, size.x, size.y, size.z,
                                  std::move(uninitializedSlices)};
 
@@ -1062,8 +1063,7 @@ void WebGLTexture::TexImage(uint32_t level, GLenum respecFormat,
     // generally slower.
     newImageInfo = Some(webgl::ImageInfo{dstUsage, size.x, size.y, size.z});
     if (!blob->HasData()) {
-      newImageInfo->mUninitializedSlices =
-          Some(std::vector<bool>(size.z, true));
+      newImageInfo->mUninitializedSlices.emplace(size.z, true);
     }
 
     isRespec = (imageInfo->mWidth != newImageInfo->mWidth ||
@@ -1334,7 +1334,7 @@ void WebGLTexture::CompressedTexImage(bool sub, GLenum imageTarget,
   // Update our specification data?
 
   if (!sub) {
-    const auto uninitializedSlices = Nothing();
+    constexpr auto uninitializedSlices = std::nullopt;
     const webgl::ImageInfo newImageInfo{usage, size.x, size.y, size.z,
                                         uninitializedSlices};
     *imageInfo = newImageInfo;
@@ -1889,7 +1889,7 @@ void WebGLTexture::CopyTexImage(GLenum imageTarget, uint32_t level,
   // Update our specification data?
 
   if (respecFormat) {
-    const auto uninitializedSlices = Nothing();
+    constexpr auto uninitializedSlices = std::nullopt;
     const webgl::ImageInfo newImageInfo{dstUsage, size.x, size.y, size.z,
                                         uninitializedSlices};
     *imageInfo = newImageInfo;

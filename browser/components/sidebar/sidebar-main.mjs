@@ -137,8 +137,8 @@ export default class SidebarMain extends MozLitElement {
     }
 
     if (
-      this.contextMenuTarget.getAttribute("extensionId") ||
-      this.contextMenuTarget.className.includes("tab") ||
+      this.contextMenuTarget?.getAttribute("extensionId") ||
+      this.contextMenuTarget?.className.includes("tab") ||
       isToolbarTarget
     ) {
       this.updateExtensionContextMenuItems();
@@ -383,10 +383,12 @@ export default class SidebarMain extends MozLitElement {
           class="tools-and-extensions actions-list"
           orientation=${this.isToolsOverflowing() ? "horizontal" : "vertical"}
         >
-          ${repeat(
-            this.getToolsAndExtensions().values(),
-            action => action.view,
-            action => this.entrypointTemplate(action)
+          ${when(!this.isToolsOverflowing(), () =>
+            repeat(
+              this.getToolsAndExtensions().values(),
+              action => action.view,
+              action => this.entrypointTemplate(action)
+            )
           )}
           ${when(window.SidebarController.sidebarVerticalTabsEnabled, () =>
             repeat(
@@ -395,16 +397,24 @@ export default class SidebarMain extends MozLitElement {
               action => this.entrypointTemplate(action)
             )
           )}
+          ${when(this.isToolsOverflowing(), () =>
+            repeat(
+              this.getToolsAndExtensions().values(),
+              action => action.view,
+              action => this.entrypointTemplate(action)
+            )
+          )}
         </button-group>
         ${when(
           !window.SidebarController.sidebarVerticalTabsEnabled,
-          () => html` <div class="bottom-actions actions-list">
-            ${repeat(
-              this.bottomActions,
-              action => action.view,
-              action => this.entrypointTemplate(action)
-            )}
-          </div>`
+          () =>
+            html` <div class="bottom-actions actions-list">
+              ${repeat(
+                this.bottomActions,
+                action => action.view,
+                action => this.entrypointTemplate(action)
+              )}
+            </div>`
         )}
       </div>
     `;

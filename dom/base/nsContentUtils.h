@@ -194,6 +194,7 @@ class Selection;
 enum class ShadowRootMode : uint8_t;
 class ShadowRoot;
 struct StructuredSerializeOptions;
+class TrustedHTMLOrString;
 class WorkerPrivate;
 enum class ElementCallbackType;
 enum class ReferrerPolicy : uint8_t;
@@ -874,17 +875,6 @@ class nsContentUtils {
                                       ParseHTMLIntegerResultFlags* aResult);
 
  public:
-  /**
-   * Parse a margin string of format 'top, right, bottom, left' into
-   * an nsIntMargin.
-   *
-   * @param aString the string to parse
-   * @param aResult the resulting integer
-   * @return whether the value could be parsed
-   */
-  static bool ParseIntMarginValue(const nsAString& aString,
-                                  nsIntMargin& aResult);
-
   /**
    * Parse the value of the <font size=""> attribute according to the HTML5
    * spec as of April 16, 2012.
@@ -1881,7 +1871,9 @@ class nsContentUtils {
 
   MOZ_CAN_RUN_SCRIPT
   static void SetHTMLUnsafe(mozilla::dom::FragmentOrElement* aTarget,
-                            Element* aContext, const nsAString& aSource);
+                            Element* aContext,
+                            const mozilla::dom::TrustedHTMLOrString& aSource,
+                            bool aIsShadowRoot, mozilla::ErrorResult& aError);
   /**
    * Invoke the fragment parsing algorithm (innerHTML) using the HTML parser.
    *
@@ -2539,12 +2531,6 @@ class nsContentUtils {
   static void GetCommandOrWinText(nsAString& text);
   static void GetAltText(nsAString& text);
   static void GetModifierSeparatorText(nsAString& text);
-
-  /**
-   * Returns if aContent has the 'scrollgrab' property.
-   * aContent may be null (in this case false is returned).
-   */
-  static bool HasScrollgrab(nsIContent* aContent);
 
   /**
    * Flushes the layout tree (recursively)
@@ -3712,6 +3698,9 @@ nsContentUtils::InternalContentPolicyTypeToExternal(nsContentPolicyType aType) {
     case nsIContentPolicy::TYPE_INTERNAL_EXTERNAL_RESOURCE:
       return ExtContentPolicy::TYPE_OTHER;
 
+    case nsIContentPolicy::TYPE_INTERNAL_JSON_PRELOAD:
+      return ExtContentPolicy::TYPE_JSON;
+
     case nsIContentPolicy::TYPE_INVALID:
     case nsIContentPolicy::TYPE_OTHER:
     case nsIContentPolicy::TYPE_SCRIPT:
@@ -3739,6 +3728,7 @@ nsContentUtils::InternalContentPolicyTypeToExternal(nsContentPolicyType aType) {
     case nsIContentPolicy::TYPE_PROXIED_WEBRTC_MEDIA:
     case nsIContentPolicy::TYPE_WEB_IDENTITY:
     case nsIContentPolicy::TYPE_WEB_TRANSPORT:
+    case nsIContentPolicy::TYPE_JSON:
       // NOTE: When adding something here make sure the enumerator is defined!
       return static_cast<ExtContentPolicyType>(aType);
 

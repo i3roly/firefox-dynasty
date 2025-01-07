@@ -95,9 +95,9 @@ add_setup(async function () {
   // for this test.
   let suggestionEngine = await SearchTestUtils.installOpenSearchEngine({
     url: getRootDirectory(gTestPath) + "urlbarTelemetrySearchSuggestions.xml",
+    faviconURL: "https://www.example.com/favicon.ico",
     setAsDefault: true,
   });
-  suggestionEngine._setIcon("https://www.example.com/favicon.ico", false);
   suggestionEngine.alias = ENGINE_ALIAS;
   engineDomain = suggestionEngine.searchUrlDomain;
   engineName = suggestionEngine.name;
@@ -415,7 +415,7 @@ add_task(async function test_keywordoffer_restrict_keyword() {
   let restrictResult = await UrlbarTestUtils.getDetailsOfResultAt(window, 0);
 
   Assert.equal(
-    restrictResult.result.payload.l10nRestrictKeyword,
+    restrictResult.result.payload.l10nRestrictKeywords[0],
     "bookmarks",
     "The first result should be restrict bookmarks result with the correct keyword."
   );

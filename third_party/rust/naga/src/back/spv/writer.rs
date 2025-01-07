@@ -971,6 +971,7 @@ impl Writer {
                             let length_id = self.get_index_constant(length.get());
                             Instruction::type_array(id, type_id, length_id)
                         }
+                        crate::ArraySize::Pending(_) => unreachable!(),
                         crate::ArraySize::Dynamic => Instruction::type_runtime_array(id, type_id),
                     }
                 }
@@ -981,6 +982,7 @@ impl Writer {
                             let length_id = self.get_index_constant(length.get());
                             Instruction::type_array(id, type_id, length_id)
                         }
+                        crate::ArraySize::Pending(_) => unreachable!(),
                         crate::ArraySize::Dynamic => Instruction::type_runtime_array(id, type_id),
                     }
                 }
@@ -1800,12 +1802,13 @@ impl Writer {
             }
         }
 
-        // Matrices and arrays of matrices both require decorations,
-        // so "see through" an array to determine if they're needed.
-        let member_array_subty_inner = match arena[member.ty].inner {
-            crate::TypeInner::Array { base, .. } => &arena[base].inner,
-            ref other => other,
-        };
+        // Matrices and (potentially nested) arrays of matrices both require decorations,
+        // so "see through" any arrays to determine if they're needed.
+        let mut member_array_subty_inner = &arena[member.ty].inner;
+        while let crate::TypeInner::Array { base, .. } = *member_array_subty_inner {
+            member_array_subty_inner = &arena[base].inner;
+        }
+
         if let crate::TypeInner::Matrix {
             columns: _,
             rows,

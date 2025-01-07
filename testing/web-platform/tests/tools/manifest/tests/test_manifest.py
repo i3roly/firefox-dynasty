@@ -168,7 +168,7 @@ def test_manifest_to_json_forwardslash():
         assert m.update(tree) is True
 
     assert m.to_json() == {
-        'version': 8,
+        'version': 9,
         'url_base': '/',
         'items': {
             'testharness': {'a': {'b': [
@@ -306,7 +306,7 @@ def test_update_from_json_modified():
             (None, {'timeout': 'long', 'pac': 'proxy.pac'})
         ]}},
         'url_base': '/',
-        'version': 8
+        'version': 9
     }
 
 def test_manifest_spec_to_json():
@@ -326,12 +326,38 @@ def test_manifest_spec_to_json():
         assert m.update(tree, True, manifest.compute_manifest_spec_items) is True
 
     assert m.to_json() == {
-        'version': 8,
+        'version': 9,
         'url_base': '/',
         'items': {
             'spec': {'a': {'b': [
                 '0000000000000000000000000000000000000000',
                 (None, {'spec_link1': 'specA'})
+            ]}},
+        }
+    }
+
+
+@pytest.mark.parametrize("testdriver,expected_extra", [
+    (True, {"testdriver": True}),
+    # Don't bloat the manifest with the `testdriver=False` default.
+    (False, {}),
+])
+def test_dump_testdriver(testdriver, expected_extra):
+    m = manifest.Manifest("")
+    source_file = SourceFileWithTest("a" + os.path.sep + "b", "0"*40, item.RefTest,
+                                     testdriver=testdriver)
+
+    tree, sourcefile_mock = tree_and_sourcefile_mocks([(source_file, None, True)])
+    with mock.patch("tools.manifest.manifest.SourceFile", side_effect=sourcefile_mock):
+        assert m.update(tree) is True
+
+    assert m.to_json() == {
+        'version': 9,
+        'url_base': '/',
+        'items': {
+            'reftest': {'a': {'b': [
+                '0000000000000000000000000000000000000000',
+                (mock.ANY, [], expected_extra)
             ]}},
         }
     }

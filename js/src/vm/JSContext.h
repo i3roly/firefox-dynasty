@@ -88,10 +88,12 @@ class InternalJobQueue : public JS::JobQueue {
   ~InternalJobQueue() = default;
 
   // JS::JobQueue methods.
-  JSObject* getIncumbentGlobal(JSContext* cx) override;
+  bool getHostDefinedData(JSContext* cx,
+                          JS::MutableHandle<JSObject*> data) const override;
+
   bool enqueuePromiseJob(JSContext* cx, JS::HandleObject promise,
                          JS::HandleObject job, JS::HandleObject allocationSite,
-                         JS::HandleObject incumbentGlobal) override;
+                         JS::HandleObject hostDefinedData) override;
   void runJobs(JSContext* cx) override;
   bool empty() const override;
   bool isDrainingStopped() const override { return interrupted_; }
@@ -801,7 +803,17 @@ struct JS_PUBLIC_API JSContext : public JS::RootingContext,
 
   // Checks if the page's Content-Security-Policy (CSP) allows
   // runtime code generation "unsafe-eval", or "wasm-unsafe-eval" for Wasm.
-  bool isRuntimeCodeGenEnabled(JS::RuntimeCode kind, js::HandleString code);
+  bool isRuntimeCodeGenEnabled(
+      JS::RuntimeCode kind, JS::Handle<JSString*> codeString,
+      JS::CompilationType compilationType,
+      JS::Handle<JS::StackGCVector<JSString*>> parameterStrings,
+      JS::Handle<JSString*> bodyString,
+      JS::Handle<JS::StackGCVector<JS::Value>> parameterArgs,
+      JS::Handle<JS::Value> bodyArg, bool* outCanCompileStrings);
+
+  // Get code to be used by eval for Object argument.
+  bool getCodeForEval(JS::HandleObject code,
+                      JS::MutableHandle<JSString*> outCode);
 
   size_t sizeOfExcludingThis(mozilla::MallocSizeOf mallocSizeOf) const;
   size_t sizeOfIncludingThis(mozilla::MallocSizeOf mallocSizeOf) const;

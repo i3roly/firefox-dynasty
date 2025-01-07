@@ -72,11 +72,19 @@ export class DataSourceBase {
     this.#aggregatorApi.setNotification(notification);
   }
 
+  discardChangesConfirmed() {
+    this.#aggregatorApi.discardChangesConfirmed();
+  }
+
   formatMessages = createFormatMessages("preview/megalist.ftl");
   static ftl = new Localization(["branding/brand.ftl", "preview/megalist.ftl"]);
 
   async localizeStrings(strings) {
     const keys = Object.keys(strings);
+    // On Linux there are no translation id's for OS auth messsages because it
+    // is not supported (see getPlatformFtl), so we need to filter them out
+    // to stay consistent with l10nObj.
+    const validKeys = keys.filter(key => !!strings[key]?.id);
     const l10nObj = Object.values(strings)
       .filter(({ id }) => id)
       .map(({ id, args = {} }) => ({ id, args }));
@@ -90,7 +98,7 @@ export class DataSourceBase {
           {}
         );
       }
-      strings[keys[i]] = value;
+      strings[validKeys[i]] = value;
     }
     return strings;
   }

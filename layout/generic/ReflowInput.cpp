@@ -285,6 +285,20 @@ nscoord SizeComputationInput::ComputeISizeValue(
       .mISize;
 }
 
+template <typename SizeOrMaxSize>
+nscoord SizeComputationInput::ComputeBSizeValueHandlingStretch(
+    nscoord aContainingBlockBSize, StyleBoxSizing aBoxSizing,
+    const SizeOrMaxSize& aSize) const {
+  if (aSize.BehavesLikeStretchOnBlockAxis()) {
+    WritingMode wm = GetWritingMode();
+    return nsLayoutUtils::ComputeStretchContentBoxBSize(
+        aContainingBlockBSize, ComputedLogicalMargin(wm).Size(wm).BSize(wm),
+        ComputedLogicalBorderPadding(wm).Size(wm).BSize(wm));
+  }
+  return ComputeBSizeValue(aContainingBlockBSize, aBoxSizing,
+                           aSize.AsLengthPercentage());
+}
+
 nscoord SizeComputationInput::ComputeBSizeValue(
     nscoord aContainingBlockBSize, StyleBoxSizing aBoxSizing,
     const LengthPercentage& aSize) const {
@@ -294,6 +308,11 @@ nscoord SizeComputationInput::ComputeBSizeValue(
     inside = ComputedLogicalBorderPadding(wm).BStartEnd(wm);
   }
   return nsLayoutUtils::ComputeBSizeValue(aContainingBlockBSize, inside, aSize);
+}
+
+WritingMode ReflowInput::GetCBWritingMode() const {
+  return mCBReflowInput ? mCBReflowInput->GetWritingMode()
+                        : mFrame->GetContainingBlock()->GetWritingMode();
 }
 
 nsSize ReflowInput::ComputedSizeAsContainerIfConstrained() const {
@@ -1484,7 +1503,9 @@ void ReflowInput::CalculateHypotheticalPosition(
 
     nscoord boxBSize;
     const auto& styleBSize = mStylePosition->BSize(wm);
-    if (styleBSize.BehavesLikeInitialValueOnBlockAxis()) {
+    const bool isAutoBSize =
+        nsLayoutUtils::IsAutoBSize(styleBSize, blockContentSize.BSize(wm));
+    if (isAutoBSize) {
       if (mFlags.mIsReplaced && intrinsicSize) {
         // It's a replaced element with an 'auto' block size so the box
         // block size is its intrinsic size plus any border/padding/margin
@@ -1496,6 +1517,16 @@ void ReflowInput::CalculateHypotheticalPosition(
         // positioned frame?)
         boxBSize = 0;
       }
+    } else if (styleBSize.BehavesLikeStretchOnBlockAxis()) {
+      MOZ_ASSERT(blockContentSize.BSize(wm) != NS_UNCONSTRAINEDSIZE,
+                 "If we're 'stretch' with unconstrained size, isAutoBSize "
+                 "should be true which should make us skip this code");
+      // TODO(dholbert) The 'insideBoxSizing' and 'outsideBoxSizing' usages
+      // here aren't quite right, because we're supposed to be passing margin
+      // and borderPadding specifically.  The arithmetic seems to work out in
+      // testcases though.
+      boxBSize = nsLayoutUtils::ComputeStretchContentBoxBSize(
+          blockContentSize.BSize(wm), outsideBoxSizing, insideBoxSizing);
     } else {
       // We need to compute it. It's important we do this, because if it's
       // percentage-based this computed value may be different from the
@@ -2378,8 +2409,8 @@ void ReflowInput::InitConstraints(
           // flag.
           return true;
         }
-        if (!alignCB->IsGridContainerFrame() && mCBReflowInput &&
-            mCBReflowInput->GetWritingMode().IsOrthogonalTo(mWritingMode)) {
+        if (!alignCB->IsGridContainerFrame() &&
+            mWritingMode.IsOrthogonalTo(GetCBWritingMode())) {
           // Shrink-wrap blocks that are orthogonal to their container (unless
           // we're in a grid?)
           return true;
@@ -2605,8 +2636,7 @@ void ReflowInput::CalculateBlockSideMargins() {
   // case, "CalculateBlock*Side*Margins" will actually end up adjusting
   // the BStart/BEnd margins; those are the "sides" of the block from its
   // container's point of view.
-  WritingMode cbWM =
-      mCBReflowInput ? mCBReflowInput->GetWritingMode() : GetWritingMode();
+  WritingMode cbWM = GetCBWritingMode();
 
   nscoord availISizeCBWM = AvailableSize(cbWM).ISize(cbWM);
   nscoord computedISizeCBWM = ComputedSize(cbWM).ISize(cbWM);
@@ -3009,9 +3039,8 @@ void ReflowInput::ComputeMinMaxValues(const LogicalSize& aCBSize) {
   if (BSizeBehavesAsInitialValue(minBSize)) {
     SetComputedMinBSize(0);
   } else {
-    SetComputedMinBSize(ComputeBSizeValue(bPercentageBasis,
-                                          mStylePosition->mBoxSizing,
-                                          minBSize.AsLengthPercentage()));
+    SetComputedMinBSize(ComputeBSizeValueHandlingStretch(
+        bPercentageBasis, mStylePosition->mBoxSizing, minBSize));
   }
 
   if (mIsThemed) {
@@ -3022,9 +3051,8 @@ void ReflowInput::ComputeMinMaxValues(const LogicalSize& aCBSize) {
     // Specified value of 'none'
     SetComputedMaxBSize(NS_UNCONSTRAINEDSIZE);
   } else {
-    SetComputedMaxBSize(ComputeBSizeValue(bPercentageBasis,
-                                          mStylePosition->mBoxSizing,
-                                          maxBSize.AsLengthPercentage()));
+    SetComputedMaxBSize(ComputeBSizeValueHandlingStretch(
+        bPercentageBasis, mStylePosition->mBoxSizing, maxBSize));
   }
 
   // If the computed value of 'min-height' is greater than the value of

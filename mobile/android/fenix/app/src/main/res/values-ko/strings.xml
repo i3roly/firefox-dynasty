@@ -375,7 +375,7 @@
     <!-- Browser menu label for turning OFF reader view of the current visited page -->
     <string name="browser_menu_turn_off_reader_view">리더뷰 끄기</string>
     <!-- Browser menu button that reopens a private tab as a regular tab -->
-    <string name="browser_menu_open_in_normal_tab">일반 탭으로 이동</string>dsa
+    <string name="browser_menu_open_in_normal_tab">일반 탭으로 이동</string>
     <!-- Browser menu label for navigating to the translation feature, which provides language translation options the current visited page -->
     <string name="browser_menu_translate_page">페이지 번역…</string>
     <!-- Browser menu label for navigating to the Web Compat Reporter feature, which provides users the ability to send bug reports for broken sites. -->
@@ -460,6 +460,11 @@
     <!-- Content description (not visible, for screen readers etc.): Search engine icon.
     The parameter is the search engine name (for example: DuckDuckGo). -->
     <string name="search_engine_icon_content_description_1">검색 엔진: %s</string>
+
+    <!-- Content description (not visible, for screen readers etc.) of the search engine selector from the search toolbar.
+    The parameter is the search engine name (for example: DuckDuckGo).
+    The colon character (in "%s:") is intended to have the screen reader make a small pause between the search engine name and the description of the button. -->
+    <string name="search_engine_selector_content_description">%s: 검색 엔진 선택자</string>
 
     <!-- Home onboarding -->
     <!-- Home onboarding dialog welcome screen title text. -->
@@ -623,7 +628,7 @@
     <!-- Onboarding label for 'Save and continue' button, used by Nimbus experiments. -->
     <string name="onboarding_save_and_continue_button">저장하고 계속</string>
     <!-- Onboarding toolbar selection card label for 'skip' button, used by Nimbus experiments. -->
-    <string name="onboarding_customize_toolbar_skip_button">건너뛰기</string>
+    <string name="onboarding_customize_toolbar_skip_button" tools:ignore="UnusedResources">건너뛰기</string>
     <!-- Onboarding toolbar selection card label for 'top' option, used by Nimbus experiments. -->
     <string name="onboarding_customize_toolbar_top_option">위쪽</string>
     <!-- Onboarding toolbar selection card label for 'bottom' option, used by Nimbus experiments. -->
@@ -638,6 +643,9 @@
     <string name="onboarding_customize_toolbar_placement_bottom_content_description">하단 도구 모음 이미지</string>
     <string name="onboarding_customize_toolbar_placement_top_content_description">상단 도구 모음 이미지</string>
 
+    <!-- Onboarding toolbar selection card label for 'Not now' button, used by Nimbus experiments. -->
+    <string name="onboarding_customize_toolbar_not_now_button">나중에</string>
+
     <!-- Onboarding header for the theme selection card, used by Nimbus experiments. -->
     <string name="onboarding_customize_theme_title" tools:ignore="UnusedResources">테마 선택</string>
     <!-- Onboarding sub header for theme selection card, used by Nimbus experiments. -->
@@ -645,7 +653,7 @@
     <!-- Onboarding label for 'Save and start browsing' button, used by Nimbus experiments. -->
     <string name="onboarding_save_and_start_button">저장하고 탐색 시작</string>
     <!-- Onboarding theme selection card label for 'skip' button, used by Nimbus experiments. -->
-    <string name="onboarding_customize_theme_skip_button">건너뛰기</string>
+    <string name="onboarding_customize_theme_skip_button" tools:ignore="UnusedResources">건너뛰기</string>
     <!-- Onboarding theme selection card label for 'dark' option, used by Nimbus experiments. -->
     <string name="onboarding_customize_theme_dark_option">어둡게</string>
     <!-- Onboarding theme selection card label for 'light' option, used by Nimbus experiments. -->
@@ -656,6 +664,9 @@
     <string name="onboarding_customize_theme_main_image_content_description">아티스트 및 빌더 도구를 그림으로 보여주는 테마 선택 뷰의 큰 헤더 이미지입니다.</string>
     <!-- Onboarding theme selection card content description for the theme selection image. %1$s is placeholder for either 'system', 'light' or 'dark'. -->
     <string name="onboarding_customize_theme_content_description">%1$s 테마 이미지</string>
+
+    <!-- Onboarding theme selection card label for 'Not now' button, used by Nimbus experiments. -->
+    <string name="onboarding_customize_theme_not_now_button">나중에</string>
 
     <!-- Search Widget -->
     <!-- Content description for searching with a widget. The first parameter is the name of the application.-->
@@ -2048,7 +2059,7 @@
     <string name="etp_back_button_content_description">뒤로</string>
     <!-- About page link text to open what's new link -->
     <string name="about_whats_new">%s의 새 기능</string>
-  
+
     <!-- Open source licenses page title
     The first parameter is the app name -->
     <string name="open_source_licenses_title">%s | OSS 라이브러리</string>
@@ -3145,10 +3156,10 @@
     <!-- Messages explaining how to exit fullscreen mode -->
     <!-- Message shown to explain how to exit fullscreen mode when gesture navigation is enabled. -->
     <!-- Localisation note: this text should be as short as possible, max 68 chars -->
-    <string name="exit_fullscreen_with_gesture_short">종료하려면, 위에서 드래그하고 뒤로 가기 제스처를 사용하세요</string>
+    <string name="exit_fullscreen_with_gesture_short">전체 화면에서 나가려면, 화면 상단를 아래로 드래그하고 뒤로가기 제스처를 사용하세요</string>
     <!-- Message shown to explain how to exit fullscreen mode when using back button navigation. -->
     <!-- Localisation note: this text should be as short as possible, max 68 chars -->
-    <string name="exit_fullscreen_with_back_button_short">종료하려면, 위에서 드래그하고 뒤로 가기를 누르세요</string>
+    <string name="exit_fullscreen_with_back_button_short">전체 화면에서 나가려면, 화면 상단를 아래로 드래그하고 뒤로가기를 누르세요</string>
 
     <!-- Beta Label Component !-->
     <!-- Text shown as a label or tag to indicate a feature or area is still undergoing active development. Note that here "Beta" should not be translated, as it is used as an icon styled element. -->

@@ -129,12 +129,10 @@ static bool ElementNeedsRestyle(Element* aElement,
     return true;
   }
 
-  // TODO: Bug 1921553. Use PseudoStyleRequest for web animations.
   // If the pseudo-element is animating, make sure to flush.
-  if (aElement->MayHaveAnimations() &&
-      aPseudo.mType != PseudoStyleType::NotPseudo &&
-      AnimationUtils::IsSupportedPseudoForAnimations(aPseudo.mType)) {
-    if (EffectSet::Get(aElement, aPseudo.mType)) {
+  if (aElement->MayHaveAnimations() && !aPseudo.IsNotPseudo() &&
+      AnimationUtils::IsSupportedPseudoForAnimations(aPseudo)) {
+    if (EffectSet::Get(aElement, aPseudo)) {
       return true;
     }
   }
@@ -588,9 +586,7 @@ nsComputedDOMStyle::GetUnanimatedComputedStyleNoFlush(
   MOZ_ASSERT(presShell,
              "How in the world did we get a style a few lines above?");
 
-  // TODO: Bug 1921553. Use PseudoStyleRequest for animations.
-  Element* elementOrPseudoElement =
-      AnimationUtils::GetElementForRestyle(aElement, aPseudo.mType);
+  Element* elementOrPseudoElement = aElement->GetPseudoElement(aPseudo);
   if (!elementOrPseudoElement) {
     return nullptr;
   }

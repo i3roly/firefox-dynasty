@@ -1223,14 +1223,6 @@ void CanonicalBrowsingContext::SetActiveSessionHistoryEntry(
     mActiveEntry->SharedInfo()->mCacheKey = aUpdatedCacheKey;
   }
 
-  if (oldActiveEntry) {
-    // aInfo comes from the entry stored in the current document's docshell,
-    // whose interaction state does not get updated. So we instead propagate
-    // state from the previous canonical entry. See bug 1917369.
-    mActiveEntry->SetHasUserInteraction(
-        oldActiveEntry->GetHasUserInteraction());
-  }
-
   if (IsTop()) {
     Maybe<int32_t> previousEntryIndex, loadedEntryIndex;
     shistory->AddToRootSessionHistory(
@@ -1758,7 +1750,8 @@ void CanonicalBrowsingContext::PendingRemotenessChange::ProcessLaunched() {
     auto found = mTarget->FindUnloadingHost(mContentParentKeepAlive->ChildID());
     if (found != mTarget->mUnloadingHosts.end()) {
       found->mCallbacks.AppendElement(
-          [self = RefPtr{this}]() { self->ProcessReady(); });
+          [self = RefPtr{this}]()
+              MOZ_CAN_RUN_SCRIPT_BOUNDARY_LAMBDA { self->ProcessReady(); });
       return;
     }
   }
@@ -1863,8 +1856,10 @@ nsresult CanonicalBrowsingContext::PendingRemotenessChange::FinishTopContent() {
   // The process has been created, hand off to nsFrameLoaderOwner to finish
   // the process switch.
   ErrorResult error;
-  frameLoaderOwner->ChangeRemotenessToProcess(mContentParentKeepAlive.get(),
-                                              mOptions, mSpecificGroup, error);
+  RefPtr keepAlive = mContentParentKeepAlive.get();
+  RefPtr specificGroup = mSpecificGroup;
+  frameLoaderOwner->ChangeRemotenessToProcess(keepAlive, mOptions,
+                                              specificGroup, error);
   if (error.Failed()) {
     return error.StealNSResult();
   }
@@ -2216,10 +2211,11 @@ CanonicalBrowsingContext::ChangeRemoteness(
     if (blocker && blocker->State() != Promise::PromiseState::Resolved) {
       change->mWaitingForPrepareToChange = true;
       blocker->AddCallbacksWithCycleCollectedArgs(
-          [change](JSContext*, JS::Handle<JS::Value>, ErrorResult&) {
-            change->mWaitingForPrepareToChange = false;
-            change->MaybeFinish();
-          },
+          [change](JSContext*, JS::Handle<JS::Value>, ErrorResult&)
+              MOZ_CAN_RUN_SCRIPT_BOUNDARY_LAMBDA {
+                change->mWaitingForPrepareToChange = false;
+                change->MaybeFinish();
+              },
           [change](JSContext*, JS::Handle<JS::Value> aValue, ErrorResult&) {
             change->Cancel(
                 Promise::TryExtractNSResultFromRejectionValue(aValue));
@@ -2299,9 +2295,10 @@ CanonicalBrowsingContext::ChangeRemoteness(
                              /* aBrowserId */ BrowserId())
         ->Then(
             GetMainThreadSerialEventTarget(), __func__,
-            [change](UniqueContentParentKeepAlive) {
-              change->ProcessLaunched();
-            },
+            [change](UniqueContentParentKeepAlive)
+                MOZ_CAN_RUN_SCRIPT_BOUNDARY_LAMBDA {
+                  change->ProcessLaunched();
+                },
             [change]() { change->Cancel(NS_ERROR_FAILURE); });
   } else {
     change->ProcessLaunched();

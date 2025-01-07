@@ -489,8 +489,8 @@ void HttpChannelChild::OnStartRequest(
                                       false);
   }
 
-  if (!aArgs.cookie().IsEmpty()) {
-    SetCookie(aArgs.cookie());
+  if (!aArgs.cookieHeaders().IsEmpty()) {
+    SetCookieHeaders(aArgs.cookieHeaders());
   }
 
   // Note: this is where we would notify "http-on-after-examine-response"
@@ -570,7 +570,8 @@ void HttpChannelChild::OnAfterLastPart(const nsresult& aStatus) {
 void HttpChannelChild::DoOnStartRequest(nsIRequest* aRequest) {
   nsresult rv;
 
-  LOG(("HttpChannelChild::DoOnStartRequest [this=%p]\n", this));
+  LOG(("HttpChannelChild::DoOnStartRequest [this=%p, request=%p]\n", this,
+       aRequest));
 
   // We handle all the listener chaining before OnStartRequest at this moment.
   // Prevent additional listeners being added to the chain after the request
@@ -807,9 +808,11 @@ void HttpChannelChild::DoOnDataAvailable(nsIRequest* aRequest,
                                          nsIInputStream* aStream,
                                          uint64_t aOffset, uint32_t aCount) {
   AUTO_PROFILER_LABEL("HttpChannelChild::DoOnDataAvailable", NETWORK);
-  LOG(("HttpChannelChild::DoOnDataAvailable [this=%p]\n", this));
+  LOG(("HttpChannelChild::DoOnDataAvailable [this=%p, request=%p]\n", this,
+       aRequest));
   if (mCanceled) return;
 
+  mGotDataAvailable = true;
   if (mListener) {
     nsCOMPtr<nsIStreamListener> listener(mListener);
     nsresult rv = listener->OnDataAvailable(aRequest, aStream, aOffset, aCount);
@@ -1025,8 +1028,8 @@ void HttpChannelChild::OnStopRequest(
         mLastStatusReported, now, mTransferSize, kCacheUnknown,
         mLoadInfo->GetInnerWindowID(),
         mLoadInfo->GetOriginAttributes().IsPrivateBrowsing(),
-        mRequestHead.Version(), &mTransactionTimings, std::move(mSource),
-        Some(nsDependentCString(contentType.get())));
+        mRequestHead.Version(), mClassOfService.Flags(), &mTransactionTimings,
+        std::move(mSource), Some(nsDependentCString(contentType.get())));
   }
 
   TimeDuration channelCompletionDuration = now - mAsyncOpenTime;
@@ -1201,7 +1204,8 @@ void HttpChannelChild::CollectMixedContentTelemetry() {
 void HttpChannelChild::DoOnStopRequest(nsIRequest* aRequest,
                                        nsresult aChannelStatus) {
   AUTO_PROFILER_LABEL("HttpChannelChild::DoOnStopRequest", NETWORK);
-  LOG(("HttpChannelChild::DoOnStopRequest [this=%p]\n", this));
+  LOG(("HttpChannelChild::DoOnStopRequest [this=%p, request=%p]\n", this,
+       aRequest));
   MOZ_ASSERT(NS_IsMainThread());
   MOZ_ASSERT(!LoadIsPending());
 
@@ -1507,9 +1511,9 @@ mozilla::ipc::IPCResult HttpChannelChild::RecvRedirect1Begin(
     const uint32_t& aRegistrarId, nsIURI* aNewUri,
     const uint32_t& aNewLoadFlags, const uint32_t& aRedirectFlags,
     const ParentLoadInfoForwarderArgs& aLoadInfoForwarder,
-    const nsHttpResponseHead& aResponseHead,
-    nsITransportSecurityInfo* aSecurityInfo, const uint64_t& aChannelId,
-    const NetAddr& aOldPeerAddr, const ResourceTimingStructArgs& aTiming) {
+    nsHttpResponseHead&& aResponseHead, nsITransportSecurityInfo* aSecurityInfo,
+    const uint64_t& aChannelId, const NetAddr& aOldPeerAddr,
+    const ResourceTimingStructArgs& aTiming) {
   // TODO: handle security info
   LOG(("HttpChannelChild::RecvRedirect1Begin [this=%p]\n", this));
   // We set peer address of child to the old peer,
@@ -1522,7 +1526,7 @@ mozilla::ipc::IPCResult HttpChannelChild::RecvRedirect1Begin(
   mEventQ->RunOrEnqueue(new NeckoTargetChannelFunctionEvent(
       this, [self = UnsafePtr<HttpChannelChild>(this), aRegistrarId,
              newUri = RefPtr{aNewUri}, aNewLoadFlags, aRedirectFlags,
-             aLoadInfoForwarder, aResponseHead,
+             aLoadInfoForwarder, aResponseHead = std::move(aResponseHead),
              aSecurityInfo = nsCOMPtr{aSecurityInfo}, aChannelId, aTiming]() {
         self->Redirect1Begin(aRegistrarId, newUri, aNewLoadFlags,
                              aRedirectFlags, aLoadInfoForwarder, aResponseHead,
@@ -1598,9 +1602,9 @@ void HttpChannelChild::Redirect1Begin(
         NetworkLoadType::LOAD_REDIRECT, mLastStatusReported, TimeStamp::Now(),
         0, kCacheUnknown, mLoadInfo->GetInnerWindowID(),
         mLoadInfo->GetOriginAttributes().IsPrivateBrowsing(),
-        mRequestHead.Version(), &mTransactionTimings, std::move(mSource),
-        Some(nsDependentCString(contentType.get())), newOriginalURI,
-        redirectFlags, channelId);
+        mRequestHead.Version(), mClassOfService.Flags(), &mTransactionTimings,
+        std::move(mSource), Some(nsDependentCString(contentType.get())),
+        newOriginalURI, redirectFlags, channelId);
   }
 
   mSecurityInfo = securityInfo;
@@ -1921,7 +1925,7 @@ HttpChannelChild::CompleteRedirectSetup(nsIStreamListener* aListener) {
         mChannelCreationTimestamp, mLastStatusReported, 0, kCacheUnknown,
         mLoadInfo->GetInnerWindowID(),
         mLoadInfo->GetOriginAttributes().IsPrivateBrowsing(),
-        mRequestHead.Version());
+        mRequestHead.Version(), mClassOfService.Flags());
   }
   StoreIsPending(true);
   StoreWasOpened(true);
@@ -2264,7 +2268,7 @@ nsresult HttpChannelChild::AsyncOpenInternal(nsIStreamListener* aListener) {
         mChannelCreationTimestamp, mLastStatusReported, 0, kCacheUnknown,
         mLoadInfo->GetInnerWindowID(),
         mLoadInfo->GetOriginAttributes().IsPrivateBrowsing(),
-        mRequestHead.Version());
+        mRequestHead.Version(), mClassOfService.Flags());
   }
   StoreIsPending(true);
   StoreWasOpened(true);
@@ -3052,15 +3056,22 @@ HttpChannelChild::RetargetDeliveryTo(nsISerialEventTarget* aNewTarget) {
     return rv;
   }
 
-  // We allow multiple retargeting. However all such modification must happen
-  // before we have have received the first OnDataAvailable.
-  // See Bug 1887783
-  MOZ_ASSERT(mOnDataAvailableStartTime.IsNull());
-  {
-    MutexAutoLock lock(mEventTargetMutex);
-    RetargetDeliveryToImpl(aNewTarget, lock);
+  MutexAutoLock lock(mEventTargetMutex);
+  // Don't assert if the target hasn't changed, or if we haven't gotten
+  // OnDataAvailable (backed off on this last bit, see bug 1917901)
+  if (mODATarget == aNewTarget) {
+    // Same target
+    return NS_OK;
+  } else if (mODATarget) {
+    // We already retargetted (valentin: unclear if this should be allowed)
+    NS_WARNING("Retargeting delivery when already retargeted");
+    return NS_ERROR_ALREADY_INITIALIZED;
+  } else if (mGotDataAvailable) {
+    // Too late to retarget now.
+    return NS_ERROR_FAILURE;
   }
 
+  RetargetDeliveryToImpl(aNewTarget, lock);
   return NS_OK;
 }
 

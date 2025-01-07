@@ -37,14 +37,6 @@
 
 // -
 
-#if defined(__MINGW32__)  // 64 defines both 32 and 64
-// We need to fake some things, while we wait on updates to mingw's dcomp.h
-// header. Just enough that we can successfully fail to work there.
-#  define MOZ_MINGW_DCOMP_H_INCOMPLETE
-struct IDCompositionColorMatrixEffect : public IDCompositionFilterEffect {};
-struct IDCompositionTableTransferEffect : public IDCompositionFilterEffect {};
-#endif  // defined(__MINGW32__)
-
 namespace mozilla {
 namespace wr {
 
@@ -695,6 +687,16 @@ void DCLayerTree::CompositorEndFrame() {
   }
 }
 
+void DCLayerTree::BindSwapChain(wr::NativeSurfaceId aId) {
+  auto surface = GetSurface(aId);
+  surface->AsDCSwapChain()->Bind();
+}
+
+void DCLayerTree::PresentSwapChain(wr::NativeSurfaceId aId) {
+  auto surface = GetSurface(aId);
+  surface->AsDCSwapChain()->Present();
+}
+
 void DCLayerTree::Bind(wr::NativeTileId aId, wr::DeviceIntPoint* aOffset,
                        uint32_t* aFboId, wr::DeviceIntRect aDirtyRect,
                        wr::DeviceIntRect aValidRect) {
@@ -776,6 +778,31 @@ void DCLayerTree::CreateSurface(wr::NativeSurfaceId aId,
   }
 
   mDCSurfaces[aId] = std::move(surface);
+}
+
+void DCLayerTree::CreateSwapChainSurface(wr::NativeSurfaceId aId,
+                                         wr::DeviceIntSize aSize,
+                                         bool aIsOpaque) {
+  auto it = mDCSurfaces.find(aId);
+  MOZ_RELEASE_ASSERT(it == mDCSurfaces.end());
+
+  auto surface = MakeUnique<DCSwapChain>(aSize, aIsOpaque, this);
+  if (!surface->Initialize()) {
+    gfxCriticalNote << "Failed to initialize DCSwapChain: "
+                    << wr::AsUint64(aId);
+    return;
+  }
+
+  mDCSurfaces[aId] = std::move(surface);
+}
+
+void DCLayerTree::ResizeSwapChainSurface(wr::NativeSurfaceId aId,
+                                         wr::DeviceIntSize aSize) {
+  auto it = mDCSurfaces.find(aId);
+  MOZ_RELEASE_ASSERT(it != mDCSurfaces.end());
+  auto surface = it->second.get();
+
+  surface->AsDCSwapChain()->Resize(aSize);
 }
 
 void DCLayerTree::CreateExternalSurface(wr::NativeSurfaceId aId,
@@ -1341,6 +1368,134 @@ DCTile* DCSurface::GetTile(int32_t aX, int32_t aY) const {
   auto tile_it = mDCTiles.find(key);
   MOZ_RELEASE_ASSERT(tile_it != mDCTiles.end());
   return tile_it->second.get();
+}
+
+DCSwapChain::~DCSwapChain() {
+  if (mEGLSurface) {
+    const auto gl = mDCLayerTree->GetGLContext();
+
+    const auto& gle = gl::GLContextEGL::Cast(gl);
+    const auto& egl = gle->mEgl;
+    egl->fDestroySurface(mEGLSurface);
+    mEGLSurface = EGL_NO_SURFACE;
+  }
+}
+
+bool DCSwapChain::Initialize() {
+  DCSurface::Initialize();
+
+  const auto gl = mDCLayerTree->GetGLContext();
+  const auto& gle = gl::GLContextEGL::Cast(gl);
+  const auto& egl = gle->mEgl;
+
+  HRESULT hr;
+  auto device = mDCLayerTree->GetDevice();
+
+  RefPtr<IDXGIDevice> dxgiDevice;
+  device->QueryInterface((IDXGIDevice**)getter_AddRefs(dxgiDevice));
+
+  RefPtr<IDXGIFactory2> dxgiFactory;
+  {
+    RefPtr<IDXGIAdapter> adapter;
+    dxgiDevice->GetAdapter(getter_AddRefs(adapter));
+    adapter->GetParent(
+        IID_PPV_ARGS((IDXGIFactory2**)getter_AddRefs(dxgiFactory)));
+  }
+
+  DXGI_SWAP_CHAIN_DESC1 desc{};
+  desc.Width = mSize.width;
+  desc.Height = mSize.height;
+  desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+  desc.SampleDesc.Count = 1;
+  desc.SampleDesc.Quality = 0;
+  desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+  desc.BufferCount = 2;
+  // DXGI_SCALING_NONE caused swap chain creation failure.
+  desc.Scaling = DXGI_SCALING_STRETCH;
+  desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
+  desc.AlphaMode =
+      mIsOpaque ? DXGI_ALPHA_MODE_IGNORE : DXGI_ALPHA_MODE_PREMULTIPLIED;
+  desc.Flags = 0;
+
+  hr = dxgiFactory->CreateSwapChainForComposition(device, &desc, nullptr,
+                                                  getter_AddRefs(mSwapChain));
+  MOZ_RELEASE_ASSERT(SUCCEEDED(hr));
+  mVisual->SetContent(mSwapChain);
+
+  ID3D11Texture2D* backBuffer;
+  hr = mSwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void**)&backBuffer);
+  MOZ_RELEASE_ASSERT(SUCCEEDED(hr));
+
+  const EGLint pbuffer_attribs[]{LOCAL_EGL_WIDTH, mSize.width, LOCAL_EGL_HEIGHT,
+                                 mSize.height, LOCAL_EGL_NONE};
+  const auto buffer = reinterpret_cast<EGLClientBuffer>(backBuffer);
+  EGLConfig eglConfig = mDCLayerTree->GetEGLConfig();
+
+  mEGLSurface = egl->fCreatePbufferFromClientBuffer(
+      LOCAL_EGL_D3D_TEXTURE_ANGLE, buffer, eglConfig, pbuffer_attribs);
+  MOZ_RELEASE_ASSERT(mEGLSurface);
+  backBuffer->Release();
+
+  return true;
+}
+
+void DCSwapChain::Bind() {
+  const auto gl = mDCLayerTree->GetGLContext();
+  const auto& gle = gl::GLContextEGL::Cast(gl);
+
+  gle->SetEGLSurfaceOverride(mEGLSurface);
+  bool ok = gl->MakeCurrent();
+
+  MOZ_RELEASE_ASSERT(ok);
+}
+
+void DCSwapChain::Resize(wr::DeviceIntSize aSize) {
+  const auto gl = mDCLayerTree->GetGLContext();
+
+  const auto& gle = gl::GLContextEGL::Cast(gl);
+  const auto& egl = gle->mEgl;
+
+  if (mEGLSurface) {
+    egl->fDestroySurface(mEGLSurface);
+    mEGLSurface = EGL_NO_SURFACE;
+  }
+
+  ID3D11Texture2D* backBuffer;
+  DXGI_SWAP_CHAIN_DESC desc;
+  HRESULT hr;
+
+  hr = mSwapChain->GetDesc(&desc);
+  MOZ_RELEASE_ASSERT(SUCCEEDED(hr));
+
+  hr = mSwapChain->ResizeBuffers(desc.BufferCount, aSize.width, aSize.height,
+                                 DXGI_FORMAT_B8G8R8A8_UNORM, 0);
+  MOZ_RELEASE_ASSERT(SUCCEEDED(hr));
+
+  hr = mSwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void**)&backBuffer);
+  MOZ_RELEASE_ASSERT(SUCCEEDED(hr));
+
+  const EGLint pbuffer_attribs[]{LOCAL_EGL_WIDTH, aSize.width, LOCAL_EGL_HEIGHT,
+                                 aSize.height, LOCAL_EGL_NONE};
+  const auto buffer = reinterpret_cast<EGLClientBuffer>(backBuffer);
+  EGLConfig eglConfig = mDCLayerTree->GetEGLConfig();
+
+  mEGLSurface = egl->fCreatePbufferFromClientBuffer(
+      LOCAL_EGL_D3D_TEXTURE_ANGLE, buffer, eglConfig, pbuffer_attribs);
+  MOZ_RELEASE_ASSERT(mEGLSurface);
+
+  backBuffer->Release();
+
+  mSize = aSize;
+}
+
+void DCSwapChain::Present() {
+  const auto gl = mDCLayerTree->GetGLContext();
+  const auto& gle = gl::GLContextEGL::Cast(gl);
+
+  HRESULT hr = mSwapChain->Present(0, 0);
+  MOZ_RELEASE_ASSERT(SUCCEEDED(hr));
+
+  gle->SetEGLSurfaceOverride(EGL_NO_SURFACE);
 }
 
 DCSurfaceVideo::DCSurfaceVideo(bool aIsOpaque, DCLayerTree* aDCLayerTree)
@@ -2295,8 +2450,6 @@ ColorManagementChain ColorManagementChain::From(
     const color::ColorProfileConversionDesc& conv) {
   auto ret = ColorManagementChain{};
 
-#if !defined(MOZ_MINGW_DCOMP_H_INCOMPLETE)
-
   const auto Append = [&](const RefPtr<IDCompositionFilterEffect>& afterLast) {
     if (ret.last) {
       afterLast->SetInput(0, ret.last, 0);
@@ -2332,8 +2485,6 @@ ColorManagementChain ColorManagementChain::From(
   ret.dstLinearFromSrcLinear =
       MaybeAppendColorMatrix(color::mat4(conv.dstLinearFromSrcLinear));
   ret.dstTfFromDstLinear = MaybeAppendTableTransfer(conv.dstTfFromDstLinear);
-
-#endif  // !defined(MOZ_MINGW_DCOMP_H_INCOMPLETE)
 
   return ret;
 }

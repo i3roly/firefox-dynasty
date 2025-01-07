@@ -178,7 +178,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var _MultiStageProtonScreen__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(6);
 /* harmony import */ var _LanguageSwitcher__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(10);
 /* harmony import */ var _SubmenuButton__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(15);
-/* harmony import */ var _lib_addUtmParams_mjs__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(20);
+/* harmony import */ var _lib_addUtmParams_mjs__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(21);
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -482,7 +482,7 @@ const StepsIndicator = props => {
   let steps = [];
   for (let i = 0; i < props.totalNumberOfScreens; i++) {
     let className = `${i === props.order ? "current" : ""} ${i < props.order ? "complete" : ""}`;
-    steps.push( /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("div", {
+    steps.push(/*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("div", {
       key: i,
       className: `indicator ${className}`,
       role: "presentation"
@@ -817,7 +817,7 @@ const Localized = ({
   // Add zap style and content in a way that allows fluent to insert too.
   if (text.zap) {
     props.className += " welcomeZap";
-    textNodes.push( /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("span", {
+    textNodes.push(/*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("span", {
       className: "short zap",
       "data-l10n-name": "zap",
       ref: zapRef
@@ -867,9 +867,11 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var _AddonsPicker__WEBPACK_IMPORTED_MODULE_13__ = __webpack_require__(17);
 /* harmony import */ var _LinkParagraph__WEBPACK_IMPORTED_MODULE_14__ = __webpack_require__(18);
 /* harmony import */ var _ActionChecklist__WEBPACK_IMPORTED_MODULE_15__ = __webpack_require__(19);
+/* harmony import */ var _EmbeddedBrowser__WEBPACK_IMPORTED_MODULE_16__ = __webpack_require__(20);
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
+
 
 
 
@@ -1133,6 +1135,9 @@ class ProtonScreen extends (react__WEBPACK_IMPORTED_MODULE_0___default().PureCom
     }) : null, content.tiles && content.tiles.type === "action_checklist" && content.tiles.data ? /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement(_ActionChecklist__WEBPACK_IMPORTED_MODULE_15__.ActionChecklist, {
       content: content,
       message_id: this.props.messageId
+    }) : null, content.tiles && content.tiles.type === "embedded_browser" && content.tiles.data?.url ? /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement(_EmbeddedBrowser__WEBPACK_IMPORTED_MODULE_16__.EmbeddedBrowser, {
+      url: content.tiles.data.url,
+      style: content.tiles.data.style
     }) : null);
   }
   renderNoodles() {
@@ -1238,7 +1243,7 @@ class ProtonScreen extends (react__WEBPACK_IMPORTED_MODULE_0___default().PureCom
     for (const item of content) {
       switch (item.type) {
         case "text":
-          elements.push( /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement(_LinkParagraph__WEBPACK_IMPORTED_MODULE_14__.LinkParagraph, {
+          elements.push(/*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement(_LinkParagraph__WEBPACK_IMPORTED_MODULE_14__.LinkParagraph, {
             text_content: item,
             handleAction: this.props.handleAction
           }));
@@ -1576,7 +1581,7 @@ const SingleSelect = ({
   const autoTriggerAllowed = itemAction => {
     // Currently only enabled for sidebar experiment prefs
     const allowedActions = ["SET_PREF"];
-    const allowedPrefs = ["sidebar.revamp", "sidebar.verticalTabs"];
+    const allowedPrefs = ["sidebar.revamp", "sidebar.verticalTabs", "sidebar.visibility"];
     const checkAction = action => {
       if (!allowedActions.includes(action.type)) {
         return false;
@@ -1986,10 +1991,10 @@ const CTAParagraph = props => {
     onClick: handleAction,
     onKeyUp: event => ["Enter", " "].includes(event.key) ? handleAction(event) : null,
     value: "cta_paragraph",
-    role: "button",
-    tabIndex: "0"
+    tabIndex: "0",
+    role: "link"
   }, " ", /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("a", {
-    role: "button",
+    href: "",
     tabIndex: "0",
     "data-l10n-name": content.text.string_name
   }, " ")) : null));
@@ -2706,6 +2711,64 @@ const ActionChecklist = ({
 
 /***/ }),
 /* 20 */
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   EmbeddedBrowser: () => (/* binding */ EmbeddedBrowser),
+/* harmony export */   "default": () => (__WEBPACK_DEFAULT_EXPORT__)
+/* harmony export */ });
+/* harmony import */ var react__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(1);
+/* harmony import */ var react__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__webpack_require__.n(react__WEBPACK_IMPORTED_MODULE_0__);
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this file,
+ * You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+
+const BROWSER_STYLES = ["height", "width", "border", "border-radius", "flex", "margin", "padding"];
+function applyValidStyles(element, style, validStyles) {
+  Object.keys(style).forEach(key => {
+    if (validStyles.includes(key)) {
+      element.style.setProperty(key, style[key]);
+    }
+  });
+}
+const EmbeddedBrowser = props => {
+  // Conditionally render the component only if the environment supports XULElements (such as in Spotlight modals)
+  return document.createXULElement ? /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement(EmbeddedBrowserInner, props) : null;
+};
+const EmbeddedBrowserInner = ({
+  url,
+  style
+}) => {
+  const ref = (0,react__WEBPACK_IMPORTED_MODULE_0__.useRef)(null);
+  (0,react__WEBPACK_IMPORTED_MODULE_0__.useEffect)(() => {
+    const browser = document.createXULElement("browser");
+    browser.setAttribute("disableglobalhistory", "true");
+    browser.setAttribute("type", "content");
+    browser.setAttribute("remote", "true");
+    ref.current.appendChild(browser);
+  }, []);
+  (0,react__WEBPACK_IMPORTED_MODULE_0__.useEffect)(() => {
+    const browser = ref.current.querySelector("browser");
+    if (browser) {
+      if (style) {
+        applyValidStyles(browser, style, BROWSER_STYLES);
+      }
+      browser.fixupAndLoadURIString(url, {
+        triggeringPrincipal: Services.scriptSecurityManager.createNullPrincipal({})
+      });
+    }
+  }, [url, style]);
+  return /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("div", {
+    className: "embedded-browser-container",
+    ref: ref
+  });
+};
+/* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = (EmbeddedBrowser);
+
+/***/ }),
+/* 21 */
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 __webpack_require__.r(__webpack_exports__);
@@ -2748,7 +2811,7 @@ function addUtmParams(url, utmTerm) {
 
 
 /***/ }),
-/* 21 */
+/* 22 */
 /***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
 
 __webpack_require__.r(__webpack_exports__);
@@ -2759,7 +2822,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var react__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__webpack_require__.n(react__WEBPACK_IMPORTED_MODULE_0__);
 /* harmony import */ var _lib_aboutwelcome_utils_mjs__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(3);
 /* harmony import */ var _MultiStageProtonScreen__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(6);
-/* harmony import */ var _lib_addUtmParams_mjs__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(20);
+/* harmony import */ var _lib_addUtmParams_mjs__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(21);
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -2936,7 +2999,7 @@ ReturnToAMO.defaultProps = _lib_aboutwelcome_utils_mjs__WEBPACK_IMPORTED_MODULE_
 /******/ 	
 /************************************************************************/
 var __webpack_exports__ = {};
-// This entry need to be wrapped in an IIFE because it need to be isolated against other modules in the chunk.
+// This entry needs to be wrapped in an IIFE because it needs to be isolated against other modules in the chunk.
 (() => {
 __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var react__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(1);
@@ -2945,7 +3008,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var react_dom__WEBPACK_IMPORTED_MODULE_1___default = /*#__PURE__*/__webpack_require__.n(react_dom__WEBPACK_IMPORTED_MODULE_1__);
 /* harmony import */ var _lib_aboutwelcome_utils_mjs__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(3);
 /* harmony import */ var _components_MultiStageAboutWelcome__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(4);
-/* harmony import */ var _components_ReturnToAMO__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(21);
+/* harmony import */ var _components_ReturnToAMO__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(22);
 function _extends() { _extends = Object.assign ? Object.assign.bind() : function (target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; }; return _extends.apply(this, arguments); }
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -3072,7 +3135,7 @@ async function mount() {
     messageId,
     UTMTerm
   } = await retrieveRenderContent();
-  react_dom__WEBPACK_IMPORTED_MODULE_1___default().render( /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement(AboutWelcome, _extends({
+  react_dom__WEBPACK_IMPORTED_MODULE_1___default().render(/*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement(AboutWelcome, _extends({
     messageId: messageId,
     UTMTerm: UTMTerm
   }, aboutWelcomeProps)), document.getElementById("multi-stage-message-root"));

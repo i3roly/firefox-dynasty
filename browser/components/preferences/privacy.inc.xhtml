@@ -358,10 +358,10 @@
     </vbox>
   </vbox>
 </groupbox>
-<groupbox id="nonTechnicalPrivacyGroup" data-category="panePrivacy" data-subcategory="nontechnicalprivacy" hidden="true">
+<groupbox id="nonTechnicalPrivacyGroup" data-category="panePrivacy" hidden="true">
   <label id="nonTechnicalPrivacyHeader"><html:h2 data-l10n-id="non-technical-privacy-header"/></label>
   <vbox id="nonTechnicalPrivacyBox">
-    <hbox id="globalPrivacyControlBox" flex="1" align="center" hidden="true">
+    <hbox id="globalPrivacyControlBox" flex="1" align="center">
       <checkbox id="globalPrivacyControlCheckbox"
               class="tail-with-learn-more"
               preference="privacy.globalprivacycontrol.enabled"
@@ -371,27 +371,11 @@
           id="globalPrivacyControlLearnMoreLink"
           support-page="global-privacy-control" />
     </hbox>
-    <vbox id="legacyDoNotTrackBox">
-      <label>
-        <label class="tail-with-learn-more" data-l10n-id="do-not-track-description" id="doNotTrackDesc"></label>
+    <hbox id="doNotTrackBox" flex="1" align="center" hidden="true">
       <html:a is="moz-support-link"
-              class="learnMore"
-              support-page="how-do-i-turn-do-not-track-feature"
-      />
-      </label>
-      <radiogroup id="doNotTrackRadioGroup" aria-labelledby="doNotTrackDesc" preference="privacy.donottrackheader.enabled">
-        <radio value="true" data-l10n-id="do-not-track-option-always"/>
-        <radio value="false" data-l10n-id="do-not-track-option-default-content-blocking-known"/>
-      </radiogroup>
-    </vbox>
-    <hbox id="doNotTrackBox" flex="1" align="center">
-      <checkbox id="doNotTrackCheckbox"
-              class="tail-with-learn-more"
-              preference="privacy.donottrackheader.enabled"
-              data-l10n-id="do-not-track-description2" />
-      <html:a is="moz-support-link"
-          id="doNotTrackLearnMoreLink"
-          support-page="how-do-i-turn-do-not-track-feature" />
+          id="doNotTrackRemoval"
+          support-page="how-do-i-turn-do-not-track-feature"
+          data-l10n-id="do-not-track-removal" />
     </hbox>
   </vbox>
 </groupbox>
@@ -1006,14 +990,8 @@
     <html:moz-toggle id="firefoxSuggestDataCollectionPrivacyToggle"
                      preference="browser.urlbar.quicksuggest.dataCollection.enabled"
                      data-l10n-id="addressbar-firefox-suggest-data-collection"
-                     data-l10n-attrs="label, description">
-      <html:a slot="support-link"
-              is="moz-support-link"
-              id="firefoxSuggestDataCollectionLearnMorePrivacy"
-              class="learnMore firefoxSuggestLearnMore"
-              data-l10n-id="addressbar-locbar-firefox-suggest-learn-more"
-              support-page="firefox-suggest"
-      />
+                     data-l10n-attrs="label, description"
+                     support-page="firefox-suggest">
     </html:moz-toggle>
   </vbox>
   <vbox id="privacySegmentationSection" data-subcategory="privacy-segmentation" hidden="true">

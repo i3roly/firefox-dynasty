@@ -1,14 +1,15 @@
 use crate::{
     device::{
         queue::{EncoderInFlight, SubmittedWorkDoneClosure, TempResource},
-        DeviceError, DeviceLostClosure,
+        DeviceError,
     },
-    resource::{self, Buffer, Texture, Trackable},
+    resource::{Buffer, Texture, Trackable},
     snatch::SnatchGuard,
     SubmissionIndex,
 };
 use smallvec::SmallVec;
 
+use crate::resource::{Blas, Tlas};
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -103,6 +104,44 @@ impl ActiveSubmission {
 
         false
     }
+
+    pub fn contains_blas(&self, blas: &Blas) -> bool {
+        for encoder in &self.encoders {
+            // The ownership location of blas's depends on where the command encoder
+            // came from. If it is the staging command encoder on the queue, it is
+            // in the pending buffer list. If it came from a user command encoder,
+            // it is in the tracker.
+
+            if encoder.trackers.blas_s.contains(blas) {
+                return true;
+            }
+
+            if encoder.pending_blas_s.contains_key(&blas.tracker_index()) {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    pub fn contains_tlas(&self, tlas: &Tlas) -> bool {
+        for encoder in &self.encoders {
+            // The ownership location of tlas's depends on where the command encoder
+            // came from. If it is the staging command encoder on the queue, it is
+            // in the pending buffer list. If it came from a user command encoder,
+            // it is in the tracker.
+
+            if encoder.trackers.tlas_s.contains(tlas) {
+                return true;
+            }
+
+            if encoder.pending_tlas_s.contains_key(&tlas.tracker_index()) {
+                return true;
+            }
+        }
+
+        false
+    }
 }
 
 #[derive(Clone, Debug, Error)]
@@ -112,8 +151,6 @@ pub enum WaitIdleError {
     Device(#[from] DeviceError),
     #[error("Tried to wait using a submission index ({0}) that has not been returned by a successful submission (last successful submission: {1})")]
     WrongSubmissionIndex(SubmissionIndex, SubmissionIndex),
-    #[error("GPU got stuck :(")]
-    StuckGpu,
 }
 
 /// Resource tracking for a device.
@@ -157,11 +194,6 @@ pub(crate) struct LifetimeTracker {
     /// must happen _after_ all mapped buffer callbacks are mapped, so we defer them
     /// here until the next time the device is maintained.
     work_done_closures: SmallVec<[SubmittedWorkDoneClosure; 1]>,
-
-    /// Closure to be called on "lose the device". This is invoked directly by
-    /// device.lose or by the UserCallbacks returned from maintain when the device
-    /// has been destroyed and its queues are empty.
-    pub device_lost_closure: Option<DeviceLostClosure>,
 }
 
 impl LifetimeTracker {
@@ -170,7 +202,6 @@ impl LifetimeTracker {
             active: Vec::new(),
             ready_to_map: Vec::new(),
             work_done_closures: SmallVec::new(),
-            device_lost_closure: None,
         }
     }
 
@@ -227,6 +258,34 @@ impl LifetimeTracker {
     }
 
     /// Returns the submission index of the most recent submission that uses the
+    /// given blas.
+    pub fn get_blas_latest_submission_index(&self, blas: &Blas) -> Option<SubmissionIndex> {
+        // We iterate in reverse order, so that we can bail out early as soon
+        // as we find a hit.
+        self.active.iter().rev().find_map(|submission| {
+            if submission.contains_blas(blas) {
+                Some(submission.index)
+            } else {
+                None
+            }
+        })
+    }
+
+    /// Returns the submission index of the most recent submission that uses the
+    /// given tlas.
+    pub fn get_tlas_latest_submission_index(&self, tlas: &Tlas) -> Option<SubmissionIndex> {
+        // We iterate in reverse order, so that we can bail out early as soon
+        // as we find a hit.
+        self.active.iter().rev().find_map(|submission| {
+            if submission.contains_tlas(tlas) {
+                Some(submission.index)
+            } else {
+                None
+            }
+        })
+    }
+
+    /// Returns the submission index of the most recent submission that uses the
     /// given texture.
     pub fn get_texture_latest_submission_index(
         &self,
@@ -261,7 +320,6 @@ impl LifetimeTracker {
     pub fn triage_submissions(
         &mut self,
         last_done: SubmissionIndex,
-        command_allocator: &crate::command::CommandAllocator,
     ) -> SmallVec<[SubmittedWorkDoneClosure; 1]> {
         profiling::scope!("triage_submissions");
 
@@ -277,8 +335,10 @@ impl LifetimeTracker {
         for a in self.active.drain(..done_count) {
             self.ready_to_map.extend(a.mapped);
             for encoder in a.encoders {
-                let raw = unsafe { encoder.land() };
-                command_allocator.release_encoder(raw);
+                // This involves actually decrementing the ref count of all command buffer
+                // resources, so can be _very_ expensive.
+                profiling::scope!("drop command buffer trackers");
+                drop(encoder);
             }
             drop(a.temp_resources);
             work_done_closures.extend(a.work_done_closures);
@@ -327,7 +387,6 @@ impl LifetimeTracker {
     #[must_use]
     pub(crate) fn handle_mapping(
         &mut self,
-        raw: &dyn hal::DynDevice,
         snatch_guard: &SnatchGuard,
     ) -> Vec<super::BufferMapPendingClosure> {
         if self.ready_to_map.is_empty() {
@@ -337,61 +396,10 @@ impl LifetimeTracker {
             Vec::with_capacity(self.ready_to_map.len());
 
         for buffer in self.ready_to_map.drain(..) {
-            // This _cannot_ be inlined into the match. If it is, the lock will be held
-            // open through the whole match, resulting in a deadlock when we try to re-lock
-            // the buffer back to active.
-            let mapping = std::mem::replace(
-                &mut *buffer.map_state.lock(),
-                resource::BufferMapState::Idle,
-            );
-            let pending_mapping = match mapping {
-                resource::BufferMapState::Waiting(pending_mapping) => pending_mapping,
-                // Mapping cancelled
-                resource::BufferMapState::Idle => continue,
-                // Mapping queued at least twice by map -> unmap -> map
-                // and was already successfully mapped below
-                resource::BufferMapState::Active { .. } => {
-                    *buffer.map_state.lock() = mapping;
-                    continue;
-                }
-                _ => panic!("No pending mapping."),
-            };
-            let status = if pending_mapping.range.start != pending_mapping.range.end {
-                let host = pending_mapping.op.host;
-                let size = pending_mapping.range.end - pending_mapping.range.start;
-                match super::map_buffer(
-                    raw,
-                    &buffer,
-                    pending_mapping.range.start,
-                    size,
-                    host,
-                    snatch_guard,
-                ) {
-                    Ok(mapping) => {
-                        *buffer.map_state.lock() = resource::BufferMapState::Active {
-                            mapping,
-                            range: pending_mapping.range.clone(),
-                            host,
-                        };
-                        Ok(())
-                    }
-                    Err(e) => {
-                        log::error!("Mapping failed: {e}");
-                        Err(e)
-                    }
-                }
-            } else {
-                *buffer.map_state.lock() = resource::BufferMapState::Active {
-                    mapping: hal::BufferMapping {
-                        ptr: std::ptr::NonNull::dangling(),
-                        is_coherent: true,
-                    },
-                    range: pending_mapping.range,
-                    host: pending_mapping.op.host,
-                };
-                Ok(())
-            };
-            pending_callbacks.push((pending_mapping.op, status));
+            match buffer.map(snatch_guard) {
+                Some(cb) => pending_callbacks.push(cb),
+                None => continue,
+            }
         }
         pending_callbacks
     }

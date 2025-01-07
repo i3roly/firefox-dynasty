@@ -11,12 +11,18 @@
 
 #include "mozilla/Mutex.h"
 #include "mozilla/layers/NativeLayer.h"
-#include "mozilla/layers/SurfacePoolWayland.h"
 #include "mozilla/widget/MozContainerWayland.h"
 #include "nsRegion.h"
 #include "nsTArray.h"
 
+namespace mozilla::widget {
+class WaylandBuffer;
+class WaylandBufferSHM;
+}  // namespace mozilla::widget
+
 namespace mozilla::layers {
+
+class SurfacePoolHandleWayland;
 
 typedef void (*CallbackFunc)(void* aData, uint32_t aTime);
 
@@ -76,7 +82,9 @@ class NativeLayerRootWayland final : public NativeLayerRoot {
   Mutex mMutex MOZ_UNANNOTATED;
 
   MozContainer* mContainer = nullptr;
+#if 0
   wl_surface* mWlSurface = nullptr;
+#endif
   RefPtr<widget::WaylandBufferSHM> mShmBuffer;
 
   nsTArray<RefPtr<NativeLayerWayland>> mSublayers;
@@ -85,9 +93,11 @@ class NativeLayerRootWayland final : public NativeLayerRoot {
   bool mNewLayers = false;
 
   bool mFrameInProcess = false;
+#if 0
   bool mCallbackRequested = false;
 
   gulong mGdkAfterPaintId = 0;
+#endif
   RefPtr<CallbackMultiplexHelper> mCallbackMultiplexHelper;
 };
 
@@ -119,13 +129,12 @@ class NativeLayerWayland final : public NativeLayer {
   bool SurfaceIsFlipped() override;
 
   void AttachExternalImage(wr::RenderTextureHost* aExternalImage) override;
+  GpuFence* GetGpuFence() override { return nullptr; }
 
   void Commit();
   void Unmap();
   void EnsureParentSurface(wl_surface* aParentSurface);
-  const RefPtr<SurfacePoolHandleWayland> GetSurfacePoolHandle() {
-    return mSurfacePoolHandle;
-  };
+  const auto& GetSurfacePoolHandle() { return mSurfacePoolHandle; };
   void SetBufferTransformFlipped(bool aFlippedX, bool aFlippedY);
   void SetSubsurfacePosition(int aX, int aY);
   void SetViewportSourceRect(const gfx::Rect aSourceRect);

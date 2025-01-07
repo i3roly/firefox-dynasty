@@ -11,7 +11,7 @@ const {
   NimbusFeatures,
   _ExperimentFeature: ExperimentFeature,
 } = ChromeUtils.importESModule("resource://nimbus/ExperimentAPI.sys.mjs");
-const { EnrollmentsContext } = ChromeUtils.importESModule(
+const { EnrollmentsContext, RecipeStatus } = ChromeUtils.importESModule(
   "resource://nimbus/lib/RemoteSettingsExperimentLoader.sys.mjs"
 );
 const { PanelTestProvider } = ChromeUtils.importESModule(
@@ -111,7 +111,7 @@ add_task(async function test_updateRecipes_invalidFeatureId() {
   sandbox.stub(manager.store, "getAllActiveExperiments").returns([]);
 
   await loader.init();
-  ok(onRecipe.notCalled, "No recipes");
+  ok(onRecipe.notCalled, "Should not call .onRecipe for invalid recipes");
 
   await assertEmptyStore(manager.store);
 });
@@ -159,7 +159,7 @@ add_task(async function test_updateRecipes_invalidFeatureValue() {
   sandbox.stub(manager.store, "getAllActiveExperiments").returns([]);
 
   await loader.init();
-  ok(onRecipe.notCalled, "No recipes");
+  ok(onRecipe.notCalled, "Should not call onRecipe for invalid recipe");
 
   await assertEmptyStore(manager.store, { cleanup: true });
 });
@@ -181,7 +181,7 @@ add_task(async function test_updateRecipes_invalidRecipe() {
   sandbox.stub(manager.store, "getAllActiveExperiments").returns([]);
 
   await loader.init();
-  ok(onRecipe.notCalled, "No recipes");
+  ok(onRecipe.notCalled, "Should not call .onRecipe for invalid recipe");
 
   await assertEmptyStore(manager.store, { cleanup: true });
 });
@@ -212,8 +212,8 @@ add_task(async function test_updateRecipes_invalidRecipeAfterUpdate() {
   ok(loader.updateRecipes.calledOnce, "should call .updateRecipes");
   equal(loader.manager.onRecipe.callCount, 1, "should call .onRecipe once");
   ok(
-    loader.manager.onRecipe.calledWith(recipe, "rs-loader"),
-    "should call .onRecipe with argument data"
+    loader.manager.onRecipe.calledWith(recipe, "rs-loader", true),
+    "should call .onRecipe with recipe and isTargettingMatch=true"
   );
   equal(loader.manager.onFinalize.callCount, 1, "should call .onFinalize once");
 
@@ -330,8 +330,8 @@ add_task(async function test_updateRecipes_invalidBranchAfterUpdate() {
   ok(loader.updateRecipes.calledOnce, "should call .updateRecipes");
   equal(loader.manager.onRecipe.callCount, 1, "should call .onRecipe once");
   ok(
-    loader.manager.onRecipe.calledWith(recipe, "rs-loader"),
-    "should call .onRecipe with argument data"
+    loader.manager.onRecipe.calledWith(recipe, "rs-loader", true),
+    "should call .onRecipe with recipe and isTargetting=true"
   );
   equal(loader.manager.onFinalize.callCount, 1, "should call .onFinalize once");
   ok(
@@ -594,7 +594,7 @@ add_task(async function test_updateRecipes_validationTelemetry() {
     );
 
     const gleanEvents = Glean.nimbusEvents.validationFailed
-      .testGetValue()
+      .testGetValue("events")
       .map(event => {
         event = { ...event };
         // We do not care about the timestamp.
@@ -742,7 +742,7 @@ add_task(async function test_updateRecipes_appId() {
   info("Testing updateRecipes() with the default application ID");
   await loader.init();
 
-  Assert.equal(manager.onRecipe.callCount, 0, ".onRecipe was never called");
+  Assert.ok(manager.onRecipe.notCalled, ".onRecipe was never called");
   Assert.ok(
     onFinalizeCalled(manager.onFinalize, "rs-loader", {
       recipeMismatches: [],
@@ -867,8 +867,7 @@ add_task(async function test_updateRecipes_recipeAppId() {
   sinon.stub(manager.store, "ready").resolves();
 
   await loader.init();
-
-  Assert.equal(manager.onRecipe.callCount, 0, ".onRecipe was never called");
+  Assert.ok(manager.onRecipe.notCalled, ".onRecipe was never called");
   Assert.ok(
     onFinalizeCalled(manager.onFinalize, "rs-loader", {
       recipeMismatches: [],
@@ -948,8 +947,8 @@ add_task(async function test_updateRecipes_featureValidationOptOut() {
 
     await loader.init();
     ok(
-      manager.onRecipe.calledOnceWith(optOutRecipe, "rs-loader"),
-      "should call .onRecipe for the opt-out recipe"
+      manager.onRecipe.calledOnceWith(optOutRecipe, "rs-loader", true),
+      "should call .onRecipe for opt-out recipe"
     );
 
     ok(
@@ -1012,6 +1011,7 @@ add_task(async function test_updateRecipes_invalidFeature_mismatch() {
     EnrollmentsContext.prototype,
     "checkTargeting"
   );
+  const checkSpy = sinon.spy(EnrollmentsContext.prototype, "checkRecipe");
 
   await loader.init();
   ok(targetingSpy.calledOnce, "Should have checked targeting for recipe");
@@ -1019,7 +1019,15 @@ add_task(async function test_updateRecipes_invalidFeature_mismatch() {
     !(await targetingSpy.returnValues[0]),
     "Targeting should not have matched"
   );
-  ok(manager.onRecipe.notCalled, "should not call .onRecipe for the recipe");
+  Assert.equal(
+    await checkSpy.returnValues[0],
+    RecipeStatus.TARGETING_MISMATCH,
+    "Recipe should be considered a targeting mismatch"
+  );
+  ok(
+    manager.onRecipe.calledOnceWith(recipe, "rs-loader", false),
+    "should call .onRecipe for the recipe"
+  );
   ok(
     telemetrySpy.notCalled,
     "Should not have submitted validation failed telemetry"
@@ -1120,7 +1128,8 @@ add_task(async function test_updateRecipes_rollout_bucketing() {
     "Should unenroll from rollout"
   );
 
-  const unenrollmentEvents = Glean.nimbusEvents.unenrollment.testGetValue();
+  const unenrollmentEvents =
+    Glean.nimbusEvents.unenrollment.testGetValue("events");
   Assert.equal(
     unenrollmentEvents.length,
     1,
@@ -1720,7 +1729,7 @@ add_task(
     Services.fog.testResetFOG();
     await loader.updateRecipes();
 
-    const isReadyEvents = Glean.nimbusEvents.isReady.testGetValue();
+    const isReadyEvents = Glean.nimbusEvents.isReady.testGetValue("events");
 
     Assert.equal(isReadyEvents.length, 1);
 
@@ -1776,7 +1785,7 @@ add_task(
       `Enrollment exists for ${slug} and is active`
     );
 
-    const isReadyEvents = Glean.nimbusEvents.isReady.testGetValue();
+    const isReadyEvents = Glean.nimbusEvents.isReady.testGetValue("events");
 
     Assert.equal(isReadyEvents.length, 3);
     manager.unenroll(EXPERIMENT.slug);
@@ -1895,4 +1904,288 @@ add_task(async function test_updateRecipes_secure() {
       );
     }
   }
+});
+
+add_task(async function test_updateRecipesClearsOptIns() {
+  const now = new Date().getTime();
+  const recipes = [
+    ExperimentFakes.recipe("opt-in-1", {
+      bucketConfig: {
+        ...ExperimentFakes.recipe.bucketConfig,
+        count: 1000,
+      },
+      isFirefoxLabsOptIn: true,
+      firefoxLabsTitle: "opt-in-1-title",
+      firefoxLabsDescription: "opt-in-1-desc",
+      firefoxLabsGroup: "group",
+      requiresRestart: false,
+      isRollout: true,
+      branches: [ExperimentFakes.recipe.branches[0]],
+      targeting: "true",
+      publishedDate: new Date(now).toISOString(),
+    }),
+    ExperimentFakes.recipe("opt-in-2", {
+      bucketConfig: {
+        ...ExperimentFakes.recipe.bucketConfig,
+        count: 1000,
+      },
+      isFirefoxLabsOptIn: true,
+      firefoxLabsTitle: "opt-in-2-title",
+      firefoxLabsDescription: "opt-in-2-desc",
+      firefoxLabsGroup: "group",
+      requiresRestart: false,
+      isRollout: true,
+      branches: [ExperimentFakes.recipe.branches[0]],
+      targeting: "false",
+      publishedDate: new Date(now + 10000).toISOString(),
+    }),
+  ];
+
+  const sandbox = sinon.createSandbox();
+
+  const loader = ExperimentFakes.rsLoader();
+  const manager = loader.manager;
+
+  sandbox.stub(loader, "setTimer");
+  await loader.init();
+  await manager.onStartup();
+  await manager.store.ready();
+
+  sandbox
+    .stub(loader.remoteSettingsClients.experiments, "get")
+    .resolves(recipes);
+
+  await loader.updateRecipes();
+
+  Assert.deepEqual(manager.optInRecipes, recipes);
+
+  await loader.updateRecipes();
+
+  Assert.deepEqual(manager.optInRecipes, recipes);
+
+  await assertEmptyStore(manager.store);
+});
+
+add_task(async function test_updateRecipes_optInsStayEnrolled() {
+  info("testing opt-ins stay enrolled after update");
+
+  const recipe = ExperimentFakes.recipe("opt-in", {
+    bucketConfig: {
+      ...ExperimentFakes.recipe.bucketConfig,
+      count: 1000,
+    },
+    branches: [
+      {
+        ...ExperimentFakes.recipe.branches[0],
+        slug: "branch-0",
+        firefoxLabsTitle: "branch-0-title",
+      },
+      {
+        ...ExperimentFakes.recipe.branches[1],
+        slug: "branch-1",
+        firefoxLabsTitle: "branch-1-title",
+      },
+    ],
+    targeting: "true",
+    isFirefoxLabsOptIn: true,
+    firefoxLabsTitle: "opt-in-title",
+    firefoxLabsDescription: "opt-in-desc",
+    firefoxLabsGroup: "group",
+    requiresRestart: false,
+  });
+
+  const sandbox = sinon.createSandbox();
+  const loader = ExperimentFakes.rsLoader();
+  const manager = loader.manager;
+
+  sandbox.stub(loader, "setTimer");
+  await loader.init();
+  await manager.onStartup();
+  await manager.store.ready();
+
+  sandbox
+    .stub(loader.remoteSettingsClients.experiments, "get")
+    .resolves([recipe]);
+
+  await loader.updateRecipes();
+
+  await manager.enroll(recipe, "rs-loader", {
+    optInRecipeBranchSlug: "branch-0",
+  });
+  Assert.ok(manager.store.get("opt-in")?.active, "Opt-in was enrolled");
+
+  await loader.updateRecipes();
+  Assert.ok(manager.store.get("opt-in")?.active, "Opt-in stayed enrolled");
+
+  manager.unenroll("opt-in");
+  manager.store._deleteForTests("opt-in");
+
+  await assertEmptyStore(manager.store);
+});
+
+add_task(async function test_updateRecipes_optInsUnerollOnFalseTargeting() {
+  info("testing opt-ins unenroll after targeting becomes false");
+
+  const recipe = ExperimentFakes.recipe("opt-in", {
+    bucketConfig: {
+      ...ExperimentFakes.recipe.bucketConfig,
+      count: 1000,
+    },
+    branches: [
+      {
+        ...ExperimentFakes.recipe.branches[0],
+        slug: "branch-0",
+        firefoxLabsTitle: "branch-0-title",
+      },
+      {
+        ...ExperimentFakes.recipe.branches[1],
+        slug: "branch-1",
+        firefoxLabsTitle: "branch-1-title",
+      },
+    ],
+    targeting: "true",
+    isFirefoxLabsOptIn: true,
+    firefoxLabsTitle: "opt-in-title",
+    firefoxLabsDescription: "opt-in-desc",
+    firefoxLabsGroup: "group",
+    requiresRestart: false,
+  });
+
+  const sandbox = sinon.createSandbox();
+  const loader = ExperimentFakes.rsLoader();
+  const manager = loader.manager;
+
+  sandbox.stub(loader, "setTimer");
+  await loader.init();
+  await manager.onStartup();
+  await manager.store.ready();
+
+  sandbox
+    .stub(loader.remoteSettingsClients.experiments, "get")
+    .resolves([recipe]);
+
+  await loader.updateRecipes();
+
+  await manager.enroll(recipe, "rs-loader", {
+    optInRecipeBranchSlug: "branch-0",
+  });
+  Assert.ok(manager.store.get("opt-in")?.active, "Opt-in was enrolled");
+
+  recipe.targeting = "false";
+  await loader.updateRecipes();
+  Assert.ok(!manager.store.get("opt-in")?.active, "Opt-in unenrolled");
+
+  manager.store._deleteForTests("opt-in");
+
+  await assertEmptyStore(manager.store);
+});
+
+add_task(async function test_updateRecipes_bucketingCausesOptInUnenrollments() {
+  info("testing opt-in rollouts unenroll after if bucketing changes");
+
+  const recipe = ExperimentFakes.recipe("opt-in", {
+    bucketConfig: {
+      ...ExperimentFakes.recipe.bucketConfig,
+      count: 1000,
+    },
+    branches: [
+      {
+        ...ExperimentFakes.recipe.branches[0],
+        slug: "branch-0",
+      },
+    ],
+    targeting: "true",
+    isFirefoxLabsOptIn: true,
+    isRollout: true,
+    firefoxLabsTitle: "opt-in-title",
+    firefoxLabsDescription: "opt-in-desc",
+    firefoxLabsGroup: "group",
+    requiresRestart: false,
+  });
+
+  const sandbox = sinon.createSandbox();
+  const loader = ExperimentFakes.rsLoader();
+  const manager = loader.manager;
+
+  sandbox.stub(loader, "setTimer");
+  await loader.init();
+  await manager.onStartup();
+  await manager.store.ready();
+
+  sandbox
+    .stub(loader.remoteSettingsClients.experiments, "get")
+    .resolves([recipe]);
+
+  await loader.updateRecipes();
+
+  await manager.enroll(recipe, "rs-loader", {
+    optInRecipeBranchSlug: "branch-0",
+  });
+  Assert.ok(manager.store.get("opt-in")?.active, "Opt-in was enrolled");
+
+  recipe.bucketConfig.count = 0;
+  await loader.updateRecipes();
+  Assert.ok(!manager.store.get("opt-in")?.active, "Opt-in unenrolled");
+
+  manager.store._deleteForTests("opt-in");
+
+  await assertEmptyStore(manager.store);
+});
+
+add_task(async function test_updateRecipes_reEnrollRolloutOptin() {
+  info(
+    "testing opt-in rollouts do-not re-enroll automatically if bucketing changes"
+  );
+
+  const recipe = ExperimentFakes.recipe("opt-in", {
+    bucketConfig: {
+      ...ExperimentFakes.recipe.bucketConfig,
+      count: 1000,
+    },
+    branches: [
+      {
+        ...ExperimentFakes.recipe.branches[0],
+        slug: "branch-0",
+      },
+    ],
+    targeting: "true",
+    isFirefoxLabsOptIn: true,
+    isRollout: true,
+    firefoxLabsTitle: "opt-in-title",
+    firefoxLabsDescription: "opt-in-desc",
+    firefoxLabsGroup: "group",
+    requiresRestart: false,
+  });
+
+  const sandbox = sinon.createSandbox();
+  const loader = ExperimentFakes.rsLoader();
+  const manager = loader.manager;
+
+  sandbox.stub(loader, "setTimer");
+  await loader.init();
+  await manager.onStartup();
+  await manager.store.ready();
+
+  sandbox
+    .stub(loader.remoteSettingsClients.experiments, "get")
+    .resolves([recipe]);
+
+  await loader.updateRecipes();
+
+  await manager.enroll(recipe, "rs-loader", {
+    optInRecipeBranchSlug: "branch-0",
+  });
+  Assert.ok(manager.store.get("opt-in")?.active, "Opt-in was enrolled");
+
+  recipe.bucketConfig.count = 0;
+  await loader.updateRecipes();
+  Assert.ok(!manager.store.get("opt-in")?.active, "Opt-in unenrolled");
+
+  recipe.bucketConfig.count = 1000;
+  await loader.updateRecipes();
+  Assert.ok(manager.store.get("opt-in")?.active, "Opt-in re-enrolled");
+
+  manager.store._deleteForTests("opt-in");
+
+  await assertEmptyStore(manager.store);
 });

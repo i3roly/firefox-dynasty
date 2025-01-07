@@ -242,6 +242,9 @@
 #include "mozilla/dom/TouchEvent.h"
 #include "mozilla/dom/TreeOrderedArrayInlines.h"
 #include "mozilla/dom/TreeWalker.h"
+#include "mozilla/dom/TrustedHTML.h"
+#include "mozilla/dom/TrustedTypeUtils.h"
+#include "mozilla/dom/TrustedTypesConstants.h"
 #include "mozilla/dom/URL.h"
 #include "mozilla/dom/UseCounterMetrics.h"
 #include "mozilla/dom/UserActivation.h"
@@ -1411,6 +1414,7 @@ Document::Document(const char* aContentType)
       mForceLoadAtTop(false),
       mFireMutationEvents(true),
       mHasPolicyWithRequireTrustedTypesForDirective(false),
+      mClipboardCopyTriggered(false),
       mXMLDeclarationBits(0),
       mOnloadBlockCount(0),
       mWriteLevel(0),
@@ -1663,14 +1667,28 @@ void Document::GetNetErrorInfo(NetErrorInfo& aInfo, ErrorResult& aRv) {
     return;
   }
 
+  nsCOMPtr<nsIHttpChannel> httpChannel(do_QueryInterface(mFailedChannel));
+
+  // We don't throw even if httpChannel is null, we just keep responseStatus and
+  // responseStatusText empty
+  if (httpChannel) {
+    uint32_t responseStatus;
+    nsAutoCString responseStatusText;
+    rv = httpChannel->GetResponseStatus(&responseStatus);
+    if (NS_SUCCEEDED(rv)) {
+      aInfo.mResponseStatus = responseStatus;
+    }
+
+    rv = httpChannel->GetResponseStatusText(responseStatusText);
+    if (NS_SUCCEEDED(rv)) {
+      aInfo.mResponseStatusText.AssignASCII(responseStatusText);
+    }
+  }
+
   nsCOMPtr<nsITransportSecurityInfo> tsi;
   rv = mFailedChannel->GetSecurityInfo(getter_AddRefs(tsi));
   if (NS_WARN_IF(NS_FAILED(rv))) {
     aRv.Throw(rv);
-    return;
-  }
-  if (NS_WARN_IF(!tsi)) {
-    aRv.Throw(NS_ERROR_DOM_INVALID_STATE_ERR);
     return;
   }
 
@@ -1681,6 +1699,12 @@ void Document::GetNetErrorInfo(NetErrorInfo& aInfo, ErrorResult& aRv) {
     return;
   }
   aInfo.mChannelStatus = static_cast<uint32_t>(channelStatus);
+
+  // If nsITransportSecurityInfo is not set, simply keep the remaining fields
+  // empty (to make responseStatus and responseStatusText accessible).
+  if (!tsi) {
+    return;
+  }
 
   // TransportSecurityInfo::GetErrorCodeString always returns NS_OK
   (void)tsi->GetErrorCodeString(aInfo.mErrorCodeString);
@@ -2592,6 +2616,7 @@ NS_IMPL_CYCLE_COLLECTION_TRAVERSE_BEGIN_INTERNAL(Document)
   NS_IMPL_CYCLE_COLLECTION_TRAVERSE(mAnonymousContents)
   NS_IMPL_CYCLE_COLLECTION_TRAVERSE(mCommandDispatcher)
   NS_IMPL_CYCLE_COLLECTION_TRAVERSE(mFeaturePolicy)
+  NS_IMPL_CYCLE_COLLECTION_TRAVERSE(mPermissionDelegateHandler)
   NS_IMPL_CYCLE_COLLECTION_TRAVERSE(mSuppressedEventListener)
   NS_IMPL_CYCLE_COLLECTION_TRAVERSE(mPrototypeDocument)
   NS_IMPL_CYCLE_COLLECTION_TRAVERSE(mMidasCommandManager)
@@ -2722,6 +2747,7 @@ NS_IMPL_CYCLE_COLLECTION_UNLINK_BEGIN(Document)
   NS_IMPL_CYCLE_COLLECTION_UNLINK(mAnonymousContents)
   NS_IMPL_CYCLE_COLLECTION_UNLINK(mCommandDispatcher)
   NS_IMPL_CYCLE_COLLECTION_UNLINK(mFeaturePolicy)
+  NS_IMPL_CYCLE_COLLECTION_UNLINK(mPermissionDelegateHandler)
   NS_IMPL_CYCLE_COLLECTION_UNLINK(mSuppressedEventListener)
   NS_IMPL_CYCLE_COLLECTION_UNLINK(mPrototypeDocument)
   NS_IMPL_CYCLE_COLLECTION_UNLINK(mMidasCommandManager)
@@ -2933,10 +2959,9 @@ void Document::DisconnectNodeTree() {
     // Invalidate cached array of child nodes
     InvalidateChildNodes();
 
-    while (HasChildren()) {
+    while (nsCOMPtr<nsIContent> content = GetLastChild()) {
       nsMutationGuard::DidMutate();
-      nsCOMPtr<nsIContent> content = GetLastChild();
-      nsIContent* previousSibling = content->GetPreviousSibling();
+      MutationObservers::NotifyContentWillBeRemoved(this, content);
       DisconnectChild(content);
       if (content == mCachedRootElement) {
         // Immediately clear mCachedRootElement, now that it's been removed
@@ -2944,7 +2969,6 @@ void Document::DisconnectNodeTree() {
         // now-stale value.
         mCachedRootElement = nullptr;
       }
-      MutationObservers::NotifyContentRemoved(this, content, previousSibling);
       content->UnbindFromTree();
     }
     MOZ_ASSERT(!mCachedRootElement,
@@ -5099,7 +5123,9 @@ void Document::EnsureInitializeInternalCommandDataHashtable() {
 }
 
 Document::InternalCommandData Document::ConvertToInternalCommand(
-    const nsAString& aHTMLCommandName, const nsAString& aValue /* = u""_ns */,
+    const nsAString& aHTMLCommandName,
+    const TrustedHTMLOrString* aValue /* = nullptr */,
+    ErrorResult* aRv /* = nullptr */,
     nsAString* aAdjustedValue /* = nullptr */) {
   MOZ_ASSERT(!aAdjustedValue || aAdjustedValue->IsEmpty());
   EnsureInitializeInternalCommandDataHashtable();
@@ -5130,6 +5156,23 @@ Document::InternalCommandData Document::ConvertToInternalCommand(
     // No further work to do
     return commandData;
   }
+  MOZ_ASSERT(aValue);
+  MOZ_ASSERT(aRv);
+  Maybe<nsAutoString> compliantStringHolder;
+  const nsAString* compliantString = nullptr;
+  if (commandData.mCommand == Command::InsertHTML) {
+    constexpr nsLiteralString sink = u"Document execCommand"_ns;
+    compliantString = TrustedTypeUtils::GetTrustedTypesCompliantString(
+        *aValue, sink, kTrustedTypesOnlySinkGroup, *this, compliantStringHolder,
+        *aRv);
+    if (aRv->Failed()) {
+      return InternalCommandData();
+    }
+  } else {
+    compliantString = aValue->IsString() ? &aValue->GetAsString()
+                                         : &aValue->GetAsTrustedHTML().mData;
+  }
+
   switch (commandData.mExecCommandParam) {
     case ExecCommandParam::Ignore:
       // Just have to copy it, no checking
@@ -5158,7 +5201,7 @@ Document::InternalCommandData Document::ConvertToInternalCommand(
                     EditorCommandParamType::Bool));
       // If this is a boolean value and it's not explicitly false (e.g. no
       // value).  We default to "true" (see bug 301490).
-      if (!aValue.LowerCaseEqualsLiteral("false")) {
+      if (!compliantString->LowerCaseEqualsLiteral("false")) {
         aAdjustedValue->AssignLiteral("true");
       } else {
         aAdjustedValue->AssignLiteral("false");
@@ -5169,7 +5212,7 @@ Document::InternalCommandData Document::ConvertToInternalCommand(
       MOZ_ASSERT(!!(EditorCommand::GetParamType(commandData.mCommand) &
                     EditorCommandParamType::Bool));
       // For old backwards commands we invert the check.
-      if (aValue.LowerCaseEqualsLiteral("false")) {
+      if (compliantString->LowerCaseEqualsLiteral("false")) {
         aAdjustedValue->AssignLiteral("true");
       } else {
         aAdjustedValue->AssignLiteral("false");
@@ -5182,8 +5225,8 @@ Document::InternalCommandData Document::ConvertToInternalCommand(
           (EditorCommandParamType::String | EditorCommandParamType::CString)));
       switch (commandData.mCommand) {
         case Command::FormatBlock: {
-          const char16_t* start = aValue.BeginReading();
-          const char16_t* end = aValue.EndReading();
+          const char16_t* start = compliantString->BeginReading();
+          const char16_t* end = compliantString->EndReading();
           if (start != end && *start == '<' && *(end - 1) == '>') {
             ++start;
             --end;
@@ -5232,7 +5275,7 @@ Document::InternalCommandData Document::ConvertToInternalCommand(
           // whitespace.  Otherwise, we parse it as a legacy font size.  For
           // now, we just parse as a legacy font size regardless (matching
           // WebKit) -- bug 747879.
-          int32_t size = nsContentUtils::ParseLegacyFontSize(aValue);
+          int32_t size = nsContentUtils::ParseLegacyFontSize(*compliantString);
           if (!size) {
             return InternalCommandData();
           }
@@ -5242,23 +5285,23 @@ Document::InternalCommandData Document::ConvertToInternalCommand(
         }
         case Command::InsertImage:
         case Command::InsertLink:
-          if (aValue.IsEmpty()) {
+          if (compliantString->IsEmpty()) {
             // Invalid value, return false
             return InternalCommandData();
           }
-          aAdjustedValue->Assign(aValue);
+          aAdjustedValue->Assign(*compliantString);
           return commandData;
         case Command::SetDocumentDefaultParagraphSeparator:
-          if (!aValue.LowerCaseEqualsLiteral("div") &&
-              !aValue.LowerCaseEqualsLiteral("p") &&
-              !aValue.LowerCaseEqualsLiteral("br")) {
+          if (!compliantString->LowerCaseEqualsLiteral("div") &&
+              !compliantString->LowerCaseEqualsLiteral("p") &&
+              !compliantString->LowerCaseEqualsLiteral("br")) {
             // Invalid value
             return InternalCommandData();
           }
-          aAdjustedValue->Assign(aValue);
+          aAdjustedValue->Assign(*compliantString);
           return commandData;
         default:
-          aAdjustedValue->Assign(aValue);
+          aAdjustedValue->Assign(*compliantString);
           return commandData;
       }
 
@@ -5443,7 +5486,7 @@ Document::AutoRunningExecCommandMarker::AutoRunningExecCommandMarker(
 }
 
 bool Document::ExecCommand(const nsAString& aHTMLCommandName, bool aShowUI,
-                           const nsAString& aValue,
+                           const TrustedHTMLOrString& aValue,
                            nsIPrincipal& aSubjectPrincipal, ErrorResult& aRv) {
   // Only allow on HTML documents.
   if (!IsHTMLOrXHTML()) {
@@ -5463,7 +5506,7 @@ bool Document::ExecCommand(const nsAString& aHTMLCommandName, bool aShowUI,
 
   nsAutoString adjustedValue;
   InternalCommandData commandData =
-      ConvertToInternalCommand(aHTMLCommandName, aValue, &adjustedValue);
+      ConvertToInternalCommand(aHTMLCommandName, &aValue, &aRv, &adjustedValue);
   switch (commandData.mCommand) {
     case Command::DoNothing:
       return false;
@@ -7578,20 +7621,30 @@ void Document::InsertChildBefore(nsIContent* aKid, nsIContent* aBeforeThis,
 
 void Document::RemoveChildNode(nsIContent* aKid, bool aNotify) {
   Maybe<mozAutoDocUpdate> updateBatch;
-  if (aKid->IsElement()) {
+  const bool removingRoot = aKid->IsElement();
+  if (removingRoot) {
     updateBatch.emplace(this, aNotify);
     // Destroy the link map up front before we mess with the child list.
     DestroyElementMaps();
+
+    // Notify early so that we can clear the cached element after notifying,
+    // without having to slow down nsINode::RemoveChildNode.
+    if (aNotify) {
+      MutationObservers::NotifyContentWillBeRemoved(this, aKid);
+      aNotify = false;
+    }
+
+    // Preemptively clear mCachedRootElement, since we are about to remove it
+    // from our child list, and we don't want to return this maybe-obsolete
+    // value from any GetRootElement() calls that happen inside of
+    // RemoveChildNode().
+    // (NOTE: for this to be useful, RemoveChildNode() must NOT trigger any
+    // GetRootElement() calls until after it's removed the child from mChildren.
+    // Any call before that point would restore this soon-to-be-obsolete cached
+    // answer, and our clearing here would be fruitless.)
+    mCachedRootElement = nullptr;
   }
 
-  // Preemptively clear mCachedRootElement, since we may be about to remove it
-  // from our child list, and we don't want to return this maybe-obsolete value
-  // from any GetRootElement() calls that happen inside of RemoveChildNode().
-  // (NOTE: for this to be useful, RemoveChildNode() must NOT trigger any
-  // GetRootElement() calls until after it's removed the child from mChildren.
-  // Any call before that point would restore this soon-to-be-obsolete cached
-  // answer, and our clearing here would be fruitless.)
-  mCachedRootElement = nullptr;
   nsINode::RemoveChildNode(aKid, aNotify);
   MOZ_ASSERT(mCachedRootElement != aKid,
              "Stale pointer in mCachedRootElement, after we tried to clear it "
@@ -8779,14 +8832,14 @@ already_AddRefed<Element> Document::CreateElement(
     // Check 'pseudo' and throw an exception if it's not one allowed
     // with CSS_PSEUDO_ELEMENT_IS_JS_CREATED_NAC.
     if (options.mPseudo.WasPassed()) {
-      Maybe<PseudoStyleType> type =
-          nsCSSPseudoElements::GetPseudoType(options.mPseudo.Value());
-      if (!type || *type == PseudoStyleType::NotPseudo ||
-          !nsCSSPseudoElements::PseudoElementIsJSCreatedNAC(*type)) {
+      Maybe<PseudoStyleRequest> request =
+          nsCSSPseudoElements::ParsePseudoElement(options.mPseudo.Value());
+      if (!request || request->IsNotPseudo() ||
+          !nsCSSPseudoElements::PseudoElementIsJSCreatedNAC(request->mType)) {
         rv.ThrowNotSupportedError("Invalid pseudo-element");
         return nullptr;
       }
-      pseudoType = *type;
+      pseudoType = request->mType;
     }
   }
 
@@ -8985,6 +9038,8 @@ void Document::ScheduleForPresAttrEvaluation(Element* aElement) {
     // attributes.
     nsLayoutUtils::PostRestyleEvent(aElement, RestyleHint::RESTYLE_SELF,
                                     nsChangeHint(0));
+  } else if (auto* presContext = GetPresContext()) {
+    presContext->RestyleManager()->IncrementUndisplayedRestyleGeneration();
   }
 }
 
@@ -9357,25 +9412,31 @@ bool Document::IsValidDomain(nsIURI* aOrigHost, nsIURI* aNewURI) {
 
 Element* Document::GetHtmlElement() const {
   Element* rootElement = GetRootElement();
-  if (rootElement && rootElement->IsHTMLElement(nsGkAtoms::html))
+  if (rootElement && rootElement->IsHTMLElement(nsGkAtoms::html)) {
     return rootElement;
+  }
   return nullptr;
 }
 
-Element* Document::GetHtmlChildElement(nsAtom* aTag) {
+Element* Document::GetHtmlChildElement(
+    nsAtom* aTag, const nsIContent* aContentToIgnore) const {
   Element* html = GetHtmlElement();
-  if (!html) return nullptr;
+  if (!html) {
+    return nullptr;
+  }
 
   // Look for the element with aTag inside html. This needs to run
   // forwards to find the first such element.
   for (nsIContent* child = html->GetFirstChild(); child;
        child = child->GetNextSibling()) {
-    if (child->IsHTMLElement(aTag)) return child->AsElement();
+    if (child->IsHTMLElement(aTag) && MOZ_LIKELY(child != aContentToIgnore)) {
+      return child->AsElement();
+    }
   }
   return nullptr;
 }
 
-nsGenericHTMLElement* Document::GetBody() {
+nsGenericHTMLElement* Document::GetBody() const {
   Element* html = GetHtmlElement();
   if (!html) {
     return nullptr;
@@ -9383,8 +9444,7 @@ nsGenericHTMLElement* Document::GetBody() {
 
   for (nsIContent* child = html->GetFirstChild(); child;
        child = child->GetNextSibling()) {
-    if (child->IsHTMLElement(nsGkAtoms::body) ||
-        child->IsHTMLElement(nsGkAtoms::frameset)) {
+    if (child->IsAnyOfHTMLElements(nsGkAtoms::body, nsGkAtoms::frameset)) {
       return static_cast<nsGenericHTMLElement*>(child);
     }
   }
@@ -9418,7 +9478,7 @@ void Document::SetBody(nsGenericHTMLElement* newBody, ErrorResult& rv) {
   }
 }
 
-HTMLSharedElement* Document::GetHead() {
+HTMLSharedElement* Document::GetHead() const {
   return static_cast<HTMLSharedElement*>(GetHeadElement());
 }
 
@@ -10223,25 +10283,36 @@ void Document::Close(ErrorResult& rv) {
   --mWriteLevel;
 }
 
-void Document::WriteCommon(const Sequence<nsString>& aText,
+void Document::WriteCommon(const Sequence<OwningTrustedHTMLOrString>& aText,
                            bool aNewlineTerminate, mozilla::ErrorResult& rv) {
+  bool isTrusted = true;
+  auto getAsString =
+      [&isTrusted](const OwningTrustedHTMLOrString& aTrustedHTMLOrString) {
+        if (aTrustedHTMLOrString.IsString()) {
+          isTrusted = false;
+          return &aTrustedHTMLOrString.GetAsString();
+        }
+        return &aTrustedHTMLOrString.GetAsTrustedHTML()->mData;
+      };
+
   // Fast path the common case
   if (aText.Length() == 1) {
-    WriteCommon(aText[0], aNewlineTerminate, rv);
+    WriteCommon(*getAsString(aText[0]), aNewlineTerminate,
+                aText[0].IsTrustedHTML(), rv);
   } else {
     // XXXbz it would be nice if we could pass all the strings to the parser
     // without having to do all this copying and then ask it to start
     // parsing....
     nsString text;
     for (size_t i = 0; i < aText.Length(); ++i) {
-      text.Append(aText[i]);
+      text.Append(*getAsString(aText[i]));
     }
-    WriteCommon(text, aNewlineTerminate, rv);
+    WriteCommon(text, aNewlineTerminate, isTrusted, rv);
   }
 }
 
 void Document::WriteCommon(const nsAString& aText, bool aNewlineTerminate,
-                           ErrorResult& aRv) {
+                           bool aIsTrusted, ErrorResult& aRv) {
 #ifdef DEBUG
   {
     // Assert that we do not use or accidentally introduce doc.write()
@@ -10337,16 +10408,35 @@ void Document::WriteCommon(const nsAString& aText, bool aNewlineTerminate,
 
   ++mWriteLevel;
 
-  // This could be done with less code, but for performance reasons it
-  // makes sense to have the code for two separate Parse() calls here
-  // since the concatenation of strings costs more than we like. And
-  // why pay that price when we don't need to?
-  if (aNewlineTerminate) {
-    aRv = (static_cast<nsHtml5Parser*>(mParser.get()))
-              ->Parse(aText + new_line, key, false);
+  auto parseString =
+      [this, &aNewlineTerminate, &aRv, &key](const nsAString& aString)
+          MOZ_CAN_RUN_SCRIPT_FOR_DEFINITION -> void {
+    // This could be done with less code, but for performance reasons it
+    // makes sense to have the code for two separate Parse() calls here
+    // since the concatenation of strings costs more than we like. And
+    // why pay that price when we don't need to?
+    if (aNewlineTerminate) {
+      aRv = (static_cast<nsHtml5Parser*>(mParser.get()))
+                ->Parse(aString + new_line, key, false);
+    } else {
+      aRv = (static_cast<nsHtml5Parser*>(mParser.get()))
+                ->Parse(aString, key, false);
+    }
+  };
+
+  if (aIsTrusted) {
+    parseString(aText);
   } else {
-    aRv =
-        (static_cast<nsHtml5Parser*>(mParser.get()))->Parse(aText, key, false);
+    constexpr nsLiteralString sinkWrite = u"Document write"_ns;
+    constexpr nsLiteralString sinkWriteLn = u"Document writeln"_ns;
+    Maybe<nsAutoString> compliantStringHolder;
+    const nsAString* compliantString =
+        TrustedTypeUtils::GetTrustedTypesCompliantStringForTrustedHTML(
+            aText, aNewlineTerminate ? sinkWriteLn : sinkWrite,
+            kTrustedTypesOnlySinkGroup, *this, compliantStringHolder, aRv);
+    if (!aRv.Failed()) {
+      parseString(*compliantString);
+    }
   }
 
   --mWriteLevel;
@@ -10354,11 +10444,13 @@ void Document::WriteCommon(const nsAString& aText, bool aNewlineTerminate,
   mTooDeepWriteRecursion = (mWriteLevel != 0 && mTooDeepWriteRecursion);
 }
 
-void Document::Write(const Sequence<nsString>& aText, ErrorResult& rv) {
+void Document::Write(const Sequence<OwningTrustedHTMLOrString>& aText,
+                     ErrorResult& rv) {
   WriteCommon(aText, false, rv);
 }
 
-void Document::Writeln(const Sequence<nsString>& aText, ErrorResult& rv) {
+void Document::Writeln(const Sequence<OwningTrustedHTMLOrString>& aText,
+                       ErrorResult& rv) {
   WriteCommon(aText, true, rv);
 }
 
@@ -19710,19 +19802,32 @@ bool Document::AllowsDeclarativeShadowRoots() const {
 }
 
 /* static */
-already_AddRefed<Document> Document::ParseHTMLUnsafe(GlobalObject& aGlobal,
-                                                     const nsAString& aHTML) {
+already_AddRefed<Document> Document::ParseHTMLUnsafe(
+    GlobalObject& aGlobal, const TrustedHTMLOrString& aHTML,
+    ErrorResult& aError) {
   nsCOMPtr<nsIURI> uri;
   NS_NewURI(getter_AddRefs(uri), "about:blank");
   if (!uri) {
     return nullptr;
   }
 
+  nsCOMPtr<nsIGlobalObject> global = do_QueryInterface(aGlobal.GetAsSupports());
+
+  constexpr nsLiteralString sink = u"Document parseHTMLUnsafe"_ns;
+  Maybe<nsAutoString> compliantStringHolder;
+  const nsAString* compliantString =
+      TrustedTypeUtils::GetTrustedTypesCompliantString(
+          aHTML, sink, kTrustedTypesOnlySinkGroup, *global,
+          compliantStringHolder, aError);
+  if (aError.Failed()) {
+    return nullptr;
+  }
+
   nsCOMPtr<Document> doc;
-  nsresult rv =
+  aError =
       NS_NewHTMLDocument(getter_AddRefs(doc), aGlobal.GetSubjectPrincipal(),
                          aGlobal.GetSubjectPrincipal());
-  if (NS_WARN_IF(NS_FAILED(rv))) {
+  if (aError.Failed()) {
     return nullptr;
   }
 
@@ -19733,8 +19838,8 @@ already_AddRefed<Document> Document::ParseHTMLUnsafe(GlobalObject& aGlobal,
       do_QueryInterface(aGlobal.GetAsSupports());
   doc->SetScriptHandlingObject(scriptHandlingObject);
   doc->SetDocumentCharacterSet(UTF_8_ENCODING);
-  rv = nsContentUtils::ParseDocumentHTML(aHTML, doc, false);
-  if (NS_WARN_IF(NS_FAILED(rv))) {
+  aError = nsContentUtils::ParseDocumentHTML(*compliantString, doc, false);
+  if (aError.Failed()) {
     return nullptr;
   }
 

@@ -140,6 +140,10 @@
   skin/classic/browser/fxa/avatar.svg                          (../shared/fxa/avatar.svg)
   skin/classic/browser/fxa/avatar-color.svg                    (../shared/fxa/avatar-color.svg)
   skin/classic/browser/fxa/avatar-empty.svg                    (../shared/fxa/avatar-empty.svg)
+  skin/classic/browser/fxa/avatar-empty-circle.svg             (../shared/fxa/avatar-empty-circle.svg)
+  skin/classic/browser/fxa/avatar-fox.svg                      (../shared/fxa/avatar-fox.svg)
+  skin/classic/browser/fxa/avatar-fox-circle.svg               (../shared/fxa/avatar-fox-circle.svg)
+  skin/classic/browser/fxa/circle.svg                          (../shared/fxa/circle.svg)
   skin/classic/browser/fxa/sync-devices.svg                    (../shared/fxa/sync-devices.svg)
   skin/classic/browser/fxa/send.svg                            (../shared/fxa/send.svg)
   skin/classic/browser/fxa/monitor.svg                         (../shared/fxa/monitor.svg)
@@ -235,6 +239,7 @@
   skin/classic/browser/tabbrowser/tab-audio-blocked-small.svg  (../shared/tabbrowser/tab-audio-blocked-small.svg)
   skin/classic/browser/tabbrowser/tab-drag-indicator.svg       (../shared/tabbrowser/tab-drag-indicator.svg)
   skin/classic/browser/tabbrowser/tab-group-chicklet.svg       (../shared/tabbrowser/tab-group-chicklet.svg)
+  skin/classic/browser/tabbrowser/tab-groups.svg               (../shared/tabbrowser/tab-groups.svg)
   skin/classic/browser/tabbrowser/tab-hover-preview.css        (../shared/tabbrowser/tab-hover-preview.css)
   skin/classic/browser/tabbrowser/tabs.css                     (../shared/tabbrowser/tabs.css)
 

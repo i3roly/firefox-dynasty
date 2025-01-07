@@ -413,7 +413,9 @@ parent:
      * Create an asynchronous color picker on the parent side,
      * but don't open it yet.
      */
-    async PColorPicker(nsString title, nsString initialColor, nsString[] defaultColors);
+    async PColorPicker(MaybeDiscardedBrowsingContext aBrowsingContext,
+                       nsString title, nsString initialColor,
+                       nsString[] defaultColors);
 
     async PFilePicker(nsString aTitle, Mode aMode, MaybeDiscardedBrowsingContext aBrowsingContext);
 
@@ -527,6 +529,7 @@ parent:
     async OnLocationChange(WebProgressData aWebProgressData,
                            RequestData aRequestData, nullable nsIURI aLocation,
                            uint32_t aFlags, bool aCanGoBack,
+                           bool aCanGoBackIgnoringUserInteraction,
                            bool aCanGoForward,
                            WebProgressLocationChangeData? aLocationChangeData);
 

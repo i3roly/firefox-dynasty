@@ -377,7 +377,7 @@
     <!-- Browser menu label for turning OFF reader view of the current visited page -->
     <string name="browser_menu_turn_off_reader_view">Отключить Вид для чтения</string>
     <!-- Browser menu button that reopens a private tab as a regular tab -->
-    <string name="browser_menu_open_in_normal_tab">Переместить в обычную вкладку</string>dsa
+    <string name="browser_menu_open_in_normal_tab">Переместить в обычную вкладку</string>
     <!-- Browser menu label for navigating to the translation feature, which provides language translation options the current visited page -->
     <string name="browser_menu_translate_page">Перевести страницу…</string>
     <!-- Browser menu label for navigating to the Web Compat Reporter feature, which provides users the ability to send bug reports for broken sites. -->
@@ -461,6 +461,11 @@
     <!-- Content description (not visible, for screen readers etc.): Search engine icon.
     The parameter is the search engine name (for example: DuckDuckGo). -->
     <string name="search_engine_icon_content_description_1">Поисковая система: %s</string>
+
+    <!-- Content description (not visible, for screen readers etc.) of the search engine selector from the search toolbar.
+    The parameter is the search engine name (for example: DuckDuckGo).
+    The colon character (in "%s:") is intended to have the screen reader make a small pause between the search engine name and the description of the button. -->
+    <string name="search_engine_selector_content_description">%s: выбор поисковой системы</string>
 
     <!-- Home onboarding -->
     <!-- Home onboarding dialog welcome screen title text. -->
@@ -622,7 +627,7 @@
     <!-- Onboarding label for 'Save and continue' button, used by Nimbus experiments. -->
     <string name="onboarding_save_and_continue_button">Сохранить и продолжить</string>
     <!-- Onboarding toolbar selection card label for 'skip' button, used by Nimbus experiments. -->
-    <string name="onboarding_customize_toolbar_skip_button">Пропустить</string>
+    <string name="onboarding_customize_toolbar_skip_button" tools:ignore="UnusedResources">Пропустить</string>
     <!-- Onboarding toolbar selection card label for 'top' option, used by Nimbus experiments. -->
     <string name="onboarding_customize_toolbar_top_option">Вверху</string>
     <!-- Onboarding toolbar selection card label for 'bottom' option, used by Nimbus experiments. -->
@@ -637,6 +642,9 @@
     <string name="onboarding_customize_toolbar_placement_bottom_content_description">Изображение нижней панели инструментов</string>
     <string name="onboarding_customize_toolbar_placement_top_content_description">Изображение верхней панели инструментов</string>
 
+    <!-- Onboarding toolbar selection card label for 'Not now' button, used by Nimbus experiments. -->
+    <string name="onboarding_customize_toolbar_not_now_button">Не сейчас</string>
+
     <!-- Onboarding header for the theme selection card, used by Nimbus experiments. -->
     <string name="onboarding_customize_theme_title" tools:ignore="UnusedResources">Выберите тему</string>
     <!-- Onboarding sub header for theme selection card, used by Nimbus experiments. -->
@@ -644,7 +652,7 @@
     <!-- Onboarding label for 'Save and start browsing' button, used by Nimbus experiments. -->
     <string name="onboarding_save_and_start_button">Сохраните и начните веб-сёрфинг</string>
     <!-- Onboarding theme selection card label for 'skip' button, used by Nimbus experiments. -->
-    <string name="onboarding_customize_theme_skip_button">Пропустить</string>
+    <string name="onboarding_customize_theme_skip_button" tools:ignore="UnusedResources">Пропустить</string>
     <!-- Onboarding theme selection card label for 'dark' option, used by Nimbus experiments. -->
     <string name="onboarding_customize_theme_dark_option">Тёмная</string>
     <!-- Onboarding theme selection card label for 'light' option, used by Nimbus experiments. -->
@@ -655,6 +663,9 @@
     <string name="onboarding_customize_theme_main_image_content_description">Большое изображение в заголовке окна выбора темы, показывающее иллюстрированные инструменты художника и конструктора.</string>
     <!-- Onboarding theme selection card content description for the theme selection image. %1$s is placeholder for either 'system', 'light' or 'dark'. -->
     <string name="onboarding_customize_theme_content_description">Изображение темы %1$s</string>
+
+    <!-- Onboarding theme selection card label for 'Not now' button, used by Nimbus experiments. -->
+    <string name="onboarding_customize_theme_not_now_button">Не сейчас</string>
 
     <!-- Search Widget -->
     <!-- Content description for searching with a widget. The first parameter is the name of the application.-->
@@ -2081,10 +2092,10 @@
     <string name="browser_toolbar_long_press_popup_paste_and_go">Вставить и перейти</string>
     <!-- Paste the text in the clipboard -->
     <string name="browser_toolbar_long_press_popup_paste">Вставить</string>
-  
+
     <!-- Snackbar message shown after an URL has been copied to clipboard. -->
     <string name="browser_toolbar_url_copied_to_clipboard_snackbar">Ссылка скопирована в буфер обмена</string>
-  
+
     <!-- Title text for the Add To Homescreen dialog -->
     <string name="add_to_homescreen_title">Добавить на домашний экран</string>
     <!-- Cancel button text for the Add to Homescreen dialog -->

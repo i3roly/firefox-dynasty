@@ -794,7 +794,7 @@ void ContentChild::Init(mozilla::ipc::UntypedEndpoint&& aEndpoint,
       }));
 #endif
 
-#if defined(MOZ_MEMORY) && defined(DEBUG)
+#if defined(MOZ_MEMORY) && defined(DEBUG) && !defined(MOZ_UBSAN)
   jemalloc_stats_t stats;
   jemalloc_stats(&stats);
   MOZ_ASSERT(!stats.opt_randomize_small,
@@ -2248,7 +2248,6 @@ void ContentChild::ProcessingError(Result aCode, const char* aReason) {
     case MsgNotAllowed:
     case MsgPayloadError:
     case MsgProcessingError:
-    case MsgRouteError:
     case MsgValueError:
       break;
 

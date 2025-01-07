@@ -26,7 +26,7 @@
  */
 
 // We expose a singleton from this module. Some tests may import the
-// constructor via a backstage pass.
+// constructor via the system global.
 import { FormAutofill } from "resource://autofill/FormAutofill.sys.mjs";
 import { FormAutofillUtils } from "resource://gre/modules/shared/FormAutofillUtils.sys.mjs";
 
@@ -193,6 +193,14 @@ export let FormAutofillStatus = {
 
   async observe(subject, topic, data) {
     lazy.log.debug("observe:", topic, "with data:", data);
+
+    if (
+      !FormAutofill.isAutofillCreditCardsAvailable &&
+      !FormAutofill.isAutofillAddressesAvailable
+    ) {
+      return;
+    }
+
     switch (topic) {
       case "privacy-pane-loaded": {
         let formAutofillPreferences = new lazy.FormAutofillPreferences();
@@ -291,6 +299,13 @@ export class FormAutofillParent extends JSWindowActorParent {
    * @param   {object} message.data The data of the message.
    */
   async receiveMessage({ name, data }) {
+    if (
+      !FormAutofill.isAutofillCreditCardsAvailable &&
+      !FormAutofill.isAutofillAddressesAvailable
+    ) {
+      return undefined;
+    }
+
     switch (name) {
       case "FormAutofill:InitStorage": {
         await lazy.gFormAutofillStorage.initialize();
@@ -307,9 +322,6 @@ export class FormAutofillParent extends JSWindowActorParent {
         this.onFormSubmit(rootElementId, formFilledData);
         break;
       }
-      case "FormAutofill:UpdateWarningMessage":
-        this.notifyMessageObservers("updateWarningNote", data);
-        break;
 
       case "FormAutofill:FieldsIdentified":
         this.notifyMessageObservers("fieldsIdentified", data);
@@ -906,7 +918,7 @@ export class FormAutofillParent extends JSWindowActorParent {
     }
 
     const relayPromise = lazy.FirefoxRelay.autocompleteItemsAsync({
-      formOrigin: this.formOrigin,
+      origin: this.formOrigin,
       scenarioName,
       hasInput: !!searchString?.length,
     });

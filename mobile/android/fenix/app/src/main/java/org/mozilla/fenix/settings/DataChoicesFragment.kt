@@ -5,9 +5,6 @@
 package org.mozilla.fenix.settings
 
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
-import android.widget.Toast
 import androidx.annotation.VisibleForTesting
 import androidx.navigation.findNavController
 import androidx.preference.Preference
@@ -22,7 +19,9 @@ import org.mozilla.fenix.ext.nav
 import org.mozilla.fenix.ext.requireComponents
 import org.mozilla.fenix.ext.settings
 import org.mozilla.fenix.ext.showToolbar
-import kotlin.system.exitProcess
+import org.mozilla.fenix.nimbus.FxNimbus
+import org.mozilla.fenix.nimbus.OnboardingCardData
+import org.mozilla.fenix.nimbus.OnboardingCardType
 
 /**
  * Lets the user toggle telemetry on/off.
@@ -42,17 +41,6 @@ class DataChoicesFragment : PreferenceFragmentCompat() {
                     if (context.settings().isExperimentationEnabled) {
                         context.settings().isExperimentationEnabled = false
                         requireComponents.nimbus.sdk.globalUserParticipation = false
-                        if (SHOULD_EXIT_APP_AFTER_TURNING_OFF_STUDIES) {
-                            Toast.makeText(
-                                context,
-                                getString(R.string.quit_application),
-                                Toast.LENGTH_LONG,
-                            ).show()
-                            Handler(Looper.getMainLooper()).postDelayed(
-                                { quitTheApp() },
-                                EXIT_DELAY,
-                            )
-                        }
                     }
                 }
                 updateStudiesSection()
@@ -88,16 +76,49 @@ class DataChoicesFragment : PreferenceFragmentCompat() {
             onPreferenceChangeListener = SharedPreferenceUpdater()
         }
 
-        requirePreference<SwitchPreference>(R.string.pref_key_marketing_telemetry).apply {
-            isChecked = (context.settings().isMarketingTelemetryEnabled) && (!Config.channel.isMozillaOnline)
-            onPreferenceChangeListener = SharedPreferenceUpdater()
-            isVisible = false
+        val marketingTelemetryPref =
+            requirePreference<SwitchPreference>(R.string.pref_key_marketing_telemetry).apply {
+                isChecked =
+                    context.settings().isMarketingTelemetryEnabled && !Config.channel.isMozillaOnline
+                onPreferenceChangeListener = SharedPreferenceUpdater()
+                isVisible =
+                    !Config.channel.isMozillaOnline && shouldShowMarketingTelemetryPreference()
+            }
+
+        requirePreference<Preference>(R.string.pref_key_learn_about_marketing_telemetry).apply {
+            isVisible = marketingTelemetryPref.isVisible
         }
 
         requirePreference<SwitchPreference>(R.string.pref_key_crash_reporting_always_report).apply {
             isChecked = context.settings().crashReportAlwaysSend
             onPreferenceChangeListener = SharedPreferenceUpdater()
         }
+    }
+
+    @VisibleForTesting
+    internal fun shouldShowMarketingTelemetryPreference(
+        cards: Collection<OnboardingCardData> = FxNimbus.features.junoOnboarding.value().cards.values,
+        hasValidTermsOfServiceData: (OnboardingCardData) -> Boolean = { it.hasValidTermsOfServiceData() },
+    ) = cards.any {
+        it.cardType == OnboardingCardType.TERMS_OF_SERVICE && hasValidTermsOfServiceData(it)
+    }
+
+    override fun onPreferenceTreeClick(preference: Preference): Boolean {
+        when (preference.key) {
+            getPreferenceKey(R.string.pref_key_learn_about_marketing_telemetry) ->
+                openLearnMoreUrlInSandboxedTab()
+        }
+
+        return super.onPreferenceTreeClick(preference)
+    }
+
+    private fun openLearnMoreUrlInSandboxedTab() {
+        startActivity(
+            SupportUtils.createSandboxCustomTabIntent(
+                context = requireContext(),
+                url = SupportUtils.getGenericSumoURLForTopic(SupportUtils.SumoTopic.HELP),
+            ),
+        )
     }
 
     private fun updateStudiesSection() {
@@ -117,16 +138,7 @@ class DataChoicesFragment : PreferenceFragmentCompat() {
             true
         }
     }
-
-    @VisibleForTesting
-    internal fun quitTheApp() {
-        exitProcess(0)
-    }
-
-    companion object {
-        private const val EXIT_DELAY = 2000L
-
-        @VisibleForTesting
-        var SHOULD_EXIT_APP_AFTER_TURNING_OFF_STUDIES = true
-    }
 }
+
+@VisibleForTesting
+internal fun OnboardingCardData.hasValidTermsOfServiceData() = extraData?.termOfServiceData != null

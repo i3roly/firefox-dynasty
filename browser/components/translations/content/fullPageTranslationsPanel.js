@@ -14,6 +14,8 @@ ChromeUtils.defineESModuleGetters(this, {
   PageActions: "resource:///modules/PageActions.sys.mjs",
   TranslationsTelemetry:
     "chrome://browser/content/translations/TranslationsTelemetry.sys.mjs",
+  TranslationsUtils:
+    "chrome://global/content/translations/TranslationsUtils.sys.mjs",
   TranslationsPanelShared:
     "chrome://browser/content/translations/TranslationsPanelShared.sys.mjs",
 });
@@ -445,8 +447,14 @@ var FullPageTranslationsPanel = new (class {
     if (
       requestedTranslationPair &&
       !isEngineReady &&
-      toMenuList.value === requestedTranslationPair.toLanguage &&
-      fromMenuList.value === requestedTranslationPair.fromLanguage
+      TranslationsUtils.langTagsMatch(
+        fromMenuList.value,
+        requestedTranslationPair.fromLanguage
+      ) &&
+      TranslationsUtils.langTagsMatch(
+        toMenuList.value,
+        requestedTranslationPair.toLanguage
+      )
     ) {
       // A translation has been requested, but is not ready yet.
       document.l10n.setAttributes(
@@ -462,29 +470,34 @@ var FullPageTranslationsPanel = new (class {
         "translations-panel-translate-button"
       );
       translateButton.disabled =
-        // The translation languages are the same, don't allow this translation.
-        toMenuList.value === fromMenuList.value ||
         // No "to" language was provided.
         !toMenuList.value ||
         // No "from" language was provided.
         !fromMenuList.value ||
+        // The translation languages are the same, don't allow this translation.
+        TranslationsUtils.langTagsMatch(toMenuList.value, fromMenuList.value) ||
         // This is the requested translation pair.
         (requestedTranslationPair &&
-          requestedTranslationPair.fromLanguage === fromMenuList.value &&
-          requestedTranslationPair.toLanguage === toMenuList.value);
+          TranslationsUtils.langTagsMatch(
+            requestedTranslationPair.fromLanguage,
+            fromMenuList.value
+          ) &&
+          TranslationsUtils.langTagsMatch(
+            requestedTranslationPair.toLanguage,
+            toMenuList.value
+          ));
     }
 
     if (requestedTranslationPair && isEngineReady) {
       const { fromLanguage, toLanguage } = requestedTranslationPair;
-      const displayNames = new Services.intl.DisplayNames(undefined, {
-        type: "language",
-      });
+      const languageDisplayNames =
+        TranslationsParent.createLanguageDisplayNames();
       cancelButton.hidden = true;
       this.updateUIForReTranslation(true /* isReTranslation */);
 
       document.l10n.setAttributes(header, "translations-panel-revisit-header", {
-        fromLanguage: displayNames.of(fromLanguage),
-        toLanguage: displayNames.of(toLanguage),
+        fromLanguage: languageDisplayNames.of(fromLanguage),
+        toLanguage: languageDisplayNames.of(toLanguage),
       });
     } else {
       document.l10n.setAttributes(header, "translations-panel-header");
@@ -612,7 +625,9 @@ var FullPageTranslationsPanel = new (class {
           });
       }
 
-      if (fromMenuList.value === toMenuList.value) {
+      if (
+        TranslationsUtils.langTagsMatch(fromMenuList.value, toMenuList.value)
+      ) {
         // The best possible user-preferred language tag that we were able to find for the
         // toMenuList is the same as the fromMenuList, but same-language to same-language
         // translations are not allowed in Full Page Translations, so we will just show the
@@ -654,11 +669,11 @@ var FullPageTranslationsPanel = new (class {
       );
       let language;
       if (docLangTag) {
-        const displayNames = new Intl.DisplayNames(undefined, {
-          type: "language",
-          fallback: "none",
-        });
-        language = displayNames.of(docLangTag);
+        const languageDisplayNames =
+          TranslationsParent.createLanguageDisplayNames({
+            fallback: "none",
+          });
+        language = languageDisplayNames.of(docLangTag);
       }
       if (language) {
         document.l10n.setAttributes(
@@ -780,12 +795,12 @@ var FullPageTranslationsPanel = new (class {
     /** @type {string | undefined} */
     let docLangDisplayName;
     if (docLangTag) {
-      const displayNames = new Services.intl.DisplayNames(undefined, {
-        type: "language",
-        fallback: "none",
-      });
+      const languageDisplayNames =
+        TranslationsParent.createLanguageDisplayNames({
+          fallback: "none",
+        });
       // The display name will still be empty if the docLangTag is not known.
-      docLangDisplayName = displayNames.of(docLangTag);
+      docLangDisplayName = languageDisplayNames.of(docLangTag);
     }
 
     for (const menuitem of alwaysTranslateMenuItems) {
@@ -1577,26 +1592,26 @@ var FullPageTranslationsPanel = new (class {
             // The translation is active, update the urlbar button.
             button.setAttribute("translationsactive", true);
             if (isEngineReady) {
-              const displayNames = new Services.intl.DisplayNames(undefined, {
-                type: "language",
-              });
+              const languageDisplayNames =
+                TranslationsParent.createLanguageDisplayNames();
 
               document.l10n.setAttributes(
                 button,
                 "urlbar-translations-button-translated",
                 {
-                  fromLanguage: displayNames.of(
+                  fromLanguage: languageDisplayNames.of(
                     requestedTranslationPair.fromLanguage
                   ),
-                  toLanguage: displayNames.of(
+                  toLanguage: languageDisplayNames.of(
                     requestedTranslationPair.toLanguage
                   ),
                 }
               );
-              // Show the locale of the page in the button.
+              // Show the language tag of translated the page in the button.
               buttonLocale.hidden = false;
               buttonCircleArrows.hidden = true;
-              buttonLocale.innerText = requestedTranslationPair.toLanguage;
+              buttonLocale.innerText =
+                requestedTranslationPair.toLanguage.split("-")[0];
             } else {
               document.l10n.setAttributes(
                 button,

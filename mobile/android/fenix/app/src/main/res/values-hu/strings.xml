@@ -367,7 +367,7 @@
     <!-- Browser menu label for turning OFF reader view of the current visited page -->
     <string name="browser_menu_turn_off_reader_view">Olvasó nézet kikapcsolása</string>
     <!-- Browser menu button that reopens a private tab as a regular tab -->
-    <string name="browser_menu_open_in_normal_tab">Áthelyezés egy nem privát lapra</string>dsa
+    <string name="browser_menu_open_in_normal_tab">Áthelyezés egy nem privát lapra</string>
     <!-- Browser menu label for navigating to the translation feature, which provides language translation options the current visited page -->
     <string name="browser_menu_translate_page">Oldal fordítása…</string>
     <!-- Browser menu label for navigating to the Web Compat Reporter feature, which provides users the ability to send bug reports for broken sites. -->
@@ -452,6 +452,11 @@
     <!-- Content description (not visible, for screen readers etc.): Search engine icon.
     The parameter is the search engine name (for example: DuckDuckGo). -->
     <string name="search_engine_icon_content_description_1">Keresőszolgáltatás: %s</string>
+
+    <!-- Content description (not visible, for screen readers etc.) of the search engine selector from the search toolbar.
+    The parameter is the search engine name (for example: DuckDuckGo).
+    The colon character (in "%s:") is intended to have the screen reader make a small pause between the search engine name and the description of the button. -->
+    <string name="search_engine_selector_content_description">%s: keresőszolgáltatás-választó</string>
 
     <!-- Home onboarding -->
     <!-- Home onboarding dialog welcome screen title text. -->
@@ -613,7 +618,7 @@
     <!-- Onboarding label for 'Save and continue' button, used by Nimbus experiments. -->
     <string name="onboarding_save_and_continue_button">Mentés és folytatás</string>
     <!-- Onboarding toolbar selection card label for 'skip' button, used by Nimbus experiments. -->
-    <string name="onboarding_customize_toolbar_skip_button">Kihagyás</string>
+    <string name="onboarding_customize_toolbar_skip_button" tools:ignore="UnusedResources">Kihagyás</string>
     <!-- Onboarding toolbar selection card label for 'top' option, used by Nimbus experiments. -->
     <string name="onboarding_customize_toolbar_top_option">Felső</string>
     <!-- Onboarding toolbar selection card label for 'bottom' option, used by Nimbus experiments. -->
@@ -628,6 +633,9 @@
     <string name="onboarding_customize_toolbar_placement_bottom_content_description">Az alsó eszköztár képe</string>
     <string name="onboarding_customize_toolbar_placement_top_content_description">A felső eszköztár képe</string>
 
+    <!-- Onboarding toolbar selection card label for 'Not now' button, used by Nimbus experiments. -->
+    <string name="onboarding_customize_toolbar_not_now_button">Most nem</string>
+
     <!-- Onboarding header for the theme selection card, used by Nimbus experiments. -->
     <string name="onboarding_customize_theme_title" tools:ignore="UnusedResources">Válasszon témát</string>
     <!-- Onboarding sub header for theme selection card, used by Nimbus experiments. -->
@@ -635,7 +643,7 @@
     <!-- Onboarding label for 'Save and start browsing' button, used by Nimbus experiments. -->
     <string name="onboarding_save_and_start_button">Mentés, és a böngészés megkezdése</string>
     <!-- Onboarding theme selection card label for 'skip' button, used by Nimbus experiments. -->
-    <string name="onboarding_customize_theme_skip_button">Kihagyás</string>
+    <string name="onboarding_customize_theme_skip_button" tools:ignore="UnusedResources">Kihagyás</string>
     <!-- Onboarding theme selection card label for 'dark' option, used by Nimbus experiments. -->
     <string name="onboarding_customize_theme_dark_option">Sötét</string>
     <!-- Onboarding theme selection card label for 'light' option, used by Nimbus experiments. -->
@@ -646,6 +654,9 @@
     <string name="onboarding_customize_theme_main_image_content_description">Nagy fejléckép a témaválasztó nézetről, amely illusztrált művész- és építőeszközöket mutat.</string>
     <!-- Onboarding theme selection card content description for the theme selection image. %1$s is placeholder for either 'system', 'light' or 'dark'. -->
     <string name="onboarding_customize_theme_content_description">A %1$s téma képe</string>
+
+    <!-- Onboarding theme selection card label for 'Not now' button, used by Nimbus experiments. -->
+    <string name="onboarding_customize_theme_not_now_button">Most nem</string>
 
     <!-- Search Widget -->
     <!-- Content description for searching with a widget. The first parameter is the name of the application.-->
@@ -2052,7 +2063,7 @@
         The first parameter is number of long clicks left to enable the menu -->
     <string name="about_debug_menu_toast_progress">Hibakeresési menü: %1$d kattintás van hátra az engedélyezésig</string>
     <string name="about_debug_menu_toast_done">Hibakeresési menü engedélyezve</string>
-  
+
     <!-- Browser long press popup menu -->
     <!-- Copy the current url -->
     <string name="browser_toolbar_long_press_popup_copy">Másolás</string>
@@ -2060,10 +2071,10 @@
     <string name="browser_toolbar_long_press_popup_paste_and_go">Beillesztés és ugrás</string>
     <!-- Paste the text in the clipboard -->
     <string name="browser_toolbar_long_press_popup_paste">Beillesztés</string>
-  
+
     <!-- Snackbar message shown after an URL has been copied to clipboard. -->
     <string name="browser_toolbar_url_copied_to_clipboard_snackbar">Webcím a vágólapra másolva</string>
-  
+
     <!-- Title text for the Add To Homescreen dialog -->
     <string name="add_to_homescreen_title">Kezdőképernyőhöz adás</string>
     <!-- Cancel button text for the Add to Homescreen dialog -->

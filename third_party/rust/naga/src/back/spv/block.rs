@@ -259,7 +259,7 @@ impl Writer {
     }
 }
 
-impl<'w> BlockContext<'w> {
+impl BlockContext<'_> {
     /// Cache an expression for a value.
     pub(super) fn cache_expression_value(
         &mut self,
@@ -1032,6 +1032,12 @@ impl<'w> BlockContext<'w> {
                         arg0_id,
                     )),
                     Mf::Determinant => MathOp::Ext(spirv::GLOp::Determinant),
+                    Mf::QuantizeToF16 => MathOp::Custom(Instruction::unary(
+                        spirv::Op::QuantizeToF16,
+                        result_type_id,
+                        id,
+                        arg0_id,
+                    )),
                     Mf::ReverseBits => MathOp::Custom(Instruction::unary(
                         spirv::Op::BitReverse,
                         result_type_id,
@@ -1730,10 +1736,7 @@ impl<'w> BlockContext<'w> {
             }
             crate::Expression::ArrayLength(expr) => self.write_runtime_array_length(expr, block)?,
             crate::Expression::RayQueryGetIntersection { query, committed } => {
-                if !committed {
-                    return Err(Error::FeatureNotImplemented("candidate intersection"));
-                }
-                self.write_ray_query_get_intersection(query, block)
+                self.write_ray_query_get_intersection(query, block, committed)
             }
         };
 

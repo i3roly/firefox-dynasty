@@ -2151,7 +2151,7 @@ static nsIContent* GetNativeAnonymousSubtreeRoot(nsIContent* aContent) {
   return aContent->GetClosestNativeAnonymousSubtreeRoot();
 }
 
-void PresShell::NativeAnonymousContentRemoved(nsIContent* aAnonContent) {
+void PresShell::NativeAnonymousContentWillBeRemoved(nsIContent* aAnonContent) {
   MOZ_ASSERT(aAnonContent->IsRootOfNativeAnonymousSubtree());
   mPresContext->EventStateManager()->NativeAnonymousContentRemoved(
       aAnonContent);
@@ -2868,11 +2868,8 @@ already_AddRefed<nsIContent> PresShell::GetContentForScrolling() const {
 already_AddRefed<nsIContent> PresShell::GetSelectedContentForScrolling() const {
   nsCOMPtr<nsIContent> selectedContent;
   if (mSelection) {
-    Selection* domSelection = mSelection->GetSelection(SelectionType::eNormal);
-    if (domSelection) {
-      selectedContent =
-          nsIContent::FromNodeOrNull(domSelection->GetFocusNode());
-    }
+    Selection& domSelection = mSelection->NormalSelection();
+    selectedContent = nsIContent::FromNodeOrNull(domSelection.GetFocusNode());
   }
   return selectedContent.forget();
 }
@@ -3250,14 +3247,14 @@ nsresult PresShell::GoToAnchor(const nsAString& aAnchorName,
         nodeToSelect = nodeToSelect->GetFirstChild();
       }
       jumpToRange->SelectNodeContents(*nodeToSelect, IgnoreErrors());
-      if (RefPtr sel = mSelection->GetSelection(SelectionType::eNormal)) {
-        sel->RemoveAllRanges(IgnoreErrors());
-        sel->AddRangeAndSelectFramesAndNotifyListeners(*jumpToRange,
-                                                       IgnoreErrors());
-        if (!StaticPrefs::layout_selectanchor()) {
-          // Use a caret (collapsed selection) at the start of the anchor.
-          sel->CollapseToStart(IgnoreErrors());
-        }
+      RefPtr sel = &mSelection->NormalSelection();
+      MOZ_ASSERT(sel);
+      sel->RemoveAllRanges(IgnoreErrors());
+      sel->AddRangeAndSelectFramesAndNotifyListeners(*jumpToRange,
+                                                     IgnoreErrors());
+      if (!StaticPrefs::layout_selectanchor()) {
+        // Use a caret (collapsed selection) at the start of the anchor.
+        sel->CollapseToStart(IgnoreErrors());
       }
     }
 
@@ -3474,7 +3471,7 @@ static nscoord ComputeWhereToScroll(WhereToScroll aWhereToScroll,
     // of it.
     nscoord min = std::min(aRectMin, aRectMax - scrollPortLength);
     nscoord max = std::max(aRectMin, aRectMax - scrollPortLength);
-    resultCoord = std::min(std::max(aOriginalCoord, min), max);
+    resultCoord = std::clamp(aOriginalCoord, min, max);
   } else {
     float percent = aWhereToScroll.mPercentage.value() / 100.0f;
     nscoord frameAlignCoord =
@@ -4624,30 +4621,17 @@ MOZ_CAN_RUN_SCRIPT_BOUNDARY void PresShell::ContentInserted(
       aChild, nsCSSFrameConstructor::InsertionKind::Async);
 }
 
-MOZ_CAN_RUN_SCRIPT_BOUNDARY void PresShell::ContentRemoved(
-    nsIContent* aChild, nsIContent* aPreviousSibling) {
+MOZ_CAN_RUN_SCRIPT_BOUNDARY void PresShell::ContentWillBeRemoved(
+    nsIContent* aChild) {
   MOZ_ASSERT(!nsContentUtils::IsSafeToRunScript());
   MOZ_ASSERT(!mIsDocumentGone, "Unexpected ContentRemoved");
   MOZ_ASSERT(aChild->OwnerDoc() == mDocument, "Unexpected document");
-  nsINode* container = aChild->GetParentNode();
-
   // Notify the ESM that the content has been removed, so that
   // it can clean up any state related to the content.
 
   mPresContext->EventStateManager()->ContentRemoved(mDocument, aChild);
 
   nsAutoCauseReflowNotifier crNotifier(this);
-
-  // Call this here so it only happens for real content mutations and
-  // not cases when the frame constructor calls its own methods to force
-  // frame reconstruction.
-  nsIContent* oldNextSibling = nullptr;
-
-  // Editor and view transitions code call into here with NAC.
-  if (MOZ_LIKELY(!aChild->IsRootOfNativeAnonymousSubtree())) {
-    oldNextSibling = aPreviousSibling ? aPreviousSibling->GetNextSibling()
-                                      : container->GetFirstChild();
-  }
 
   // After removing aChild from tree we should save information about live
   // ancestor
@@ -4656,14 +4640,14 @@ MOZ_CAN_RUN_SCRIPT_BOUNDARY void PresShell::ContentRemoved(
     mPointerEventTarget = aChild->GetParent();
   }
 
-  mFrameConstructor->ContentRemoved(aChild, oldNextSibling,
-                                    nsCSSFrameConstructor::REMOVE_CONTENT);
+  mFrameConstructor->ContentWillBeRemoved(
+      aChild, nsCSSFrameConstructor::REMOVE_CONTENT);
 
   // NOTE(emilio): It's important that this goes after the frame constructor
   // stuff, otherwise the frame constructor can't see elements which are
   // display: contents / display: none, because we'd have cleared all the style
   // data from there.
-  mPresContext->RestyleManager()->ContentRemoved(aChild, oldNextSibling);
+  mPresContext->RestyleManager()->ContentWillBeRemoved(aChild);
 }
 
 void PresShell::NotifyCounterStylesAreDirty() {
@@ -7169,6 +7153,9 @@ nsresult PresShell::EventHandler::HandleEvent(nsIFrame* aFrameForPresShell,
   // the next transasction that gets sent to the compositor will carry this over
   if (mPresShell->mAPZFocusSequenceNumber < aGUIEvent->mFocusSequenceNumber) {
     mPresShell->mAPZFocusSequenceNumber = aGUIEvent->mFocusSequenceNumber;
+    if (aFrameForPresShell) {
+      aFrameForPresShell->SchedulePaint(nsIFrame::PAINT_COMPOSITE_ONLY);
+    }
   }
 
   if (mPresShell->IsDestroying() ||

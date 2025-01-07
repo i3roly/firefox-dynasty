@@ -11,10 +11,11 @@
 
 [package]
 edition = "2021"
-rust-version = "1.70.0"
+rust-version = "1.71"
 name = "quinn-udp"
-version = "0.5.6"
+version = "0.5.9"
 build = "build.rs"
+autolib = false
 autobins = false
 autoexamples = false
 autotests = false

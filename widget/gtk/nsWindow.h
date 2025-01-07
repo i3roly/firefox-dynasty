@@ -13,7 +13,7 @@
 
 #include "CompositorWidget.h"
 #include "MozContainer.h"
-#include "MozContainerSurfaceLock.h"
+#include "WaylandSurfaceLock.h"
 #include "VsyncSource.h"
 #include "mozilla/EventForwards.h"
 #include "mozilla/Maybe.h"
@@ -42,11 +42,13 @@
 #ifdef MOZ_WAYLAND
 #  include <gdk/gdkwayland.h>
 #  include "base/thread.h"
-#  include "WaylandVsyncSource.h"
 #  include "nsClipboardWayland.h"
 #endif
 
 #ifdef MOZ_LOGGING
+
+#  undef LOG
+#  undef LOGVERBOSE
 
 #  include "mozilla/Logging.h"
 #  include "nsTArray.h"
@@ -62,13 +64,18 @@ extern mozilla::LazyLogModule gWidgetWaylandLog;
     MOZ_LOG(IsPopup() ? gWidgetPopupLog : gWidgetLog, \
             mozilla::LogLevel::Debug,                 \
             ("%s: " str, GetDebugTag().get(), ##__VA_ARGS__))
+#  define LOGVERBOSE(str, ...)                        \
+    MOZ_LOG(IsPopup() ? gWidgetPopupLog : gWidgetLog, \
+            mozilla::LogLevel::Verbose,               \
+            ("%s: " str, GetDebugTag().get(), ##__VA_ARGS__))
 #  define LOGW(...) MOZ_LOG(gWidgetLog, mozilla::LogLevel::Debug, (__VA_ARGS__))
 #  define LOGDRAG(...) \
     MOZ_LOG(gWidgetDragLog, mozilla::LogLevel::Debug, (__VA_ARGS__))
 #  define LOG_POPUP(...) \
     MOZ_LOG(gWidgetPopupLog, mozilla::LogLevel::Debug, (__VA_ARGS__))
-#  define LOG_VSYNC(...) \
-    MOZ_LOG(gWidgetVsync, mozilla::LogLevel::Debug, (__VA_ARGS__))
+#  define LOG_VSYNC(str, ...)                       \
+    MOZ_LOG(gWidgetVsync, mozilla::LogLevel::Debug, \
+            ("%s: " str, GetDebugTag().get(), ##__VA_ARGS__))
 #  define LOG_ENABLED()                                         \
     (MOZ_LOG_TEST(gWidgetPopupLog, mozilla::LogLevel::Debug) || \
      MOZ_LOG_TEST(gWidgetLog, mozilla::LogLevel::Debug))
@@ -78,6 +85,7 @@ extern mozilla::LazyLogModule gWidgetWaylandLog;
 #else
 
 #  define LOG(...)
+#  define LOGVERBOSE(...)
 #  define LOGW(...)
 #  define LOGDRAG(...)
 #  define LOG_POPUP(...)
@@ -119,10 +127,14 @@ typedef enum {
 } GdkTouchpadGesturePhase;
 #endif
 
+struct zwp_locked_pointer_v1;
+struct zwp_relative_pointer_v1;
+
 namespace mozilla {
 enum class NativeKeyBindingsType : uint8_t;
 
 class TimeStamp;
+class WaylandVsyncSource;
 #ifdef MOZ_X11
 class CurrentX11TimeGetter;
 #endif
@@ -130,6 +142,8 @@ class CurrentX11TimeGetter;
 namespace widget {
 class DBusMenuBar;
 class Screen;
+class WaylandSurface;
+class WaylandSurfaceLock;
 }  // namespace widget
 }  // namespace mozilla
 
@@ -273,6 +287,9 @@ class nsWindow final : public nsBaseWidget {
 
   void UpdateOpaqueRegionInternal();
   void UpdateOpaqueRegion(const LayoutDeviceIntRegion&) override;
+  LayoutDeviceIntRegion GetOpaqueRegionForTesting() const override {
+    return GetOpaqueRegion();
+  }
   LayoutDeviceIntRegion GetOpaqueRegion() const;
 
   already_AddRefed<mozilla::gfx::DrawTarget> StartRemoteDrawingInRegion(
@@ -290,8 +307,16 @@ class nsWindow final : public nsBaseWidget {
   void OnDPIChanged();
   void OnCheckResize();
   void OnCompositedChanged();
-  void OnScaleChanged(bool aNotify);
   void DispatchResized();
+  void OnScaleEvent();
+
+  // Load new scale from system.
+
+  // aRefreshScreen means notify layout that scale was changed and
+  //  it should load correct values.
+  // Set aRefreshScreen to false if we operate on hidden window
+  // or if we're going to repaint.
+  void RefreshScale(bool aRefreshScreen);
 
   static guint32 sLastButtonPressTime;
 
@@ -332,7 +357,6 @@ class nsWindow final : public nsBaseWidget {
   void SetTransparencyMode(TransparencyMode aMode) override;
   TransparencyMode GetTransparencyMode() override;
   void SetInputRegion(const InputRegion&) override;
-  void DidChangeParent(nsIWidget* aOldParent) override;
 
   nsresult SynthesizeNativeMouseEvent(LayoutDeviceIntPoint aPoint,
                                       NativeMouseMessage aNativeMessage,
@@ -373,9 +397,7 @@ class nsWindow final : public nsBaseWidget {
   void GetCompositorWidgetInitData(
       mozilla::widget::CompositorWidgetInitData* aInitData) override;
 
-  nsresult SetNonClientMargins(const LayoutDeviceIntMargin&) override;
-  void SetDrawsInTitlebar(bool aState);
-  mozilla::LayoutDeviceIntCoord GetTitlebarRadius();
+  void SetCustomTitlebar(bool) override;
   void UpdateWindowDraggingRegion(
       const LayoutDeviceIntRegion& aRegion) override;
 
@@ -424,7 +446,7 @@ class nsWindow final : public nsBaseWidget {
 
   static nsWindow* GetFocusedWindow();
 
-  mozilla::UniquePtr<MozContainerSurfaceLock> LockSurface();
+  mozilla::UniquePtr<mozilla::widget::WaylandSurfaceLock> LockSurface();
 
 #ifdef MOZ_WAYLAND
   // Use xdg-activation protocol to transfer focus from gFocusWindow to aWindow.
@@ -492,9 +514,6 @@ class nsWindow final : public nsBaseWidget {
 
   void RegisterTouchWindow() override;
 
-  mozilla::Atomic<int, mozilla::Relaxed> mCeiledScaleFactor{1};
-  double mFractionalScaleFactor = 0.0;
-
   void NativeMoveResize(bool aMoved, bool aResized);
 
   void NativeShow(bool aAction);
@@ -560,6 +579,9 @@ class nsWindow final : public nsBaseWidget {
   GtkWidget* mShell = nullptr;
   MozContainer* mContainer = nullptr;
   GdkWindow* mGdkWindow = nullptr;
+#ifdef MOZ_WAYLAND
+  RefPtr<mozilla::widget::WaylandSurface> mSurface;
+#endif
   mozilla::Maybe<GdkPoint> mGdkWindowOrigin;
   mozilla::Maybe<GdkPoint> mGdkWindowRootOrigin;
 
@@ -581,6 +603,10 @@ class nsWindow final : public nsBaseWidget {
   float mAspectRatioSaved = 0.0f;
   mozilla::Maybe<GtkOrientation> mAspectResizer;
   LayoutDeviceIntPoint mLastResizePoint;
+
+  // Keep in sync with WaylandSurface::sNoScale
+  constexpr static const int sNoScale = -1;
+  int mCeiledScaleFactor = sNoScale;
 
   // The size requested, which might not be reflected in mBounds.  Used in
   // WaylandPopupSetDirectPosition() to remember intended size for popup
@@ -993,9 +1019,11 @@ class nsWindow final : public nsBaseWidget {
   void RequestRepaint(LayoutDeviceIntRegion& aRepaintRegion);
 
 #ifdef MOZ_X11
-  typedef enum {GTK_WIDGET_COMPOSITED_DEFAULT = 0,
-                GTK_WIDGET_COMPOSITED_DISABLED = 1,
-                GTK_WIDGET_COMPOSITED_ENABLED = 2} WindowComposeRequest;
+  typedef enum {
+    GTK_WIDGET_COMPOSITED_DEFAULT = 0,
+    GTK_WIDGET_COMPOSITED_DISABLED = 1,
+    GTK_WIDGET_COMPOSITED_ENABLED = 2
+  } WindowComposeRequest;
   void SetCompositorHint(WindowComposeRequest aState);
   bool ConfigureX11GLVisual();
 #endif
@@ -1011,10 +1039,6 @@ class nsWindow final : public nsBaseWidget {
   nsCString mWindowActivationTokenFromEnv;
   mozilla::widget::WindowSurfaceProvider mSurfaceProvider;
   GdkDragContext* mSourceDragContext = nullptr;
-#if MOZ_LOGGING
-  LayoutDeviceIntRect mLastLoggedBoundSize;
-  int mLastLoggedScale = -1;
-#endif
   mozilla::Sides mResizableEdges{mozilla::SideBits::eAll};
   // Running in kiosk mode and requested to stay on specified monitor.
   // If monitor is removed minimize the window.

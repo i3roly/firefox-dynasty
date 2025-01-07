@@ -2,15 +2,8 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-do-not-track-description = Send websites a “Do Not Track” signal that you don’t want to be tracked
-do-not-track-description2 =
-    .label = Send websites a “Do Not Track” request
-    .accesskey = d
+do-not-track-removal = We no longer support the “Do Not Track” signal
 do-not-track-learn-more = Learn more
-do-not-track-option-default-content-blocking-known =
-    .label = Only when { -brand-short-name } is set to block known trackers
-do-not-track-option-always =
-    .label = Always
 
 global-privacy-control-description =
     .label = Tell websites not to sell or share my data
@@ -185,8 +178,8 @@ open-new-link-as-tabs =
     .label = Open links in tabs instead of new windows
     .accesskey = w
 
-confirm-on-close-multiple-tabs =
-    .label = Confirm before closing multiple tabs
+ask-on-close-multiple-tabs =
+    .label = Ask before closing multiple tabs
     .accesskey = m
 
 # This string is used for the confirm before quitting preference.
@@ -194,8 +187,8 @@ confirm-on-close-multiple-tabs =
 #   $quitKey (string) - the quit keyboard shortcut, and formatted
 #                       in the same manner as it would appear,
 #                       for example, in the File menu.
-confirm-on-quit-with-key =
-    .label = Confirm before quitting with { $quitKey }
+ask-on-quit-with-key =
+    .label = Ask before quitting with { $quitKey }
     .accesskey = b
 
 warn-on-open-many-tabs =

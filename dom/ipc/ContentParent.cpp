@@ -3589,13 +3589,17 @@ ContentParent::BlockShutdown(nsIAsyncShutdownClient* aClient) {
 #ifdef MOZ_DIAGNOSTIC_ASSERT_ENABLED
     mBlockShutdownCalled = true;
 #endif
-    // Our real shutdown has not yet started. Just notify the impending
-    // shutdown and eventually cancel content JS.
-    SignalImpendingShutdownToContentJS();
     // This will make our process unusable for normal content, so we need to
     // ensure we won't get re-used by GetUsedBrowserProcess as we have not yet
     // done MarkAsDead.
     PreallocatedProcessManager::Erase(this);
+    {
+      RecursiveMutexAutoLock lock(mThreadsafeHandle->mMutex);
+      mThreadsafeHandle->mShutdownStarted = true;
+    }
+    // Our real shutdown has not yet started. Just notify the impending
+    // shutdown and eventually cancel content JS.
+    SignalImpendingShutdownToContentJS();
 
     if (sQuitApplicationGrantedClient) {
       Unused << sQuitApplicationGrantedClient->RemoveBlocker(this);
@@ -4079,8 +4083,8 @@ mozilla::ipc::IPCResult ContentParent::RecvCloneDocumentTreeInto(
     return IPC_OK();
   }
 
-  auto* source = aSource.get_canonical();
-  auto* target = aTarget.get_canonical();
+  RefPtr source = aSource.get_canonical();
+  RefPtr target = aTarget.get_canonical();
 
   if (!CloneIsLegal(this, *source, *target)) {
     return IPC_FAIL(this, "Illegal subframe clone");

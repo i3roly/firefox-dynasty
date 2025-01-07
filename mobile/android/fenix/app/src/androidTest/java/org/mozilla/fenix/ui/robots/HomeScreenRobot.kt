@@ -64,7 +64,6 @@ import org.mozilla.fenix.helpers.MatcherHelper.itemWithClassNameAndIndex
 import org.mozilla.fenix.helpers.MatcherHelper.itemWithDescription
 import org.mozilla.fenix.helpers.MatcherHelper.itemWithIndex
 import org.mozilla.fenix.helpers.MatcherHelper.itemWithResId
-import org.mozilla.fenix.helpers.MatcherHelper.itemWithResIdAndDescription
 import org.mozilla.fenix.helpers.MatcherHelper.itemWithResIdAndIndex
 import org.mozilla.fenix.helpers.MatcherHelper.itemWithResIdAndText
 import org.mozilla.fenix.helpers.MatcherHelper.itemWithResIdContainingText
@@ -741,13 +740,13 @@ class HomeScreenRobot {
             return ThreeDotMenuMainRobot.Transition()
         }
 
-        fun openThreeDotMenuFromRedesignedToolbar(interact: ThreeDotMenuMainRobot.() -> Unit): ThreeDotMenuMainRobot.Transition {
+        fun openThreeDotMenuFromRedesignedToolbar(interact: RedesignedMainMenuRobot.() -> Unit): RedesignedMainMenuRobot.Transition {
             Log.i(TAG, "openThreeDotMenuFromRedesignedToolbar: Trying to click main menu button")
-            threeDotButtonFromRedesignedToolbar().click()
+            itemWithDescription(getStringResource(R.string.content_description_menu)).click()
             Log.i(TAG, "openThreeDotMenuFromRedesignedToolbar: Clicked main menu button")
 
-            ThreeDotMenuMainRobot().interact()
-            return ThreeDotMenuMainRobot.Transition()
+            RedesignedMainMenuRobot().interact()
+            return RedesignedMainMenuRobot.Transition()
         }
 
         fun openSearch(interact: SearchRobot.() -> Unit): SearchRobot.Transition {
@@ -1138,12 +1137,6 @@ private fun homeScreenList() =
     ).setAsVerticalList()
 
 private fun threeDotButton() = onView(allOf(withId(R.id.menuButton)))
-
-private fun threeDotButtonFromRedesignedToolbar() =
-    itemWithResIdAndDescription(
-        "$packageName:id/icon",
-        getStringResource(R.string.mozac_browser_menu_button),
-    )
 
 private fun saveTabsToCollectionButton() = onView(withId(R.id.add_tabs_to_collections_button))
 

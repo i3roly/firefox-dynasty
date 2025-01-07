@@ -90,7 +90,7 @@
     <menuitem id="context_undoCloseTab"
               data-lazy-l10n-id="tab-context-reopen-closed-tabs"
               data-l10n-args='{"tabCount": 1}'
-              observes="History:UndoCloseTab"/>
+              command="History:UndoCloseTab"/>
     <menuseparator contexttype="fullscreen"/>
     <menuitem id="context_fullscreenAutohide"
               class="fullscreen-context-autohide"
@@ -393,7 +393,8 @@
     <menuitem id="toolbar-context-undoCloseTab"
               contexttype="tabbar"
               data-lazy-l10n-id="toolbar-context-menu-reopen-closed-tabs"
-              observes="History:UndoCloseTab"/>
+              data-l10n-args='{"tabCount": 1}'
+              command="History:UndoCloseTab"/>
     <menuseparator id="toolbarItemsMenuSeparator"/>
     <menuseparator id="viewToolbarsMenuSeparator"/>
     <menuitem id="toolbar-context-customize"
@@ -532,7 +533,7 @@
     <description class="tooltip-label" data-l10n-id="navbar-tooltip-instruction"/>
   </tooltip>
 
-#include popup-notifications.inc
+#include popup-notifications.inc.xhtml
 
 #include ../../components/customizableui/content/panelUI.inc.xhtml
 #include ../../components/controlcenter/content/identityPanel.inc.xhtml
@@ -626,7 +627,7 @@
                        data-l10n-id="sharing-warning-screen"/>
           </label>
           <hbox align="center">
-            <button id="sharing-warning-proceed-to-tab" oncommand="gSharedTabWarning.allowSharedTabSwitch();" flex="1" data-l10n-id="sharing-warning-proceed-to-tab"/>
+            <button id="sharing-warning-proceed-to-tab" flex="1" data-l10n-id="sharing-warning-proceed-to-tab"/>
           </hbox>
           <hbox pack="start">
             <checkbox id="sharing-warning-disable-for-session" data-l10n-id="sharing-warning-disable-for-session"/>

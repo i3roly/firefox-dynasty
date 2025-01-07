@@ -13,6 +13,8 @@
     --tab-min-height: 41px;
   }
   --tab-group-label-height: max(1.5em, var(--tab-min-height) - 14px);
+  --tab-group-label-padding: 4px;
+  --tab-group-line-thickness: 2px;
   /* Collapsed tabs should be square, so set width to match the min height */
   --tab-collapsed-background-width: var(--tab-min-height);
   --tab-collapsed-width: calc(var(--tab-collapsed-background-width) + 2 * var(--tab-inner-inline-margin));
@@ -226,11 +228,6 @@
   &[multiselected-move-together][multiselected]:not([selected]) {
     z-index: 2;
   }
-
-  &:is([visuallyselected], [multiselected]) {
-    color: var(--tab-selected-textcolor);
-    color-scheme: var(--tab-selected-color-scheme);
-  }
 }
 
 .tab-content {
@@ -242,6 +239,11 @@
 
   :root:not([uidensity=compact]) &[pinned] {
     padding: 0 10px;
+  }
+
+  &:is([selected], [multiselected]) {
+    color: var(--tab-selected-textcolor);
+    color-scheme: var(--tab-selected-color-scheme);
   }
 }
 
@@ -745,101 +747,182 @@
 
 /* Tab Groups */
 
-/*
- * .tab-group-line needs to span the drop shadows + space between tabs in the
- * same tab group so that the whole tab group appears to be underlined by an
- * unbroken line. However, the last tab in a tab group should have its group
- * underline stop at the right edge of the tab itself, otherwise it looks
- * like the tab group extends too far past the right edge of the tab.
- */
-.tab-group-line {
-  display: none;
-  background-color: light-dark(var(--tab-group-color), var(--tab-group-color-invert));
-  height: 2px;
-  margin: 0 calc(-1 * var(--tab-overflow-clip-margin)) calc(-1 * var(--tab-block-margin));
-
-  .tabbrowser-tab:last-of-type > .tab-stack > .tab-background > & {
-    margin-inline-end: 0;
-  }
-
-  tab-group & {
-    display: flex;
-  }
-
-  #tabbrowser-tabs[movingtab] &:is([selected],[multiselected]) {
-    display: flex;
-    background-color: light-dark(var(--dragover-tab-group-color), var(--dragover-tab-group-color-invert));
-  }
-
-  #tabbrowser-tabs:is([movingtab-createGroup],[movingtab-ungroup]) &:is([selected],[multiselected]) {
+/* stylelint-disable-next-line media-query-no-invalid */
+@media not (-moz-bool-pref: "sidebar.verticalTabs") {
+  /*
+   * .tab-group-line needs to span the drop shadows + space between tabs in the
+   * same tab group so that the whole tab group appears to be underlined by an
+   * unbroken line. However, the last tab in a tab group should have its group
+   * underline stop at the right edge of the tab itself, otherwise it looks
+   * like the tab group extends too far past the right edge of the tab.
+   */
+  .tab-group-line {
     display: none;
+    background-color: light-dark(var(--tab-group-color), var(--tab-group-color-invert));
+    height: var(--tab-group-line-thickness);
+    margin: 0 calc(-1 * var(--tab-overflow-clip-margin)) calc(-1 * var(--tab-block-margin));
+
+    .tabbrowser-tab:last-of-type > .tab-stack > .tab-background > & {
+      margin-inline-end: 0;
+      border-start-end-radius: calc(var(--tab-group-line-thickness) / 2);
+      border-end-end-radius: calc(var(--tab-group-line-thickness) / 2);
+    }
+
+    tab-group & {
+      display: flex;
+    }
+
+    #tabbrowser-tabs[movingtab] &:is([selected],[multiselected]) {
+      display: flex;
+      background-color: light-dark(var(--dragover-tab-group-color), var(--dragover-tab-group-color-invert));
+      border-radius: 1px;
+    }
+
+    #tabbrowser-tabs:is([movingtab-createGroup],[movingtab-ungroup]) &:is([selected],[multiselected]) {
+      display: none;
+    }
+  }
+
+  tab-group {
+    /*
+     * Let the tab bar flexbox distribute space between all tabs evenly, regardless of
+     * whether they are children of the tab bar directly or children of tab groups
+     */
+    display: contents;
+
+    &[collapsed] > .tabbrowser-tab {
+      min-width: 0;
+      max-width: 0;
+      padding: 0;
+      overflow-clip-margin: 0;
+    }
   }
 }
 
-tab-group {
-  /*
-   * Let the tab bar flexbox distribute space between all tabs evenly, regardless of
-   * whether they are children of the tab bar directly or children of tab groups
-   */
-  display: contents;
+/* stylelint-disable-next-line media-query-no-invalid */
+@media (-moz-bool-pref: "sidebar.verticalTabs") {
+  tab-group {
+    flex-direction: column;
+    position: relative;
 
-  &[collapsed] > .tabbrowser-tab {
-    min-width: 0;
-    max-width: 0;
-    padding: 0;
-    overflow-clip-margin: 0;
+    &:not([collapsed])::before {
+      content: "";
+      display: block;
+      position: absolute;
+      inset-inline-start: var(--tab-group-line-thickness);
+      inset-block-start: var(--space-medium);
+      inset-block-end: 0;
+      width: var(--tab-group-line-thickness);
+      background-color: light-dark(var(--tab-group-color), var(--tab-group-color-invert));
+      border-radius: 1px;
+    }
+
+    &[collapsed] > .tabbrowser-tab {
+      display: none;
+    }
+
+    #tabbrowser-tabs[expanded] & {
+      margin-inline-start: var(--space-medium);
+
+      &:not([collapsed])::before {
+        inset-inline-start: 0;
+
+        /* Move the line down by the height of the group label */
+        inset-block-start: calc(var(--tab-group-label-height) + 2 * var(--tab-group-label-padding) + var(--space-medium));
+      }
+    }
   }
 }
 
 .tab-group-label-container {
-  /*
-   * Provide some empty space to either side of the tab group label.
-   * Use margin on the left because the ::after underline should not extend
-   * to the left beyond the tab group label.
-   * Use padding on the right because the ::after underline should extend
-   * to the right to connect to the underline of the first tab in the group.
-   */
-  margin-inline-start: 3px;
-  padding-inline-end: 3px;
-
-  position: relative;
   transform: var(--tabgroup-dragover-transform);
   transition: var(--tab-dragover-transition);
 
-  tab-group:not([collapsed]) > &::after {
-    content: "";
-    background-color: light-dark(var(--tab-group-color), var(--tab-group-color-invert));
-    height: 2px;
-    position: absolute;
-    inset: auto 0 0;
+  /* stylelint-disable-next-line media-query-no-invalid */
+  @media not (-moz-bool-pref: "sidebar.verticalTabs") {
+    position: relative;
+
+    /*
+     * Provide some empty space to either side of the tab group label.
+     * Use margin on the left because the ::after underline should not extend
+     * to the left beyond the tab group label.
+     * Use padding on the right because the ::after underline should extend
+     * to the right to connect to the underline of the first tab in the group.
+     */
+    margin-inline-start: 3px;
+    padding-inline-end: 3px;
+
+    tab-group:not([collapsed]) > &::after {
+      content: "";
+      background-color: light-dark(var(--tab-group-color), var(--tab-group-color-invert));
+      height: var(--tab-group-line-thickness);
+      position: absolute;
+      inset: auto 0 0;
+      border-start-start-radius: 1px;
+      border-end-start-radius: 1px;
+    }
+  }
+
+  #tabbrowser-tabs[orient="vertical"]:not([expanded]) & {
+    width: var(--tab-collapsed-width);
+    height: var(--tab-collapsed-width);
+  }
+
+  #tabbrowser-tabs[orient="vertical"][expanded] & {
+    contain: inline-size;
   }
 }
 
 .tab-group-label {
+  -moz-window-dragging: no-drag;
   text-align: center;
   font-weight: var(--font-weight-bold);
   text-overflow: ellipsis;
   white-space: nowrap;
   overflow: hidden;
+  text-shadow: none;
   border-radius: var(--tab-border-radius);
-  line-height: calc(var(--tab-group-label-height) - 2px);
+  line-height: calc(var(--tab-group-label-height) - var(--tab-group-line-thickness));
   min-height: var(--tab-group-label-height);
   min-width: var(--tab-group-label-height);
   max-width: 10em;
-  padding-inline: 4px;
+  padding-inline: var(--tab-group-label-padding);
   color: light-dark(var(--tab-group-color-pale), var(--tab-group-label-text-dark));
   background-color: light-dark(var(--tab-group-color), var(--tab-group-color-invert));
   margin: auto 0;
 
-  #tabbrowser-tabs[tablist-has-focus] &.tablist-keyboard-focus {
-    outline: var(--focus-outline);
-    outline-offset: var(--focus-outline-offset);
-  }
-
   tab-group[collapsed] > .tab-group-label-container > & {
     background-color: light-dark(var(--tab-group-color-pale), var(--tab-group-color));
     color: light-dark(var(--tab-group-color), var(--tab-group-color-pale));
-    border: 1px solid light-dark(var(--tab-group-color), var(--tab-group-color-pale));
+    outline: 1px solid light-dark(var(--tab-group-color), var(--tab-group-color-pale));
+    outline-offset: -1px;
+  }
+
+  #tabbrowser-tabs[orient="vertical"]:not([expanded]) & {
+    width: 24px;
+    min-height: 24px;
+    max-width: 24px;
+    margin: auto;
+    font-size: 0;
+
+    &:first-letter {
+      font: message-box;
+      font-weight: var(--font-weight-bold);
+      line-height: 24px;
+    }
+  }
+
+  #tabbrowser-tabs[orient="vertical"][expanded] & {
+    align-self: start;
+    max-width: -moz-available;
+    margin-block: var(--space-small);
+    margin-inline-end: var(--space-medium);
+    padding-block: var(--tab-group-label-padding);
+  }
+
+  #tabbrowser-tabs[tablist-has-focus] &.tablist-keyboard-focus {
+    outline: var(--focus-outline);
+    outline-offset: var(--focus-outline-offset);
   }
 }
 
@@ -1255,19 +1338,6 @@ tab-group {
   -moz-window-shadow: none;
 }
 
-/* Drag space */
-
-.titlebar-spacer[type="pre-tabs"],
-.titlebar-spacer[type="post-tabs"] {
-  width: 40px;
-}
-
-@media (max-width: 500px) {
-  .titlebar-spacer[type="post-tabs"] {
-    display: none;
-  }
-}
-
 /* Firefox View button and menu item */
 
 #TabsToolbar #firefox-view-button[open] > .toolbarbutton-icon {
@@ -1278,8 +1348,8 @@ tab-group {
   color-scheme: var(--tab-selected-color-scheme);
 }
 
-:root:not([privatebrowsingmode], [firefoxviewhidden]) :is(toolbarbutton, toolbarpaletteitem) ~ #tabbrowser-tabs,
-:root[privatebrowsingmode]:not([firefoxviewhidden]) :is(
+:root:not([privatebrowsingmode]) :is(toolbarbutton, toolbarpaletteitem) ~ #tabbrowser-tabs,
+:root[privatebrowsingmode] :is(
   toolbarbutton:not(#firefox-view-button),
   toolbarpaletteitem:not(#wrapper-firefox-view-button)
 ) ~ #tabbrowser-tabs {
@@ -1288,7 +1358,6 @@ tab-group {
   margin-inline-start: 2px;
 }
 
-:root[firefoxviewhidden] :is(#firefox-view-button, #wrapper-firefox-view-button),
 :root[privatebrowsingmode] :is(#firefox-view-button, #menu_openFirefoxView) {
   display: none;
 }
@@ -1396,23 +1465,42 @@ toolbar:not(#TabsToolbar) #firefox-view-button {
   }
 }
 
+#allTabsMenu-groupsView {
+  flex: auto;
+  flex-grow: 0;
+
+  &:empty,
+  &:empty + toolbarseparator {
+    display: none;
+  }
+}
+
 .all-tabs-item {
-  margin-inline: var(--arrowpanel-menuitem-margin-inline);
   border-radius: var(--arrowpanel-menuitem-border-radius);
+  margin-inline: var(--arrowpanel-menuitem-margin-inline);
+
+  &.grouped {
+    /* Indent further by the size of a favicon and the favicon's end margin. */
+    margin-inline-start: calc(var(--arrowpanel-menuitem-margin-inline) + 16px + 8px);
+  }
 
   &[selected] {
-    font-weight: bold;
+    font-weight: var(--font-weight-bold);
   }
 
   > toolbarbutton {
     margin: 0;
+    color: var(--button-text-color-ghost);
+    background-color: var(--button-background-color-ghost);
 
     &:hover {
-      background-color: var(--panel-item-hover-bgcolor);
+      color: var(--button-text-color-ghost-hover);
+      background-color: var(--button-background-color-ghost-hover);
     }
 
     &:hover:active {
-      background-color: var(--panel-item-active-bgcolor);
+      color: var(--button-text-color-ghost-active);
+      background-color: var(--button-background-color-ghost-active);
     }
 
     &.all-tabs-container-indicator {
@@ -1425,6 +1513,19 @@ toolbar:not(#TabsToolbar) #firefox-view-button {
         width: 2px;
       }
     }
+  }
+}
+
+.all-tabs-group-item {
+  > .subviewbutton-iconic > .toolbarbutton-icon {
+    list-style-image: url("chrome://browser/skin/tabbrowser/tab-group-chicklet.svg");
+    fill: light-dark(var(--tab-group-color), var(--tab-group-color-invert));
+  }
+
+  > .all-tabs-group-saved-group > .toolbarbutton-icon {
+    -moz-context-properties: fill, stroke;
+    fill: transparent;
+    stroke: light-dark(var(--tab-group-color), var(--tab-group-color-invert));
   }
 }
 
@@ -1478,8 +1579,29 @@ toolbar:not(#TabsToolbar) #firefox-view-button {
   }
 }
 
-.tab-contextmenu-group-icon {
+.menu-iconic.tab-group-icon,
+.menuitem-iconic.tab-group-icon,
+.subviewbutton-iconic.tab-group-icon {
   list-style-image: url("chrome://browser/skin/tabbrowser/tab-group-chicklet.svg");
-  -moz-context-properties: fill;
+  -moz-context-properties: fill, stroke;
   fill: light-dark(var(--tab-group-color), var(--tab-group-color-invert));
+  stroke: light-dark(var(--tab-group-color), var(--tab-group-color-invert));
+}
+
+.menu-iconic.tab-group-icon-collapsed,
+.menuitem-iconic.tab-group-icon-collapsed,
+.subviewbutton-iconic.tab-group-icon-collapsed {
+  list-style-image: url("chrome://browser/skin/tabbrowser/tab-group-chicklet.svg");
+  -moz-context-properties: fill, stroke;
+  fill: light-dark(var(--tab-group-color-pale), var(--tab-group-color));
+  stroke: light-dark(var(--tab-group-color), var(--tab-group-color-pale));
+}
+
+.menu-iconic.tab-group-icon-closed,
+.menuitem-iconic.tab-group-icon-closed,
+.subviewbutton-iconic.tab-group-icon-closed {
+  list-style-image: url("chrome://browser/skin/tabbrowser/tab-group-chicklet.svg");
+  -moz-context-properties: fill, stroke;
+  fill: transparent;
+  stroke: light-dark(var(--tab-group-color), var(--tab-group-color-invert));
 }

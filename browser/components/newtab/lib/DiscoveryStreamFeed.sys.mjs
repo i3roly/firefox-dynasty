@@ -119,6 +119,8 @@ const PREF_CONTEXTUAL_CONTENT_FAKESPOT_CTA_URL =
   "discoverystream.contextualContent.fakespot.ctaUrl";
 
 const PREF_SECTIONS_ENABLED = "discoverystream.sections.enabled";
+const PREF_SECTIONS_FOLLOWING = "discoverystream.sections.following";
+const PREF_SECTIONS_BLOCKED = "discoverystream.sections.blocked";
 
 let getHardcodedLayout;
 
@@ -277,10 +279,19 @@ export class DiscoveryStreamFeed {
   async setupDevtoolsState(isStartup = false) {
     const cachedData = (await this.cache.get()) || {};
     let impressions = cachedData.recsImpressions || {};
+    let blocks = cachedData.recsBlocks || {};
 
     this.store.dispatch({
       type: at.DISCOVERY_STREAM_DEV_IMPRESSIONS,
       data: impressions,
+      meta: {
+        isStartup,
+      },
+    });
+
+    this.store.dispatch({
+      type: at.DISCOVERY_STREAM_DEV_BLOCKS,
+      data: blocks,
       meta: {
         isStartup,
       },
@@ -878,9 +889,9 @@ export class DiscoveryStreamFeed {
 
         feedPromise
           .then(feed => {
-            // If we stored the result of filter in feed cache as it happened,
             // I think we could reduce doing this for cache fetches.
             // Bug https://bugzilla.mozilla.org/show_bug.cgi?id=1606277
+            // We can remove filterRecommendations once ESR catches up to bug 1932196
             newFeeds[url] = this.filterRecommendations(feed);
             sendUpdate({
               type: at.DISCOVERY_STREAM_FEED_UPDATE,
@@ -906,16 +917,17 @@ export class DiscoveryStreamFeed {
     };
   }
 
+  // This filters just recommendations using NewTabUtils.blockedLinks only.
+  // This is essentially a sync blocked links filter. filterBlocked is async.
+  // See bug 1606277.
   filterRecommendations(feed) {
-    if (
-      feed &&
-      feed.data &&
-      feed.data.recommendations &&
-      feed.data.recommendations.length
-    ) {
-      const { data: recommendations } = this.filterBlocked(
-        feed.data.recommendations
-      );
+    if (feed?.data?.recommendations?.length) {
+      const recommendations = feed.data.recommendations.filter(item => {
+        const blocked = lazy.NewTabUtils.blockedLinks.isBlocked({
+          url: item.url,
+        });
+        return !blocked;
+      });
 
       return {
         ...feed,
@@ -1137,7 +1149,6 @@ export class DiscoveryStreamFeed {
         if (unifiedAdsEnabled) {
           const endpointBaseUrl = state.Prefs.values[PREF_UNIFIED_ADS_ENDPOINT];
           endpoint = `${endpointBaseUrl}v1/ads`;
-
           const placementsArray = state.Prefs.values[
             PREF_SPOC_PLACEMENTS
           ]?.split(`,`)
@@ -1247,7 +1258,8 @@ export class DiscoveryStreamFeed {
 
               const { data: capResult } = this.frequencyCapSpocs(migratedSpocs);
 
-              const { data: blockedResults } = this.filterBlocked(capResult);
+              const { data: blockedResults } =
+                await this.filterBlocked(capResult);
 
               const { data: spocsWithFetchTimestamp } = this.addFetchTimestamp(
                 blockedResults,
@@ -1320,6 +1332,11 @@ export class DiscoveryStreamFeed {
 
     if (unifiedAdsEnabled) {
       const endpointBaseUrl = state.Prefs.values[PREF_UNIFIED_ADS_ENDPOINT];
+
+      if (!endpointBaseUrl) {
+        return;
+      }
+
       endpoint = `${endpointBaseUrl}v1/delete_user`;
       body = {
         context_id: lazy.contextId,
@@ -1413,13 +1430,18 @@ export class DiscoveryStreamFeed {
     return item;
   }
 
-  filterBlocked(data) {
-    if (data && data.length) {
+  async filterBlocked(data) {
+    if (data?.length) {
       let flights = this.readDataPref(PREF_FLIGHT_BLOCKS);
+
+      const cachedData = (await this.cache.get()) || {};
+      let blocks = cachedData.recsBlocks || {};
+
       const filteredItems = data.filter(item => {
         const blocked =
           lazy.NewTabUtils.blockedLinks.isBlocked({ url: item.url }) ||
-          flights[item.flight_id];
+          flights[item.flight_id] ||
+          blocks[item.id];
         return !blocked;
       });
       return { data: filteredItems };
@@ -1480,7 +1502,7 @@ export class DiscoveryStreamFeed {
   // @returns {Object} An object with a property `data` as the result, and a property
   //                   `filterItems` as the frequency capped items.
   frequencyCapSpocs(spocs) {
-    if (spocs && spocs.length) {
+    if (spocs?.length) {
       const impressions = this.readDataPref(PREF_SPOC_IMPRESSIONS);
       const caps = [];
       const result = spocs.filter(s => {
@@ -1546,8 +1568,7 @@ export class DiscoveryStreamFeed {
 
   async retryFeed(feed) {
     const { url } = feed;
-    const result = await this.getComponentFeed(url);
-    const newFeed = this.filterRecommendations(result);
+    const newFeed = await this.getComponentFeed(url);
     this.store.dispatch(
       ac.BroadcastToContent({
         type: at.DISCOVERY_STREAM_FEED_UPDATE,
@@ -1602,8 +1623,9 @@ export class DiscoveryStreamFeed {
         let { recommendations } = feedResponse;
         if (this.isMerino) {
           recommendations = feedResponse.data.map(item => ({
-            id: item.tileId,
+            id: item.corpusItemId || item.scheduledCorpusItemId || item.tileId,
             scheduled_corpus_item_id: item.scheduledCorpusItemId,
+            corpus_item_id: item.corpusItemId,
             url: item.url,
             title: item.title,
             topic: item.topic,
@@ -1619,8 +1641,13 @@ export class DiscoveryStreamFeed {
             const selectedFeedResponse = feedResponse.feeds[selectedFeedPref];
             selectedFeedResponse?.[keyName]?.forEach(item =>
               recommendations.push({
-                id: isFakespot ? item.id : item.tileId,
+                id: isFakespot
+                  ? item.id
+                  : item.corpusItemId ||
+                    item.scheduledCorpusItemId ||
+                    item.tileId,
                 scheduled_corpus_item_id: item.scheduledCorpusItemId,
+                corpus_item_id: item.corpusItemId,
                 url: item.url,
                 title: item.title,
                 topic: item.topic,
@@ -1653,8 +1680,12 @@ export class DiscoveryStreamFeed {
               if (sectionData) {
                 for (const item of sectionData.recommendations) {
                   recommendations.push({
-                    id: item.tileId,
+                    id:
+                      item.corpusItemId ||
+                      item.scheduledCorpusItemId ||
+                      item.tileId,
                     scheduled_corpus_item_id: item.scheduledCorpusItemId,
+                    corpus_item_id: item.corpusItemId,
                     url: item.url,
                     title: item.title,
                     topic: item.topic,
@@ -1699,6 +1730,9 @@ export class DiscoveryStreamFeed {
         // Rotate is also the only place that uses these impressions.
         await this.cleanUpTopRecImpressions();
         const rotatedItems = await this.rotate(scoredItems);
+
+        const { data: filteredResults } =
+          await this.filterBlocked(rotatedItems);
         this.componentFeedFetched = true;
         feed = {
           lastUpdated: Date.now(),
@@ -1706,7 +1740,7 @@ export class DiscoveryStreamFeed {
           data: {
             settings,
             sections,
-            recommendations: rotatedItems,
+            recommendations: filteredResults,
             status: "success",
           },
         };
@@ -1782,12 +1816,41 @@ export class DiscoveryStreamFeed {
         PREF_MERINO_FEED_EXPERIMENT
       );
 
+      // Raw string of followed/blocked topics, ex: "entertainment, news"
+      const followedSectionsString = prefs[PREF_SECTIONS_FOLLOWING];
+      const blockedSectionsString = prefs[PREF_SECTIONS_BLOCKED];
+
+      // Format followed sections
+      const followedSections = followedSectionsString
+        ? followedSectionsString.split(",").map(s => s.trim())
+        : [];
+
+      // Format blocked sections
+      const blockedSections = blockedSectionsString
+        ? blockedSectionsString.split(",").map(s => s.trim())
+        : [];
+
+      // Combine followed and blocked sections and format into desired JSON shape for merino.
+      // Example:
+      // {
+      //   "sectionId": "business",
+      //   "isFollowed": true,
+      //   "isBlocked": false
+      // }
+      const sectionTopics = new Set([...followedSections, ...blockedSections]);
+      const sections = Array.from(sectionTopics).map(section => ({
+        sectionId: section,
+        isFollowed: followedSections.includes(section),
+        isBlocked: blockedSections.includes(section),
+      }));
+
       headers.append("content-type", "application/json");
       let body = {
         ...(prefMerinoFeedExperiment ? this.getExperimentInfo() : {}),
         locale: this.locale,
         region: this.region,
         topics,
+        sections,
       };
 
       const sectionsEnabled = prefs[PREF_SECTIONS_ENABLED];
@@ -2030,6 +2093,19 @@ export class DiscoveryStreamFeed {
     await this.cache.set("recsImpressions", {});
   }
 
+  async resetBlocks() {
+    await this.cache.set("recsBlocks", {});
+    const cachedData = (await this.cache.get()) || {};
+    let blocks = cachedData.recsBlocks || {};
+
+    this.store.dispatch({
+      type: at.DISCOVERY_STREAM_DEV_BLOCKS,
+      data: blocks,
+    });
+    // Update newtab after clearing blocks.
+    await this.refreshAll({ updateOpenTabs: true });
+  }
+
   async resetContentFeed() {
     await this.cache.set("feeds", {});
   }
@@ -2100,6 +2176,21 @@ export class DiscoveryStreamFeed {
       this.store.dispatch({
         type: at.DISCOVERY_STREAM_DEV_IMPRESSIONS,
         data: impressions,
+      });
+    }
+  }
+
+  async recordBlockRecId(recId) {
+    const cachedData = (await this.cache.get()) || {};
+    let blocks = cachedData.recsBlocks || {};
+
+    if (!blocks[recId]) {
+      blocks[recId] = 1;
+      await this.cache.set("recsBlocks", blocks);
+
+      this.store.dispatch({
+        type: at.DISCOVERY_STREAM_DEV_BLOCKS,
+        data: blocks,
       });
     }
   }
@@ -2383,6 +2474,9 @@ export class DiscoveryStreamFeed {
       case at.TOPIC_SELECTION_MAYBE_LATER:
         this.topicSelectionMaybeLaterEvent();
         break;
+      case at.DISCOVERY_STREAM_DEV_BLOCKS_RESET:
+        await this.resetBlocks();
+        break;
       case at.DISCOVERY_STREAM_DEV_SYSTEM_TICK:
       case at.SYSTEM_TICK:
         // Only refresh if we loaded once in .enable()
@@ -2515,10 +2609,34 @@ export class DiscoveryStreamFeed {
           }
         }
         break;
-      // This is fired from the browser, it has no concept of spocs, flight or pocket.
-      // We match the blocked url with our available spoc urls to see if there is a match.
+
+      // This is fired from the browser, it has no concept of spocs, flights or pocket.
+      // We match the blocked url with our available story urls to see if there is a match.
       // I suspect we *could* instead do this in BLOCK_URL but I'm not sure.
-      case at.PLACES_LINK_BLOCKED:
+      case at.PLACES_LINK_BLOCKED: {
+        const feedsState = this.store.getState().DiscoveryStream.feeds;
+        const feeds = {};
+
+        for (const url of Object.keys(feedsState.data)) {
+          let feed = feedsState.data[url];
+
+          const { data: filteredResults } = await this.filterBlocked(
+            feed.data.recommendations
+          );
+
+          feed = {
+            ...feed,
+            data: {
+              ...feed.data,
+              recommendations: filteredResults,
+            },
+          };
+
+          feeds[url] = feed;
+        }
+
+        await this.cache.set("feeds", feeds);
+
         if (this.showSpocs) {
           let blockedItems = [];
           const spocsState = this.store.getState().DiscoveryStream.spocs;
@@ -2581,6 +2699,7 @@ export class DiscoveryStreamFeed {
           })
         );
         break;
+      }
       case at.UNINIT:
         // When this feed is shutting down:
         this.uninitPrefs();
@@ -2591,12 +2710,15 @@ export class DiscoveryStreamFeed {
         // If we block a story that also has a flight_id
         // we want to record that as blocked too.
         // This is because a single flight might have slightly different urls.
-        action.data.forEach(site => {
-          const { flight_id } = site;
+        for (const site of action.data) {
+          const { flight_id, tile_id } = site;
           if (flight_id) {
             this.recordBlockFlightId(flight_id);
           }
-        });
+          if (tile_id) {
+            await this.recordBlockRecId(tile_id);
+          }
+        }
         break;
       }
       case at.PREF_CHANGED:

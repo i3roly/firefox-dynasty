@@ -666,9 +666,9 @@ class MediaDecoderStateMachine::DecodingState
   }
 
   void HandlePlayStateChanged(MediaDecoder::PlayState aPlayState) override {
+    // Schedule Step() to check if we can start or stop playback.
+    mMaster->ScheduleStateMachine();
     if (aPlayState == MediaDecoder::PLAY_STATE_PLAYING) {
-      // Schedule Step() to check if we can start playback.
-      mMaster->ScheduleStateMachine();
       // Try to dispatch decoding tasks for mMinimizePreroll might be reset.
       DispatchDecodeTasksIfNeeded();
     }
@@ -2356,8 +2356,7 @@ class MediaDecoderStateMachine::NextFrameSeekingState
 
     if (!NeedMoreVideo()) {
       FinishSeek();
-    } else if (!mMaster->IsRequestingVideoData() &&
-               !mMaster->IsWaitingVideoData()) {
+    } else if (!mMaster->IsTrackingVideoData()) {
       RequestVideoData();
     }
   }
@@ -2626,6 +2625,18 @@ class MediaDecoderStateMachine::BufferingState
     }
 
     mBufferingStart = TimeStamp::Now();
+    // Playback is now stopped, so there is no need to connect to the queues'
+    // PopFrontEvent()s, but frames may have been recently popped before the
+    // transition from DECODING.
+    if (mMaster->IsAudioDecoding() && !mMaster->HaveEnoughDecodedAudio() &&
+        !mMaster->IsTrackingAudioData()) {
+      mMaster->RequestAudioData();
+    }
+    if (mMaster->IsVideoDecoding() && !mMaster->HaveEnoughDecodedVideo() &&
+        !mMaster->IsTrackingVideoData()) {
+      mMaster->RequestVideoData(TimeUnit());
+    }
+
     mMaster->ScheduleStateMachineIn(TimeUnit::FromMicroseconds(USECS_PER_S));
     mMaster->mOnNextFrameStatus.Notify(
         MediaDecoderOwner::NEXT_FRAME_UNAVAILABLE_BUFFERING);
@@ -3143,16 +3154,14 @@ void MediaDecoderStateMachine::DecodingState::DispatchDecodeTasksIfNeeded() {
 }
 
 void MediaDecoderStateMachine::DecodingState::EnsureAudioDecodeTaskQueued() {
-  if (!mMaster->IsAudioDecoding() || mMaster->IsRequestingAudioData() ||
-      mMaster->IsWaitingAudioData()) {
+  if (!mMaster->IsAudioDecoding() || mMaster->IsTrackingAudioData()) {
     return;
   }
   mMaster->RequestAudioData();
 }
 
 void MediaDecoderStateMachine::DecodingState::EnsureVideoDecodeTaskQueued() {
-  if (!mMaster->IsVideoDecoding() || mMaster->IsRequestingVideoData() ||
-      mMaster->IsWaitingVideoData()) {
+  if (!mMaster->IsVideoDecoding() || mMaster->IsTrackingVideoData()) {
     return;
   }
   mMaster->RequestVideoData(mMaster->GetMediaTime(),
@@ -3315,12 +3324,8 @@ void MediaDecoderStateMachine::BufferingState::Step() {
       return;
     }
   } else if (mMaster->OutOfDecodedAudio() || mMaster->OutOfDecodedVideo()) {
-    MOZ_ASSERT(!mMaster->OutOfDecodedAudio() ||
-               mMaster->IsRequestingAudioData() ||
-               mMaster->IsWaitingAudioData());
-    MOZ_ASSERT(!mMaster->OutOfDecodedVideo() ||
-               mMaster->IsRequestingVideoData() ||
-               mMaster->IsWaitingVideoData());
+    MOZ_ASSERT(!mMaster->OutOfDecodedAudio() || mMaster->IsTrackingAudioData());
+    MOZ_ASSERT(!mMaster->OutOfDecodedVideo() || mMaster->IsTrackingVideoData());
     SLOG(
         "In buffering mode, waiting to be notified: outOfAudio: %d, "
         "mAudioStatus: %s, outOfVideo: %d, mVideoStatus: %s",
@@ -3839,7 +3844,7 @@ void MediaDecoderStateMachine::SetVideoDecodeModeInternal(
     RefPtr<MediaDecoderStateMachine> self = this;
     mVideoDecodeSuspendTimer.Ensure(
         target, [=]() { self->OnSuspendTimerResolved(); },
-        []() { MOZ_DIAGNOSTIC_ASSERT(false); });
+        []() { MOZ_DIAGNOSTIC_CRASH("SetVideoDecodeModeInternal reject"); });
     mOnPlaybackEvent.Notify(MediaPlaybackEvent::StartVideoSuspendTimer);
     return;
   }
@@ -4387,7 +4392,7 @@ void MediaDecoderStateMachine::ScheduleStateMachineIn(const TimeUnit& aTime) {
         self->mDelayedScheduler.CompleteRequest();
         self->RunStateMachine();
       },
-      []() { MOZ_DIAGNOSTIC_ASSERT(false); });
+      []() { MOZ_DIAGNOSTIC_CRASH("ScheduleStateMachineIn reject"); });
 }
 
 bool MediaDecoderStateMachine::IsStateMachineScheduled() const {

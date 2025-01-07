@@ -2529,6 +2529,30 @@ bool WarpCacheIRTranspiler::emitNewSetObjectResult(
   return resumeAfter(obj);
 }
 
+bool WarpCacheIRTranspiler::emitNewMapObjectFromIterableResult(
+    uint32_t templateObjectOffset, ValOperandId iterableId) {
+  JSObject* templateObj = tenuredObjectStubField(templateObjectOffset);
+  MDefinition* iterable = getOperand(iterableId);
+
+  auto* obj = MNewMapObjectFromIterable::New(alloc(), iterable, templateObj);
+  addEffectful(obj);
+
+  pushResult(obj);
+  return resumeAfter(obj);
+}
+
+bool WarpCacheIRTranspiler::emitNewSetObjectFromIterableResult(
+    uint32_t templateObjectOffset, ValOperandId iterableId) {
+  JSObject* templateObj = tenuredObjectStubField(templateObjectOffset);
+  MDefinition* iterable = getOperand(iterableId);
+
+  auto* obj = MNewSetObjectFromIterable::New(alloc(), iterable, templateObj);
+  addEffectful(obj);
+
+  pushResult(obj);
+  return resumeAfter(obj);
+}
+
 bool WarpCacheIRTranspiler::emitNewStringObjectResult(
     uint32_t templateObjectOffset, StringOperandId strId) {
   JSObject* templateObj = tenuredObjectStubField(templateObjectOffset);
@@ -3509,8 +3533,9 @@ bool WarpCacheIRTranspiler::emitBigIntPtrNot(IntPtrOperandId inputId,
   return defineOperand(resultId, ins);
 }
 
-bool WarpCacheIRTranspiler::emitCallStringConcatResult(StringOperandId lhsId,
-                                                       StringOperandId rhsId) {
+bool WarpCacheIRTranspiler::emitConcatStringsResult(StringOperandId lhsId,
+                                                    StringOperandId rhsId,
+                                                    uint32_t stubOffset) {
   MDefinition* lhs = getOperand(lhsId);
   MDefinition* rhs = getOperand(rhsId);
 

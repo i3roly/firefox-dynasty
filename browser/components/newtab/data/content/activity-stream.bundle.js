@@ -103,6 +103,7 @@ for (const type of [
   "ADDONS_INFO_REQUEST",
   "ADDONS_INFO_RESPONSE",
   "ARCHIVE_FROM_POCKET",
+  "BLOCK_SECTION",
   "BLOCK_URL",
   "BOOKMARK_URL",
   "CARD_SECTION_IMPRESSION",
@@ -112,6 +113,7 @@ for (const type of [
   "DELETE_FROM_POCKET",
   "DELETE_HISTORY_URL",
   "DIALOG_CANCEL",
+  "DIALOG_CLOSE",
   "DIALOG_OPEN",
   "DISABLE_SEARCH",
   "DISCOVERY_STREAM_COLLECTION_DISMISSIBLE_TOGGLE",
@@ -120,6 +122,8 @@ for (const type of [
   "DISCOVERY_STREAM_CONFIG_RESET_DEFAULTS",
   "DISCOVERY_STREAM_CONFIG_SETUP",
   "DISCOVERY_STREAM_CONFIG_SET_VALUE",
+  "DISCOVERY_STREAM_DEV_BLOCKS",
+  "DISCOVERY_STREAM_DEV_BLOCKS_RESET",
   "DISCOVERY_STREAM_DEV_EXPIRE_CACHE",
   "DISCOVERY_STREAM_DEV_IDLE_DAILY",
   "DISCOVERY_STREAM_DEV_IMPRESSIONS",
@@ -158,6 +162,7 @@ for (const type of [
   "FAKESPOT_DISMISS",
   "FAKE_FOCUS_SEARCH",
   "FILL_SEARCH_TERM",
+  "FOLLOW_SECTION",
   "HANDOFF_SEARCH_TO_AWESOMEBAR",
   "HIDE_PERSONALIZE",
   "HIDE_PRIVACY_INFO",
@@ -243,6 +248,7 @@ for (const type of [
   "TOP_SITES_UPDATED",
   "TOTAL_BOOKMARKS_REQUEST",
   "TOTAL_BOOKMARKS_RESPONSE",
+  "UNFOLLOW_SECTION",
   "UNINIT",
   "UPDATE_PINNED_SEARCH_SHORTCUTS",
   "UPDATE_SEARCH_SHORTCUTS",
@@ -693,9 +699,11 @@ class DiscoveryStreamAdminUI extends (external_React_default()).PureComponent {
     this.onStoryToggle = this.onStoryToggle.bind(this);
     this.handleWeatherSubmit = this.handleWeatherSubmit.bind(this);
     this.handleWeatherUpdate = this.handleWeatherUpdate.bind(this);
+    this.resetBlocks = this.resetBlocks.bind(this);
     this.refreshTopicSelectionCache = this.refreshTopicSelectionCache.bind(this);
     this.toggleTBRFeed = this.toggleTBRFeed.bind(this);
     this.handleSectionsToggle = this.handleSectionsToggle.bind(this);
+    this.toggleIABBanners = this.toggleIABBanners.bind(this);
     this.state = {
       toggledStories: {},
       weatherQuery: ""
@@ -733,6 +741,11 @@ class DiscoveryStreamAdminUI extends (external_React_default()).PureComponent {
       type
     }));
   }
+  resetBlocks() {
+    this.props.dispatch(actionCreators.OnlyToMain({
+      type: actionTypes.DISCOVERY_STREAM_DEV_BLOCKS_RESET
+    }));
+  }
   systemTick() {
     this.dispatchSimpleAction(actionTypes.DISCOVERY_STREAM_DEV_SYSTEM_TICK);
   }
@@ -764,6 +777,37 @@ class DiscoveryStreamAdminUI extends (external_React_default()).PureComponent {
       weatherQuery
     } = this.state;
     this.props.dispatch(actionCreators.SetPref("weather.query", weatherQuery));
+  }
+  toggleIABBanners(e) {
+    const {
+      pressed,
+      id
+    } = e.target;
+    const billboardEnabled = this.props.otherPrefs["newtabAdSize.billboard"];
+    const leaderboardEnabled = this.props.otherPrefs["newtabAdSize.leaderboard"];
+    let spocValue;
+    let spocCount;
+    if (id === "billboard") {
+      this.props.dispatch(actionCreators.SetPref("newtabAdSize.billboard", pressed));
+      if (pressed) {
+        spocValue = `newtab_spocs, newtab_billboard${leaderboardEnabled ? ", newtab_leaderboard" : ""}`;
+        spocCount = `6,1${leaderboardEnabled ? ",1" : ""}`;
+      } else {
+        spocValue = `newtab_spocs${leaderboardEnabled ? ", newtab_leaderboard" : ""}`;
+        spocCount = `6${leaderboardEnabled ? ",1" : ""}`;
+      }
+    } else if (id === "leaderboard") {
+      this.props.dispatch(actionCreators.SetPref("newtabAdSize.leaderboard", pressed));
+      if (pressed) {
+        spocValue = `newtab_spocs, newtab_leaderboard${billboardEnabled ? ", newtab_billboard" : ""}`;
+        spocCount = `6,1${billboardEnabled ? ",1" : ""}`;
+      } else {
+        spocValue = `newtab_spocs${billboardEnabled ? ", newtab_billboard" : ""}`;
+        spocCount = `6${billboardEnabled ? ",1" : ""}`;
+      }
+    }
+    this.props.dispatch(actionCreators.SetPref("discoverystream.placements.spocs", spocValue));
+    this.props.dispatch(actionCreators.SetPref("discoverystream.placements.spocs.counts", spocCount));
   }
   handleSectionsToggle(e) {
     const {
@@ -837,6 +881,21 @@ class DiscoveryStreamAdminUI extends (external_React_default()).PureComponent {
       }, key), /*#__PURE__*/external_React_default().createElement("td", null, relativeTime(impressions.feed[key]) || "(no data)"));
     }))));
   }
+  renderBlocksData() {
+    const {
+      blocks
+    } = this.props.state.DiscoveryStream;
+    return /*#__PURE__*/external_React_default().createElement((external_React_default()).Fragment, null, /*#__PURE__*/external_React_default().createElement("h4", null, "Blocks"), /*#__PURE__*/external_React_default().createElement("button", {
+      className: "button",
+      onClick: this.resetBlocks
+    }, "Reset Blocks"), " ", /*#__PURE__*/external_React_default().createElement("table", null, /*#__PURE__*/external_React_default().createElement("tbody", null, Object.keys(blocks).map(key => {
+      return /*#__PURE__*/external_React_default().createElement(Row, {
+        key: key
+      }, /*#__PURE__*/external_React_default().createElement("td", {
+        className: "min"
+      }, key));
+    }))));
+  }
   renderSpocs() {
     const {
       spocs
@@ -904,6 +963,13 @@ class DiscoveryStreamAdminUI extends (external_React_default()).PureComponent {
     const selectedFeed = this.props.otherPrefs["discoverystream.contextualContent.selectedFeed"];
     const sectionsEnabled = this.props.otherPrefs["discoverystream.sections.enabled"];
     const TBRFeeds = this.props.otherPrefs["discoverystream.contextualContent.feeds"].split(",").map(s => s.trim()).filter(item => item);
+
+    // Prefs for IAB Banners
+    const billboardsEnabled = this.props.otherPrefs["newtabAdSize.billboard"];
+    const leaderboardEnabled = this.props.otherPrefs["newtabAdSize.leaderboard"];
+    const spocPlacements = this.props.otherPrefs["discoverystream.placements.spocs"];
+    const billboardPressed = billboardsEnabled && spocPlacements.includes("newtab_billboard");
+    const leaderboardPressed = leaderboardEnabled && spocPlacements.includes("newtab_leaderboard");
     return /*#__PURE__*/external_React_default().createElement("div", null, /*#__PURE__*/external_React_default().createElement("button", {
       className: "button",
       onClick: this.restorePrefDefaults
@@ -942,7 +1008,23 @@ class DiscoveryStreamAdminUI extends (external_React_default()).PureComponent {
       pressed: sectionsEnabled || null,
       onToggle: this.handleSectionsToggle,
       label: "Toggle DS Sections"
-    })), /*#__PURE__*/external_React_default().createElement("table", null, /*#__PURE__*/external_React_default().createElement("tbody", null, prefToggles.map(pref => /*#__PURE__*/external_React_default().createElement(Row, {
+    })), /*#__PURE__*/external_React_default().createElement("details", {
+      className: "details-section"
+    }, /*#__PURE__*/external_React_default().createElement("summary", null, "IAB Banner Ad Sizes"), /*#__PURE__*/external_React_default().createElement("div", {
+      className: "toggle-wrapper"
+    }, /*#__PURE__*/external_React_default().createElement("moz-toggle", {
+      id: "leaderboard",
+      pressed: leaderboardPressed || null,
+      onToggle: this.toggleIABBanners,
+      label: "Enable IAB Leaderboard"
+    })), /*#__PURE__*/external_React_default().createElement("div", {
+      className: "toggle-wrapper"
+    }, /*#__PURE__*/external_React_default().createElement("moz-toggle", {
+      id: "billboard",
+      pressed: billboardPressed || null,
+      onToggle: this.toggleIABBanners,
+      label: "Enable IAB Billboard"
+    }))), /*#__PURE__*/external_React_default().createElement("table", null, /*#__PURE__*/external_React_default().createElement("tbody", null, prefToggles.map(pref => /*#__PURE__*/external_React_default().createElement(Row, {
       key: pref
     }, /*#__PURE__*/external_React_default().createElement("td", null, /*#__PURE__*/external_React_default().createElement(TogglePrefCheckbox, {
       checked: config[pref],
@@ -963,7 +1045,9 @@ class DiscoveryStreamAdminUI extends (external_React_default()).PureComponent {
       className: "large-data-container"
     }, this.renderFeedsData()), /*#__PURE__*/external_React_default().createElement("h3", null, "Impressions Data"), /*#__PURE__*/external_React_default().createElement("div", {
       className: "large-data-container"
-    }, this.renderImpressionsData()), /*#__PURE__*/external_React_default().createElement("h3", null, "Weather Data"), this.renderWeatherData());
+    }, this.renderImpressionsData()), /*#__PURE__*/external_React_default().createElement("h3", null, "Blocked Data"), /*#__PURE__*/external_React_default().createElement("div", {
+      className: "large-data-container"
+    }, this.renderBlocksData()), /*#__PURE__*/external_React_default().createElement("h3", null, "Weather Data"), this.renderWeatherData());
   }
 }
 class DiscoveryStreamAdminInner extends (external_React_default()).PureComponent {
@@ -1606,6 +1690,13 @@ const LinkMenuOptions = {
         typedBonus: site.typedBonus,
         url: site.url,
         sponsored_tile_id: site.sponsored_tile_id,
+        ...(site.section
+          ? {
+              section: site.section,
+              section_position: site.section_position,
+              is_secton_followed: site.is_secton_followed,
+            }
+          : {}),
       },
     }),
     userEvent: "OPEN_NEW_WINDOW",
@@ -1631,6 +1722,7 @@ const LinkMenuOptions = {
         ...(site.block_key ? { block_key: site.block_key } : {}),
         recommendation_id: site.recommendation_id,
         scheduled_corpus_item_id: site.scheduled_corpus_item_id,
+        corpus_item_id: site.corpus_item_id,
         received_rank: site.received_rank,
         recommended_at: site.recommended_at,
         // used by PlacesFeed and TopSitesFeed for sponsored top sites blocking.
@@ -1657,6 +1749,7 @@ const LinkMenuOptions = {
           ? {
               section: site.section,
               section_position: site.section_position,
+              is_secton_followed: site.is_secton_followed,
             }
           : {}),
       })),
@@ -1706,6 +1799,11 @@ const LinkMenuOptions = {
               siteInfo
             )
           ),
+          // Also broadcast that this url has been deleted so that
+          // the confirmation dialog knows it needs to disappear now.
+          actionCreators.AlsoToMain({
+            type: actionTypes.DIALOG_CLOSE,
+          }),
         ],
         eventSource,
         body_string_id: [
@@ -1943,6 +2041,70 @@ const LinkMenuOptions = {
       type: actionTypes.OPEN_ABOUT_FAKESPOT,
     }),
   }),
+  SectionBlock: ({ blockedSections, sectionKey, sectionPosition }) => ({
+    id: "newtab-menu-section-block",
+    icon: "delete",
+    action: {
+      // Open the confirmation dialog to block a section.
+      type: actionTypes.DIALOG_OPEN,
+      data: {
+        onConfirm: [
+          // Once the user confirmed their intention to block this section,
+          // update their preferences.
+          actionCreators.AlsoToMain({
+            type: actionTypes.SET_PREF,
+            data: {
+              name: "discoverystream.sections.blocked",
+              value: [...blockedSections, sectionKey].join(", "),
+            },
+          }),
+          // Telemetry
+          actionCreators.OnlyToMain({
+            type: actionTypes.BLOCK_SECTION,
+            data: {
+              section: sectionKey,
+              section_position: sectionPosition,
+              event_source: "CONTEXT_MENU",
+            },
+          }),
+          // Also broadcast that this section has been blocked so that
+          // the confirmation dialog knows it needs to disappear now.
+          actionCreators.AlsoToMain({
+            type: actionTypes.DIALOG_CLOSE,
+          }),
+        ],
+        // Pass Fluent strings to ConfirmDialog component for the copy
+        // of the prompt to block sections.
+        body_string_id: [
+          "newtab-section-confirm-block-section-p1",
+          "newtab-section-confirm-block-section-p2",
+        ],
+        confirm_button_string_id: "newtab-section-block-section-button",
+        cancel_button_string_id: "newtab-section-cancel-button",
+      },
+    },
+    userEvent: "DIALOG_OPEN",
+  }),
+  SectionUnfollow: ({ followedSections, sectionKey, sectionPosition }) => ({
+    id: "newtab-menu-section-unfollow",
+    action: actionCreators.AlsoToMain({
+      type: actionTypes.SET_PREF,
+      data: {
+        name: "discoverystream.sections.following",
+        value: [...followedSections.filter(item => item !== sectionKey)].join(
+          ", "
+        ),
+      },
+    }),
+    impression: actionCreators.OnlyToMain({
+      type: actionTypes.UNFOLLOW_SECTION,
+      data: {
+        section: sectionKey,
+        section_position: sectionPosition,
+        event_source: "CONTEXT_MENU",
+      },
+    }),
+  }),
 };
 
 ;// CONCATENATED MODULE: ./content-src/components/LinkMenu/LinkMenu.jsx
@@ -2168,6 +2330,7 @@ class DSLinkMenu extends (external_React_default()).PureComponent {
         flight_id: this.props.flightId,
         tile_id: this.props.tile_id,
         recommendation_id: this.props.recommendation_id,
+        corpus_item_id: this.props.corpus_item_id,
         scheduled_corpus_item_id: this.props.scheduled_corpus_item_id,
         recommended_at: this.props.recommended_at,
         received_rank: this.props.received_rank,
@@ -2177,7 +2340,8 @@ class DSLinkMenu extends (external_React_default()).PureComponent {
         } : {}),
         ...(this.props.section ? {
           section: this.props.section,
-          section_position: this.props.section_position
+          section_position: this.props.section_position,
+          is_secton_followed: this.props.is_secton_followed
         } : {})
       }
     })));
@@ -2245,7 +2409,7 @@ const INTERSECTION_RATIO = 0.5;
 /**
  * Impression wrapper for Discovery Stream related React components.
  *
- * It makses use of the Intersection Observer API to detect the visibility,
+ * It makes use of the Intersection Observer API to detect the visibility,
  * and relies on page visibility to ensure the impression is reported
  * only when the component is visible on the page.
  *
@@ -2332,6 +2496,7 @@ class ImpressionStats_ImpressionStats extends (external_React_default()).PureCom
             } : {}),
             recommendation_id: link.recommendation_id,
             fetchTimestamp: link.fetchTimestamp,
+            corpus_item_id: link.corpus_item_id,
             scheduled_corpus_item_id: link.scheduled_corpus_item_id,
             recommended_at: link.recommended_at,
             received_rank: link.received_rank,
@@ -2342,7 +2507,8 @@ class ImpressionStats_ImpressionStats extends (external_React_default()).PureCom
             } : {}),
             ...(link.section ? {
               section: link.section,
-              section_position: link.section_position
+              section_position: link.section_position,
+              is_secton_followed: link.is_secton_followed
             } : {})
           })),
           firstVisibleTimestamp: this.props.firstVisibleTimestamp
@@ -2838,7 +3004,7 @@ class DSContextFooter extends (external_React_default()).PureComponent {
         className: "source clamp cta-footer-source"
       }, source));
     }
-    if (sponsorLabel || dsMessageLabel) {
+    if (sponsorLabel || dsMessageLabel && context_type !== "pocket") {
       return /*#__PURE__*/external_React_default().createElement("div", {
         className: "story-footer"
       }, sponsorLabel, sponsorLabel && spocMessageVariant === "variant-b" && /*#__PURE__*/external_React_default().createElement(SponsoredContentHighlight, {
@@ -2990,57 +3156,61 @@ const DefaultMeta = ({
   topic,
   isSectionsCard,
   showTopics
-}) => /*#__PURE__*/external_React_default().createElement("div", {
-  className: "meta"
-}, /*#__PURE__*/external_React_default().createElement("div", {
-  className: "info-wrap"
-}, ctaButtonVariant !== "variant-b" && format !== "rectangle" && /*#__PURE__*/external_React_default().createElement(DSSource, {
-  source: source,
-  timeToRead: timeToRead,
-  newSponsoredLabel: newSponsoredLabel,
-  context: context,
-  sponsor: sponsor,
-  sponsored_by_override: sponsored_by_override
-}), format !== "rectangle" && /*#__PURE__*/external_React_default().createElement((external_React_default()).Fragment, null, /*#__PURE__*/external_React_default().createElement("h3", {
-  className: "title clamp"
-}, title), excerpt && /*#__PURE__*/external_React_default().createElement("p", {
-  className: "excerpt clamp"
-}, excerpt)), format === "rectangle" && /*#__PURE__*/external_React_default().createElement((external_React_default()).Fragment, null, /*#__PURE__*/external_React_default().createElement("h3", {
-  className: "title clamp"
-}, "Sponsored"), /*#__PURE__*/external_React_default().createElement("p", {
-  className: "excerpt clamp"
-}, "Sponsored content supports our mission to build a better web."))), !isListCard && format !== "rectangle" && !mayHaveSectionsCards && mayHaveThumbsUpDown && /*#__PURE__*/external_React_default().createElement(DSThumbsUpDownButtons, {
-  onThumbsDownClick: onThumbsDownClick,
-  onThumbsUpClick: onThumbsUpClick,
-  sponsor: sponsor,
-  isThumbsDownActive: state.isThumbsDownActive,
-  isThumbsUpActive: state.isThumbsUpActive
-}), isSectionsCard && /*#__PURE__*/external_React_default().createElement("div", {
-  className: "sections-card-footer"
-}, !isListCard && format !== "rectangle" && mayHaveSectionsCards && mayHaveThumbsUpDown && /*#__PURE__*/external_React_default().createElement(DSThumbsUpDownButtons, {
-  onThumbsDownClick: onThumbsDownClick,
-  onThumbsUpClick: onThumbsUpClick,
-  sponsor: sponsor,
-  isThumbsDownActive: state.isThumbsDownActive,
-  isThumbsUpActive: state.isThumbsUpActive
-}), showTopics && /*#__PURE__*/external_React_default().createElement("span", {
-  className: "ds-card-topic",
-  "data-l10n-id": `newtab-topic-label-${topic}`
-})), !newSponsoredLabel && /*#__PURE__*/external_React_default().createElement(DSContextFooter, {
-  context_type: context_type,
-  context: context,
-  sponsor: sponsor,
-  sponsored_by_override: sponsored_by_override,
-  cta_button_variant: ctaButtonVariant,
-  source: source,
-  dispatch: dispatch,
-  spocMessageVariant: spocMessageVariant,
-  mayHaveSectionsCards: mayHaveSectionsCards
-}), newSponsoredLabel && /*#__PURE__*/external_React_default().createElement(DSMessageFooter, {
-  context_type: context_type,
-  context: null,
-  saveToPocketCard: saveToPocketCard
-}));
+}) => {
+  const shouldHaveThumbs = !isListCard && format !== "rectangle" && mayHaveSectionsCards && mayHaveThumbsUpDown;
+  const shouldHaveFooterSection = isSectionsCard && (shouldHaveThumbs || showTopics);
+  return /*#__PURE__*/external_React_default().createElement("div", {
+    className: "meta"
+  }, /*#__PURE__*/external_React_default().createElement("div", {
+    className: "info-wrap"
+  }, ctaButtonVariant !== "variant-b" && format !== "rectangle" && /*#__PURE__*/external_React_default().createElement(DSSource, {
+    source: source,
+    timeToRead: timeToRead,
+    newSponsoredLabel: newSponsoredLabel,
+    context: context,
+    sponsor: sponsor,
+    sponsored_by_override: sponsored_by_override
+  }), format !== "rectangle" && /*#__PURE__*/external_React_default().createElement((external_React_default()).Fragment, null, /*#__PURE__*/external_React_default().createElement("h3", {
+    className: "title clamp"
+  }, title), excerpt && /*#__PURE__*/external_React_default().createElement("p", {
+    className: "excerpt clamp"
+  }, excerpt)), format === "rectangle" && /*#__PURE__*/external_React_default().createElement((external_React_default()).Fragment, null, /*#__PURE__*/external_React_default().createElement("h3", {
+    className: "title clamp"
+  }, "Sponsored"), /*#__PURE__*/external_React_default().createElement("p", {
+    className: "excerpt clamp"
+  }, "Sponsored content supports our mission to build a better web."))), !isListCard && format !== "rectangle" && !mayHaveSectionsCards && mayHaveThumbsUpDown && /*#__PURE__*/external_React_default().createElement(DSThumbsUpDownButtons, {
+    onThumbsDownClick: onThumbsDownClick,
+    onThumbsUpClick: onThumbsUpClick,
+    sponsor: sponsor,
+    isThumbsDownActive: state.isThumbsDownActive,
+    isThumbsUpActive: state.isThumbsUpActive
+  }), shouldHaveFooterSection && /*#__PURE__*/external_React_default().createElement("div", {
+    className: "sections-card-footer"
+  }, shouldHaveThumbs && /*#__PURE__*/external_React_default().createElement(DSThumbsUpDownButtons, {
+    onThumbsDownClick: onThumbsDownClick,
+    onThumbsUpClick: onThumbsUpClick,
+    sponsor: sponsor,
+    isThumbsDownActive: state.isThumbsDownActive,
+    isThumbsUpActive: state.isThumbsUpActive
+  }), showTopics && /*#__PURE__*/external_React_default().createElement("span", {
+    className: "ds-card-topic",
+    "data-l10n-id": `newtab-topic-label-${topic}`
+  })), !newSponsoredLabel && /*#__PURE__*/external_React_default().createElement(DSContextFooter, {
+    context_type: context_type,
+    context: context,
+    sponsor: sponsor,
+    sponsored_by_override: sponsored_by_override,
+    cta_button_variant: ctaButtonVariant,
+    source: source,
+    dispatch: dispatch,
+    spocMessageVariant: spocMessageVariant,
+    mayHaveSectionsCards: mayHaveSectionsCards
+  }), newSponsoredLabel && /*#__PURE__*/external_React_default().createElement(DSMessageFooter, {
+    context_type: context_type,
+    context: null,
+    saveToPocketCard: saveToPocketCard
+  }));
+};
 class _DSCard extends (external_React_default()).PureComponent {
   constructor(props) {
     super(props);
@@ -3153,6 +3323,7 @@ class _DSCard extends (external_React_default()).PureComponent {
             } : {}),
             fetchTimestamp: this.props.fetchTimestamp,
             firstVisibleTimestamp: this.props.firstVisibleTimestamp,
+            corpus_item_id: this.props.corpus_item_id,
             scheduled_corpus_item_id: this.props.scheduled_corpus_item_id,
             recommended_at: this.props.recommended_at,
             received_rank: this.props.received_rank,
@@ -3165,7 +3336,8 @@ class _DSCard extends (external_React_default()).PureComponent {
             } : {}),
             ...(this.props.section ? {
               section: this.props.section,
-              section_position: this.props.sectionPosition
+              section_position: this.props.sectionPosition,
+              is_secton_followed: this.props.sectionFollowed
             } : {})
           }
         }));
@@ -3190,7 +3362,8 @@ class _DSCard extends (external_React_default()).PureComponent {
             } : {}),
             ...(this.props.section ? {
               section: this.props.section,
-              section_position: this.props.sectionPosition
+              section_position: this.props.sectionPosition,
+              is_secton_followed: this.props.sectionFollowed
             } : {})
           }]
         }));
@@ -3222,6 +3395,7 @@ class _DSCard extends (external_React_default()).PureComponent {
           } : {}),
           fetchTimestamp: this.props.fetchTimestamp,
           firstVisibleTimestamp: this.props.firstVisibleTimestamp,
+          corpus_item_id: this.props.corpus_item_id,
           scheduled_corpus_item_id: this.props.scheduled_corpus_item_id,
           recommended_at: this.props.recommended_at,
           received_rank: this.props.received_rank,
@@ -3234,7 +3408,8 @@ class _DSCard extends (external_React_default()).PureComponent {
           } : {}),
           ...(this.props.section ? {
             section: this.props.section,
-            section_position: this.props.sectionPosition
+            section_position: this.props.sectionPosition,
+            is_secton_followed: this.props.sectionFollowed
           } : {})
         }
       }));
@@ -3256,13 +3431,17 @@ class _DSCard extends (external_React_default()).PureComponent {
           } : {}),
           ...(this.props.section ? {
             section: this.props.section,
-            section_position: this.props.sectionPosition
+            section_position: this.props.sectionPosition,
+            is_secton_followed: this.props.sectionFollowed
           } : {})
         }]
       }));
     }
   }
-  onThumbsUpClick() {
+  onThumbsUpClick(event) {
+    event.stopPropagation();
+    event.preventDefault();
+
     // Toggle active state for thumbs up button to show CSS animation
     const currentState = this.state.isThumbsUpActive;
 
@@ -3281,12 +3460,18 @@ class _DSCard extends (external_React_default()).PureComponent {
       value: {
         recommendation_id: this.props.recommendation_id,
         tile_id: this.props.id,
+        corpus_item_id: this.props.corpus_item_id,
         scheduled_corpus_item_id: this.props.scheduled_corpus_item_id,
         recommended_at: this.props.recommended_at,
         received_rank: this.props.received_rank,
         thumbs_up: true,
         thumbs_down: false,
-        topic: this.props.topic
+        topic: this.props.topic,
+        ...(this.props.section ? {
+          section: this.props.section,
+          section_position: this.props.sectionPosition,
+          is_secton_followed: this.props.sectionFollowed
+        } : {})
       }
     }));
 
@@ -3299,7 +3484,10 @@ class _DSCard extends (external_React_default()).PureComponent {
       }
     }, "ActivityStream:Content"));
   }
-  onThumbsDownClick() {
+  onThumbsDownClick(event) {
+    event.stopPropagation();
+    event.preventDefault();
+
     // Toggle active state for thumbs down button to show CSS animation
     const currentState = this.state.isThumbsDownActive;
     this.setState({
@@ -3317,6 +3505,7 @@ class _DSCard extends (external_React_default()).PureComponent {
         card_type: "organic",
         recommendation_id: this.props.recommendation_id,
         tile_id: this.props.id,
+        corpus_item_id: this.props.corpus_item_id,
         scheduled_corpus_item_id: this.props.scheduled_corpus_item_id,
         recommended_at: this.props.recommended_at,
         received_rank: this.props.received_rank
@@ -3346,12 +3535,18 @@ class _DSCard extends (external_React_default()).PureComponent {
         value: {
           recommendation_id: this.props.recommendation_id,
           tile_id: this.props.id,
+          corpus_item_id: this.props.corpus_item_id,
           scheduled_corpus_item_id: this.props.scheduled_corpus_item_id,
           recommended_at: this.props.recommended_at,
           received_rank: this.props.received_rank,
           thumbs_up: false,
           thumbs_down: true,
-          topic: this.props.topic
+          topic: this.props.topic,
+          ...(this.props.section ? {
+            section: this.props.section,
+            section_position: this.props.sectionPosition,
+            is_secton_followed: this.props.sectionFollowed
+          } : {})
         }
       }));
 
@@ -3489,6 +3684,9 @@ class _DSCard extends (external_React_default()).PureComponent {
     const descLinesClassName = `ds-card-desc-lines-${descLines}`;
     const isMediumRectangle = format === "rectangle";
     const spocFormatClassName = isMediumRectangle ? `ds-spoc-rectangle` : ``;
+
+    // Only update the "Saved" Pocket button UI for the Sections experiment.
+    const compactPocketSavedButtonClassName = mayHaveSectionsCards && this.props.context_type === "pocket" ? `ds-compact-pocket-saved-button` : ``;
     let sizes = [];
     if (!isMediumRectangle) {
       sizes = isListCard ? this.listCardImageSizes : this.dsImageSizes;
@@ -3505,7 +3703,8 @@ class _DSCard extends (external_React_default()).PureComponent {
         role: "img",
         className: "story-badge-icon icon icon-pocket"
       }), /*#__PURE__*/external_React_default().createElement("span", {
-        "data-l10n-id": "newtab-pocket-saved"
+        "data-l10n-id": "newtab-pocket-saved",
+        className: "pocket-saved-copy"
       })) : /*#__PURE__*/external_React_default().createElement((external_React_default()).Fragment, null, /*#__PURE__*/external_React_default().createElement("span", {
         "data-l10n-id": "newtab-pocket-image",
         role: "img",
@@ -3521,6 +3720,12 @@ class _DSCard extends (external_React_default()).PureComponent {
       "data-position-two": this.props["data-position-one"],
       "data-position-three": this.props["data-position-one"],
       "data-position-four": this.props["data-position-one"]
+    }, /*#__PURE__*/external_React_default().createElement(SafeAnchor, {
+      className: "ds-card-link",
+      dispatch: this.props.dispatch,
+      onLinkClick: !this.props.placeholder ? this.onLinkClick : undefined,
+      url: this.props.url,
+      title: this.props.title
     }, this.props.showTopics && !this.props.mayHaveSectionsCards && this.props.topic && !isListCard && /*#__PURE__*/external_React_default().createElement("span", {
       className: "ds-card-topic",
       "data-l10n-id": `newtab-topic-label-${this.props.topic}`
@@ -3535,13 +3740,7 @@ class _DSCard extends (external_React_default()).PureComponent {
       title: this.props.title,
       isRecentSave: isRecentSave,
       alt_text: alt_text
-    })), /*#__PURE__*/external_React_default().createElement(SafeAnchor, {
-      className: "ds-card-link",
-      dispatch: this.props.dispatch,
-      onLinkClick: !this.props.placeholder ? this.onLinkClick : undefined,
-      url: this.props.url,
-      title: this.props.title
-    }, /*#__PURE__*/external_React_default().createElement(ImpressionStats_ImpressionStats, {
+    })), /*#__PURE__*/external_React_default().createElement(ImpressionStats_ImpressionStats, {
       flightId: this.props.flightId,
       rows: [{
         id: this.props.id,
@@ -3551,6 +3750,7 @@ class _DSCard extends (external_React_default()).PureComponent {
         } : {}),
         recommendation_id: this.props.recommendation_id,
         fetchTimestamp: this.props.fetchTimestamp,
+        corpus_item_id: this.props.corpus_item_id,
         scheduled_corpus_item_id: this.props.scheduled_corpus_item_id,
         recommended_at: this.props.recommended_at,
         received_rank: this.props.received_rank,
@@ -3563,14 +3763,15 @@ class _DSCard extends (external_React_default()).PureComponent {
         category: this.props.category,
         ...(this.props.section ? {
           section: this.props.section,
-          section_position: this.props.sectionPosition
+          section_position: this.props.sectionPosition,
+          is_secton_followed: this.props.sectionFollowed
         } : {})
       }],
       dispatch: this.props.dispatch,
       isFakespot: isFakespot,
       source: this.props.type,
       firstVisibleTimestamp: this.props.firstVisibleTimestamp
-    })), ctaButtonVariant === "variant-b" && /*#__PURE__*/external_React_default().createElement("div", {
+    }), ctaButtonVariant === "variant-b" && /*#__PURE__*/external_React_default().createElement("div", {
       className: "cta-header"
     }, "Shop Now"), isFakespot ? /*#__PURE__*/external_React_default().createElement("div", {
       className: "meta"
@@ -3602,8 +3803,8 @@ class _DSCard extends (external_React_default()).PureComponent {
       isSectionsCard: this.props.mayHaveSectionsCards && this.props.topic && !isListCard,
       format: format,
       topic: this.props.topic
-    }), /*#__PURE__*/external_React_default().createElement("div", {
-      className: "card-stp-button-hover-background"
+    })), /*#__PURE__*/external_React_default().createElement("div", {
+      className: `card-stp-button-hover-background ${compactPocketSavedButtonClassName}`
     }, /*#__PURE__*/external_React_default().createElement("div", {
       className: "card-stp-button-position-wrapper"
     }, saveToPocketCard && !isListCard && /*#__PURE__*/external_React_default().createElement((external_React_default()).Fragment, null, !this.props.flightId && stpButton()), !isFakespot && /*#__PURE__*/external_React_default().createElement(DSLinkMenu, {
@@ -3628,12 +3829,14 @@ class _DSCard extends (external_React_default()).PureComponent {
       recommendation_id: this.props.recommendation_id,
       tile_id: this.props.id,
       block_key: this.props.id,
+      corpus_item_id: this.props.corpus_item_id,
       scheduled_corpus_item_id: this.props.scheduled_corpus_item_id,
       recommended_at: this.props.recommended_at,
       received_rank: this.props.received_rank,
       is_list_card: this.props.isListCard,
       section: this.props.section,
       section_position: this.props.sectionPosition,
+      is_secton_followed: this.props.sectionFollowed,
       format: format,
       isSectionsCard: this.props.mayHaveSectionsCards
     }))));
@@ -4030,6 +4233,7 @@ function ListFeed({
       context_type: rec.context_type,
       bookmarkGuid: rec.bookmarkGuid,
       firstVisibleTimestamp: firstVisibleTimestamp,
+      corpus_item_id: rec.corpus_item_id,
       scheduled_corpus_item_id: rec.scheduled_corpus_item_id,
       recommended_at: rec.recommended_at,
       received_rank: rec.received_rank,
@@ -4048,10 +4252,140 @@ function ListFeed({
   }, ctaCopy)))));
 }
 
+;// CONCATENATED MODULE: ./content-src/components/DiscoveryStreamComponents/AdBanner/AdBanner.jsx
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this file,
+ * You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+
+
+
+
+const AdBanner = ({
+  spoc,
+  dispatch,
+  firstVisibleTimestamp,
+  row,
+  type
+}) => {
+  const getDimensions = format => {
+    switch (format) {
+      case "leaderboard":
+        return {
+          width: "728",
+          height: "90"
+        };
+      case "billboard":
+        return {
+          width: "970",
+          height: "250"
+        };
+    }
+    return {
+      // image will still render with default values
+      width: undefined,
+      height: undefined
+    };
+  };
+  const {
+    width: imgWidth,
+    height: imgHeight
+  } = getDimensions(spoc.format);
+  const handleDismissClick = () => {
+    dispatch(actionCreators.AlsoToMain({
+      type: actionTypes.BLOCK_URL,
+      data: [{
+        block_key: spoc.block_key,
+        fetchTimestamp: spoc.fetchTimestamp,
+        flight_id: spoc.flight_id,
+        format: spoc.format,
+        id: spoc.id,
+        card_type: "spoc",
+        is_pocket_card: true,
+        position: row,
+        sponsor: spoc.sponsor,
+        title: spoc.title,
+        url: spoc.url || spoc.shim.url,
+        personalization_models: spoc.personalization_models,
+        priority: spoc.priority,
+        score: spoc.score,
+        alt_text: spoc.alt_text
+      }]
+    }));
+  };
+  const onLinkCLick = () => {
+    dispatch(actionCreators.DiscoveryStreamUserEvent({
+      event: "CLICK",
+      source: type.toUpperCase(),
+      // Banner ads dont have a position, but a row number
+      action_position: row,
+      value: {
+        card_type: "spoc",
+        tile_id: spoc.id,
+        ...(spoc.shim?.click ? {
+          shim: spoc.shim.click
+        } : {}),
+        fetchTimestamp: spoc.fetchTimestamp,
+        firstVisibleTimestamp,
+        format: spoc.format
+      }
+    }));
+  };
+
+  // in the default card grid 1 would come before the 1st row of cards and 9 comes after the last row
+  // using clamp to make sure its between valid values (1-9)
+  const clampedRow = Math.max(1, Math.min(9, row));
+  return /*#__PURE__*/external_React_default().createElement("aside", {
+    className: `ad-banner-wrapper`,
+    style: {
+      gridRow: clampedRow
+    }
+  }, /*#__PURE__*/external_React_default().createElement("div", {
+    className: `ad-banner-inner ${spoc.format}`
+  }, /*#__PURE__*/external_React_default().createElement("div", {
+    className: "ad-banner-dismiss"
+  }, /*#__PURE__*/external_React_default().createElement("button", {
+    className: "icon icon-dismiss",
+    onClick: handleDismissClick,
+    "data-l10n-id": "newtab-toast-dismiss-button"
+  })), /*#__PURE__*/external_React_default().createElement(SafeAnchor, {
+    className: "ad-banner-link",
+    url: spoc.url,
+    title: spoc.title,
+    onLinkClick: onLinkCLick,
+    dispatch: dispatch
+  }, /*#__PURE__*/external_React_default().createElement(ImpressionStats_ImpressionStats, {
+    flightId: spoc.flight_id,
+    rows: [{
+      id: spoc.id,
+      card_type: "spoc",
+      pos: row,
+      recommended_at: spoc.recommended_at,
+      received_rank: spoc.received_rank,
+      format: spoc.format
+    }],
+    dispatch: dispatch,
+    firstVisibleTimestamp: firstVisibleTimestamp
+  }), /*#__PURE__*/external_React_default().createElement("div", {
+    className: "ad-banner-content"
+  }, /*#__PURE__*/external_React_default().createElement("img", {
+    src: spoc.raw_image_src,
+    alt: spoc.alt_text,
+    loading: "eager",
+    width: imgWidth,
+    height: imgHeight
+  }))), /*#__PURE__*/external_React_default().createElement("div", {
+    className: "ad-banner-sponsored"
+  }, /*#__PURE__*/external_React_default().createElement("span", {
+    className: "ad-banner-sponsored-label",
+    "data-l10n-id": "newtab-topsite-sponsored"
+  }))));
+};
 ;// CONCATENATED MODULE: ./content-src/components/DiscoveryStreamComponents/CardGrid/CardGrid.jsx
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
+
 
 
 
@@ -4073,6 +4407,10 @@ const PREF_SPOCS_STARTUPCACHE_ENABLED = "discoverystream.spocs.startupCache.enab
 const PREF_LIST_FEED_ENABLED = "discoverystream.contextualContent.enabled";
 const PREF_LIST_FEED_SELECTED_FEED = "discoverystream.contextualContent.selectedFeed";
 const PREF_FAKESPOT_ENABLED = "discoverystream.contextualContent.fakespot.enabled";
+const PREF_BILLBOARD_ENABLED = "newtabAdSize.billboard";
+const PREF_LEADERBOARD_ENABLED = "newtabAdSize.leaderboard";
+const PREF_LEADERBOARD_POSITION = "newtabAdSize.leaderboard.position";
+const PREF_BILLBOARD_POSITION = "newtabAdSize.billboard.position";
 const CardGrid_INTERSECTION_RATIO = 0.5;
 const CardGrid_VISIBLE = "visible";
 const CardGrid_VISIBILITY_CHANGE_EVENT = "visibilitychange";
@@ -4353,6 +4691,8 @@ class _CardGrid extends (external_React_default()).PureComponent {
     const spocsStartupCacheEnabled = prefs[PREF_SPOCS_STARTUPCACHE_ENABLED];
     const listFeedEnabled = prefs[PREF_LIST_FEED_ENABLED];
     const listFeedSelectedFeed = prefs[PREF_LIST_FEED_SELECTED_FEED];
+    const billboardEnabled = prefs[PREF_BILLBOARD_ENABLED];
+    const leaderboardEnabled = prefs[PREF_LEADERBOARD_ENABLED];
     // filter out recs that should be in ListFeed
     const recs = this.props.data.recommendations.filter(item => !item.feedName).slice(0, items);
     const cards = [];
@@ -4399,6 +4739,7 @@ class _CardGrid extends (external_React_default()).PureComponent {
         firstVisibleTimestamp: this.props.firstVisibleTimestamp,
         mayHaveThumbsUpDown: mayHaveThumbsUpDown,
         mayHaveSectionsCards: mayHaveSectionsCards,
+        corpus_item_id: rec.corpus_item_id,
         scheduled_corpus_item_id: rec.scheduled_corpus_item_id,
         recommended_at: rec.recommended_at,
         received_rank: rec.received_rank,
@@ -4441,6 +4782,32 @@ class _CardGrid extends (external_React_default()).PureComponent {
       if (!isFakespot || isFakespot && fakespotEnabled) {
         // Place the list feed as the 3rd element in the card grid
         cards.splice(2, 1, this.renderListFeed(this.props.data.recommendations, listFeedSelectedFeed));
+      }
+    }
+
+    // if a banner ad is enabled and we have any available, place them in the grid
+    const {
+      spocs
+    } = this.props.DiscoveryStream;
+    if ((billboardEnabled || leaderboardEnabled) && spocs.data.newtab_spocs) {
+      // Only render one AdBanner in the grid -
+      // Prioritize rendering a leaderboard if it exists,
+      // otherwise render a billboard
+      const spocToRender = spocs.data.newtab_spocs.items.find(({
+        format
+      }) => format === "leaderboard" && leaderboardEnabled) || spocs.data.newtab_spocs.items.find(({
+        format
+      }) => format === "billboard" && billboardEnabled);
+      if (spocToRender) {
+        const row = spocToRender.format === "leaderboard" ? prefs[PREF_LEADERBOARD_POSITION] : prefs[PREF_BILLBOARD_POSITION];
+        cards.push( /*#__PURE__*/external_React_default().createElement(AdBanner, {
+          spoc: spocToRender,
+          key: `dscard-${spocToRender.id}`,
+          dispatch: this.props.dispatch,
+          type: this.props.type,
+          firstVisibleTimestamp: this.props.firstVisibleTimestamp,
+          row: row
+        }));
       }
     }
     let moreRecsHeader = "";
@@ -6334,6 +6701,8 @@ const INITIAL_STATE = {
     impressions: {
       feed: {},
     },
+    // Used to show blocks in newtab devtools.
+    blocks: {},
     spocs: {
       spocs_endpoint: "",
       lastUpdated: null,
@@ -6601,7 +6970,8 @@ function Dialog(prevState = INITIAL_STATE.Dialog, action) {
       return Object.assign({}, prevState, { visible: true, data: action.data });
     case actionTypes.DIALOG_CANCEL:
       return Object.assign({}, prevState, { visible: false });
-    case actionTypes.DELETE_HISTORY_URL:
+    case actionTypes.DIALOG_CLOSE:
+      // Reset and hide the confirmation dialog once the action is complete.
       return Object.assign({}, INITIAL_STATE.Dialog);
     default:
       return prevState;
@@ -7010,7 +7380,11 @@ function DiscoveryStream(prevState = INITIAL_STATE.DiscoveryStream, action) {
           feed: action.data,
         },
       };
-
+    case actionTypes.DISCOVERY_STREAM_DEV_BLOCKS:
+      return {
+        ...prevState,
+        blocks: action.data,
+      };
     case actionTypes.DISCOVERY_STREAM_SPOCS_CAPS:
       return {
         ...prevState,
@@ -7142,6 +7516,12 @@ function DiscoveryStream(prevState = INITIAL_STATE.DiscoveryStream, action) {
       return {
         ...prevState,
         showTopicSelection: false,
+      };
+    case actionTypes.SECTION_BLOCKED:
+      return {
+        ...prevState,
+        showBlockSectionConfirmation: true,
+        sectionData: action.data,
       };
     default:
       return prevState;
@@ -8251,9 +8631,11 @@ class _TopSiteList extends (external_React_default()).PureComponent {
       }
       topSitesUI.push(topSiteLink);
     }
-    return /*#__PURE__*/external_React_default().createElement("ul", {
+    return /*#__PURE__*/external_React_default().createElement("div", {
+      className: "top-sites-list-wrapper"
+    }, /*#__PURE__*/external_React_default().createElement("ul", {
       className: `top-sites-list${this.state.draggedSite ? " dnd-active" : ""}`
-    }, topSitesUI);
+    }, topSitesUI));
   }
 }
 const TopSiteList = (0,external_ReactRedux_namespaceObject.connect)(state => ({
@@ -9316,12 +9698,19 @@ const selectLayoutRender = ({ state = {}, prefs = {} }) => {
       const placement = spocsPlacement || {};
       const placementName = placement.name || "newtab_spocs";
       const spocsData = spocs.data[placementName];
+
       // We expect a spoc, spocs are loaded, and the server returned spocs.
       if (spocs.loaded && spocsData?.items?.length) {
+        // Since banner-type ads are placed by row and don't use the normal spoc position,
+        // dont combine with content
+        const excludedSpocs = ["billboard", "leaderboard"];
+        const filteredSpocs = spocsData?.items?.filter(
+          item => !excludedSpocs.includes(item.format)
+        );
         result = fillSpocPositionsForPlacement(
           result,
           spocsPositions,
-          spocsData.items,
+          filteredSpocs,
           placementName
         );
       }
@@ -9560,6 +9949,68 @@ function useIntersectionObserver(callback, threshold = 0.3) {
   return elementsRef;
 }
 
+;// CONCATENATED MODULE: ./content-src/components/DiscoveryStreamComponents/SectionContextMenu/SectionContextMenu.jsx
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+
+
+
+/**
+ * A context menu for blocking, following and unfollowing sections.
+ *
+ * @param props
+ * @returns {React.FunctionComponent}
+ */
+function SectionContextMenu({
+  type = "DISCOVERY_STREAM",
+  title,
+  source,
+  index,
+  dispatch,
+  sectionKey,
+  following,
+  followedSections,
+  blockedSections,
+  sectionPosition
+}) {
+  // Initial context menu options: block this section only.
+  const SECTIONS_CONTEXT_MENU_OPTIONS = ["SectionBlock"];
+  const [showContextMenu, setShowContextMenu] = (0,external_React_namespaceObject.useState)(false);
+  if (following) {
+    SECTIONS_CONTEXT_MENU_OPTIONS.push("SectionUnfollow");
+  }
+  const onClick = e => {
+    e.preventDefault();
+    setShowContextMenu(!showContextMenu);
+  };
+  const onUpdate = () => {
+    setShowContextMenu(!showContextMenu);
+  };
+  return /*#__PURE__*/external_React_default().createElement("div", {
+    className: "section-context-menu"
+  }, /*#__PURE__*/external_React_default().createElement("moz-button", {
+    type: "icon",
+    size: "default",
+    iconsrc: "chrome://global/skin/icons/more.svg",
+    title: title || source,
+    onClick: onClick
+  }), showContextMenu && /*#__PURE__*/external_React_default().createElement(LinkMenu, {
+    onUpdate: onUpdate,
+    dispatch: dispatch,
+    index: index,
+    source: type.toUpperCase(),
+    options: SECTIONS_CONTEXT_MENU_OPTIONS,
+    shouldSendImpressionStats: true,
+    site: {
+      followedSections,
+      blockedSections,
+      sectionKey,
+      sectionPosition
+    }
+  }));
+}
 ;// CONCATENATED MODULE: ./content-src/components/DiscoveryStreamComponents/CardSections/CardSections.jsx
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -9572,13 +10023,242 @@ function useIntersectionObserver(callback, threshold = 0.3) {
 
 
 
+
 // Prefs
 const CardSections_PREF_SECTIONS_CARDS_ENABLED = "discoverystream.sections.cards.enabled";
 const PREF_SECTIONS_CARDS_THUMBS_UP_DOWN_ENABLED = "discoverystream.sections.cards.thumbsUpDown.enabled";
+const PREF_SECTIONS_PERSONALIZATION_ENABLED = "discoverystream.sections.personalization.enabled";
 const CardSections_PREF_TOPICS_ENABLED = "discoverystream.topicLabels.enabled";
 const CardSections_PREF_TOPICS_SELECTED = "discoverystream.topicSelection.selectedTopics";
+const PREF_FOLLOWED_SECTIONS = "discoverystream.sections.following";
+const PREF_BLOCKED_SECTIONS = "discoverystream.sections.blocked";
 const CardSections_PREF_TOPICS_AVAILABLE = "discoverystream.topicSelection.topics";
 const CardSections_PREF_THUMBS_UP_DOWN_ENABLED = "discoverystream.thumbsUpDown.enabled";
+function getLayoutData(responsiveLayouts, index) {
+  let layoutData = {
+    classNames: []
+  };
+  responsiveLayouts.forEach(layout => {
+    layout.tiles.forEach((tile, tileIndex) => {
+      if (tile.position === index) {
+        layoutData.classNames.push(`col-${layout.columnCount}-${tile.size}`);
+        layoutData.classNames.push(`col-${layout.columnCount}-position-${tileIndex}`);
+      }
+    });
+  });
+  return layoutData;
+}
+
+// function to determine amount of tiles shown per section per viewport
+function getMaxTiles(responsiveLayouts) {
+  return responsiveLayouts.flatMap(responsiveLayout => responsiveLayout).reduce((acc, t) => {
+    acc[t.columnCount] = t.tiles.length;
+
+    // Update maxTile if current tile count is greater
+    if (!acc.maxTile || t.tiles.length > acc.maxTile) {
+      acc.maxTile = t.tiles.length;
+    }
+    return acc;
+  }, {});
+}
+
+/**
+ * Transforms a comma-separated string of topics in user preferences
+ * into a cleaned-up array.
+ *
+ * @param pref
+ * @returns string[]
+ */
+const getTopics = pref => {
+  return pref.split(",").map(item => item.trim()).filter(item => item);
+};
+function CardSection({
+  sectionPosition,
+  section,
+  dispatch,
+  type,
+  firstVisibleTimestamp,
+  is_collection,
+  spocMessageVariant,
+  ctaButtonVariant,
+  ctaButtonSponsors
+}) {
+  const prefs = (0,external_ReactRedux_namespaceObject.useSelector)(state => state.Prefs.values);
+  const showTopics = prefs[CardSections_PREF_TOPICS_ENABLED];
+  const mayHaveSectionsCards = prefs[CardSections_PREF_SECTIONS_CARDS_ENABLED];
+  const mayHaveSectionsCardsThumbsUpDown = prefs[PREF_SECTIONS_CARDS_THUMBS_UP_DOWN_ENABLED];
+  const mayHaveThumbsUpDown = prefs[CardSections_PREF_THUMBS_UP_DOWN_ENABLED];
+  const selectedTopics = prefs[CardSections_PREF_TOPICS_SELECTED];
+  const availableTopics = prefs[CardSections_PREF_TOPICS_AVAILABLE];
+  const followedSectionsPref = prefs[PREF_FOLLOWED_SECTIONS] || "";
+  const blockedSectionsPref = prefs[PREF_BLOCKED_SECTIONS] || "";
+  const {
+    saveToPocketCard
+  } = (0,external_ReactRedux_namespaceObject.useSelector)(state => state.DiscoveryStream);
+  const mayHaveSectionsPersonalization = prefs[PREF_SECTIONS_PERSONALIZATION_ENABLED];
+  const {
+    sectionKey,
+    title,
+    subtitle
+  } = section;
+  const {
+    responsiveLayouts
+  } = section.layout;
+  const followedSections = getTopics(followedSectionsPref);
+  const following = followedSections.includes(sectionKey);
+  const blockedSections = getTopics(blockedSectionsPref);
+  const handleIntersection = (0,external_React_namespaceObject.useCallback)(() => {
+    dispatch(actionCreators.AlsoToMain({
+      type: actionTypes.CARD_SECTION_IMPRESSION,
+      data: {
+        section: sectionKey,
+        section_position: sectionPosition,
+        is_secton_followed: following
+      }
+    }));
+  }, [dispatch, sectionKey, sectionPosition, following]);
+
+  // Ref to hold the section element
+  const sectionRefs = useIntersectionObserver(handleIntersection);
+
+  // Only show thumbs up/down buttons if both default thumbs and sections thumbs prefs are enabled
+  const mayHaveCombinedThumbsUpDown = mayHaveSectionsCardsThumbsUpDown && mayHaveThumbsUpDown;
+  const onFollowClick = (0,external_React_namespaceObject.useCallback)(() => {
+    dispatch(actionCreators.SetPref(PREF_FOLLOWED_SECTIONS, [...followedSections, sectionKey].join(", ")));
+    // Telemetry Event Dispatch
+    dispatch(actionCreators.OnlyToMain({
+      type: "FOLLOW_SECTION",
+      data: {
+        section: sectionKey,
+        section_position: sectionPosition,
+        event_source: "MOZ_BUTTON"
+      }
+    }));
+  }, [dispatch, followedSections, sectionKey, sectionPosition]);
+  const onUnfollowClick = (0,external_React_namespaceObject.useCallback)(() => {
+    dispatch(actionCreators.SetPref(PREF_FOLLOWED_SECTIONS, [...followedSections.filter(item => item !== sectionKey)].join(", ")));
+    // Telemetry Event Dispatch
+    dispatch(actionCreators.OnlyToMain({
+      type: "UNFOLLOW_SECTION",
+      data: {
+        section: sectionKey,
+        section_position: sectionPosition,
+        event_source: "MOZ_BUTTON"
+      }
+    }));
+  }, [dispatch, followedSections, sectionKey, sectionPosition]);
+  const {
+    maxTile
+  } = getMaxTiles(responsiveLayouts);
+  const displaySections = section.data.slice(0, maxTile);
+  const isSectionEmpty = !displaySections?.length;
+  const shouldShowLabels = sectionKey === "top_stories_section" && showTopics;
+  if (isSectionEmpty) {
+    return null;
+  }
+  const sectionContextWrapper = /*#__PURE__*/external_React_default().createElement("div", {
+    className: "section-context-wrapper"
+  }, /*#__PURE__*/external_React_default().createElement("div", {
+    className: following ? "section-follow following" : "section-follow"
+  }, /*#__PURE__*/external_React_default().createElement("moz-button", {
+    onClick: following ? onUnfollowClick : onFollowClick,
+    type: following ? "destructive" : "default",
+    index: sectionPosition,
+    section: sectionKey
+  }, /*#__PURE__*/external_React_default().createElement("span", {
+    className: "section-button-follow-text",
+    "data-l10n-id": "newtab-section-follow-button"
+  }), /*#__PURE__*/external_React_default().createElement("span", {
+    className: "section-button-following-text",
+    "data-l10n-id": "newtab-section-following-button"
+  }), /*#__PURE__*/external_React_default().createElement("span", {
+    className: "section-button-unfollow-text",
+    "data-l10n-id": "newtab-section-unfollow-button"
+  }))), /*#__PURE__*/external_React_default().createElement(SectionContextMenu, {
+    dispatch: dispatch,
+    index: sectionPosition,
+    following: following,
+    followedSections: followedSections,
+    blockedSections: blockedSections,
+    sectionKey: sectionKey,
+    title: title,
+    type: type,
+    sectionPosition: sectionPosition
+  }));
+  return /*#__PURE__*/external_React_default().createElement("section", {
+    className: "ds-section",
+    ref: el => {
+      sectionRefs.current[0] = el;
+    }
+  }, /*#__PURE__*/external_React_default().createElement("div", {
+    className: "section-heading"
+  }, /*#__PURE__*/external_React_default().createElement("div", {
+    className: "section-title-wrapper"
+  }, /*#__PURE__*/external_React_default().createElement("h2", {
+    className: "section-title"
+  }, title), subtitle && /*#__PURE__*/external_React_default().createElement("p", {
+    className: "section-subtitle"
+  }, subtitle)), mayHaveSectionsPersonalization ? sectionContextWrapper : null), /*#__PURE__*/external_React_default().createElement("div", {
+    className: "ds-section-grid ds-card-grid"
+  }, section.data.slice(0, maxTile).map((rec, index) => {
+    const {
+      classNames
+    } = getLayoutData(responsiveLayouts, index);
+    if (!rec || rec.placeholder) {
+      return /*#__PURE__*/external_React_default().createElement(PlaceholderDSCard, {
+        key: `dscard-${index}`
+      });
+    }
+    return /*#__PURE__*/external_React_default().createElement(DSCard, {
+      key: `dscard-${rec.id}`,
+      pos: rec.pos,
+      flightId: rec.flight_id,
+      image_src: rec.image_src,
+      raw_image_src: rec.raw_image_src,
+      word_count: rec.word_count,
+      time_to_read: rec.time_to_read,
+      title: rec.title,
+      topic: rec.topic,
+      excerpt: rec.excerpt,
+      url: rec.url,
+      id: rec.id,
+      shim: rec.shim,
+      fetchTimestamp: rec.fetchTimestamp,
+      type: type,
+      context: rec.context,
+      sponsor: rec.sponsor,
+      sponsored_by_override: rec.sponsored_by_override,
+      dispatch: dispatch,
+      source: rec.domain,
+      publisher: rec.publisher,
+      pocket_id: rec.pocket_id,
+      context_type: rec.context_type,
+      bookmarkGuid: rec.bookmarkGuid,
+      recommendation_id: rec.recommendation_id,
+      firstVisibleTimestamp: firstVisibleTimestamp,
+      corpus_item_id: rec.corpus_item_id,
+      scheduled_corpus_item_id: rec.scheduled_corpus_item_id,
+      recommended_at: rec.recommended_at,
+      received_rank: rec.received_rank,
+      format: rec.format,
+      alt_text: rec.alt_text,
+      mayHaveThumbsUpDown: mayHaveCombinedThumbsUpDown,
+      mayHaveSectionsCards: mayHaveSectionsCards,
+      showTopics: shouldShowLabels,
+      selectedTopics: selectedTopics,
+      availableTopics: availableTopics,
+      is_collection: is_collection,
+      saveToPocketCard: saveToPocketCard,
+      ctaButtonSponsors: ctaButtonSponsors,
+      ctaButtonVariant: ctaButtonVariant,
+      spocMessageVariant: spocMessageVariant,
+      sectionsClassNames: classNames.join(" "),
+      section: sectionKey,
+      sectionPosition: sectionPosition,
+      sectionFollowed: following
+    });
+  })));
+}
 function CardSections({
   data,
   feed,
@@ -9590,68 +10270,19 @@ function CardSections({
   ctaButtonVariant,
   ctaButtonSponsors
 }) {
-  const {
-    recommendations,
-    sections
-  } = data;
-  const isEmpty = !recommendations?.length || !sections;
   const prefs = (0,external_ReactRedux_namespaceObject.useSelector)(state => state.Prefs.values);
-  const showTopics = prefs[CardSections_PREF_TOPICS_ENABLED];
-  const mayHaveSectionsCards = prefs[CardSections_PREF_SECTIONS_CARDS_ENABLED];
-  const mayHaveSectionsCardsThumbsUpDown = prefs[PREF_SECTIONS_CARDS_THUMBS_UP_DOWN_ENABLED];
-  const mayHaveThumbsUpDown = prefs[CardSections_PREF_THUMBS_UP_DOWN_ENABLED];
-  const selectedTopics = prefs[CardSections_PREF_TOPICS_SELECTED];
-  const availableTopics = prefs[CardSections_PREF_TOPICS_AVAILABLE];
-  const {
-    saveToPocketCard
-  } = (0,external_ReactRedux_namespaceObject.useSelector)(state => state.DiscoveryStream);
-  const handleIntersection = (0,external_React_namespaceObject.useCallback)(el => {
-    dispatch(actionCreators.AlsoToMain({
-      type: actionTypes.CARD_SECTION_IMPRESSION,
-      data: {
-        section: el.id,
-        section_position: el.dataset.sectionPosition
-      }
-    }));
-  }, [dispatch]);
-
-  // Ref to hold all of the section elements
-  const sectionRefs = useIntersectionObserver(handleIntersection);
 
   // Handle a render before feed has been fetched by displaying nothing
   if (!data) {
     return null;
   }
 
-  // Only show thumbs up/down buttons if both default thumbs and sections thumbs prefs are enabled
-  const mayHaveCombinedThumbsUpDown = mayHaveSectionsCardsThumbsUpDown && mayHaveThumbsUpDown;
-  function getLayoutData(responsiveLayout, index) {
-    let layoutData = {
-      classNames: []
-    };
-    responsiveLayout.forEach(layout => {
-      layout.tiles.forEach((tile, tileIndex) => {
-        if (tile.position === index) {
-          layoutData.classNames.push(`col-${layout.columnCount}-${tile.size}`);
-          layoutData.classNames.push(`col-${layout.columnCount}-position-${tileIndex}`);
-        }
-      });
-    });
-    return layoutData;
-  }
+  // Retrieve blocked sections
+  const blockedSections = getTopics(prefs[PREF_BLOCKED_SECTIONS] || "");
 
-  // function to determine amount of tiles shown per section per viewport
-  function getMaxTiles(responsiveLayouts) {
-    return responsiveLayouts.flatMap(responsiveLayout => responsiveLayout).reduce((acc, t) => {
-      acc[t.columnCount] = t.tiles.length;
-
-      // Update maxTile if current tile count is greater
-      if (!acc.maxTile || t.tiles.length > acc.maxTile) {
-        acc.maxTile = t.tiles.length;
-      }
-      return acc;
-    }, {});
-  }
+  // Only show sections that haven't been blocked by the user
+  const sections = data.sections.filter(section => !blockedSections.includes(section.sectionKey));
+  const isEmpty = sections.length === 0;
   return isEmpty ? /*#__PURE__*/external_React_default().createElement("div", {
     className: "ds-card-grid empty"
   }, /*#__PURE__*/external_React_default().createElement(DSEmptyState, {
@@ -9660,96 +10291,19 @@ function CardSections({
     feed: feed
   })) : /*#__PURE__*/external_React_default().createElement("div", {
     className: "ds-section-wrapper"
-  }, sections.map((section, sectionIndex) => {
-    const {
-      sectionKey,
-      title,
-      subtitle
-    } = section;
-    const {
-      responsiveLayouts
-    } = section.layout;
-    const {
-      maxTile
-    } = getMaxTiles(responsiveLayouts);
-    const displaySections = section.data.slice(0, maxTile);
-    const isSectionEmpty = !displaySections?.length;
-    const shouldShowLabels = sectionKey === "top_stories_section" && showTopics;
-    if (isSectionEmpty) {
-      return null;
-    }
-    return /*#__PURE__*/external_React_default().createElement("section", {
-      key: sectionKey,
-      id: sectionKey,
-      className: "ds-section",
-      "data-section-position": sectionIndex,
-      ref: el => {
-        sectionRefs.current[sectionIndex] = el;
-      }
-    }, /*#__PURE__*/external_React_default().createElement("div", {
-      className: "section-heading"
-    }, /*#__PURE__*/external_React_default().createElement("h2", {
-      className: "section-title"
-    }, title), subtitle && /*#__PURE__*/external_React_default().createElement("p", {
-      className: "section-subtitle"
-    }, subtitle)), /*#__PURE__*/external_React_default().createElement("div", {
-      className: "ds-section-grid ds-card-grid"
-    }, section.data.slice(0, maxTile).map((rec, index) => {
-      const {
-        classNames
-      } = getLayoutData(responsiveLayouts, index);
-      if (!rec || rec.placeholder) {
-        return /*#__PURE__*/external_React_default().createElement(PlaceholderDSCard, {
-          key: `dscard-${index}`
-        });
-      }
-      return /*#__PURE__*/external_React_default().createElement(DSCard, {
-        key: `dscard-${rec.id}`,
-        pos: rec.pos,
-        flightId: rec.flight_id,
-        image_src: rec.image_src,
-        raw_image_src: rec.raw_image_src,
-        word_count: rec.word_count,
-        time_to_read: rec.time_to_read,
-        title: rec.title,
-        topic: rec.topic,
-        excerpt: rec.excerpt,
-        url: rec.url,
-        id: rec.id,
-        shim: rec.shim,
-        fetchTimestamp: rec.fetchTimestamp,
-        type: type,
-        context: rec.context,
-        sponsor: rec.sponsor,
-        sponsored_by_override: rec.sponsored_by_override,
-        dispatch: dispatch,
-        source: rec.domain,
-        publisher: rec.publisher,
-        pocket_id: rec.pocket_id,
-        context_type: rec.context_type,
-        bookmarkGuid: rec.bookmarkGuid,
-        recommendation_id: rec.recommendation_id,
-        firstVisibleTimestamp: firstVisibleTimestamp,
-        scheduled_corpus_item_id: rec.scheduled_corpus_item_id,
-        recommended_at: rec.recommended_at,
-        received_rank: rec.received_rank,
-        format: rec.format,
-        alt_text: rec.alt_text,
-        mayHaveThumbsUpDown: mayHaveCombinedThumbsUpDown,
-        mayHaveSectionsCards: mayHaveSectionsCards,
-        showTopics: shouldShowLabels,
-        selectedTopics: selectedTopics,
-        availableTopics: availableTopics,
-        is_collection: is_collection,
-        saveToPocketCard: saveToPocketCard,
-        ctaButtonSponsors: ctaButtonSponsors,
-        ctaButtonVariant: ctaButtonVariant,
-        spocMessageVariant: spocMessageVariant,
-        sectionsClassNames: classNames.join(" "),
-        section: sectionKey,
-        sectionPosition: sectionIndex
-      });
-    })));
+  }, sections.map((section, sectionPosition) => {
+    return /*#__PURE__*/external_React_default().createElement(CardSection, {
+      key: `section-${section.sectionKey}`,
+      sectionPosition: sectionPosition,
+      section: section,
+      dispatch: dispatch,
+      type: type,
+      firstVisibleTimestamp: firstVisibleTimestamp,
+      is_collection: is_collection,
+      spocMessageVariant: spocMessageVariant,
+      ctaButtonVariant: ctaButtonVariant,
+      ctaButtonSponsors: ctaButtonSponsors
+    });
   }));
 }
 
@@ -10491,11 +11045,10 @@ class ContentSection extends (external_React_default()).PureComponent {
     } else {
       return;
     }
-    let drawerHeight;
     if (drawerRef) {
-      drawerHeight = parseFloat(window.getComputedStyle(drawerRef)?.height);
+      let drawerHeight = parseFloat(window.getComputedStyle(drawerRef));
       if (isOpen) {
-        drawerRef.style.marginTop = `0`;
+        drawerRef.style.marginTop = "var(--space-large)";
       } else {
         drawerRef.style.marginTop = `-${drawerHeight}px`;
       }
@@ -10539,6 +11092,8 @@ class ContentSection extends (external_React_default()).PureComponent {
       setPref: setPref,
       activeWallpaper: activeWallpaper
     })), /*#__PURE__*/external_React_default().createElement("div", {
+      className: "settings-toggles"
+    }, /*#__PURE__*/external_React_default().createElement("div", {
       id: "shortcuts-section",
       className: "section"
     }, /*#__PURE__*/external_React_default().createElement("moz-toggle", {
@@ -10547,9 +11102,10 @@ class ContentSection extends (external_React_default()).PureComponent {
       onToggle: this.onPreferenceSelect,
       "data-preference": "feeds.topsites",
       "data-eventSource": "TOP_SITES",
-      "data-l10n-id": "newtab-custom-shortcuts-toggle",
-      "data-l10n-attrs": "label, description"
-    }), /*#__PURE__*/external_React_default().createElement("div", null, /*#__PURE__*/external_React_default().createElement("div", {
+      "data-l10n-id": "newtab-custom-shortcuts-toggle"
+    }, /*#__PURE__*/external_React_default().createElement("div", {
+      slot: "nested"
+    }, /*#__PURE__*/external_React_default().createElement("div", {
       className: "more-info-top-wrapper"
     }, /*#__PURE__*/external_React_default().createElement("div", {
       className: "more-information",
@@ -10595,11 +11151,9 @@ class ContentSection extends (external_React_default()).PureComponent {
       className: "sponsored",
       htmlFor: "sponsored-shortcuts",
       "data-l10n-id": "newtab-custom-sponsored-sites"
-    })))))), pocketRegion && /*#__PURE__*/external_React_default().createElement("div", {
+    }))))))), pocketRegion && /*#__PURE__*/external_React_default().createElement("div", {
       id: "pocket-section",
       className: "section"
-    }, /*#__PURE__*/external_React_default().createElement("label", {
-      className: "switch"
     }, /*#__PURE__*/external_React_default().createElement("moz-toggle", {
       id: "pocket-toggle",
       pressed: pocketEnabled || null,
@@ -10607,9 +11161,10 @@ class ContentSection extends (external_React_default()).PureComponent {
       "aria-describedby": "custom-pocket-subtitle",
       "data-preference": "feeds.section.topstories",
       "data-eventSource": "TOP_STORIES",
-      "data-l10n-id": "newtab-custom-stories-toggle",
-      "data-l10n-attrs": "label, description"
-    })), /*#__PURE__*/external_React_default().createElement("div", null, (mayHaveSponsoredStories || mayHaveRecentSaves) && /*#__PURE__*/external_React_default().createElement("div", {
+      "data-l10n-id": "newtab-custom-stories-toggle"
+    }, /*#__PURE__*/external_React_default().createElement("div", {
+      slot: "nested"
+    }, (mayHaveSponsoredStories || mayHaveRecentSaves) && /*#__PURE__*/external_React_default().createElement("div", {
       className: "more-info-pocket-wrapper"
     }, /*#__PURE__*/external_React_default().createElement("div", {
       className: "more-information",
@@ -10646,40 +11201,34 @@ class ContentSection extends (external_React_default()).PureComponent {
       className: "sponsored",
       htmlFor: "recent-saves-pocket",
       "data-l10n-id": "newtab-custom-pocket-show-recent-saves"
-    })))))), /*#__PURE__*/external_React_default().createElement("div", {
+    }))))))), /*#__PURE__*/external_React_default().createElement("div", {
       id: "recent-section",
       className: "section"
-    }, /*#__PURE__*/external_React_default().createElement("label", {
-      className: "switch"
     }, /*#__PURE__*/external_React_default().createElement("moz-toggle", {
       id: "highlights-toggle",
       pressed: highlightsEnabled || null,
       onToggle: this.onPreferenceSelect,
       "data-preference": "feeds.section.highlights",
       "data-eventSource": "HIGHLIGHTS",
-      "data-l10n-id": "newtab-custom-recent-toggle",
-      "data-l10n-attrs": "label, description"
-    }))), mayHaveWeather && /*#__PURE__*/external_React_default().createElement("div", {
+      "data-l10n-id": "newtab-custom-recent-toggle"
+    })), mayHaveWeather && /*#__PURE__*/external_React_default().createElement("div", {
       id: "weather-section",
       className: "section"
-    }, /*#__PURE__*/external_React_default().createElement("label", {
-      className: "switch"
     }, /*#__PURE__*/external_React_default().createElement("moz-toggle", {
       id: "weather-toggle",
       pressed: weatherEnabled || null,
       onToggle: this.onPreferenceSelect,
       "data-preference": "showWeather",
       "data-eventSource": "WEATHER",
-      "data-l10n-id": "newtab-custom-weather-toggle",
-      "data-l10n-attrs": "label, description"
-    }))), pocketRegion && mayHaveSponsoredStories && spocMessageVariant === "variant-c" && /*#__PURE__*/external_React_default().createElement("div", {
+      "data-l10n-id": "newtab-custom-weather-toggle"
+    })), pocketRegion && mayHaveSponsoredStories && spocMessageVariant === "variant-c" && /*#__PURE__*/external_React_default().createElement("div", {
       className: "sponsored-content-info"
     }, /*#__PURE__*/external_React_default().createElement("div", {
       className: "icon icon-help"
     }), /*#__PURE__*/external_React_default().createElement("div", null, "Sponsored content supports our mission to build a better web.", " ", /*#__PURE__*/external_React_default().createElement(SafeAnchor, {
       dispatch: this.props.dispatch,
       url: "https://support.mozilla.org/kb/pocket-sponsored-stories-new-tabs"
-    }, "Find out how"))), /*#__PURE__*/external_React_default().createElement("span", {
+    }, "Find out how")))), /*#__PURE__*/external_React_default().createElement("span", {
       className: "divider",
       role: "separator"
     }), /*#__PURE__*/external_React_default().createElement("div", null, /*#__PURE__*/external_React_default().createElement("button", {
@@ -10726,7 +11275,7 @@ class _CustomizeMenu extends (external_React_default()).PureComponent {
       className: "icon icon-settings personalize-button",
       onClick: () => this.props.onOpen(),
       onKeyDown: e => {
-        if (e.key === 13) {
+        if (e.key === "Enter") {
           this.props.onOpen();
         }
       },
@@ -11852,6 +12401,8 @@ function Base_extends() { Base_extends = Object.assign ? Object.assign.bind() : 
 const Base_VISIBLE = "visible";
 const Base_VISIBILITY_CHANGE_EVENT = "visibilitychange";
 const Base_WALLPAPER_HIGHLIGHT_DISMISSED_PREF = "newtabWallpapers.highlightDismissed";
+const Base_PREF_THUMBS_UP_DOWN_ENABLED = "discoverystream.thumbsUpDown.enabled";
+const PREF_THUMBS_UP_DOWN_LAYOUT_ENABLED = "discoverystream.thumbsUpDown.searchTopsitesCompact";
 const PrefsButton = ({
   onClick,
   icon
@@ -11939,7 +12490,8 @@ class BaseContent extends (external_React_default()).PureComponent {
     this.state = {
       fixedSearch: false,
       firstVisibleTimestamp: null,
-      colorMode: ""
+      colorMode: "",
+      fixedNavStyle: {}
     };
   }
   setFirstVisibleTimestamp() {
@@ -11986,15 +12538,97 @@ class BaseContent extends (external_React_default()).PureComponent {
     }
   }
   onWindowScroll() {
+    if (window.innerHeight <= 700) {
+      // Bug 1937296: Only apply fixed-search logic
+      // if the page is tall enough to support it.
+      return;
+    }
     const prefs = this.props.Prefs.values;
-    const SCROLL_THRESHOLD = prefs["logowordmark.alwaysVisible"] ? 179 : 34;
+    const logoAlwaysVisible = prefs["logowordmark.alwaysVisible"];
+    const layoutsVariantAEnabled = prefs["newtabLayouts.variant-a"];
+    const layoutsVariantBEnabled = prefs["newtabLayouts.variant-b"];
+    const layoutsVariantAorB = layoutsVariantAEnabled || layoutsVariantBEnabled;
+    const thumbsUpDownEnabled = prefs[Base_PREF_THUMBS_UP_DOWN_ENABLED];
+    // For the compact layout to be active,
+    // thumbs also has to be enabled until Bug 1932242 is fixed
+    const thumbsUpDownLayoutEnabled = prefs[PREF_THUMBS_UP_DOWN_LAYOUT_ENABLED] && thumbsUpDownEnabled;
+
+    /* Bug 1917937: The logic presented below is fragile but accurate to the pixel. As new tab experiments with layouts, we have a tech debt of competing styles and classes the slightly modify where the search bar sits on the page. The larger solution for this is to replace everything with an intersection observer, but would require a larger refactor of this file. In the interim, we can programmatically calculate when to fire the fixed-scroll event and account for the moved elements so that topsites/etc stays in the same place. The CSS this references has been flagged to reference this logic so (hopefully) keep them in sync. */
+
+    let SCROLL_THRESHOLD = 0; // When the fixed-scroll event fires
+    let MAIN_OFFSET_PADDING = 0; // The padding to compensate for the moved elements
+
+    let layout = {
+      outerWrapperPaddingTop: 30,
+      searchWrapperPaddingTop: 34,
+      searchWrapperPaddingBottom: 38,
+      searchWrapperFixedScrollPaddingTop: 27,
+      searchWrapperFixedScrollPaddingBottom: 27,
+      searchInnerWrapperMinHeight: 52,
+      logoAndWordmarkWrapperHeight: 64,
+      logoAndWordmarkWrapperMarginBottom: 48
+    };
+    const CSS_VAR_SPACE_XXLARGE = 34.2; // Custom Acorn themed variable (8 * 0.267rem);
+
+    // Experimental layouts
+    // (Note these if statements are ordered to match the CSS cascade)
+    if (thumbsUpDownLayoutEnabled || layoutsVariantAorB) {
+      // Thumbs Compact View Layout
+      if (thumbsUpDownLayoutEnabled) {
+        layout.logoAndWordmarkWrapperMarginBottom = CSS_VAR_SPACE_XXLARGE;
+        if (!logoAlwaysVisible) {
+          layout.searchWrapperPaddingTop = CSS_VAR_SPACE_XXLARGE;
+          layout.searchWrapperPaddingBottom = CSS_VAR_SPACE_XXLARGE;
+        }
+      }
+
+      // Variant B Layout
+      if (layoutsVariantAEnabled) {
+        layout.outerWrapperPaddingTop = 24;
+        if (!thumbsUpDownLayoutEnabled) {
+          layout.searchWrapperPaddingTop = 0;
+          layout.searchWrapperPaddingBottom = 32;
+          layout.logoAndWordmarkWrapperMarginBottom = 32;
+        }
+      }
+
+      // Variant B Layout
+      if (layoutsVariantBEnabled) {
+        layout.outerWrapperPaddingTop = 24;
+        // Logo is positioned absolute, so remove it
+        layout.logoAndWordmarkWrapperHeight = 0;
+        layout.logoAndWordmarkWrapperMarginBottom = 0;
+        layout.searchWrapperPaddingTop = 16;
+        layout.searchWrapperPaddingBottom = CSS_VAR_SPACE_XXLARGE;
+        if (!thumbsUpDownLayoutEnabled) {
+          layout.searchWrapperPaddingBottom = 32;
+        }
+      }
+    }
+
+    // Logo visibility applies to all layouts
+    if (!logoAlwaysVisible) {
+      layout.logoAndWordmarkWrapperHeight = 0;
+      layout.logoAndWordmarkWrapperMarginBottom = 0;
+    }
+    SCROLL_THRESHOLD = layout.outerWrapperPaddingTop + layout.searchWrapperPaddingTop + layout.logoAndWordmarkWrapperHeight + layout.logoAndWordmarkWrapperMarginBottom - layout.searchWrapperFixedScrollPaddingTop;
+    MAIN_OFFSET_PADDING = layout.searchWrapperPaddingTop + layout.searchWrapperPaddingBottom + layout.searchInnerWrapperMinHeight + layout.logoAndWordmarkWrapperHeight + layout.logoAndWordmarkWrapperMarginBottom;
+
+    // Edge case if logo and thums are turned off, but Var A is enabled
+    if (SCROLL_THRESHOLD < 1) {
+      SCROLL_THRESHOLD = 1;
+    }
     if (__webpack_require__.g.scrollY > SCROLL_THRESHOLD && !this.state.fixedSearch) {
       this.setState({
-        fixedSearch: true
+        fixedSearch: true,
+        fixedNavStyle: {
+          paddingBlockStart: `${MAIN_OFFSET_PADDING}px`
+        }
       });
     } else if (__webpack_require__.g.scrollY <= SCROLL_THRESHOLD && this.state.fixedSearch) {
       this.setState({
-        fixedSearch: false
+        fixedSearch: false,
+        fixedNavStyle: {}
       });
     }
   }
@@ -12282,7 +12916,9 @@ class BaseContent extends (external_React_default()).PureComponent {
     }, weatherEnabled && /*#__PURE__*/external_React_default().createElement(ErrorBoundary, null, /*#__PURE__*/external_React_default().createElement(Weather_Weather, null))), /*#__PURE__*/external_React_default().createElement("div", {
       className: outerClassName,
       onClick: this.closeCustomizationMenu
-    }, /*#__PURE__*/external_React_default().createElement("main", null, prefs.showSearch && /*#__PURE__*/external_React_default().createElement("div", {
+    }, /*#__PURE__*/external_React_default().createElement("main", {
+      style: this.state.fixedNavStyle
+    }, prefs.showSearch && /*#__PURE__*/external_React_default().createElement("div", {
       className: "non-collapsible-section"
     }, /*#__PURE__*/external_React_default().createElement(ErrorBoundary, null, /*#__PURE__*/external_React_default().createElement(Search_Search, Base_extends({
       showLogo: noSectionsEnabled || prefs["logowordmark.alwaysVisible"],

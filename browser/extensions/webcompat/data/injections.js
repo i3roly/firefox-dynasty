@@ -278,20 +278,6 @@ const AVAILABLE_INJECTIONS = [
     },
   },
   {
-    id: "bug1765947",
-    platform: "android",
-    domain: "veniceincoming.com",
-    bug: "1765947",
-    contentScripts: {
-      matches: ["*://veniceincoming.com/*"],
-      css: [
-        {
-          file: "injections/css/bug1765947-veniceincoming.com-left-fix.css",
-        },
-      ],
-    },
-  },
-  {
     id: "bug11769762",
     platform: "all",
     domain: "tiktok.com",
@@ -694,20 +680,6 @@ const AVAILABLE_INJECTIONS = [
       js: [
         {
           file: "injections/js/bug1842437-www.youtube.com-performance-now-precision.js",
-        },
-      ],
-    },
-  },
-  {
-    id: "bug1848711",
-    platform: "android",
-    domain: "vio.com",
-    bug: "1848711",
-    contentScripts: {
-      matches: ["*://*.vio.com/*"],
-      css: [
-        {
-          file: "injections/css/bug1848711-vio.com-page-height.css",
         },
       ],
     },
@@ -1224,6 +1196,20 @@ const AVAILABLE_INJECTIONS = [
       js: [
         {
           file: "injections/js/bug1930440-online.singaporepools.com-prevent-unsupported-alert.js",
+        },
+      ],
+    },
+  },
+  {
+    id: "1934567",
+    platform: "android",
+    domain: "www.port8.fi",
+    bug: "1934567",
+    contentScripts: {
+      matches: ["*://www.port8.fi/bokning/*"],
+      css: [
+        {
+          file: "injections/css/bug1934567-www.port8.fi-scrolling-fix.css",
         },
       ],
     },

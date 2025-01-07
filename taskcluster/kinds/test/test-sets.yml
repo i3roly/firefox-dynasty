@@ -401,7 +401,10 @@ macosx1100-aarch64-qr-tests:
     - cppunittest
     - mochitest-media
 
-macosx1015-64-qr-tests:
+web-platform-tests-1015:
+    - web-platform-tests-reftest
+
+macosx1470-64-tests:
     - cppunittest
     - crashtest
     - firefox-ui-functional
@@ -412,25 +415,40 @@ macosx1015-64-qr-tests:
     - marionette-unittest
     - mochitest-a11y
     - mochitest-browser-a11y
-    - mochitest-browser-chrome
-    - mochitest-browser-media
     - mochitest-browser-translations
     - mochitest-chrome
     - mochitest-chrome-gpu
     - mochitest-devtools-chrome
-    - mochitest-media
     - mochitest-plain
     - mochitest-plain-gpu
     - mochitest-remote
-    - mochitest-webgl1-core
-    - mochitest-webgl1-ext
-    - mochitest-webgl2-core
-    - mochitest-webgl2-ext
     - reftest
     - telemetry-tests-client
     - test-verify
     - test-verify-gpu
     - test-verify-wpt
+    - web-platform-tests
+    - web-platform-tests-canvas
+    - web-platform-tests-crashtest
+    - web-platform-tests-eme
+    - web-platform-tests-print-reftest
+    - web-platform-tests-privatebrowsing
+    - web-platform-tests-reftest
+    - web-platform-tests-wdspec
+    - web-platform-tests-webcodecs
+    - xpcshell
+
+macosx1015-64-qr-tests:
+    - cppunittest
+    - crashtest
+    - jittest
+    - mochitest-browser-chrome
+    - mochitest-browser-media
+    - mochitest-media
+    - mochitest-webgl1-core
+    - mochitest-webgl1-ext
+    - mochitest-webgl2-core
+    - mochitest-webgl2-ext
     - xpcshell
 
 macosx64-talos:
@@ -520,6 +538,7 @@ android-hw-browsertime:
     - browsertime-benchmark-motionmark-1-3
     - browsertime-benchmark-jetstream2
     - browsertime-video-playback-latency-mobile
+    - browsertime-youtube-playback-power-mobile
 
 android-hw-browsertime-profiling:
     - browsertime-tp6m-profiling
@@ -527,3 +546,6 @@ android-hw-browsertime-profiling:
 android-hw-speedometer-tests:
     - browsertime-benchmark-speedometer-mobile
     - browsertime-benchmark-speedometer3-mobile
+
+android-hw-power-tests:
+    - browsertime-youtube-playback-power-mobile
