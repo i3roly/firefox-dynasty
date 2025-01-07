@@ -66,8 +66,8 @@
         The first parameter is the name of the app defined in app_name (for example: Fenix) -->
     <string name="private_browsing_placeholder_description_2">%1$s leert die eingegebenen Suchbegriffe und besuchten Webseiten aller privaten Tabs wenn Sie diese schließen oder die App beenden. Das macht Sie gegenüber Website-Betreibern und Internetanbietern nicht anonym, aber erleichtert es Ihnen, dass andere Nutzer dieses Geräts Ihre Aktivitäten nicht einsehen können.</string>
     <string name="private_browsing_common_myths">
-       
-       
+
+
     Häufige Missverständnisse über das Surfen im Privaten Modus</string>
 
     <!-- True Private Browsing Mode -->
@@ -372,7 +372,7 @@
     <!-- Browser menu label for turning OFF reader view of the current visited page -->
     <string name="browser_menu_turn_off_reader_view">Leseansicht deaktivieren</string>
     <!-- Browser menu button that reopens a private tab as a regular tab -->
-    <string name="browser_menu_open_in_normal_tab">In nicht privaten Tab verschieben</string>dsa
+    <string name="browser_menu_open_in_normal_tab">In nicht privaten Tab verschieben</string>
     <!-- Browser menu label for navigating to the translation feature, which provides language translation options the current visited page -->
     <string name="browser_menu_translate_page">Seite übersetzen…</string>
     <!-- Browser menu label for navigating to the Web Compat Reporter feature, which provides users the ability to send bug reports for broken sites. -->
@@ -621,7 +621,7 @@
     <!-- Onboarding label for 'Save and continue' button, used by Nimbus experiments. -->
     <string name="onboarding_save_and_continue_button">Speichern und fortfahren</string>
     <!-- Onboarding toolbar selection card label for 'skip' button, used by Nimbus experiments. -->
-    <string name="onboarding_customize_toolbar_skip_button">Überspringen</string>
+    <string name="onboarding_customize_toolbar_skip_button" tools:ignore="UnusedResources">Überspringen</string>
     <!-- Onboarding toolbar selection card label for 'top' option, used by Nimbus experiments. -->
     <string name="onboarding_customize_toolbar_top_option">Oben</string>
     <!-- Onboarding toolbar selection card label for 'bottom' option, used by Nimbus experiments. -->
@@ -636,6 +636,9 @@
     <string name="onboarding_customize_toolbar_placement_bottom_content_description">Grafik der unteren Symbolleiste</string>
     <string name="onboarding_customize_toolbar_placement_top_content_description">Grafik der oberen Symbolleiste</string>
 
+    <!-- Onboarding toolbar selection card label for 'Not now' button, used by Nimbus experiments. -->
+    <string name="onboarding_customize_toolbar_not_now_button">Nicht jetzt</string>
+
     <!-- Onboarding header for the theme selection card, used by Nimbus experiments. -->
     <string name="onboarding_customize_theme_title" tools:ignore="UnusedResources">Wählen Sie ein Theme</string>
     <!-- Onboarding sub header for theme selection card, used by Nimbus experiments. -->
@@ -643,7 +646,7 @@
     <!-- Onboarding label for 'Save and start browsing' button, used by Nimbus experiments. -->
     <string name="onboarding_save_and_start_button">Speichern und lossurfen</string>
     <!-- Onboarding theme selection card label for 'skip' button, used by Nimbus experiments. -->
-    <string name="onboarding_customize_theme_skip_button">Überspringen</string>
+    <string name="onboarding_customize_theme_skip_button" tools:ignore="UnusedResources">Überspringen</string>
     <!-- Onboarding theme selection card label for 'dark' option, used by Nimbus experiments. -->
     <string name="onboarding_customize_theme_dark_option">Dunkel</string>
     <!-- Onboarding theme selection card label for 'light' option, used by Nimbus experiments. -->
@@ -654,6 +657,9 @@
     <string name="onboarding_customize_theme_main_image_content_description">Große Kopfzeilengrafik der Theme-Auswahlansicht mit illustrierten Künstler- und Entwicklerwerkzeugen.</string>
     <!-- Onboarding theme selection card content description for the theme selection image. %1$s is placeholder for either 'system', 'light' or 'dark'. -->
     <string name="onboarding_customize_theme_content_description">Grafik des Themes %1$s</string>
+
+    <!-- Onboarding theme selection card label for 'Not now' button, used by Nimbus experiments. -->
+    <string name="onboarding_customize_theme_not_now_button">Nicht jetzt</string>
 
     <!-- Search Widget -->
     <!-- Content description for searching with a widget. The first parameter is the name of the application.-->
@@ -2085,10 +2091,10 @@
     <string name="browser_toolbar_long_press_popup_paste_and_go">Einfügen &amp; Los</string>
     <!-- Paste the text in the clipboard -->
     <string name="browser_toolbar_long_press_popup_paste">Einfügen</string>
-  
+
     <!-- Snackbar message shown after an URL has been copied to clipboard. -->
     <string name="browser_toolbar_url_copied_to_clipboard_snackbar">URL in Zwischenablage kopiert</string>
-  
+
     <!-- Title text for the Add To Homescreen dialog -->
     <string name="add_to_homescreen_title">Zum Startbildschirm hinzufügen</string>
     <!-- Cancel button text for the Add to Homescreen dialog -->

@@ -20,7 +20,7 @@ import mozilla.components.concept.engine.EngineSession.CookieBannerHandlingMode
 import mozilla.components.feature.sitepermissions.SitePermissionsRules
 import mozilla.components.feature.sitepermissions.SitePermissionsRules.Action
 import mozilla.components.feature.sitepermissions.SitePermissionsRules.AutoplayAction
-import mozilla.components.service.contile.ContileTopSitesProvider
+import mozilla.components.service.mars.contile.ContileTopSitesProvider
 import mozilla.components.support.ktx.android.content.PreferencesHolder
 import mozilla.components.support.ktx.android.content.booleanPreference
 import mozilla.components.support.ktx.android.content.floatPreference
@@ -1698,6 +1698,14 @@ class Settings(private val appContext: Context) : PreferencesHolder {
     )
 
     /**
+     * Indicates if the MARS API integration is used for sponsored content.
+     */
+    var marsAPIEnabled by booleanPreference(
+        key = appContext.getPreferenceKey(R.string.pref_key_mars_api_enabled),
+        default = FeatureFlags.marsAPIEnabled,
+    )
+
+    /**
      * Indicates if the Contile functionality should be visible.
      */
     var showContileFeature by booleanPreference(
@@ -1764,6 +1772,14 @@ class Settings(private val appContext: Context) : PreferencesHolder {
     var shouldShowNavigationBarCFR by booleanPreference(
         key = appContext.getPreferenceKey(R.string.pref_key_should_navbar_cfr),
         default = true,
+    )
+
+    /**
+     * Indicates if the search bar CFR should be displayed to the user.
+     */
+    var shouldShowSearchBarCFR by booleanPreference(
+        key = appContext.getPreferenceKey(R.string.pref_key_should_searchbar_cfr),
+        default = false,
     )
 
     /**
@@ -2154,6 +2170,14 @@ class Settings(private val appContext: Context) : PreferencesHolder {
     var numberOfSetAsDefaultPromptShownTimes by intPreference(
         appContext.getPreferenceKey(R.string.pref_key_number_of_set_as_default_prompt_shown_times),
         default = 0,
+    )
+
+    /**
+     * Indicates if the Set as default Browser prompt was displayed while onboarding.
+     */
+    var promptToSetAsDefaultBrowserDisplayedInOnboarding by booleanPreference(
+        appContext.getPreferenceKey(R.string.pref_key_app_is_onboarding_set_as_default_displayed),
+        default = false,
     )
 
     /**

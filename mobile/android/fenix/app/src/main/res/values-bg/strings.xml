@@ -370,7 +370,7 @@
     <!-- Browser menu label for turning OFF reader view of the current visited page -->
     <string name="browser_menu_turn_off_reader_view">Изключете изгледа за четене</string>
     <!-- Browser menu button that reopens a private tab as a regular tab -->
-    <string name="browser_menu_open_in_normal_tab">Преместване в не-поверителен раздел</string>dsa
+    <string name="browser_menu_open_in_normal_tab">Преместване в не-поверителен раздел</string>
     <!-- Browser menu label for navigating to the translation feature, which provides language translation options the current visited page -->
     <string name="browser_menu_translate_page">Превеждане на страницата…</string>
     <!-- Browser menu label for navigating to the Web Compat Reporter feature, which provides users the ability to send bug reports for broken sites. -->
@@ -617,7 +617,7 @@
     <!-- Onboarding label for 'Save and continue' button, used by Nimbus experiments. -->
     <string name="onboarding_save_and_continue_button">Запазване и продължаване</string>
     <!-- Onboarding toolbar selection card label for 'skip' button, used by Nimbus experiments. -->
-    <string name="onboarding_customize_toolbar_skip_button">Пропускане</string>
+    <string name="onboarding_customize_toolbar_skip_button" tools:ignore="UnusedResources">Пропускане</string>
     <!-- Onboarding toolbar selection card label for 'top' option, used by Nimbus experiments. -->
     <string name="onboarding_customize_toolbar_top_option">Горе</string>
     <!-- Onboarding toolbar selection card label for 'bottom' option, used by Nimbus experiments. -->
@@ -632,6 +632,9 @@
     <string name="onboarding_customize_toolbar_placement_bottom_content_description">Изображение на долната лента с инструменти</string>
     <string name="onboarding_customize_toolbar_placement_top_content_description">Изображение на горната лента с инструменти</string>
 
+    <!-- Onboarding toolbar selection card label for 'Not now' button, used by Nimbus experiments. -->
+    <string name="onboarding_customize_toolbar_not_now_button">Не сега</string>
+
     <!-- Onboarding header for the theme selection card, used by Nimbus experiments. -->
     <string name="onboarding_customize_theme_title" tools:ignore="UnusedResources">Изберете тема</string>
     <!-- Onboarding sub header for theme selection card, used by Nimbus experiments. -->
@@ -639,7 +642,7 @@
     <!-- Onboarding label for 'Save and start browsing' button, used by Nimbus experiments. -->
     <string name="onboarding_save_and_start_button">Запазване и начало на разглеждане</string>
     <!-- Onboarding theme selection card label for 'skip' button, used by Nimbus experiments. -->
-    <string name="onboarding_customize_theme_skip_button">Пропускане</string>
+    <string name="onboarding_customize_theme_skip_button" tools:ignore="UnusedResources">Пропускане</string>
     <!-- Onboarding theme selection card label for 'dark' option, used by Nimbus experiments. -->
     <string name="onboarding_customize_theme_dark_option">Тъмна</string>
     <!-- Onboarding theme selection card label for 'light' option, used by Nimbus experiments. -->
@@ -650,6 +653,9 @@
     <string name="onboarding_customize_theme_main_image_content_description">Голямо заглавно изображение на изгледа за избор на теми, показващо илюстрирани инструменти за художник и разработчик.</string>
     <!-- Onboarding theme selection card content description for the theme selection image. %1$s is placeholder for either 'system', 'light' or 'dark'. -->
     <string name="onboarding_customize_theme_content_description">Изображение на темата на %1$s</string>
+
+    <!-- Onboarding theme selection card label for 'Not now' button, used by Nimbus experiments. -->
+    <string name="onboarding_customize_theme_not_now_button">Не сега</string>
 
     <!-- Search Widget -->
     <!-- Content description for searching with a widget. The first parameter is the name of the application.-->
@@ -1924,7 +1930,7 @@
     <string name="etp_settings">Настройки на защитата</string>
     <!-- Preference title for enhanced tracking protection settings -->
     <string name="preference_enhanced_tracking_protection">Подобрена защита от проследяване</string>
-  
+
     <!-- Preference summary for enhanced tracking protection settings on/off switch -->
     <string name="preference_enhanced_tracking_protection_summary">Вече включва цялостна защита на бисквитките, най-мощната ни бариера срещу проследяване в различни сайтове.</string>
     <!-- Description of enhanced tracking protection. The parameter is the name of the application (For example: Firefox Fenix) -->

@@ -85,6 +85,8 @@
     <string name="preferences_debug_settings_compose_bookmarks" translatable="false">Enable Compose Bookmarks</string>
     <!-- Label for enabling Homepage as a New Tab -->
     <string name="preferences_debug_settings_homepage_as_new_tab" translatable="false">Enable Homepage as a New Tab</string>
+    <!-- Label for enabling MARS API integration -->
+    <string name="preferences_debug_settings_mars_api" translatable="false">Enable MARS API integration</string>
     <!-- Label for enabling Merino content recommendations -->
     <string name="preferences_debug_settings_merino_content_recommendations" translatable="false">Enable Merino Content Recommendations</string>
     <!-- Label for enabling the menu redesign -->
@@ -172,6 +174,10 @@
     <string name="debug_drawer_cfr_tools_homepage_nav_toolbar_title">Homepage Navigation Toolbar</string>
     <!-- The homepage nav toolbar CFR description in CFR Tools -->
     <string name="debug_drawer_cfr_tools_homepage_nav_toolbar_description">Displayed when the user is on the homepage and sees the new navigation bar for the first time. Note that this CFR must be displayed in order for the Homepage Sync CFR to be shown.</string>
+    <!-- The homepage search bar CFR title in CFR Tools -->
+    <string name="debug_drawer_cfr_tools_homepage_searchbar_title">Homepage Searchbar</string>
+    <!-- The homepage searchbar CFR description in CFR Tools -->
+    <string name="debug_drawer_cfr_tools_homepage_searchbar_description">Displayed when a new user sees the homepage for the first time.</string>
     <!-- The homepage sync CFR title in CFR Tools -->
     <string name="debug_drawer_cfr_tools_homepage_sync_title">Homepage Sync</string>
     <!-- The homepage sync CFR description in CFR Tools -->

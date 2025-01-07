@@ -371,7 +371,7 @@
     <!-- Browser menu label for turning OFF reader view of the current visited page -->
     <string name="browser_menu_turn_off_reader_view">Хомӯш кардани намоиши хонанда</string>
     <!-- Browser menu button that reopens a private tab as a regular tab -->
-    <string name="browser_menu_open_in_normal_tab">Гузариш ба варақаи ғайрихусусӣ</string>dsa
+    <string name="browser_menu_open_in_normal_tab">Гузариш ба варақаи ғайрихусусӣ</string>
     <!-- Browser menu label for navigating to the translation feature, which provides language translation options the current visited page -->
     <string name="browser_menu_translate_page">Тарҷума кардани саҳифа…</string>
 
@@ -456,6 +456,11 @@
     <!-- Content description (not visible, for screen readers etc.): Search engine icon.
     The parameter is the search engine name (for example: DuckDuckGo). -->
     <string name="search_engine_icon_content_description_1">Низоми ҷустуҷӯӣ: %s</string>
+
+    <!-- Content description (not visible, for screen readers etc.) of the search engine selector from the search toolbar.
+    The parameter is the search engine name (for example: DuckDuckGo).
+    The colon character (in "%s:") is intended to have the screen reader make a small pause between the search engine name and the description of the button. -->
+    <string name="search_engine_selector_content_description">%s: интихоби низоми ҷустуҷӯӣ</string>
 
     <!-- Home onboarding -->
     <!-- Home onboarding dialog welcome screen title text. -->
@@ -619,7 +624,7 @@
     <!-- Onboarding label for 'Save and continue' button, used by Nimbus experiments. -->
     <string name="onboarding_save_and_continue_button">Нигоҳ доред ва идома диҳед</string>
     <!-- Onboarding toolbar selection card label for 'skip' button, used by Nimbus experiments. -->
-    <string name="onboarding_customize_toolbar_skip_button">Нодида гузарондан</string>
+    <string name="onboarding_customize_toolbar_skip_button" tools:ignore="UnusedResources">Нодида гузарондан</string>
     <!-- Onboarding toolbar selection card label for 'top' option, used by Nimbus experiments. -->
     <string name="onboarding_customize_toolbar_top_option">Боло</string>
     <!-- Onboarding toolbar selection card label for 'bottom' option, used by Nimbus experiments. -->
@@ -635,6 +640,9 @@
     <string name="onboarding_customize_toolbar_placement_bottom_content_description">Тасвири навори абзорҳои поён</string>
     <string name="onboarding_customize_toolbar_placement_top_content_description">Тасвири навори абзорҳои боло</string>
 
+    <!-- Onboarding toolbar selection card label for 'Not now' button, used by Nimbus experiments. -->
+    <string name="onboarding_customize_toolbar_not_now_button">Ҳоло не</string>
+
     <!-- Onboarding header for the theme selection card, used by Nimbus experiments. -->
     <string name="onboarding_customize_theme_title" tools:ignore="UnusedResources">Мавзуеро интихоб намоед</string>
 
@@ -644,7 +652,7 @@
     <!-- Onboarding label for 'Save and start browsing' button, used by Nimbus experiments. -->
     <string name="onboarding_save_and_start_button">Нигоҳ доред ва тамошоро оғоз намоед</string>
     <!-- Onboarding theme selection card label for 'skip' button, used by Nimbus experiments. -->
-    <string name="onboarding_customize_theme_skip_button">Нодида гузарондан</string>
+    <string name="onboarding_customize_theme_skip_button" tools:ignore="UnusedResources">Нодида гузарондан</string>
     <!-- Onboarding theme selection card label for 'dark' option, used by Nimbus experiments. -->
     <string name="onboarding_customize_theme_dark_option">Торик</string>
     <!-- Onboarding theme selection card label for 'light' option, used by Nimbus experiments. -->
@@ -655,6 +663,9 @@
     <string name="onboarding_customize_theme_main_image_content_description">Тасвири калон дар сарлавҳаи намуди интихоби мавзуъ, ки тасвири абзорҳои рассом ва созандаи тавсифшударо нишон медиҳад.</string>
     <!-- Onboarding theme selection card content description for the theme selection image. %1$s is placeholder for either 'system', 'light' or 'dark'. -->
     <string name="onboarding_customize_theme_content_description">Тасвири мавзуи «%1$s»</string>
+
+    <!-- Onboarding theme selection card label for 'Not now' button, used by Nimbus experiments. -->
+    <string name="onboarding_customize_theme_not_now_button">Ҳоло не</string>
 
     <!-- Search Widget -->
     <!-- Content description for searching with a widget. The first parameter is the name of the application.-->

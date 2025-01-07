@@ -65,6 +65,7 @@
       this.addEventListener("dblclick", this);
       this.addEventListener("click", this);
       this.addEventListener("click", this, true);
+      this.addEventListener("keydown", this, { mozSystemGroup: true });
       this.addEventListener("dragstart", this);
       this.addEventListener("dragover", this);
       this.addEventListener("drop", this);
@@ -500,12 +501,9 @@
             case KeyEvent.DOM_VK_RETURN: {
               ariaFocusedItem.click();
               event.preventDefault();
-              return;
             }
           }
         }
-        // defer to the parent `on_keydown` handler
-        MozElements.TabsBase.prototype.on_keydown.call(this, event);
       } else if (keyComboForMove) {
         switch (event.keyCode) {
           case KeyEvent.DOM_VK_UP:
@@ -616,7 +614,7 @@
     }
 
     /**
-     * Moves the focus in the tab strip left or right, as appropriate, to
+     * Moves the ARIA focus in the tab strip left or right, as appropriate, to
      * the next tab or tab group label.
      *
      * @param {-1|1} direction
@@ -633,6 +631,56 @@
 
       let itemToFocus = this.ariaFocusableItems[newIndex];
       this.ariaFocusedItem = itemToFocus;
+    }
+
+    /**
+     * Changes the selected tab or tab group label on the tab strip
+     * relative to the ARIA-focused tab strip element or the active tab. This
+     * is intended for traversing the tab strip visually, e.g by using keyboard
+     * arrows. For cases where keyboard shortcuts or other logic should only
+     * select tabs (and never tab group labels), see `advanceSelectedTab`.
+     *
+     * @override
+     * @param {-1|1} direction
+     * @param {boolean} shouldWrap
+     */
+    advanceSelectedItem(aDir, aWrap) {
+      let { ariaFocusableItems, ariaFocusedIndex } = this;
+
+      // Advance relative to the ARIA-focused item if set, otherwise advance
+      // relative to the active tab.
+      let currentItemIndex =
+        ariaFocusedIndex >= 0
+          ? ariaFocusedIndex
+          : ariaFocusableItems.indexOf(this.selectedItem);
+
+      let newItemIndex = currentItemIndex + aDir;
+
+      if (aWrap) {
+        if (newItemIndex >= ariaFocusableItems.length) {
+          newItemIndex = 0;
+        } else if (newItemIndex < 0) {
+          newItemIndex = ariaFocusableItems.length - 1;
+        }
+      } else {
+        newItemIndex = Math.min(
+          ariaFocusableItems.length - 1,
+          Math.max(0, newItemIndex)
+        );
+      }
+
+      if (currentItemIndex == newItemIndex) {
+        return;
+      }
+
+      // If the next item is a tab, select it. If the next item is a tab group
+      // label, keep the active tab selected and just set ARIA focus on the tab
+      // group label.
+      let newItem = ariaFocusableItems[newItemIndex];
+      if (isTab(newItem)) {
+        this._selectNewTab(newItem, aDir, aWrap);
+      }
+      this.ariaFocusedItem = newItem;
     }
 
     on_keypress(event) {
@@ -2772,12 +2820,14 @@
               selectedTab = {
                 left: selectedTab.left,
                 right: selectedTab.right,
+                top: selectedTab.top,
+                bottom: selectedTab.bottom,
               };
             }
             return [
               this._lastTabToScrollIntoView,
               this.arrowScrollbox.scrollClientRect,
-              { left: lastTabRect.left, right: lastTabRect.right },
+              lastTabRect,
               selectedTab,
             ];
           })
@@ -2794,8 +2844,11 @@
             delete this._lastTabToScrollIntoView;
             // Is the new tab already completely visible?
             if (
-              scrollRect.left <= tabRect.left &&
-              tabRect.right <= scrollRect.right
+              this.verticalMode
+                ? scrollRect.top <= tabRect.top &&
+                  tabRect.bottom <= scrollRect.bottom
+                : scrollRect.left <= tabRect.left &&
+                  tabRect.right <= scrollRect.right
             ) {
               return;
             }
@@ -2804,20 +2857,29 @@
               // Can we make both the new tab and the selected tab completely visible?
               if (
                 !selectedRect ||
-                Math.max(
-                  tabRect.right - selectedRect.left,
-                  selectedRect.right - tabRect.left
-                ) <= scrollRect.width
+                (this.verticalMode
+                  ? Math.max(
+                      tabRect.bottom - selectedRect.top,
+                      selectedRect.bottom - tabRect.top
+                    ) <= scrollRect.height
+                  : Math.max(
+                      tabRect.right - selectedRect.left,
+                      selectedRect.right - tabRect.left
+                    ) <= scrollRect.width)
               ) {
                 this.arrowScrollbox.ensureElementIsVisible(tabToScrollIntoView);
                 return;
               }
 
-              this.arrowScrollbox.scrollByPixels(
-                this.#rtlMode
-                  ? selectedRect.right - scrollRect.right
-                  : selectedRect.left - scrollRect.left
-              );
+              let scrollPixels;
+              if (this.verticalMode) {
+                scrollPixels = tabRect.top - selectedRect.top;
+              } else if (this.#rtlMode) {
+                scrollPixels = selectedRect.right - scrollRect.right;
+              } else {
+                scrollPixels = selectedRect.left - scrollRect.left;
+              }
+              this.arrowScrollbox.scrollByPixels(scrollPixels);
             }
 
             if (!this._animateElement.hasAttribute("highlight")) {

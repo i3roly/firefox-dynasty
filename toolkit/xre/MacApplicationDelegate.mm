@@ -391,6 +391,10 @@ nsTArray<nsCString> TakeStartupURLs() { return std::move(StartupURLs()); }
 // opened. It will be called once for each selected document.
 - (BOOL)application:(NSApplication*)theApplication
            openFile:(NSString*)filename {
+  if(nsCocoaFeatures::OnHighSierraOrLater()) {
+    return false; 
+  }
+
   NS_OBJC_BEGIN_TRY_BLOCK_RETURN;
   return [self openURLs:((NSArray<NSURL*>*) @[filename])];
   NS_OBJC_END_TRY_BLOCK_RETURN(NO);

@@ -43,22 +43,23 @@
       </html:moz-button-group>
       <toolbarseparator class="tab-group-edit-mode-only" />
       <html:div class="panel-body tab-group-edit-actions tab-group-edit-mode-only">
-        <toolbarbutton tabindex="1" id="tabGroupEditor_addNewTabInGroup" class="subviewbutton" data-l10n-id="tab-group-editor-action-new-tab"></toolbarbutton>
-        <toolbarbutton tabindex="1" id="tabGroupEditor_moveGroupToNewWindow" class="subviewbutton" data-l10n-id="tab-group-editor-action-new-window"></toolbarbutton>
-        <toolbarbutton tabindex="1" id="tabGroupEditor_saveAndCloseGroup" class="subviewbutton" data-l10n-id="tab-group-editor-action-save"></toolbarbutton>
-        <toolbarbutton tabindex="1" id="tabGroupEditor_ungroupTabs" class="subviewbutton" data-l10n-id="tab-group-editor-action-ungroup"></toolbarbutton>
+        <toolbarbutton tabindex="0" id="tabGroupEditor_addNewTabInGroup" class="subviewbutton" data-l10n-id="tab-group-editor-action-new-tab"></toolbarbutton>
+        <toolbarbutton tabindex="0" id="tabGroupEditor_moveGroupToNewWindow" class="subviewbutton" data-l10n-id="tab-group-editor-action-new-window"></toolbarbutton>
+        <toolbarbutton tabindex="0" id="tabGroupEditor_saveAndCloseGroup" class="subviewbutton" data-l10n-id="tab-group-editor-action-save"></toolbarbutton>
+        <toolbarbutton tabindex="0" id="tabGroupEditor_ungroupTabs" class="subviewbutton" data-l10n-id="tab-group-editor-action-ungroup"></toolbarbutton>
       </html:div>
       <toolbarseparator class="tab-group-edit-mode-only" />
       <html:div class="tab-group-edit-mode-only panel-body tab-group-delete">
-        <toolbarbutton id="tabGroupEditor_deleteGroup" class="subviewbutton" data-l10n-id="tab-group-editor-action-delete"></toolbarbutton>
+        <toolbarbutton tabindex="0" id="tabGroupEditor_deleteGroup" class="subviewbutton" data-l10n-id="tab-group-editor-action-delete"></toolbarbutton>
       </html:div>
     </panel>
        `;
 
     #activeGroup;
-    #createMode;
     #cancelButton;
     #createButton;
+    #createMode;
+    #keepNewlyCreatedGroup;
     #nameField;
     #panel;
     #swatches;
@@ -93,11 +94,11 @@
       this.#populateSwatches();
 
       this.#cancelButton.addEventListener("click", () => {
-        this.#handleCancel();
+        this.close();
       });
 
       this.#createButton.addEventListener("click", () => {
-        this.close();
+        this.close(true);
       });
 
       this.#nameField.addEventListener("input", () => {
@@ -246,21 +247,30 @@
         gBrowser.openTabs.length == this.activeGroup?.tabs.length;
     }
 
-    close() {
+    close(keepNewlyCreatedGroup = false) {
+      if (this.createMode) {
+        this.#keepNewlyCreatedGroup = keepNewlyCreatedGroup;
+      }
       this.#panel.hidePopup();
     }
 
     on_popupshown() {
+      if (this.createMode) {
+        this.#keepNewlyCreatedGroup = false;
+      }
       this.#nameField.focus();
     }
 
     on_popuphidden() {
+      if (this.createMode && !this.#keepNewlyCreatedGroup) {
+        this.activeGroup.ungroupTabs();
+      }
       this.activeGroup = null;
     }
 
     on_keypress(event) {
       if (event.keyCode == KeyEvent.DOM_VK_RETURN) {
-        this.close();
+        this.close(true);
       }
     }
 
@@ -274,11 +284,6 @@
       if (this.activeGroup) {
         this.activeGroup.color = aEvent.target.value;
       }
-    }
-
-    #handleCancel() {
-      this.activeGroup.ungroupTabs();
-      this.close();
     }
 
     async #handleNewTabInGroup() {

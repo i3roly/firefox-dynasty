@@ -50,7 +50,6 @@ import org.mozilla.fenix.onboarding.view.ManagePrivacyPreferencesDialogFragment
 import org.mozilla.fenix.onboarding.view.OnboardingAddOn
 import org.mozilla.fenix.onboarding.view.OnboardingPageUiData
 import org.mozilla.fenix.onboarding.view.OnboardingScreen
-import org.mozilla.fenix.onboarding.view.ThemeOptionType
 import org.mozilla.fenix.onboarding.view.ToolbarOptionType
 import org.mozilla.fenix.onboarding.view.sequencePosition
 import org.mozilla.fenix.onboarding.view.telemetrySequenceId
@@ -103,7 +102,8 @@ class OnboardingFragment : Fragment() {
             .registerReceiver(pinAppWidgetReceiver, filter)
 
         if (isNotDefaultBrowser(context) &&
-            activity?.isDefaultBrowserPromptSupported() == true
+            activity?.isDefaultBrowserPromptSupported() == true &&
+            !requireContext().settings().promptToSetAsDefaultBrowserDisplayedInOnboarding
         ) {
             requireComponents.strictMode.resetAfter(StrictMode.allowThreadDiskReads()) {
                 promptToSetAsDefaultBrowser()
@@ -124,6 +124,8 @@ class OnboardingFragment : Fragment() {
                 ScreenContent()
             }
         }
+
+        requireContext().settings().promptToSetAsDefaultBrowserDisplayedInOnboarding = false
     }
 
     override fun onResume() {
@@ -141,7 +143,7 @@ class OnboardingFragment : Fragment() {
 
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     @Composable
-    @Suppress("LongMethod", "ThrowsCount")
+    @Suppress("LongMethod")
     private fun ScreenContent() {
         OnboardingScreen(
             pagesToDisplay = pagesToDisplay,
@@ -209,6 +211,7 @@ class OnboardingFragment : Fragment() {
             onFinish = {
                 onFinish(it)
                 disableNavBarCFRForNewUser()
+                enableSearchBarCFRForNewUser()
             },
             onImpression = {
                 telemetryRecorder.onImpression(
@@ -238,14 +241,8 @@ class OnboardingFragment : Fragment() {
             },
 
             onCustomizeThemeClick = {
-                val selectedTheme = when {
-                    requireContext().settings().shouldFollowDeviceTheme -> ThemeOptionType.THEME_SYSTEM
-                    requireContext().settings().shouldUseDarkTheme -> ThemeOptionType.THEME_DARK
-                    else -> ThemeOptionType.THEME_LIGHT
-                }
-
                 telemetryRecorder.onSelectThemeClick(
-                    selectedTheme.id,
+                    onboardingStore.state.themeOptionSelected.id,
                     pagesToDisplay.telemetrySequenceId(),
                     pagesToDisplay.sequencePosition(OnboardingPageUiData.Type.THEME_SELECTION),
                 )
@@ -329,6 +326,10 @@ class OnboardingFragment : Fragment() {
 
     private fun disableNavBarCFRForNewUser() {
         requireContext().settings().shouldShowNavigationBarCFR = false
+    }
+
+    private fun enableSearchBarCFRForNewUser() {
+        requireContext().settings().shouldShowSearchBarCFR = FxNimbus.features.encourageSearchCfr.value().enabled
     }
 
     // Marked as internal since it is used in unit tests

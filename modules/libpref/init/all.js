@@ -2732,7 +2732,7 @@ pref("font.size.monospace.x-math", 13);
 
   // fontconfig doesn't support emoji yet
   // https://lists.freedesktop.org/archives/fontconfig/2016-October/005842.html
-  pref("font.name-list.emoji", "Twemoji Mozilla");
+  pref("font.name-list.emoji", "Noto Color Emoji, Twemoji Mozilla");
 
   pref("font.name-list.serif.ar", "serif");
   pref("font.name-list.sans-serif.ar", "sans-serif");
@@ -3562,9 +3562,6 @@ pref("reader.content_width", 3);
 // The default relative line height in reader mode (1-9)
 pref("reader.line_height", 4);
 
-// Determines if improved text and layout menu is enabled in reader mode.
-pref("reader.improved_text_menu.enabled", true);
-
 // The default character spacing in reader mode (1-9)
 pref("reader.character_spacing", 0);
 
@@ -3581,9 +3578,6 @@ pref("reader.color_scheme", "auto");
 
 // Color scheme values available in reader mode UI.
 pref("reader.color_scheme.values", "[\"auto\",\"light\",\"dark\",\"sepia\",\"contrast\",\"gray\"]");
-
-// Determines if updated color theme menu is enabled in reader mode.
-pref("reader.colors_menu.enabled", true);
 
 // The custom color scheme options in reader colors menu.
 pref("reader.custom_colors.foreground", "");
@@ -3709,7 +3703,7 @@ pref("browser.ml.minimumPhysicalMemory", 4);
 // Default memory usage for a model in GiB
 pref("browser.ml.defaultModelMemoryUsage", 1);
 // Check for memory before running
-pref("browser.ml.checkForMemory", true);
+pref("browser.ml.checkForMemory", false);
 // Maximum memory pressure (%)
 pref("browser.ml.maximumMemoryPressure", 80);
 // Queue wait timeout in seconds

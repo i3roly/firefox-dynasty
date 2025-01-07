@@ -107,6 +107,8 @@ export class MegalistAlpha extends MozLitElement {
   #onInputChange(e) {
     const searchText = e.target.value;
     this.searchText = searchText;
+    this.viewMode = VIEW_MODES.LIST;
+    this.selectedRecord = null;
 
     this.#debounce(
       () => this.#messageToViewModel("UpdateFilter", { searchText }),
@@ -375,6 +377,11 @@ export class MegalistAlpha extends MozLitElement {
     return html`
       <moz-card class="empty-state-card">
         <div class="no-logins-card-content">
+          <img
+            src="chrome://global/content/megalist/icons/cpm-fox-illustration.svg"
+            role="presentation"
+            alt=""
+          />
           <strong
             class="no-logins-card-heading"
             data-l10n-id="passwords-no-passwords-header"
@@ -561,7 +568,7 @@ export class MegalistAlpha extends MozLitElement {
           action="remove-all-logins"
           data-l10n-id="about-logins-menu-menuitem-remove-all-logins2"
           @click=${() => this.#sendCommand("RemoveAll")}
-          .disabled=${!this.header.value.total}
+          ?disabled=${!this.header.value.total}
         ></panel-item>
         <hr />
         <panel-item
