@@ -11,9 +11,6 @@
 #include "AppleATDecoder.h"
 #include "AppleVTDecoder.h"
 #include "AppleVDADecoder.h"
-#include "AppleVDALinker.h"
-#include "AppleCMLinker.h"
-#include "AppleVTLinker.h"
 
 #include "MP4Decoder.h"
 #include "VideoUtils.h"
@@ -42,21 +39,12 @@ bool AppleDecoderModule::sInitialized = false;
 bool AppleDecoderModule::sCanUseVP9Decoder = false;
 bool AppleDecoderModule::sCanUseAV1Decoder = false;
 
-bool AppleDecoderModule::sIsCoreMediaAvailable = false;
-bool AppleDecoderModule::sIsVTAvailable = false;
-bool AppleDecoderModule::sIsVDAAvailable = false;
-
 /* static */
 void AppleDecoderModule::Init() {
   if (sInitialized) {
     return;
   }
 
-  //10.7.3 - > 10.7 need these (thanks jya)
-  sIsCoreMediaAvailable = AppleCMLinker::Link();
-  sIsVDAAvailable = AppleVDALinker::Link();
-  sIsVTAvailable = AppleVTLinker::Link();
-  
   sInitialized = true;
   if (RegisterSupplementalVP9Decoder()) {
     sCanUseVP9Decoder = CanCreateHWDecoder(MediaCodec::VP9);
@@ -262,39 +250,39 @@ bool AppleDecoderModule::CanCreateHWDecoder(MediaCodec aCodec) {
           vtReportsSupport = VTIsHardwareDecodeSupported(kCMVideoCodecType_VP9);
           break;
         case MediaCodec::H264:
-          // 1806391 - H264 hardware decode check crashes on 10.12 - 10.14
-          if (__builtin_available(macos 10.15, *)) {
-            info.mMimeType = "video/avc";
-            vtReportsSupport = VTIsHardwareDecodeSupported(kCMVideoCodecType_H264);
-          }
+          info.mMimeType = "video/avc";
+          vtReportsSupport = VTIsHardwareDecodeSupported(kCMVideoCodecType_H264);
           break;
         default:
           vtReportsSupport = false;
           break;
       }
-  } else if (__builtin_available(macOS 10.6.3, *)) { //HW decoder is 10.6.3 and up
-    if (aCodec == media::MediaCodec::H264) {
+  } else if (aCodec == media::MediaCodec::H264) { // when/if 10.6 (lowest supported OS) happens, it will have VDA acceleration
       // VTIsHardwareDecodeSupported function is only available on 10.13+.
       // For earlier versions (10.6.3+), we must check H264 support by always
       // attempting to create a decoder.
       info.mMimeType = "video/avc";
       vtReportsSupport = true;
-    }
   }
     // VT reports HW decode is supported -- verify by creating an actual decoder
   if (vtReportsSupport) {
-    RefPtr<MediaDataDecoder> decoder;//Dummy variable
+    bool hwSupport; 
     MediaResult rv;
+    nsAutoCString failureReason;
     char *type;
     if(__builtin_available(macOS 10.7, *)) {
       RefPtr<AppleVTDecoder> decoder =
           new AppleVTDecoder(info, nullptr, {}, nullptr, Nothing());
       rv = decoder->InitializeSession();
+      hwSupport = decoder->IsHardwareAccelerated(failureReason);
+      decoder->Shutdown();
       type = strdup("VT");
     } else {
       RefPtr<AppleVDADecoder> decoder =
           new AppleVDADecoder(info, nullptr, {}, nullptr, Nothing());
       rv = decoder->InitializeSession();
+      hwSupport = decoder->IsHardwareAccelerated(failureReason);
+      decoder->Shutdown();
       type = strdup("VDA");
     }
     if (!NS_SUCCEEDED(rv)) {
@@ -304,18 +292,15 @@ bool AppleDecoderModule::CanCreateHWDecoder(MediaCodec aCodec) {
       free(type);
       return false;
     }
-    nsAutoCString failureReason;
     // IsHardwareAccelerated appears to return invalid results for H.264 so
     // we assume that the earlier VTIsHardwareDecodeSupported call is correct.
     // See: https://bugzilla.mozilla.org/show_bug.cgi?id=1716196#c7
-    bool hwSupport = decoder->IsHardwareAccelerated(failureReason) ||
-                     aCodec == MediaCodec::H264;
+    hwSupport |= aCodec == MediaCodec::H264;
     if (!hwSupport) {
       MOZ_LOG(sPDMLog, LogLevel::Debug,
               ("Apple %s HW decode failure: '%s'", type, failureReason.BeginReading()));
     }
     free(type);
-    decoder->Shutdown();
     return hwSupport;
   }
   return false;
