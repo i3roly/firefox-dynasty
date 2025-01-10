@@ -3933,9 +3933,8 @@ void MacroAssembler::loadBaselineJitCodeRaw(Register func, Register dest,
   // Load BaselineScript
   loadPtr(Address(dest, JitScript::offsetOfBaselineScript()), dest);
   if (failure) {
-    static_assert(BaselineDisabledScript == 0x1);
-    branchPtr(Assembler::BelowOrEqual, dest, ImmWord(BaselineDisabledScript),
-              failure);
+    static_assert(DisabledScript < CompilingScript);
+    branchPtr(Assembler::BelowOrEqual, dest, ImmWord(CompilingScript), failure);
   }
 
   // Load Baseline jitcode
@@ -4462,10 +4461,10 @@ StackMacroAssembler::StackMacroAssembler(JSContext* cx, TempAllocator& alloc)
     : MacroAssembler(alloc, CompileRuntime::get(cx->runtime()),
                      CompileRealm::get(cx->realm())) {}
 
-IonHeapMacroAssembler::IonHeapMacroAssembler(TempAllocator& alloc,
-                                             CompileRealm* realm)
+OffThreadMacroAssembler::OffThreadMacroAssembler(TempAllocator& alloc,
+                                                 CompileRealm* realm)
     : MacroAssembler(alloc, realm->runtime(), realm) {
-  MOZ_ASSERT(CurrentThreadIsIonCompiling());
+  MOZ_ASSERT(CurrentThreadIsOffThreadCompiling());
 }
 
 WasmMacroAssembler::WasmMacroAssembler(TempAllocator& alloc, bool limitedSize)

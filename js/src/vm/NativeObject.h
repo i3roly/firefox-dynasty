@@ -876,13 +876,12 @@ class NativeObject : public JSObject {
    * ArrayObjects don't use this limit and can have a lower slot capacity,
    * since they normally don't have a lot of slots.
    */
-  static const uint32_t SLOT_CAPACITY_MIN = 8 - ObjectSlots::VALUES_PER_HEADER;
+  static const uint32_t SLOT_CAPACITY_MIN = 5;
 
   /*
    * Minimum size for dynamically allocated elements in normal Objects.
    */
-  static const uint32_t ELEMENT_CAPACITY_MIN =
-      8 - ObjectElements::VALUES_PER_HEADER;
+  static const uint32_t ELEMENT_CAPACITY_MIN = 5;
 
   HeapSlot* fixedSlots() const {
     return reinterpret_cast<HeapSlot*>(uintptr_t(this) + sizeof(NativeObject));
@@ -1663,13 +1662,6 @@ class NativeObject : public JSObject {
   }
 
   inline bool hasDynamicElements() const {
-    /*
-     * Note: for objects with zero fixed slots this could potentially give
-     * a spurious 'true' result, if the end of this object is exactly
-     * aligned with the end of its arena and dynamic slots are allocated
-     * immediately afterwards. Such cases cannot occur for dense arrays
-     * (which have at least two fixed slots) and can only result in a leak.
-     */
     return !hasEmptyElements() && !hasFixedElements();
   }
 

@@ -1218,22 +1218,37 @@ Result<EditActionResult, nsresult> HTMLEditor::HandleInsertText(
       // Right now the WhiteSpaceVisibilityKeeper code bails on empty strings,
       // but IME needs the InsertTextWithTransaction() call to still happen
       // since empty strings are meaningful there.
-      Result<InsertTextResult, nsresult> insertTextResult =
+      Result<InsertTextResult, nsresult> insertEmptyTextResultOrError =
           InsertTextWithTransaction(*document, aInsertionString, pointToInsert,
                                     InsertTextTo::ExistingTextNodeIfAvailable);
-      if (MOZ_UNLIKELY(insertTextResult.isErr())) {
+      if (MOZ_UNLIKELY(insertEmptyTextResultOrError.isErr())) {
         NS_WARNING("HTMLEditor::InsertTextWithTransaction() failed");
-        return insertTextResult.propagateErr();
+        return insertEmptyTextResultOrError.propagateErr();
       }
-      InsertTextResult unwrappedInsertTextResult = insertTextResult.unwrap();
+      const InsertTextResult insertEmptyTextResult =
+          insertEmptyTextResultOrError.unwrap();
       nsresult rv = EnsureNoFollowingUnnecessaryLineBreak(
-          unwrappedInsertTextResult.EndOfInsertedTextRef(), *editingHost);
+          insertEmptyTextResult.EndOfInsertedTextRef(), *editingHost);
       if (NS_FAILED(rv)) {
         NS_WARNING(
             "HTMLEditor::EnsureNoFollowingUnnecessaryLineBreak() failed");
         return Err(rv);
       }
-      rv = unwrappedInsertTextResult.SuggestCaretPointTo(
+      // If we replaced non-empty composition string with an empty string,
+      // its preceding character may be a collapsible ASCII white-space.
+      // Therefore, we may need to insert a padding <br> after the white-space.
+      Result<CreateLineBreakResult, nsresult>
+          insertPaddingBRElementResultOrError = InsertPaddingBRElementIfNeeded(
+              insertEmptyTextResult.EndOfInsertedTextRef(), nsIEditor::eNoStrip,
+              *editingHost);
+      if (MOZ_UNLIKELY(insertPaddingBRElementResultOrError.isErr())) {
+        NS_WARNING(
+            "HTMLEditor::InsertPaddingBRElementIfNeeded(eNoStrip) failed");
+        insertEmptyTextResult.IgnoreCaretPointSuggestion();
+        return insertPaddingBRElementResultOrError.propagateErr();
+      }
+      insertPaddingBRElementResultOrError.unwrap().IgnoreCaretPointSuggestion();
+      rv = insertEmptyTextResult.SuggestCaretPointTo(
           *this, {SuggestCaret::OnlyIfHasSuggestion,
                   SuggestCaret::OnlyIfTransactionsAllowedToDoIt,
                   SuggestCaret::AndIgnoreTrivialError});
@@ -2795,8 +2810,8 @@ Result<CaretPoint, nsresult> HTMLEditor::HandleInsertParagraphInMailCiteElement(
   // also just after it.  If we don't have another br or block boundary
   // adjacent, then we will need a 2nd br added to achieve blank line that user
   // expects.
-  if (HTMLEditUtils::IsInlineContent(
-          aMailCiteElement, BlockInlineCheck::UseComputedDisplayStyle)) {
+  if (HTMLEditUtils::IsInlineContent(aMailCiteElement,
+                                     BlockInlineCheck::UseHTMLDefaultStyle)) {
     nsresult rvOfInsertPaddingBRElement = [&]() MOZ_CAN_RUN_SCRIPT {
       const auto pointToCreateNewBRElement =
           insertBRElementResult.AtLineBreak<EditorDOMPoint>();
@@ -2806,7 +2821,7 @@ Result<CaretPoint, nsresult> HTMLEditor::HandleInsertParagraphInMailCiteElement(
       const WSScanResult backwardScanFromPointToCreateNewBRElementResult =
           WSRunScanner::ScanPreviousVisibleNodeOrBlockBoundary(
               &aEditingHost, pointToCreateNewBRElement,
-              BlockInlineCheck::UseComputedDisplayStyle);
+              BlockInlineCheck::UseHTMLDefaultStyle);
       if (MOZ_UNLIKELY(
               backwardScanFromPointToCreateNewBRElementResult.Failed())) {
         NS_WARNING(
@@ -2824,7 +2839,7 @@ Result<CaretPoint, nsresult> HTMLEditor::HandleInsertParagraphInMailCiteElement(
           WSRunScanner::ScanInclusiveNextVisibleNodeOrBlockBoundary(
               &aEditingHost,
               EditorRawDOMPoint::After(pointToCreateNewBRElement),
-              BlockInlineCheck::UseComputedDisplayStyle);
+              BlockInlineCheck::UseHTMLDefaultStyle);
       if (MOZ_UNLIKELY(forwardScanFromPointAfterNewBRElementResult.Failed())) {
         NS_WARNING("WSRunScanner::ScanNextVisibleNodeOrBlockBoundary() failed");
         return NS_ERROR_FAILURE;
@@ -11178,9 +11193,28 @@ HTMLEditor::InsertPaddingBRElementIfNeeded(
     const Element& aEditingHost) {
   MOZ_ASSERT(aPoint.IsInContentNode());
 
-  EditorDOMPoint pointToInsertPaddingBR =
-      HTMLEditUtils::LineRequiresPaddingLineBreakToBeVisible(aPoint,
-                                                             aEditingHost);
+  auto pointToInsertPaddingBR = [&]() MOZ_NEVER_INLINE_DEBUG -> EditorDOMPoint {
+    // If the point is immediately before a block boundary which is for a
+    // mailcite in plaintext mail composer (it is a <span> styled as block), we
+    // should not treat it as a block because it's required by the serializer to
+    // give the mailcite contents are not appear with outer content in the same
+    // lines.
+    if (IsPlaintextMailComposer()) {
+      const WSScanResult nextVisibleThing =
+          WSRunScanner::ScanInclusiveNextVisibleNodeOrBlockBoundary(
+              &aEditingHost, aPoint,
+              BlockInlineCheck::UseComputedDisplayOutsideStyle);
+      if (nextVisibleThing.ReachedBlockBoundary() &&
+          HTMLEditUtils::IsMailCite(*nextVisibleThing.ElementPtr()) &&
+          HTMLEditUtils::IsInlineContent(
+              *nextVisibleThing.ElementPtr(),
+              BlockInlineCheck::UseHTMLDefaultStyle)) {
+        return EditorDOMPoint::AtEndOf(*nextVisibleThing.ElementPtr());
+      }
+    }
+    return HTMLEditUtils::LineRequiresPaddingLineBreakToBeVisible(aPoint,
+                                                                  aEditingHost);
+  }();
   if (!pointToInsertPaddingBR.IsSet()) {
     return CreateLineBreakResult::NotHandled();
   }
@@ -12412,12 +12446,16 @@ Result<EditActionResult, nsresult> HTMLEditor::AddZIndexAsSubAction(
   return EditActionResult::HandledResult();
 }
 
-nsresult HTMLEditor::OnDocumentModified() {
+nsresult HTMLEditor::OnDocumentModified(
+    const nsIContent* aContentWillBeRemoved /* = nullptr */) {
   if (mPendingDocumentModifiedRunner) {
+    mPendingDocumentModifiedRunner->MaybeAppendNewInvisibleWhiteSpace(
+        aContentWillBeRemoved);
     return NS_OK;  // We've already posted same runnable into the queue.
   }
-  mPendingDocumentModifiedRunner = NewRunnableMethod(
-      "HTMLEditor::OnModifyDocument", this, &HTMLEditor::OnModifyDocument);
+  mPendingDocumentModifiedRunner = new DocumentModifiedEvent(*this);
+  mPendingDocumentModifiedRunner->MaybeAppendNewInvisibleWhiteSpace(
+      aContentWillBeRemoved);
   nsContentUtils::AddScriptRunner(do_AddRef(mPendingDocumentModifiedRunner));
   // Be aware, if OnModifyDocument() may be called synchronously, the
   // editor might have been destroyed here.

@@ -237,6 +237,10 @@ export var SessionStore = {
     return SessionStoreInternal._LAST_ACTION_CLOSED_TAB;
   },
 
+  get LAST_ACTION_CLOSED_TAB_GROUP() {
+    return SessionStoreInternal._LAST_ACTION_CLOSED_TAB_GROUP;
+  },
+
   get LAST_ACTION_CLOSED_WINDOW() {
     return SessionStoreInternal._LAST_ACTION_CLOSED_WINDOW;
   },
@@ -1046,6 +1050,8 @@ var SessionStoreInternal = {
   },
 
   _LAST_ACTION_CLOSED_TAB: "tab",
+
+  _LAST_ACTION_CLOSED_TAB_GROUP: "tab-group",
 
   _LAST_ACTION_CLOSED_WINDOW: "window",
 
@@ -3046,6 +3052,15 @@ var SessionStoreInternal = {
     win,
     tabGroup
   ) {
+    // don't update our internal state if we don't have to
+    if (this._max_tabs_undo == 0) {
+      return;
+    }
+
+    // Record the closed action right away to make sure it's also being
+    // recorded for groups that are saved and closed
+    this._addClosedAction(this._LAST_ACTION_CLOSED_TAB_GROUP, tabGroup.id);
+
     if (this.getSavedTabGroup(tabGroup.id)) {
       // If a tab group is being removed from the tab strip but it's already
       // saved, then this is a "save and close" action; the saved tab group
@@ -3054,24 +3069,17 @@ var SessionStoreInternal = {
       return;
     }
 
-    // don't update our internal state if we don't have to
-    if (this._max_tabs_undo == 0) {
-      return;
-    }
-
     let closedGroups = this._windows[win.__SSi].closedGroups;
-
     let tabGroupState = lazy.TabGroupState.closed(tabGroup, win.__SSi);
     tabGroupState.tabs = this._collectClosedTabsForTabGroup(tabGroup.tabs, win);
 
     // TODO(jswinarton) it's unclear if updating lastClosedTabGroupCount is
     // necessary when restoring tab groups — it largely depends on how we
-    // decide to do the restore. If we add a _LAST_ACTION_CLOSED_TAB_GROUP
-    // item to the closed actions list, this may not be necessary.
+    // decide to do the restore.
     // To address in bug1915174
     this._windows[win.__SSi]._lastClosedTabGroupCount =
       tabGroupState.tabs.length;
-    closedGroups.push(tabGroupState);
+    closedGroups.unshift(tabGroupState);
     this._closedObjectsChanged = true;
   },
 
@@ -3312,8 +3320,16 @@ var SessionStoreInternal = {
    *        The tabData to be inserted.
    * @param closedTabs (array)
    *        The list of closed tabs for a window.
+   * @param saveAction (boolean|null)
+   *        Whether or not to add an action to the closed actions stack on save.
+   *        True by default if the tab was not closed as part of a tab group; false otherwise.
    */
-  saveClosedTabData(winData, closedTabs, tabData, saveAction = true) {
+  saveClosedTabData(winData, closedTabs, tabData, saveAction = null) {
+    if (saveAction === null) {
+      // By default, a closed action for this tab, but only if it wasn't closed as part of a tab group.
+      saveAction = closedTabs === winData._closedTabs;
+    }
+
     // Find the index of the first tab in the list
     // of closed tabs that was closed before our tab.
     let index = closedTabs.findIndex(tab => {
@@ -4128,7 +4144,7 @@ var SessionStoreInternal = {
 
         if (
           groupIdx < closedGroups.length &&
-          (tabIdx >= closedTabs.length || group?.closedAt < tab?.closedAt)
+          (tabIdx >= closedTabs.length || group?.closedAt > tab?.closedAt)
         ) {
           group.tabs.forEach((groupTab, idx) => {
             groupTab._originalStateIndex = idx;
@@ -5106,22 +5122,8 @@ var SessionStoreInternal = {
       delete winData.hidden;
     }
 
-    let sidebarBox = aWindow.document.getElementById("sidebar-box");
-    let command = sidebarBox.getAttribute("sidebarcommand");
-    winData.sidebar = {};
-    if (sidebarBox.style.width) {
-      winData.sidebar.width = sidebarBox.style.width;
-    }
-    if (command && sidebarBox.getAttribute("checked") == "true") {
-      winData.sidebar.command = command;
-    } else if (winData.sidebar?.command) {
-      delete winData.sidebar.command;
-    }
-
-    if (aWindow.SidebarController.revampComponentsLoaded) {
-      const sidebarUIState = aWindow.SidebarController.getUIState();
-      winData.sidebar = structuredClone(sidebarUIState);
-    }
+    const sidebarUIState = aWindow.SidebarController.getUIState();
+    winData.sidebar = structuredClone(sidebarUIState);
 
     let workspaceID = aWindow.getWorkspaceID();
     if (workspaceID) {
@@ -6209,7 +6211,7 @@ var SessionStoreInternal = {
     if (!aSidebar || isPopup) {
       return;
     }
-    aWindow.SidebarController.setUIState(aSidebar);
+    aWindow.SidebarController.initializeUIState(aSidebar);
   },
 
   /**

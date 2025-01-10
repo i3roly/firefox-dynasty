@@ -17,6 +17,7 @@ const lazy = {};
 
 ChromeUtils.defineESModuleGetters(lazy, {
   AboutPreferences: "resource://activity-stream/lib/AboutPreferences.sys.mjs",
+  AdsFeed: "resource://activity-stream/lib/AdsFeed.sys.mjs",
   DEFAULT_SITES: "resource://activity-stream/lib/DefaultSites.sys.mjs",
   DefaultPrefs: "resource://activity-stream/lib/ActivityStreamPrefs.sys.mjs",
   DiscoveryStreamFeed:
@@ -218,6 +219,30 @@ export const PREFS_CONFIG = new Map([
     },
   ],
   [
+    "unifiedAds.adsFeed.enabled",
+    {
+      title:
+        "Use AdsFeed.sys.mjs to fetch/cache/serve Mozilla Ad Routing Service (MARS) unified ads ",
+      value: false,
+    },
+  ],
+  [
+    "unifiedAds.adsFeed.tiles.enabled",
+    {
+      title:
+        "Use AdsFeed.sys.mjs to fetch/cache/serve sponsored top sites tiles",
+      value: false,
+    },
+  ],
+  [
+    "unifiedAds.adsFeed.spocs.enabled",
+    {
+      title:
+        "Use AdsFeed.sys.mjs to fetch/cache/serve sponsored content in recommended stories",
+      value: false,
+    },
+  ],
+  [
     "unifiedAds.tiles.enabled",
     {
       title:
@@ -412,6 +437,13 @@ export const PREFS_CONFIG = new Map([
     "newtabWallpapers.v2.enabled",
     {
       title: "Boolean flag to turn wallpaper v2 functionality on and off",
+      value: false,
+    },
+  ],
+  [
+    "newtabWallpapers.customColor.enabled",
+    {
+      title: "Boolean flag to turn show custom color select box",
       value: false,
     },
   ],
@@ -1093,6 +1125,12 @@ const FEEDS_DATA = [
     name: "weatherfeed",
     factory: () => new lazy.WeatherFeed(),
     title: "Handles fetching and caching weather data",
+    value: true,
+  },
+  {
+    name: "adsfeed",
+    factory: () => new lazy.AdsFeed(),
+    title: "Handles fetching and caching ads data",
     value: true,
   },
 ];

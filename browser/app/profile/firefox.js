@@ -1169,10 +1169,16 @@ pref("privacy.clearOnShutdown.offlineApps", false);
 pref("privacy.clearOnShutdown.siteSettings", false);
 pref("privacy.clearOnShutdown.openWindows", false);
 // Clear on shutdown prefs used in the new dialog
+
+// We can't remove the old pref yet since we need to use it to migrate the old
+// pref values to the new pref values.
 pref("privacy.clearOnShutdown_v2.historyFormDataAndDownloads", true);
+
+pref("privacy.clearOnShutdown_v2.browsingHistoryAndDownloads", true);
 pref("privacy.clearOnShutdown_v2.cookiesAndStorage", true);
 pref("privacy.clearOnShutdown_v2.cache", true);
 pref("privacy.clearOnShutdown_v2.siteSettings", false);
+pref("privacy.clearOnShutdown_v2.formData", false);
 
 pref("privacy.cpd.history",                 true);
 pref("privacy.cpd.formdata",                true);
@@ -1188,13 +1194,17 @@ pref("privacy.cpd.openWindows",             false);
 // clearHistory and clearSiteData pref branches are used to
 // remember user pref options based on the two different entry points
 pref("privacy.clearHistory.historyFormDataAndDownloads", true);
+pref("privacy.clearHistory.browsingHistoryAndDownloads", true);
 pref("privacy.clearHistory.cookiesAndStorage", true);
 pref("privacy.clearHistory.cache", true);
 pref("privacy.clearHistory.siteSettings", false);
+pref("privacy.clearHistory.formData", false);
 pref("privacy.clearSiteData.historyFormDataAndDownloads", false);
+pref("privacy.clearSiteData.browsingHistoryAndDownloads", false);
 pref("privacy.clearSiteData.cookiesAndStorage", true);
 pref("privacy.clearSiteData.cache", true);
 pref("privacy.clearSiteData.siteSettings", false);
+pref("privacy.clearSiteData.formData", false);
 
 pref("privacy.history.custom",              false);
 
@@ -1211,9 +1221,11 @@ pref("privacy.sanitize.timeSpan", 1);
 pref("privacy.sanitize.useOldClearHistoryDialog", false);
 
 pref("privacy.sanitize.clearOnShutdown.hasMigratedToNewPrefs2", false);
-// flag to track migration of clear history dialog prefs, where cpd stands for
+pref("privacy.sanitize.clearOnShutdown.hasMigratedToNewPrefs3", false);
+// flags to track migration of clear history dialog prefs, where cpd stands for
 // clear private data
 pref("privacy.sanitize.cpd.hasMigratedToNewPrefs2", false);
+pref("privacy.sanitize.cpd.hasMigratedToNewPrefs3", false);
 
 pref("privacy.panicButton.enabled",         true);
 
@@ -1717,8 +1729,12 @@ pref("services.sync.prefs.sync.privacy.clearOnShutdown_v2.cookiesAndStorage", tr
 pref("services.sync.prefs.sync.privacy.clearOnShutdown.downloads", true);
 pref("services.sync.prefs.sync.privacy.clearOnShutdown_v2.downloads", true);
 pref("services.sync.prefs.sync.privacy.clearOnShutdown.formdata", true);
+pref("services.sync.prefs.sync.privacy.clearOnShutdown_v2.formdata", true);
 pref("services.sync.prefs.sync.privacy.clearOnShutdown.history", true);
+// We can't clear the old history pref until we're sure all clients have
+// migrated to the new pref.
 pref("services.sync.prefs.sync.privacy.clearOnShutdown_v2.historyFormDataAndDownloads", true);
+pref("services.sync.prefs.sync.privacy.clearOnShutdown_v2.browsingHistoryAndDownloads", true);
 pref("services.sync.prefs.sync.privacy.clearOnShutdown.offlineApps", true);
 pref("services.sync.prefs.sync.privacy.clearOnShutdown.sessions", true);
 pref("services.sync.prefs.sync.privacy.clearOnShutdown.siteSettings", true);
@@ -1799,6 +1815,8 @@ pref("browser.newtabpage.activity-stream.unifiedAds.tiles.enabled", false);
 pref("browser.newtabpage.activity-stream.unifiedAds.spocs.enabled", false);
 #endif
 pref("browser.newtabpage.activity-stream.unifiedAds.endpoint", "https://ads.mozilla.org/");
+pref("browser.newtabpage.activity-stream.unifiedAds.adsFeed.enabled", false);
+pref("browser.newtabpage.activity-stream.unifiedAds.adsFeed.tiles.enabled", false);
 
 // Weather widget for newtab
 pref("browser.newtabpage.activity-stream.showWeather", true);
@@ -1817,6 +1835,7 @@ pref("browser.newtabpage.activity-stream.discoverystream.locale-weather-config",
 // Preference to enable wallpaper selection in the Customize Menu of new tab page
 pref("browser.newtabpage.activity-stream.newtabWallpapers.enabled", true);
 pref("browser.newtabpage.activity-stream.newtabWallpapers.v2.enabled", true);
+pref("browser.newtabpage.activity-stream.newtabWallpapers.customColor.enabled", false);
 
 // Current new tab page background images.
 pref("browser.newtabpage.activity-stream.newtabWallpapers.wallpaper-light", "");
@@ -3215,18 +3234,8 @@ pref("browser.firefox-view.virtual-list.enabled", true);
 // message id, the id of the last screen they saw, and whether they completed the tour
 pref("browser.pdfjs.feature-tour", "{\"screen\":\"\",\"complete\":false}");
 
-// Enables cookie banner handling in Nightly in Private Browsing Mode. See
-// StaticPrefList.yaml for a description of the prefs.
-#ifdef NIGHTLY_BUILD
-  pref("cookiebanners.service.mode.privateBrowsing", 1);
-#endif
 
-#if defined(EARLY_BETA_OR_EARLIER)
-  // Enables the cookie banner desktop UI.
-  pref("cookiebanners.ui.desktop.enabled", true);
-#else
-  pref("cookiebanners.ui.desktop.enabled", false);
-#endif
+pref("cookiebanners.ui.desktop.enabled", false);
 
 // When true, shows a one-time feature callout for cookie banner blocking.
 pref("cookiebanners.ui.desktop.showCallout", false);

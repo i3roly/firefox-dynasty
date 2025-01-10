@@ -367,7 +367,9 @@ nsCocoaWindow* nsChildView::GetAppWindowWidget() const {
 void nsChildView::Destroy() {
   NS_OBJC_BEGIN_TRY_IGNORE_BLOCK;
 
-  if (mOnDestroyCalled) return;
+  if (mOnDestroyCalled) {
+    return;
+  }
   mOnDestroyCalled = true;
 
   // Stuff below may delete the last ref to this
@@ -2347,6 +2349,17 @@ NSEvent* gLastDragMouseDownEvent = nil;  // [strong]
   return [[self window] isKindOfClass:[BaseWindow class]] &&
          [(BaseWindow*)[self window] mainChildView] == self &&
          [(BaseWindow*)[self window] drawsContentsIntoWindowFrame];
+}
+
+- (void)showContextMenuForSelection:(id)sender {
+  if (!mGeckoChild) {
+    return;
+  }
+  nsAutoRetainCocoaObject kungFuDeathGrip(self);
+  WidgetPointerEvent geckoEvent(true, eContextMenu, mGeckoChild,
+                                WidgetMouseEvent::eContextMenuKey);
+  geckoEvent.mRefPoint = {};
+  mGeckoChild->DispatchInputEvent(&geckoEvent);
 }
 
 - (void)viewWillStartLiveResize {

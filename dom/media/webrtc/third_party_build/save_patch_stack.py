@@ -25,6 +25,18 @@ def early_exit_handler():
         print(error_help)
 
 
+def build_repo_name_from_path(input_dir):
+    # strip off the (probably moz-patch-stack) patch-stack location
+    output_dir = os.path.dirname(os.path.relpath(input_dir))
+
+    # if directory is under third_party (likely), give us the
+    # part after third_party
+    if os.path.commonpath([output_dir, "third_party"]) != "":
+        output_dir = os.path.relpath(output_dir, "third_party")
+
+    return output_dir
+
+
 def save_patch_stack(
     github_path,
     github_branch,
@@ -66,13 +78,14 @@ def save_patch_stack(
     # it is also helpful to save the no-op-cherry-pick-msg files from
     # the state directory so that if we're restoring a patch-stack we
     # also restore the possibly consumed no-op tracking files.
-    no_op_files = [
-        path
-        for path in os.listdir(state_directory)
-        if re.findall(".*no-op-cherry-pick-msg$", path)
-    ]
-    for file in no_op_files:
-        shutil.copy(os.path.join(state_directory, file), patch_directory)
+    if state_directory != "":
+        no_op_files = [
+            path
+            for path in os.listdir(state_directory)
+            if re.findall(".*no-op-cherry-pick-msg$", path)
+        ]
+        for file in no_op_files:
+            shutil.copy(os.path.join(state_directory, file), patch_directory)
 
     # get missing files (that should be marked removed)
     cmd = f"hg status --no-status --deleted {patch_directory}"
@@ -97,7 +110,9 @@ def save_patch_stack(
             run_hg("hg amend")
         else:
             run_shell(
-                f"hg commit --message 'Bug {bug_number} - updated libwebrtc patch stack'"
+                f"hg commit --message 'Bug {bug_number} - "
+                f"updated {build_repo_name_from_path(patch_directory)} "
+                f"patch stack' {patch_directory}"
             )
 
 

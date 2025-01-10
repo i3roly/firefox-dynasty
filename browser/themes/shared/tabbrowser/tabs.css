@@ -900,7 +900,7 @@
     margin: auto;
     font-size: 0;
 
-    &:first-letter {
+    &::first-letter {
       font: message-box;
       font-weight: var(--font-weight-bold);
       line-height: 24px;
@@ -909,6 +909,8 @@
 
   #tabbrowser-tabs[orient="vertical"][expanded] & {
     align-self: start;
+    box-sizing: content-box;
+    line-height: var(--tab-group-label-height);
     max-width: -moz-available;
     margin-block: var(--space-small);
     margin-inline-end: var(--space-medium);
@@ -1463,6 +1465,7 @@ toolbar:not(#TabsToolbar) #firefox-view-button {
 #allTabsMenu-groupsView {
   flex: auto;
   flex-grow: 0;
+  max-height: 30%;
 
   &:empty,
   &:empty + toolbarseparator {

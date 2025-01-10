@@ -3017,7 +3017,6 @@ pref("font.size.monospace.x-math", 13);
 
 // Login Manager prefs
 pref("signon.rememberSignons",              true);
-pref("signon.rememberSignons.visibilityToggle", true);
 pref("signon.autofillForms",                true);
 pref("signon.autofillForms.autocompleteOff", true);
 pref("signon.autofillForms.http",           false);
@@ -4064,6 +4063,7 @@ pref("extensions.formautofill.heuristics.autofillSameOriginWithTop", true);
 
 #ifdef NIGHTLY_BUILD
   pref("extensions.formautofill.ml.experiment.enabled", true);
+  pref("extensions.formautofill.ml.experiment.modelRevision", "v0.1.3");
 #endif
 
 pref("toolkit.osKeyStore.loglevel", "Warn");

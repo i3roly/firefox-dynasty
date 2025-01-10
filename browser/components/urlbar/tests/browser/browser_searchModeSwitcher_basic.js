@@ -796,7 +796,9 @@ add_task(async function test_search_mode_switcher_private_engine_icon() {
   );
 
   const defaultPrivateEngine = Services.search.getEngineByName(testEngineName);
+  const defaultPrivateEngineIcon = `moz-extension://${searchExtension.uuid}/private.png`;
   const defaultEngine = await Services.search.getDefault();
+  const defaultEngineIcon = await defaultEngine.getIconURL();
 
   Services.search.setDefaultPrivate(
     defaultPrivateEngine,
@@ -821,7 +823,7 @@ add_task(async function test_search_mode_switcher_private_engine_icon() {
 
   Assert.equal(
     getSeachModeSwitcherIcon(window),
-    await defaultEngine.getIconURL(),
+    defaultEngineIcon,
     "Is the icon of the default engine."
   );
 
@@ -832,9 +834,21 @@ add_task(async function test_search_mode_switcher_private_engine_icon() {
 
   Assert.equal(
     getSeachModeSwitcherIcon(privateWin),
-    `moz-extension://${searchExtension.uuid}/private.png`,
+    defaultPrivateEngineIcon,
     "Is the icon of the default private engine."
   );
+
+  info("Changing the default private engine.");
+  Services.search.setDefaultPrivate(
+    defaultEngine,
+    Ci.nsISearchService.CHANGE_REASON_UNKNOWN
+  );
+
+  info("Waiting for the icon to be updated.");
+  await TestUtils.waitForCondition(
+    () => getSeachModeSwitcherIcon(privateWin) == defaultEngineIcon
+  );
+  Assert.ok(true, "The icon was updated.");
 
   await BrowserTestUtils.closeWindow(privateWin);
   await searchExtension.unload();
@@ -850,3 +864,26 @@ function getSeachModeSwitcherIcon(window) {
   let re = /url\("([^"]+)"\)/;
   return searchModeSwitcherButton.style.listStyleImage.match(re)?.[1] ?? null;
 }
+
+add_task(async function open_new_tab_during_opening_popup() {
+  info("Open switcher popup");
+  let startTabCount = gBrowser.tabs.length;
+  let switcher = document.querySelector("#urlbar-searchmode-switcher");
+  let popup = UrlbarTestUtils.searchModeSwitcherPopup(window);
+  let promisePopupShown = BrowserTestUtils.waitForEvent(popup, "popupshown");
+  switcher.click();
+  await promisePopupShown;
+  Assert.ok(switcher.hasAttribute("open"), "The popup is opened");
+
+  info("Open a new tab by key");
+  let promisePopupHidden = BrowserTestUtils.waitForEvent(popup, "popuphidden");
+  EventUtils.synthesizeKey("t", { accelKey: true });
+  await BrowserTestUtils.waitForCondition(
+    () => startTabCount < gBrowser.tabs.length,
+    "Wait until new tab is opened"
+  );
+  await promisePopupHidden;
+  Assert.ok(!switcher.hasAttribute("open"), "The popup is closed");
+
+  gBrowser.removeTab(gBrowser.selectedTab);
+});

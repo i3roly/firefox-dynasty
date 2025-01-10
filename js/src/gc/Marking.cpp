@@ -726,11 +726,6 @@ void js::gc::TraceRangeInternal(JSTracer* trc, size_t len, T* vec,
   }
 }
 
-void js::TraceEdgeToBuffer(JSTracer* trc, Cell* owner, void* buffer,
-                           const char* name) {
-  BufferAllocator::TraceEdge(trc, owner, buffer, name);
-}
-
 /*** GC Marking Interface ***************************************************/
 
 namespace js {
@@ -1665,6 +1660,16 @@ scan_obj: {
   }
 
   unsigned nslots = nobj->slotSpan();
+
+  if (nobj->hasDynamicSlots()) {
+    ObjectSlots* slots = nobj->getSlotsHeader();
+    BufferAllocator::MarkTenuredAlloc(slots);
+  }
+
+  if (nobj->hasDynamicElements()) {
+    void* elements = nobj->getUnshiftedElementsHeader();
+    BufferAllocator::MarkTenuredAlloc(elements);
+  }
 
   if (!nobj->hasEmptyElements()) {
     base = nobj->getDenseElements();

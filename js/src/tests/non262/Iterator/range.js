@@ -1,5 +1,9 @@
 // |reftest| shell-option(--enable-iterator-range) skip-if(!Iterator.hasOwnProperty('range'))
 
+/*---
+features: [Iterator.range]
+---*/
+
 // Invalid start parameter types
 assertThrowsInstanceOf(() => Iterator.range('1'), TypeError);
 assertThrowsInstanceOf(() => Iterator.range(null), TypeError);
@@ -63,6 +67,5 @@ assertDeepEq(result4, []);
 
 //TODO: support/test other sequences
 
-if (typeof reportCompare === 'function') {
+if (typeof reportCompare === 'function')
     reportCompare(0, 0);
-}

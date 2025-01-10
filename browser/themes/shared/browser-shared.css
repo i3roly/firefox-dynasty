@@ -507,6 +507,11 @@ toolbarpaletteitem > #personal-bookmarks > #PlacesToolbar,
   pointer-events: none;
 }
 
+#notifications-toolbar {
+  min-height: 0;
+  flex-direction: column;
+}
+
 /* Menupopup drop indicators */
 
 menupopup::part(drop-indicator-container) {
@@ -1104,14 +1109,6 @@ popupnotificationcontent {
    */
   &:first-of-type {
     margin-block-start: 8px;
-  }
-}
-
-#password-notification-visibilityToggle {
-  margin-block-start: 14px;
-
-  > .checkbox-label-box > .checkbox-label {
-    opacity: 0.7;
   }
 }
 

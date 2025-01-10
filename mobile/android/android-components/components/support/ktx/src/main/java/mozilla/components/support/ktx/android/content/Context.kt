@@ -5,6 +5,7 @@
 package mozilla.components.support.ktx.android.content
 
 import android.app.ActivityManager
+import android.app.UiModeManager
 import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -20,6 +21,7 @@ import android.content.Intent.EXTRA_TEXT
 import android.content.Intent.FLAG_ACTIVITY_NEW_DOCUMENT
 import android.content.Intent.FLAG_ACTIVITY_NEW_TASK
 import android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+import android.content.pm.PackageManager
 import android.content.pm.PackageManager.PERMISSION_GRANTED
 import android.hardware.camera2.CameraManager
 import android.net.Uri
@@ -35,6 +37,7 @@ import androidx.annotation.ColorInt
 import androidx.annotation.DrawableRes
 import androidx.annotation.RequiresApi
 import androidx.annotation.VisibleForTesting
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.core.content.ContextCompat
 import androidx.core.content.ContextCompat.checkSelfPermission
@@ -385,3 +388,30 @@ fun Context.isEdgeToEdgeDisabled(): Boolean =
     SDK_INT < VERSION_CODES.VANILLA_ICE_CREAM ||
         applicationInfo.targetSdkVersion < VERSION_CODES.VANILLA_ICE_CREAM ||
         isEdgeToEdgeOptOutEnabled()
+
+/**
+ * Check if the device has a hinge sensor.
+ */
+fun Context.doesDeviceHaveHinge(): Boolean =
+    SDK_INT >= VERSION_CODES.R &&
+        packageManager.hasSystemFeature(PackageManager.FEATURE_SENSOR_HINGE_ANGLE)
+
+/**
+ * Applies the provided night mode in two ways:
+ * 1. Uses AppCompatDelegate to apply the provided night mode to the current theme
+ * 2. Uses UiModeManager to persist the provided night mode so that on new launches the splash screen matches
+ * (only on API 31+).
+ */
+fun Context.setApplicationNightMode(@AppCompatDelegate.NightMode mode: Int) {
+    AppCompatDelegate.setDefaultNightMode(mode)
+
+    if (SDK_INT >= VERSION_CODES.S) {
+        val uiModeManager = getSystemService(UiModeManager::class.java)
+        val uiModeManagerMode = when (mode) {
+            AppCompatDelegate.MODE_NIGHT_NO -> UiModeManager.MODE_NIGHT_NO
+            AppCompatDelegate.MODE_NIGHT_YES -> UiModeManager.MODE_NIGHT_YES
+            else -> UiModeManager.MODE_NIGHT_AUTO
+        }
+        uiModeManager.setApplicationNightMode(uiModeManagerMode)
+    }
+}

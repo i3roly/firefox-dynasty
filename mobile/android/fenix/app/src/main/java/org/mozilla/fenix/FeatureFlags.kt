@@ -48,11 +48,6 @@ object FeatureFlags {
     }
 
     /**
-     * Enables compose on the tabs tray items.
-     */
-    const val composeTabsTray = true
-
-    /**
      * Enables compose on the top sites.
      */
     const val composeTopSites = false
@@ -79,11 +74,6 @@ object FeatureFlags {
     const val metaAttributionEnabled = true
 
     /**
-     * Enables Navigation Toolbar.
-     */
-    val navigationToolbarEnabled = Config.channel.isNightlyOrDebug
-
-    /**
      * Enables the Compose Homepage.
      */
     const val composeHomepage = false
@@ -106,5 +96,5 @@ object FeatureFlags {
     /**
      * Enables native WebCompat Reporter.
      */
-    val webCompatReporter = Config.channel.isDebug
+    val webCompatReporter = Config.channel.isNightlyOrDebug
 }

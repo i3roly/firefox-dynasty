@@ -24,7 +24,7 @@ object Versions {
     const val maven_ant_tasks = "2.1.3"
     const val jacoco = "0.8.12"
     const val okhttp = "4.12.0"
-    const val okio = "3.9.0"
+    const val okio = "3.10.1"
     const val androidsvg = "1.4"
 
     const val android_gradle_plugin = "8.7.3"
@@ -109,9 +109,9 @@ object Versions {
         const val androidx_test_uiautomator = "2.3.0"
         const val falcon = "2.2.0"
         const val fastlane = "2.1.1"
-        const val junit = "5.11.3"
-        const val mockito = "5.14.2"
-        const val mockk = "1.13.13"
+        const val junit = "5.11.4"
+        const val mockito = "5.15.2"
+        const val mockk = "1.13.14"
         const val robolectric = "4.14.1"
     }
 

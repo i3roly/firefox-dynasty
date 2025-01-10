@@ -677,6 +677,17 @@ export class UrlbarView {
       }
     }
 
+    // Disable autofill when search terms persist, as users are likely refining
+    // their search rather than navigating to a website matching the search
+    // term. If they do want to navigate directly, users can modify their
+    // search, which resets persistence and re-enables autofill.
+    let state = this.input.getBrowserState(
+      this.window.gBrowser.selectedBrowser
+    );
+    if (state.persist?.shouldPersist) {
+      queryOptions.allowAutofill = false;
+    }
+
     this.controller.engagementEvent.discard();
     queryOptions.searchString = this.input.value;
     queryOptions.autofillIgnoresSelection = true;
@@ -2730,6 +2741,10 @@ export class UrlbarView {
 
   #setAccessibleFocus(item) {
     if (item) {
+      if (!item.id) {
+        // Assign an id to dynamic actions as required by aria-activedescendant.
+        item.id = item.id = getUniqueId("aria-activedescendant-target-");
+      }
       this.input.inputField.setAttribute("aria-activedescendant", item.id);
     } else {
       this.input.inputField.removeAttribute("aria-activedescendant");

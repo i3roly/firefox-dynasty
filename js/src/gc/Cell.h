@@ -31,9 +31,11 @@ extern bool RuntimeFromMainThreadIsHeapMajorCollecting(
     JS::shadow::Zone* shadowZone);
 
 #ifdef DEBUG
-// Barriers can't be triggered during backend Ion compilation, which may run on
-// a helper thread.
+// Barriers can't be triggered during offthread baseline or Ion
+// compilation, which may run on a helper thread.
+extern bool CurrentThreadIsBaselineCompiling();
 extern bool CurrentThreadIsIonCompiling();
+extern bool CurrentThreadIsOffThreadCompiling();
 #endif
 
 extern void TraceManuallyBarrieredGenericPointerEdge(JSTracer* trc,
@@ -545,7 +547,7 @@ template <typename T, typename F>
 MOZ_ALWAYS_INLINE void PreWriteBarrier(JS::Zone* zone, T* data,
                                        const F& traceFn) {
   MOZ_ASSERT(data);
-  MOZ_ASSERT(!CurrentThreadIsIonCompiling());
+  MOZ_ASSERT(!CurrentThreadIsOffThreadCompiling());
   MOZ_ASSERT(!CurrentThreadIsGCMarking());
 
   auto* shadowZone = JS::shadow::Zone::from(zone);
@@ -876,6 +878,8 @@ inline bool TenuredThingIsMarkedAny<Cell>(Cell* thing) {
 class alignas(gc::CellAlignBytes) SmallBuffer : public TenuredCell {
  public:
   static constexpr uintptr_t NURSERY_OWNED_BIT = Bit(3);
+
+  void check() const {}  // No check value.
 
   bool isNurseryOwned() const;
   void setNurseryOwned(bool value);

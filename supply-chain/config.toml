@@ -182,6 +182,10 @@ notes = "Part of the wgpu repository, pinned as the rest of wgpu crates."
 audit-as-crates-io = true
 notes = "This is a pinned version of the upstream code, pending update of the crate."
 
+[policy.objc]
+audit-as-crates-io = true
+notes = "This is the upstream code plus a backported fix."
+
 [policy.peek-poke]
 audit-as-crates-io = false
 
@@ -307,20 +311,12 @@ criteria = "safe-to-deploy"
 version = "1.3.3"
 criteria = "safe-to-deploy"
 
-[[exemptions.bitreader]]
-version = "0.3.6"
-criteria = "safe-to-deploy"
-
 [[exemptions.block]]
 version = "0.1.6"
 criteria = "safe-to-deploy"
 
 [[exemptions.cache-padded]]
 version = "1.2.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.camino]]
-version = "1.0.9"
 criteria = "safe-to-deploy"
 
 [[exemptions.chrono]]
@@ -614,26 +610,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.once_cell]]
 version = "1.12.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.phf]]
-version = "0.10.1"
-criteria = "safe-to-deploy"
-
-[[exemptions.phf_codegen]]
-version = "0.10.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.phf_generator]]
-version = "0.10.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.phf_macros]]
-version = "0.10.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.phf_shared]]
-version = "0.10.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.plain]]

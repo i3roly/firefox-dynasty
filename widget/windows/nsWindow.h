@@ -305,11 +305,12 @@ class nsWindow final : public nsBaseWidget {
   /**
    * Event helpers
    */
+  enum class IsNonclient : bool { No = false, Yes = true };
   bool DispatchMouseEvent(mozilla::EventMessage aEventMessage, WPARAM wParam,
                           LPARAM lParam, bool aIsContextMenuKey,
                           int16_t aButton, uint16_t aInputSource,
                           WinPointerInfo* aPointerInfo = nullptr,
-                          bool aIgnoreAPZ = false);
+                          IsNonclient aIgnoreAPZ = IsNonclient::No);
   void DispatchPendingEvents();
   void DispatchCustomEvent(const nsString& eventName);
 
@@ -581,7 +582,7 @@ class nsWindow final : public nsBaseWidget {
       nsWindow* aWindow,
       mozilla::Maybe<POINT> aEventPoint = mozilla::Nothing());
   static void PostSleepWakeNotification(const bool aIsSleepMode);
-  int32_t ClientMarginHitTestPoint(int32_t mx, int32_t my);
+  int32_t ClientMarginHitTestPoint(int32_t aX, int32_t aY);
   void SetWindowButtonRect(WindowButtonType aButtonType,
                            const LayoutDeviceIntRect& aClientRect) override {
     mWindowBtnRect[aButtonType] = aClientRect;

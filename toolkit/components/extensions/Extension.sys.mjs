@@ -1639,6 +1639,17 @@ export class ExtensionData {
     );
   }
 
+  // AMO enforces a maximum length of 45 on the name since at least 2017, via
+  // https://github.com/mozilla/addons-linter/blame/c4507688899aaafe29c522f1b1aec94b78b8a095/src/schema/updates/manifest.json#L111
+  // added in https://github.com/mozilla/addons-linter/pull/1169
+  // To avoid breaking add-ons that do not go through AMO (e.g. temporarily
+  // loaded extensions), we enforce the limit by truncating and warning if
+  // needed, instead enforcing a maxLength on "name" in schemas/manifest.json.
+  //
+  // We set the limit to 75, which is a safe limit that matches the CWS,
+  // see https://bugzilla.mozilla.org/show_bug.cgi?id=1939087#c5
+  static EXT_NAME_MAX_LEN = 75;
+
   async initializeAddonTypeAndID() {
     if (this.type) {
       // Already initialized.
@@ -1765,6 +1776,14 @@ export class ExtensionData {
       if (strict_max_version?.length) {
         manifest.applications.gecko.strict_max_version = strict_max_version;
       }
+    }
+
+    if (manifest.name.length > ExtensionData.EXT_NAME_MAX_LEN) {
+      // Truncate and warn - see comment in EXT_NAME_MAX_LEN.
+      manifest.name = manifest.name.slice(0, ExtensionData.EXT_NAME_MAX_LEN);
+      this.manifestWarning(
+        `Warning processing "name": must be shorter than ${ExtensionData.EXT_NAME_MAX_LEN}`
+      );
     }
 
     if (
@@ -3866,7 +3885,8 @@ export class Extension extends ExtensionData {
     // We automatically add permissions to system/built-in extensions.
     // Extensions expliticy stating not_allowed will never get permission.
     let isAllowed = this.permissions.has(PRIVATE_ALLOWED_PERMISSION);
-    if (this.manifest.incognito === "not_allowed") {
+    const hasIncognitoNotAllowed = this.manifest.incognito === "not_allowed";
+    if (hasIncognitoNotAllowed) {
       // If an extension previously had permission, but upgrades/downgrades to
       // a version that specifies "not_allowed" in manifest, remove the
       // permission.
@@ -3890,6 +3910,32 @@ export class Extension extends ExtensionData {
     // (See Bug 1790115).
     if (this.type === "theme") {
       this.permissions.add(PRIVATE_ALLOWED_PERMISSION);
+    }
+
+    // On builds where Enterprise Policies are supported, grant or revoke
+    // the private browsing access for extensions that are not app provided
+    // (system and builtin add-ons) or hidden.
+    if (
+      Services.policies &&
+      !this.isAppProvided &&
+      !this.isHidden &&
+      !hasIncognitoNotAllowed &&
+      this.type === "extension"
+    ) {
+      const settings = Services.policies.getExtensionSettings(this.id);
+      if (settings?.private_browsing) {
+        lazy.ExtensionPermissions.add(this.id, {
+          permissions: [PRIVATE_ALLOWED_PERMISSION],
+          origins: [],
+        });
+        this.permissions.add(PRIVATE_ALLOWED_PERMISSION);
+      } else if (settings?.private_browsing === false) {
+        lazy.ExtensionPermissions.remove(this.id, {
+          permissions: [PRIVATE_ALLOWED_PERMISSION],
+          origins: [],
+        });
+        this.permissions.delete(PRIVATE_ALLOWED_PERMISSION);
+      }
     }
 
     // We only want to update the SVG_CONTEXT_PROPERTIES_PERMISSION during

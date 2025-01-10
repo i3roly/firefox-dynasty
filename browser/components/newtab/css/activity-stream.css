@@ -473,6 +473,9 @@ main {
   width: 274px;
   padding: 0;
 }
+main.newtab-main {
+  align-items: center;
+}
 main .vertical-center-wrapper {
   margin: auto 0;
 }
@@ -1326,6 +1329,8 @@ main section {
 .top-sites-list .top-site-outer .top-site-button {
   display: flex;
   flex-direction: column;
+  justify-content: center;
+  align-items: center;
 }
 .top-sites-list .top-site-outer span[dir=auto] {
   display: block;
@@ -1333,12 +1338,13 @@ main section {
   text-overflow: ellipsis;
   white-space: nowrap;
   min-height: 20px;
+  width: 100px;
 }
 .top-sites-list .top-site-outer:hover span[dir=auto], .top-sites-list .top-site-outer:focus-within span[dir=auto] {
   overflow: unset;
   text-overflow: clip;
   white-space: normal;
-  text-wrap: wrap;
+  text-wrap: balance;
   contain: size;
   word-break: break-all;
 }
@@ -2325,6 +2331,10 @@ main section {
   padding: 0;
   width: 100%;
 }
+.wallpaper-input.theme-solid-color-picker::-moz-color-swatch {
+  border-color: transparent;
+  border-radius: 8px;
+}
 .wallpaper-input.dark-landscape {
   background-image: url("chrome://activity-stream/content/data/content/assets/wallpapers/dark-landscape.avif");
 }
@@ -2361,7 +2371,7 @@ main section {
 .wallpaper-input.light-sky {
   background-image: url("chrome://activity-stream/content/data/content/assets/wallpapers/light-sky.avif");
 }
-.wallpaper-input:checked {
+.wallpaper-input.theme-solid-color-picker.active, .wallpaper-input:checked {
   outline-color: var(--color-accent-primary-active);
   padding: 2px;
 }
@@ -7692,9 +7702,25 @@ main section {
   --leaderboard-height: 90px;
   grid-column: 1/-1;
   overflow: hidden;
-  width: 100vw;
+  width: 100%;
   margin-inline-start: 50%;
   transform: translate3d(-50%, 0, 0);
+}
+.ad-banner-wrapper:has(.ad-banner-inner.billboard) {
+  min-width: 970px;
+}
+@media (width <= 1015px) {
+  .ad-banner-wrapper:has(.ad-banner-inner.billboard) {
+    min-width: auto;
+  }
+}
+.ad-banner-wrapper:has(.ad-banner-inner.leaderboard) {
+  min-width: 728px;
+}
+@media (width <= 758px) {
+  .ad-banner-wrapper:has(.ad-banner-inner.leaderboard) {
+    min-width: auto;
+  }
 }
 .ad-banner-wrapper .ad-banner-inner {
   margin-inline: auto;
@@ -7729,7 +7755,7 @@ main section {
   }
 }
 .ad-banner-wrapper .ad-banner-inner.billboard {
-  max-width: var(--billboard-width);
+  min-width: var(--billboard-width);
 }
 .ad-banner-wrapper .ad-banner-inner.billboard .ad-banner-content {
   height: var(--billboard-height);
