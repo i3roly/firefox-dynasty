@@ -21,6 +21,7 @@ EXPORTS += [
 SOURCES += [
     "!rlbox.wasm.c",
     "/third_party/wasm2c/wasm2c/wasm-rt-impl.c",
+    "/third_party/wasm2c/wasm2c/wasm-rt-mem-impl.c",
 ]
 
 # Configuration for the wasm2c runtime used by RLBox
