@@ -12,6 +12,7 @@
 #include "CallbackThreadRegistry.h"
 
 #include "AppleVDADecoder.h"
+#include "AppleVDALinker.h"
 #include "MediaInfo.h"
 #include "MP4Decoder.h"
 #include "MediaData.h"
@@ -87,10 +88,10 @@ AppleVDADecoder::AppleVDADecoder(const VideoInfo& aConfig,
       mFormat(nullptr),
       mSession(nullptr),
       mIsHardwareAccelerated(false) {
-  MOZ_COUNT_CTOR(AppleVDADecoder);
-  MOZ_ASSERT(mStreamType != StreamType::Unknown);
-  // TODO: Verify aConfig.mime_type.
-  LOG("Creating AppleVDADecoder for %dx%d %s video", mDisplayWidth,
+      MOZ_COUNT_CTOR(AppleVDADecoder);
+      MOZ_ASSERT(mStreamType != StreamType::Unknown);
+      // TODO: Verify aConfig.mime_type.
+      LOG("Creating AppleVDADecoder for %dx%d %s video", mDisplayWidth,
       mDisplayHeight, EnumValueToString(mStreamType));
 }
 
@@ -567,10 +568,10 @@ AppleVDADecoder::CreateDecoderSpecification()
                  extradata,
                  extrasize);
 
-  const void* decoderKeys[] = { kVDADecoderConfiguration_Width,
-                                kVDADecoderConfiguration_Width,
-                                kVDADecoderConfiguration_SourceFormat,
-                                kVDADecoderConfiguration_avcCData };
+  const void* decoderKeys[] = { AppleVDALinker::skPropWidth,
+                                AppleVDALinker::skPropHeight,
+                                AppleVDALinker::skPropSourceFormat,
+                                AppleVDALinker::skPropAVCCData };
   const void* decoderValue[] = { avc_width,
                                  avc_height,
                                  avc_format,
