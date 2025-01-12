@@ -11,6 +11,9 @@
 #include "AppleATDecoder.h"
 #include "AppleVTDecoder.h"
 #include "AppleVDADecoder.h"
+#include "AppleVDALinker.h"
+#include "AppleCMLinker.h"
+#include "AppleVTLinker.h"
 
 #include "MP4Decoder.h"
 #include "VideoUtils.h"
@@ -39,12 +42,21 @@ bool AppleDecoderModule::sInitialized = false;
 bool AppleDecoderModule::sCanUseVP9Decoder = false;
 bool AppleDecoderModule::sCanUseAV1Decoder = false;
 
+bool AppleDecoderModule::sIsCoreMediaAvailable = false;
+bool AppleDecoderModule::sIsVTAvailable = false;
+bool AppleDecoderModule::sIsVDAAvailable = false;
+
 /* static */
 void AppleDecoderModule::Init() {
   if (sInitialized) {
     return;
   }
 
+  //10.7.3 - > 10.7 need these (thanks jya)
+  sIsCoreMediaAvailable = AppleCMLinker::Link();
+  sIsVDAAvailable = AppleVDALinker::Link();
+  sIsVTAvailable = AppleVTLinker::Link();
+  
   sInitialized = true;
   if (RegisterSupplementalVP9Decoder()) {
     sCanUseVP9Decoder = CanCreateHWDecoder(MediaCodec::VP9);
@@ -250,6 +262,7 @@ bool AppleDecoderModule::CanCreateHWDecoder(MediaCodec aCodec) {
           vtReportsSupport = VTIsHardwareDecodeSupported(kCMVideoCodecType_VP9);
           break;
         case MediaCodec::H264:
+          // 1806391 - H264 hardware decode check crashes on 10.12 - 10.14
           info.mMimeType = "video/avc";
           vtReportsSupport = VTIsHardwareDecodeSupported(kCMVideoCodecType_H264);
           break;
@@ -266,7 +279,7 @@ bool AppleDecoderModule::CanCreateHWDecoder(MediaCodec aCodec) {
   }
     // VT reports HW decode is supported -- verify by creating an actual decoder
   if (vtReportsSupport) {
-    bool hwSupport; 
+    bool hwSupport;
     MediaResult rv;
     nsAutoCString failureReason;
     char *type;
@@ -304,6 +317,7 @@ bool AppleDecoderModule::CanCreateHWDecoder(MediaCodec aCodec) {
     return hwSupport;
   }
   return false;
+
 }
 
 /* static */
