@@ -395,20 +395,8 @@ nsresult nsAppShell::Init() {
                           topLevelObjects:nil];
     } else {
       // Get the path of the nib file, which lives in the GRE location
-      nsCOMPtr<nsIFile> nibFile;
-      nsresult rv = NS_GetSpecialDirectory(NS_GRE_DIR, getter_AddRefs(nibFile));
-      NS_ENSURE_SUCCESS(rv, rv);
-
-      nibFile->AppendNative("res"_ns);
-      nibFile->AppendNative("MainMenu.nib"_ns);
-
-      nsAutoCString nibPath;
-      rv = nibFile->GetNativePath(nibPath);
-      NS_ENSURE_SUCCESS(rv, rv);
-       [NSBundle loadNibFile:[NSString stringWithUTF8String:(const char*)nibPath.get()]
-        externalNameTable:[NSDictionary dictionaryWithObject:[GeckoNSApplication sharedApplication]
-                                                      forKey:@"NSOwner"]
-                 withZone:NSDefaultMallocZone()];
+      [NSBundle loadNibNamed:@"res/MainMenu"
+                                    owner:[GeckoNSApplication sharedApplication]];
    }
   }
 
