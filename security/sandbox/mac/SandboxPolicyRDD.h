@@ -27,6 +27,10 @@ static const char SandboxPolicyRDD[] = R"SANDBOX_LITERAL(
 
   
   (moz-deny default)
+  ;;; older macs need this to let the VT decoder get through
+  ;;; i have no idea what service it is on sub 1013 systems
+  (if (<= macosVersion 1012) 
+   (allow default))
   ; These are not included in (deny default)
   (if (>= macosVersion 1009) 
   (moz-deny process-info*))
@@ -59,12 +63,12 @@ static const char SandboxPolicyRDD[] = R"SANDBOX_LITERAL(
         (subpath "/System")
         (subpath "/usr/lib")
         (subpath "/Library/GPUBundles")
-        (subpath app-path))
+        (subpath app-path)))
       (allow file-read*
         (subpath "/System")
         (subpath "/usr/lib")
         (subpath "/Library/GPUBundles")
-        (subpath app-path))))
+        (subpath app-path)))
 
 
   (if (string? crashPort)
