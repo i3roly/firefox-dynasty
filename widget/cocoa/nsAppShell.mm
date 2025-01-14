@@ -395,8 +395,14 @@ nsresult nsAppShell::Init() {
                           topLevelObjects:nil];
     } else {
       // Get the path of the nib file, which lives in the GRE location
-      [NSBundle loadNibNamed:@"res/MainMenu"
-                                    owner:[GeckoNSApplication sharedApplication]];
+       [NSBundle loadNibFile:[[NSBundle mainBundle] pathForResource:@"res/MainMenu" ofType:@"nib"]
+        externalNameTable:[NSDictionary dictionaryWithObjectsAndKeys:[GeckoNSApplication sharedApplication], NSNibOwner, 
+                                                                    nil, NSNibTopLevelObjects, 
+                                                                    nil]
+                 withZone:nil];
+    //big thanks to the @uTox team for their example that helped me bridge the old fawx code to
+    //the proper form that uses mainBundle and topLevelObjects for loading on < 10.8:
+    //https://github.com/uTox/uTox/blob/8d5cd82e3554a3108f2aff9411bbe551e1e443b0/src/cocoa/main.m#L513
    }
   }
 
