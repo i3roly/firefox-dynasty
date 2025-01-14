@@ -35,6 +35,7 @@ UNIFIED_SOURCES += [
     "/third_party/abseil-cpp/absl/strings/internal/memutil.cc",
     "/third_party/abseil-cpp/absl/strings/internal/stringify_sink.cc",
     "/third_party/abseil-cpp/absl/strings/match.cc",
+    "/third_party/abseil-cpp/absl/strings/str_cat.cc",
     "/third_party/abseil-cpp/absl/strings/str_split.cc"
 ]
 

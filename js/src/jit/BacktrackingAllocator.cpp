@@ -4313,11 +4313,16 @@ bool BacktrackingAllocator::createMoveGroupsFromLiveRangeTransitions() {
 }
 
 // Helper for ::addLiveRegistersForRange
-size_t BacktrackingAllocator::findFirstNonCallSafepoint(CodePosition from) {
-  size_t i = 0;
+size_t BacktrackingAllocator::findFirstNonCallSafepoint(CodePosition pos,
+                                                        size_t startFrom) {
+  // Assert startFrom is valid.
+  MOZ_ASSERT_IF(startFrom > 0,
+                inputOf(graph.getSafepoint(startFrom - 1)) < pos);
+
+  size_t i = startFrom;
   for (; i < graph.numNonCallSafepoints(); i++) {
     const LInstruction* ins = graph.getNonCallSafepoint(i);
-    if (from <= inputOf(ins)) {
+    if (pos <= inputOf(ins)) {
       break;
     }
   }
@@ -4325,8 +4330,8 @@ size_t BacktrackingAllocator::findFirstNonCallSafepoint(CodePosition from) {
 }
 
 // Helper for ::installAllocationsInLIR
-void BacktrackingAllocator::addLiveRegistersForRange(VirtualRegister& reg,
-                                                     LiveRange* range) {
+void BacktrackingAllocator::addLiveRegistersForRange(
+    VirtualRegister& reg, LiveRange* range, size_t* firstNonCallSafepoint) {
   // Fill in the live register sets for all non-call safepoints.
   LAllocation a = range->bundle()->allocation();
   if (!a.isRegister()) {
@@ -4349,8 +4354,11 @@ void BacktrackingAllocator::addLiveRegistersForRange(VirtualRegister& reg,
     start = start.next();
   }
 
-  size_t i = findFirstNonCallSafepoint(start);
-  for (; i < graph.numNonCallSafepoints(); i++) {
+  *firstNonCallSafepoint =
+      findFirstNonCallSafepoint(range->from(), *firstNonCallSafepoint);
+
+  for (size_t i = *firstNonCallSafepoint; i < graph.numNonCallSafepoints();
+       i++) {
     LInstruction* ins = graph.getNonCallSafepoint(i);
     CodePosition pos = inputOf(ins);
 
@@ -4388,6 +4396,12 @@ static inline size_t NumReusingDefs(LInstruction* ins) {
 bool BacktrackingAllocator::installAllocationsInLIR() {
   JitSpew(JitSpew_RegAlloc, "Installing Allocations");
 
+  // The virtual registers and safepoints are both ordered by position. To avoid
+  // quadratic behavior in findFirstNonCallSafepoint, we use
+  // firstNonCallSafepoint as cursor to start the search at the safepoint
+  // returned by the previous call.
+  size_t firstNonCallSafepoint = 0;
+
   MOZ_ASSERT(!vregs[0u].hasRanges());
   for (size_t i = 1; i < graph.numVirtualRegisters(); i++) {
     VirtualRegister& reg = vregs[i];
@@ -4395,6 +4409,13 @@ bool BacktrackingAllocator::installAllocationsInLIR() {
     if (mir->shouldCancel("Backtracking Install Allocations (main loop)")) {
       return false;
     }
+
+    firstNonCallSafepoint =
+        findFirstNonCallSafepoint(inputOf(reg.ins()), firstNonCallSafepoint);
+
+    // The ranges are sorted by start position, so we can use the same
+    // findFirstNonCallSafepoint optimization here.
+    size_t firstNonCallSafepointForRange = firstNonCallSafepoint;
 
     for (VirtualRegister::RangeIterator iter(reg); iter; iter++) {
       LiveRange* range = *iter;
@@ -4446,7 +4467,7 @@ bool BacktrackingAllocator::installAllocationsInLIR() {
         }
       }
 
-      addLiveRegistersForRange(reg, range);
+      addLiveRegistersForRange(reg, range, &firstNonCallSafepointForRange);
     }
   }
 
@@ -4457,6 +4478,10 @@ bool BacktrackingAllocator::installAllocationsInLIR() {
 // Helper for ::populateSafepoints
 size_t BacktrackingAllocator::findFirstSafepoint(CodePosition pos,
                                                  size_t startFrom) {
+  // Assert startFrom is valid.
+  MOZ_ASSERT_IF(startFrom > 0,
+                inputOf(graph.getSafepoint(startFrom - 1)) < pos);
+
   size_t i = startFrom;
   for (; i < graph.numSafepoints(); i++) {
     LInstruction* ins = graph.getSafepoint(i);
@@ -4507,6 +4532,9 @@ static inline bool IsTraceable(VirtualRegister& reg) {
 bool BacktrackingAllocator::populateSafepoints() {
   JitSpew(JitSpew_RegAlloc, "Populating Safepoints");
 
+  // The virtual registers and safepoints are both ordered by position. To avoid
+  // quadratic behavior in findFirstSafepoint, we use firstSafepoint as cursor
+  // to start the search at the safepoint returned by the previous call.
   size_t firstSafepoint = 0;
 
   MOZ_ASSERT(!vregs[0u].def());
@@ -4523,18 +4551,24 @@ bool BacktrackingAllocator::populateSafepoints() {
       break;
     }
 
+    // The ranges are sorted by start position, so we can use the same
+    // findFirstSafepoint optimization here.
+    size_t firstSafepointForRange = firstSafepoint;
+
     for (VirtualRegister::RangeIterator iter(reg); iter; iter++) {
       LiveRange* range = *iter;
 
-      for (size_t j = firstSafepoint; j < graph.numSafepoints(); j++) {
+      firstSafepointForRange =
+          findFirstSafepoint(range->from(), firstSafepointForRange);
+
+      for (size_t j = firstSafepointForRange; j < graph.numSafepoints(); j++) {
         LInstruction* ins = graph.getSafepoint(j);
 
-        if (!range->covers(inputOf(ins))) {
-          if (inputOf(ins) >= range->to()) {
-            break;
-          }
-          continue;
+        if (inputOf(ins) >= range->to()) {
+          break;
         }
+
+        MOZ_ASSERT(range->covers(inputOf(ins)));
 
         // Include temps but not instruction outputs. Also make sure
         // MUST_REUSE_INPUT is not used with gcthings or nunboxes, or

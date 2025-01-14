@@ -5510,7 +5510,9 @@ var SessionStoreInternal = {
       let endPosition = tabbrowser.tabs.length - 1;
       for (let i = 0; i < initialTabs.length; i++) {
         tabbrowser.unpinTab(initialTabs[i]);
-        tabbrowser.moveTabTo(initialTabs[i], endPosition);
+        tabbrowser.moveTabTo(initialTabs[i], endPosition, {
+          forceStandaloneTab: true,
+        });
       }
     }
 
@@ -7840,6 +7842,7 @@ var SessionStoreInternal = {
     );
     this.forgetClosedTabGroup(source, tabGroupId);
 
+    group.select();
     return group;
   },
 
@@ -7895,6 +7898,7 @@ var SessionStoreInternal = {
     );
     this.forgetSavedTabGroup(tabGroupId);
 
+    group.select();
     return group;
   },
 

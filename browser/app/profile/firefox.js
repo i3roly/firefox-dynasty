@@ -605,14 +605,8 @@ pref("browser.urlbar.showSearchSuggestionsFirst", true);
 pref("browser.urlbar.maxCharsForSearchSuggestions", 100);
 
 pref("browser.urlbar.trimURLs", true);
-
-#ifdef NIGHTLY_BUILD
-pref("browser.urlbar.trimHttps", true);
-pref("browser.urlbar.untrimOnUserInteraction.featureGate", true);
-#else
 pref("browser.urlbar.trimHttps", false);
 pref("browser.urlbar.untrimOnUserInteraction.featureGate", false);
-#endif
 
 // If changed to true, copying the entire URL from the location bar will put the
 // human readable (percent-decoded) URL on the clipboard.
@@ -2109,14 +2103,9 @@ pref("browser.ml.chat.sidebar", true);
 // Block insecure active content on https pages
 pref("security.mixed_content.block_active_content", true);
 
-// Show "Not Secure" text for http pages; disabled for now
-#ifdef NIGHTLY_BUILD
+// Show "Not Secure" text for http pages.
 pref("security.insecure_connection_text.enabled", true);
 pref("security.insecure_connection_text.pbmode.enabled", true);
-#else
-pref("security.insecure_connection_text.enabled", false);
-pref("security.insecure_connection_text.pbmode.enabled", false);
-#endif
 
 // If this turns true, Moz*Gesture events are not called stopPropagation()
 // before content.

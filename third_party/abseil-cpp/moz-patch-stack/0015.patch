@@ -1,23 +1,27 @@
 From: Michael Froman <mfroman@mozilla.com>
-Date: Thu, 10 Oct 2024 13:42:00 +0000
-Subject: Bug 1921707 - add filtering for new build directory location in
- third_party/abseil-cpp/absl.gni r=ng
+Date: Fri, 22 Nov 2024 20:19:00 +0000
+Subject: Bug 1932928 - enable building more absl/strings files for libwebrtc
+ commit cf796a2d2c. r=dbaker
 
-Differential Revision: https://phabricator.services.mozilla.com/D224546
-Mercurial Revision: https://hg.mozilla.org/mozilla-central/rev/c4cbc65577ab4012dc243185d5d87c83e29b7446
+Differential Revision: https://phabricator.services.mozilla.com/D229961
+Mercurial Revision: https://hg.mozilla.org/mozilla-central/rev/f874c6bfdf0305139f589a0d53d1593ba01b0020
 ---
- abseil-cpp/absl.gni | 1 +
- 1 file changed, 1 insertion(+)
+ abseil-cpp/absl/strings/BUILD.gn | 4 ----
+ 1 file changed, 4 deletions(-)
 
-diff --git a/abseil-cpp/absl.gni b/abseil-cpp/absl.gni
-index aaf842c47c0..29d283dd536 100644
---- a/abseil-cpp/absl.gni
-+++ b/abseil-cpp/absl.gni
-@@ -96,6 +96,7 @@ template("absl_source_set") {
-       modified_deps = []
-       foreach (dep, deps) {
-         newdep = string_replace(dep, "//third_party/abseil-cpp/", "//")
-+        newdep = string_replace(newdep, "//build", "//chromium/build")
-         modified_deps += [ newdep ]
-       }
-       deps = []
+diff --git a/abseil-cpp/absl/strings/BUILD.gn b/abseil-cpp/absl/strings/BUILD.gn
+index b7763b6c504..62e8e585190 100644
+--- a/abseil-cpp/absl/strings/BUILD.gn
++++ b/abseil-cpp/absl/strings/BUILD.gn
+@@ -87,11 +87,7 @@ absl_source_set("strings") {
+   if (moz_webrtc_build) {
+     # Removed for unreachable sources.  See Bug 1820869.
+     sources -= [
+-      "charconv.cc",
+       "escaping.cc",
+-      "internal/charconv_bigint.cc",
+-      "internal/charconv_parse.cc",
+-      "numbers.cc",
+       "str_cat.cc",
+       "str_replace.cc",
+       "substitute.cc",

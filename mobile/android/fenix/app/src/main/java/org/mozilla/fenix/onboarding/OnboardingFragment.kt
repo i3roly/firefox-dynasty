@@ -233,13 +233,6 @@ class OnboardingFragment : Fragment() {
                     onboardingStore.state.toolbarOptionSelected.id,
                 )
             },
-            onSkipCustomizeToolbarClick = {
-                telemetryRecorder.onSkipToolbarPlacementClick(
-                    pagesToDisplay.telemetrySequenceId(),
-                    pagesToDisplay.sequencePosition(OnboardingPageUiData.Type.TOOLBAR_PLACEMENT),
-                )
-            },
-
             onCustomizeThemeClick = {
                 telemetryRecorder.onSelectThemeClick(
                     onboardingStore.state.themeOptionSelected.id,
@@ -332,8 +325,7 @@ class OnboardingFragment : Fragment() {
         requireContext().settings().shouldShowSearchBarCFR = FxNimbus.features.encourageSearchCfr.value().enabled
     }
 
-    // Marked as internal since it is used in unit tests
-    internal fun isNotDefaultBrowser(context: Context) =
+    private fun isNotDefaultBrowser(context: Context) =
         !BrowsersCache.all(context.applicationContext).isDefaultBrowser
 
     private fun canShowNotificationPage(context: Context) =

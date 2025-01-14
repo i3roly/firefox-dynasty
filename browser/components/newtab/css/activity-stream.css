@@ -108,6 +108,13 @@ input {
   :root {
     --newtab-text-secondary-color: var(--newtab-text-primary-color);
     --newtab-text-topic-label-color: #CB9EFF;
+    color-scheme: light;
+    --newtab-text-secondary-text: #000;
+  }
+}
+@media (prefers-contrast) and (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
     --newtab-text-secondary-text: #FFF;
   }
 }
@@ -7777,4 +7784,15 @@ main section {
   text-transform: uppercase;
   font-size: var(--font-size-small);
   color: var(--newtab-contextual-text-secondary-color);
+}
+
+.section-context-menu {
+  position: relative;
+}
+.section-context-menu .context-menu {
+  /* Fix the context menu width */
+  width: calc(4 * var(--size-item-large));
+  /* Position the context menu on top of the card grid, below the menu button. */
+  top: calc(2.5 * var(--size-item-small));
+  inset-inline-start: calc(-6.25 * var(--size-item-small));
 }

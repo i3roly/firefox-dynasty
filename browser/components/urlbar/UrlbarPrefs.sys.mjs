@@ -213,6 +213,12 @@ const PREF_URLBAR_DEFAULTS = new Map([
   // mode or the QuickActions search mode.
   ["quickactions.enabled", true],
 
+  // The number of times we should show the actions onboarding label.
+  ["quickactions.timesToShowOnboardingLabel", 0],
+
+  // The number of times we have shown the actions onboarding label.
+  ["quickactions.timesShownOnboardingLabel", 0],
+
   // Whether we will match QuickActions within a phrase and not only a prefix.
   ["quickactions.matchInPhrase", true],
 
@@ -530,7 +536,7 @@ const PREF_URLBAR_DEFAULTS = new Map([
   ["trending.requireSearchMode", false],
 
   // Remove 'https://' from url when urlbar is focused.
-  ["trimHttps", true],
+  ["trimHttps", false],
 
   // Remove redundant portions from URLs.
   ["trimURLs", true],
@@ -586,7 +592,7 @@ const PREF_OTHER_DEFAULTS = new Map([
   ["browser.search.suggest.enabled", true],
   ["browser.search.suggest.enabled.private", false],
   ["keyword.enabled", true],
-  ["security.insecure_connection_text.enabled", false],
+  ["security.insecure_connection_text.enabled", true],
   ["ui.popup.disable_autohide", false],
 ]);
 

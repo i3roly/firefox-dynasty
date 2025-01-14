@@ -200,18 +200,6 @@ export const GenAI = {
       },
     ],
     [
-      "https://x.com/i/grok",
-      {
-        id: "grok",
-        learnLink: "https://x.ai/grok",
-        link1: "https://x.ai/legal/terms-of-service",
-        link2: "https://x.ai/legal/privacy-policy",
-        maxLength: 13830,
-        name: "Grok",
-        queryParam: "text",
-      },
-    ],
-    [
       "https://huggingface.co/chat",
       {
         choiceIds: [

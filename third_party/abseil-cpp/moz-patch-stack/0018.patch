@@ -1,23 +1,30 @@
 From: Michael Froman <mfroman@mozilla.com>
-Date: Thu, 5 Dec 2024 23:03:00 +0000
-Subject: Bug 1935461 - enable building abseil-cpp strings:str_format for
- libwebrtc commit 75a106672e. r=dbaker
+Date: Thu, 9 Jan 2025 13:53:00 -0600
+Subject: Bug 1938156 - third_party/abseil-cpp ba05f98ec72 added a group we
+ don't need.
 
-Differential Revision: https://phabricator.services.mozilla.com/D231285
-Mercurial Revision: https://hg.mozilla.org/mozilla-central/rev/e93f7131a1ffbf2f7e4cf989a61288c603871683
+Mercurial Revision: https://hg.mozilla.org/mozilla-central/rev/928c6aa703b29d46632c4333b0c8b643fc08c60f
 ---
- abseil-cpp/BUILD.gn | 1 +
- 1 file changed, 1 insertion(+)
+ abseil-cpp/BUILD.gn | 2 ++
+ 1 file changed, 2 insertions(+)
 
 diff --git a/abseil-cpp/BUILD.gn b/abseil-cpp/BUILD.gn
-index 8404afe3917..c2325ac605b 100644
+index 520326073de..fabe5c6ff42 100644
 --- a/abseil-cpp/BUILD.gn
 +++ b/abseil-cpp/BUILD.gn
-@@ -111,6 +111,7 @@ group("absl_component_deps") {
-     "//abseil-cpp/absl/functional:any_invocable",
-     "//abseil-cpp/absl/functional:bind_front",
-     "//abseil-cpp/absl/strings",
-+    "//abseil-cpp/absl/strings:str_format",
-     "//abseil-cpp/absl/strings:string_view",
-     "//abseil-cpp/absl/types:optional",
-     "//abseil-cpp/absl/types:span",
+@@ -186,6 +186,7 @@ source_set("absl_full") {
+ }
+ 
+ group("absl_full_deps") {
++  if (!moz_webrtc_build) {
+   public_deps = [
+     # Banned because each flag registration generates a static initializer, and
+     # the flag registration mechanism is problematic in component builds.
+@@ -212,6 +213,7 @@ group("absl_full_deps") {
+   ]
+ 
+   public_configs = [ "//third_party/abseil-cpp/absl/flags:absl_flags_config" ]
++  }
+ }
+ 
+ config("absl_include_config") {

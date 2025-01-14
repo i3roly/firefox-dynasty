@@ -467,6 +467,12 @@ export class MegalistAlpha extends MozLitElement {
             };
             this.#sendCommand("DeleteLogin", { value: login });
           }}
+          .onOriginClick=${e => {
+            e.preventDefault();
+            this.#sendCommand("OpenLink", {
+              value: this.selectedRecord.origin.href,
+            });
+          }}
         >
         </login-form>`;
       case VIEW_MODES.ALERTS:
@@ -479,12 +485,12 @@ export class MegalistAlpha extends MozLitElement {
   renderSearch() {
     return html`
       <div
-        class="searchContainer"
+        class="search-container"
         @click=${() => {
           this.shadowRoot.querySelector(".search").focus();
         }}
       >
-        <div class="searchIcon"></div>
+        <div class="search-icon"></div>
         <input
           class="search"
           type="search"
