@@ -2459,7 +2459,6 @@ dependencies = [
  "nsstring",
  "oblivious_http",
  "origin-trials-ffi",
- "osclientcerts",
  "oxilangtag",
  "oxilangtag-ffi",
  "prefs_parser",
@@ -4843,7 +4842,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "osclientcerts"
+name = "osclientcerts-static"
 version = "0.1.4"
 dependencies = [
  "byteorder",
@@ -4852,10 +4851,10 @@ dependencies = [
  "lazy_static",
  "libloading",
  "log",
+ "mozilla-central-workspace-hack",
  "pkcs11-bindings",
  "rsclientcerts",
  "sha2",
- "static_prefs",
  "whatsys",
  "winapi",
 ]

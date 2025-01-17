@@ -16115,7 +16115,6 @@
   type: RelaxedAtomicBool
   value: true
   mirror: always
-  rust: true
 
 - name: security.pki.cert_short_lifetime_in_days
   type: RelaxedAtomicUint32
