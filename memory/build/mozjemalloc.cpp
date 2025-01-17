@@ -705,7 +705,7 @@ struct arena_stats_t {
   size_t allocated_large;
 
   // The number of "memory operations" aka mallocs/frees.
-  size_t operations;
+  uint64_t operations;
 };
 
 // ***************************************************************************
@@ -1170,7 +1170,7 @@ struct arena_t {
   }
 
   // We can read the operations field from mStats without a lock:
-  size_t Operations() const MOZ_NO_THREAD_SAFETY_ANALYSIS {
+  uint64_t Operations() const MOZ_NO_THREAD_SAFETY_ANALYSIS {
     return mStats.operations;
   }
 
@@ -1491,6 +1491,8 @@ class ArenaCollection {
 
     MOZ_RELEASE_ASSERT(tree.Search(aArena), "Arena not in tree");
     tree.Remove(aArena);
+    mNumOperationsDisposedArenas += aArena->Operations();
+
     delete aArena;
   }
 
@@ -1568,6 +1570,12 @@ class ArenaCollection {
     mMainThreadId = Some(GetThreadId());
   }
 
+  // This requires the lock to get a consistent count across all the active
+  // + disposed arenas.
+  uint64_t OperationsDisposedArenas() MOZ_REQUIRES(mLock) {
+    return mNumOperationsDisposedArenas;
+  }
+
  private:
   const static arena_id_t MAIN_THREAD_ARENA_BIT = 0x1;
 
@@ -1593,6 +1601,10 @@ class ArenaCollection {
   Atomic<int32_t, MemoryOrdering::Relaxed> mDefaultMaxDirtyPageModifier;
   // This is never changed except for forking, and it does not need mLock.
   Maybe<ThreadId> mMainThreadId;
+
+  // The number of operations that happened in arenas that have since been
+  // destroyed.
+  uint64_t mNumOperationsDisposedArenas = 0;
 };
 
 MOZ_RUNINIT static ArenaCollection gArenas;
@@ -1623,7 +1635,7 @@ static RedBlackTree<extent_node_t, ExtentTreeTrait> huge
 // Huge allocation statistics.
 static size_t huge_allocated MOZ_GUARDED_BY(huge_mtx);
 static size_t huge_mapped MOZ_GUARDED_BY(huge_mtx);
-static size_t huge_operations MOZ_GUARDED_BY(huge_mtx);
+static uint64_t huge_operations MOZ_GUARDED_BY(huge_mtx);
 
 // **************************
 // base (internal allocation).
@@ -5499,6 +5511,7 @@ inline void MozJemalloc::jemalloc_stats_lite(jemalloc_stats_lite_t* aStats) {
       aStats->allocated_bytes += arena->AllocatedBytes();
       aStats->num_operations += arena->Operations();
     }
+    aStats->num_operations += gArenas.OperationsDisposedArenas();
   }
 }
 

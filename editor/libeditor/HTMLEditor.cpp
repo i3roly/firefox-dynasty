@@ -4434,22 +4434,21 @@ Result<CreateLineBreakResult, nsresult> HTMLEditor::InsertLineBreak(
       -> Result<EditorLineBreak, nsresult> {
     if (aLineBreakType == LineBreakType::BRElement) {
       Result<CreateElementResult, nsresult> insertBRElementResultOrError =
-          CreateAndInsertElement(aWithTransaction, *nsGkAtoms::br,
-                                 pointToInsert);
+          InsertBRElement(aWithTransaction, BRElementType::Normal,
+                          pointToInsert);
       if (MOZ_UNLIKELY(insertBRElementResultOrError.isErr())) {
         NS_WARNING(
-            nsPrintfCString("HTMLEditor::CreateAndInsertElement(%s) failed",
-                            ToString(aWithTransaction).c_str())
+            nsPrintfCString(
+                "EditorBase::InsertBRElement(%s, BRElementType::Normal) failed",
+                ToString(aWithTransaction).c_str())
                 .get());
         return insertBRElementResultOrError.propagateErr();
       }
-      insertBRElementResultOrError.inspect().IgnoreCaretPointSuggestion();
-      const auto* brElement = HTMLBRElement::FromNode(
-          insertBRElementResultOrError.unwrap().GetNewNode());
-      if (NS_WARN_IF(!brElement)) {
-        return Err(NS_ERROR_FAILURE);
-      }
-      return EditorLineBreak(*brElement);
+      CreateElementResult insertBRElementResult =
+          insertBRElementResultOrError.unwrap();
+      MOZ_ASSERT(insertBRElementResult.Handled());
+      insertBRElementResult.IgnoreCaretPointSuggestion();
+      return EditorLineBreak(insertBRElementResult.UnwrapNewNode());
     }
     MOZ_ASSERT(aLineBreakType == LineBreakType::Linefeed);
     RefPtr<Text> newTextNode = CreateTextNode(u"\n"_ns);
@@ -5025,7 +5024,7 @@ void HTMLEditor::DoContentInserted(nsIContent* aChild,
 }
 
 MOZ_CAN_RUN_SCRIPT_BOUNDARY void HTMLEditor::ContentWillBeRemoved(
-    nsIContent* aChild) {
+    nsIContent* aChild, const BatchRemovalState*) {
   if (mLastCollapsibleWhiteSpaceAppendedTextNode == aChild) {
     mLastCollapsibleWhiteSpaceAppendedTextNode = nullptr;
   }
@@ -5644,7 +5643,7 @@ Result<SplitNodeResult, nsresult> HTMLEditor::DoSplitNode(
   if (NS_WARN_IF(!aStartOfRightNode.IsInContentNode())) {
     return Err(NS_ERROR_INVALID_ARG);
   }
-  MOZ_ASSERT(aStartOfRightNode.IsSetAndValid());
+  MOZ_DIAGNOSTIC_ASSERT(aStartOfRightNode.IsSetAndValid());
 
   // Remember all selection points.
   AutoTArray<SavedRange, 10> savedRanges;
@@ -5680,24 +5679,22 @@ Result<SplitNodeResult, nsresult> HTMLEditor::DoSplitNode(
     return Err(NS_ERROR_FAILURE);
   }
 
-  // Fix the child before mutation observer may touch the DOM tree.
-  nsIContent* firstChildOfRightNode = aStartOfRightNode.GetChild();
-  IgnoredErrorResult error;
-  parent->InsertBefore(
-      aNewNode, aStartOfRightNode.GetContainer()->GetNextSibling(), error);
-  if (MOZ_UNLIKELY(error.Failed())) {
-    NS_WARNING("nsINode::InsertBefore() failed");
-    return Err(error.StealNSResult());
-  }
-
-  MOZ_DIAGNOSTIC_ASSERT_IF(aStartOfRightNode.IsInTextNode(), aNewNode.IsText());
-  MOZ_DIAGNOSTIC_ASSERT_IF(!aStartOfRightNode.IsInTextNode(),
-                           !aNewNode.IsText());
+  // For the performance of IMEContentObserver, we should move all data into
+  // aNewNode first because IMEContentObserver needs to compute moved content
+  // length only once when aNewNode is connected.
 
   // If we are splitting a text node, we need to move its some data to the
   // new text node.
-  if (aStartOfRightNode.IsInTextNode()) {
-    if (!aStartOfRightNode.IsEndOfContainer()) {
+  MOZ_DIAGNOSTIC_ASSERT_IF(aStartOfRightNode.IsInTextNode(), aNewNode.IsText());
+  MOZ_DIAGNOSTIC_ASSERT_IF(!aStartOfRightNode.IsInTextNode(),
+                           !aNewNode.IsText());
+  const nsCOMPtr<nsIContent> firstChildOfRightNode =
+      aStartOfRightNode.GetChild();
+  nsresult rv = [&]() MOZ_NEVER_INLINE_DEBUG MOZ_CAN_RUN_SCRIPT {
+    if (aStartOfRightNode.IsEndOfContainer()) {
+      return NS_OK;  // No content which should be moved into aNewNode.
+    }
+    if (aStartOfRightNode.IsInTextNode()) {
       Text* originalTextNode = aStartOfRightNode.ContainerAs<Text>();
       Text* newTextNode = aNewNode.AsText();
       nsAutoString movingText;
@@ -5722,49 +5719,54 @@ Result<SplitNodeResult, nsresult> HTMLEditor::DoSplitNode(
       DoSetText(MOZ_KnownLive(*newTextNode), movingText, error);
       NS_WARNING_ASSERTION(!error.Failed(),
                            "EditorBase::DoSetText() failed, but ignored");
+      return NS_OK;
     }
-  }
-  // If the node has been moved to different parent, we should do nothing
-  // since web apps should handle everything in such case.
-  else if (firstChildOfRightNode &&
-           aStartOfRightNode.GetContainer() !=
-               firstChildOfRightNode->GetParentNode()) {
-    NS_WARNING(
-        "The web app interrupted us and touched the DOM tree, we stopped "
-        "splitting anything");
-  } else {
-    // If the right node is new one and there is no children or splitting at
-    // end of the node, we need to do nothing.
-    if (!firstChildOfRightNode) {
-      // Do nothing.
-    }
+
     // If the right node is new one and splitting at start of the container,
     // we need to move all children to the new right node.
-    else if (!firstChildOfRightNode->GetPreviousSibling()) {
+    if (!firstChildOfRightNode->GetPreviousSibling()) {
       // XXX Why do we ignore an error while moving nodes from the right
       //     node to the left node?
       nsresult rv = MoveAllChildren(*aStartOfRightNode.GetContainer(),
                                     EditorRawDOMPoint(&aNewNode, 0u));
-      if (NS_WARN_IF(rv == NS_ERROR_EDITOR_DESTROYED)) {
-        return Err(NS_ERROR_EDITOR_DESTROYED);
-      }
       NS_WARNING_ASSERTION(NS_SUCCEEDED(rv),
-                           "HTMLEditor::MoveAllChildren() failed, but ignored");
+                           "HTMLEditor::MoveAllChildren() failed");
+      return rv;
     }
+
     // If the right node is new one and splitting at middle of the node, we need
     // to move inclusive next siblings of the split point to the new right node.
-    else {
-      // XXX Why do we ignore an error while moving nodes from the right node
-      //     to the left node?
-      nsresult rv = MoveInclusiveNextSiblings(*firstChildOfRightNode,
-                                              EditorRawDOMPoint(&aNewNode, 0u));
-      if (NS_WARN_IF(rv == NS_ERROR_EDITOR_DESTROYED)) {
-        return Err(NS_ERROR_EDITOR_DESTROYED);
-      }
-      NS_WARNING_ASSERTION(
-          NS_SUCCEEDED(rv),
-          "HTMLEditor::MoveInclusiveNextSiblings() failed, but ignored");
-    }
+    // XXX Why do we ignore an error while moving nodes from the right node
+    //     to the left node?
+    nsresult rv = MoveInclusiveNextSiblings(*firstChildOfRightNode,
+                                            EditorRawDOMPoint(&aNewNode, 0u));
+    NS_WARNING_ASSERTION(NS_SUCCEEDED(rv),
+                         "HTMLEditor::MoveInclusiveNextSiblings() failed");
+    return rv;
+  }();
+
+  // To avoid a dataloss bug, we should try to insert aNewNode even if we've
+  // already been destroyed.
+  if (NS_WARN_IF(!aStartOfRightNode.GetContainerParent())) {
+    return NS_WARN_IF(Destroyed()) ? Err(NS_ERROR_EDITOR_DESTROYED)
+                                   : Err(NS_ERROR_FAILURE);
+  }
+
+  // Finally, we should insert aNewNode which already has proper data or
+  // children.
+  IgnoredErrorResult error;
+  parent->InsertBefore(
+      aNewNode, aStartOfRightNode.GetContainer()->GetNextSibling(), error);
+  if (NS_WARN_IF(Destroyed())) {
+    return Err(NS_ERROR_EDITOR_DESTROYED);
+  }
+  if (MOZ_UNLIKELY(error.Failed())) {
+    NS_WARNING("nsINode::InsertBefore() failed");
+    return Err(error.StealNSResult());
+  }
+  if (NS_FAILED(rv)) {
+    NS_WARNING("Moving children from left node to right node failed");
+    return Err(rv);
   }
 
   // Handle selection
@@ -6041,17 +6043,20 @@ nsresult HTMLEditor::DoJoinNodes(nsIContent& aContentToKeep,
   }
 
   // OK, ready to do join now.
-  nsresult rv = [&]() MOZ_CAN_RUN_SCRIPT {
+  nsresult rv = [&]() MOZ_NEVER_INLINE_DEBUG MOZ_CAN_RUN_SCRIPT {
     // If it's a text node, just shuffle around some text.
     if (aContentToKeep.IsText() && aContentToRemove.IsText()) {
       nsAutoString rightText;
-      nsAutoString leftText;
       aContentToRemove.AsText()->GetData(rightText);
-      aContentToKeep.AsText()->GetData(leftText);
-      leftText += rightText;
+      // Delete the node first to minimize the text change range from
+      // IMEContentObserver of view.
+      aContentToRemove.Remove();
+      // Even if we've already destroyed, let's update aContentToKeep for
+      // avoiding a dataloss bug.
       IgnoredErrorResult ignoredError;
-      DoSetText(MOZ_KnownLive(*aContentToKeep.AsText()), leftText,
-                ignoredError);
+      DoInsertText(MOZ_KnownLive(*aContentToKeep.AsText()),
+                   aContentToKeep.AsText()->TextDataLength(), rightText,
+                   ignoredError);
       if (NS_WARN_IF(Destroyed())) {
         return NS_ERROR_EDITOR_DESTROYED;
       }
@@ -6062,28 +6067,25 @@ nsresult HTMLEditor::DoJoinNodes(nsIContent& aContentToKeep,
     // Otherwise it's an interior node, so shuffle around the children.
     AutoTArray<OwningNonNull<nsIContent>, 64> arrayOfChildContents;
     HTMLEditUtils::CollectAllChildren(aContentToRemove, arrayOfChildContents);
-
+    // Delete the node first to minimize the text change range from
+    // IMEContentObserver of view.
+    aContentToRemove.Remove();
+    // Even if we've already destroyed, let's update aContentToKeep for avoiding
+    // a dataloss bug.
+    nsresult rv = NS_OK;
     for (const OwningNonNull<nsIContent>& child : arrayOfChildContents) {
       IgnoredErrorResult error;
       aContentToKeep.AppendChild(child, error);
-      if (NS_WARN_IF(Destroyed())) {
-        return NS_ERROR_EDITOR_DESTROYED;
-      }
-      if (error.Failed()) {
+      if (MOZ_UNLIKELY(error.Failed())) {
         NS_WARNING("nsINode::AppendChild() failed");
-        return error.StealNSResult();
+        rv = error.StealNSResult();
       }
     }
-    return NS_OK;
-  }();
-
-  // Delete the extra node.
-  if (NS_SUCCEEDED(rv)) {
-    aContentToRemove.Remove();
     if (NS_WARN_IF(Destroyed())) {
       return NS_ERROR_EDITOR_DESTROYED;
     }
-  }
+    return rv;
+  }();
 
   if (MOZ_LIKELY(oldPointAtRightContent.IsSet())) {
     DebugOnly<nsresult> rvIgnored = RangeUpdaterRef().SelAdjJoinNodes(
@@ -7396,6 +7398,8 @@ Element* HTMLEditor::ComputeEditingHostInternal(
   }();
   if ((content && content->IsInDesignMode()) ||
       (!content && document->IsInDesignMode())) {
+    // FIXME: There may be no <body>.  In such case and aLimitInBodyElement is
+    // "No", we should use root element instead.
     return document->GetBodyElement();
   }
 
@@ -7761,85 +7765,103 @@ nsresult HTMLEditor::OnModifyDocument(const DocumentModifiedEvent& aRunner) {
   // could destroy the editor
   nsAutoScriptBlockerSuppressNodeRemoved scriptBlocker;
 
-  // If user typed a white-space at end of a text node recently, we should try
-  // to make it keep visible even after mutations caused by the web apps because
-  // only we use U+0020 as trailing visible white-space with <br>.  Therefore,
-  // web apps may not take care of the white-space visibility.
-  // FIXME: Once we do this, the transaction should be merged to the last
-  // transaction for making an undoing deletes the inserted text too.
-  if (mLastCollapsibleWhiteSpaceAppendedTextNode &&
-      MOZ_LIKELY(
-          mLastCollapsibleWhiteSpaceAppendedTextNode->IsInComposedDoc() &&
-          mLastCollapsibleWhiteSpaceAppendedTextNode->IsEditable() &&
-          mLastCollapsibleWhiteSpaceAppendedTextNode->TextDataLength())) {
-    const auto atLastChar = EditorRawDOMPointInText::AtEndOf(
-        *mLastCollapsibleWhiteSpaceAppendedTextNode);
-    if (MOZ_LIKELY(atLastChar.IsPreviousCharCollapsibleASCIISpace())) {
-      if (const RefPtr<Element> editingHost = ComputeEditingHostInternal(
-              mLastCollapsibleWhiteSpaceAppendedTextNode,
-              LimitInBodyElement::No)) {
-        Result<CreateLineBreakResult, nsresult> insertPaddingBRResultOrError =
-            InsertPaddingBRElementIfNeeded(atLastChar.To<EditorDOMPoint>(),
-                                           eNoStrip, *editingHost);
-        if (MOZ_UNLIKELY(insertPaddingBRResultOrError.isErr())) {
-          if (insertPaddingBRResultOrError.inspectErr() ==
-              NS_ERROR_EDITOR_DESTROYED) {
+  {
+    // When this is called, there is no toplevel edit sub-action. Then,
+    // InsertNodeWithTransaction() or ReplaceTextWithTransaction() will set it.
+    // Then, OnEndHandlingTopLevelEditSubActionInternal() will call
+    // WhiteSpaceVisibilityKeeper::NormalizeVisibleWhiteSpacesAt() and may reset
+    // the hack here.  Therefore, we need to make it sure that
+    // OnEndHandlingTopLevelEditSubActionInternal() does nothing later.
+    IgnoredErrorResult error;
+    AutoEditSubActionNotifier topLevelEditSubAction(
+        *this, EditSubAction::eMaintainWhiteSpaceVisibility, eNone, error);
+    NS_WARNING_ASSERTION(!error.Failed(),
+                         "Failed to set the toplevel edit sub-action to "
+                         "maintain white-space visibility, but ignored");
+
+    // If user typed a white-space at end of a text node recently, we should try
+    // to make it keep visible even after mutations caused by the web apps
+    // because only we use U+0020 as trailing visible white-space with <br>.
+    // Therefore, web apps may not take care of the white-space visibility.
+    // FIXME: Once we do this, the transaction should be merged to the last
+    // transaction for making an undoing deletes the inserted text too.
+    if (mLastCollapsibleWhiteSpaceAppendedTextNode &&
+        MOZ_LIKELY(
+            mLastCollapsibleWhiteSpaceAppendedTextNode->IsInComposedDoc() &&
+            mLastCollapsibleWhiteSpaceAppendedTextNode->IsEditable() &&
+            mLastCollapsibleWhiteSpaceAppendedTextNode->TextDataLength())) {
+      const auto atLastChar = EditorRawDOMPointInText::AtEndOf(
+          *mLastCollapsibleWhiteSpaceAppendedTextNode);
+      if (MOZ_LIKELY(atLastChar.IsPreviousCharCollapsibleASCIISpace())) {
+        if (const RefPtr<Element> editingHost = ComputeEditingHostInternal(
+                mLastCollapsibleWhiteSpaceAppendedTextNode,
+                LimitInBodyElement::No)) {
+          Result<CreateLineBreakResult, nsresult> insertPaddingBRResultOrError =
+              InsertPaddingBRElementIfNeeded(atLastChar.To<EditorDOMPoint>(),
+                                             eNoStrip, *editingHost);
+          if (MOZ_UNLIKELY(insertPaddingBRResultOrError.isErr())) {
+            if (insertPaddingBRResultOrError.inspectErr() ==
+                NS_ERROR_EDITOR_DESTROYED) {
+              NS_WARNING(
+                  "HTMLEditor::InsertPaddingBRElementIfNeeded(nsIEditor::"
+                  "eNoStrip) destroyed the editor");
+              return insertPaddingBRResultOrError.unwrapErr();
+            }
             NS_WARNING(
                 "HTMLEditor::InsertPaddingBRElementIfNeeded(nsIEditor::"
-                "eNoStrip) destroyed the editor");
-            return insertPaddingBRResultOrError.unwrapErr();
+                "eNoStrip) failed, but ignored");
+          } else {
+            // We should not update selection for the mutation to maintain the
+            // white-space visibility.
+            insertPaddingBRResultOrError.unwrap().IgnoreCaretPointSuggestion();
           }
-          NS_WARNING(
-              "HTMLEditor::InsertPaddingBRElementIfNeeded(nsIEditor::eNoStrip) "
-              "failed, but ignored");
-        } else {
-          // We should not update selection for the mutation to maintain the
-          // white-space visibility.
-          insertPaddingBRResultOrError.unwrap().IgnoreCaretPointSuggestion();
         }
       }
     }
-  }
 
-  // If padding <br> element which made preceding collapsible ASCII white-space
-  // visible was removed by web app, we need to replace the white-space with
-  // an NBSP to make it keep visible until bug 503838 is fixed.
-  if (!aRunner.NewInvisibleWhiteSpacesRef().IsEmpty()) {
-    AutoSelectionRestorer restoreSelection(this);
-    bool doRestoreSelection = false;
-    for (const EditorDOMPointInText& atCollapsibleWhiteSpace :
-         aRunner.NewInvisibleWhiteSpacesRef()) {
-      if (!atCollapsibleWhiteSpace.IsInComposedDoc() ||
-          !atCollapsibleWhiteSpace.IsAtLastContent() ||
-          !HTMLEditUtils::IsSimplyEditableNode(
-              *atCollapsibleWhiteSpace.ContainerAs<Text>()) ||
-          !atCollapsibleWhiteSpace.IsCharCollapsibleASCIISpace()) {
-        continue;
+    // If padding <br> element which made preceding collapsible ASCII
+    // white-space visible was removed by web app, we need to replace the
+    // white-space with an NBSP to make it keep visible until bug 503838 is
+    // fixed.
+    if (!aRunner.NewInvisibleWhiteSpacesRef().IsEmpty()) {
+      AutoSelectionRestorer restoreSelection(this);
+      bool doRestoreSelection = false;
+      for (const EditorDOMPointInText& atCollapsibleWhiteSpace :
+           aRunner.NewInvisibleWhiteSpacesRef()) {
+        if (!atCollapsibleWhiteSpace.IsInComposedDoc() ||
+            !atCollapsibleWhiteSpace.IsAtLastContent() ||
+            !HTMLEditUtils::IsSimplyEditableNode(
+                *atCollapsibleWhiteSpace.ContainerAs<Text>()) ||
+            !atCollapsibleWhiteSpace.IsCharCollapsibleASCIISpace()) {
+          continue;
+        }
+        const Element* const editingHost =
+            atCollapsibleWhiteSpace.ContainerAs<Text>()->GetEditingHost();
+        if (MOZ_UNLIKELY(!editingHost)) {
+          continue;
+        }
+        const WSScanResult nextThing =
+            WSRunScanner::ScanInclusiveNextVisibleNodeOrBlockBoundary(
+                editingHost,
+                atCollapsibleWhiteSpace.AfterContainer<EditorRawDOMPoint>(),
+                BlockInlineCheck::UseComputedDisplayStyle);
+        if (!nextThing.ReachedBlockBoundary()) {
+          continue;
+        }
+        Result<InsertTextResult, nsresult> replaceToNBSPResultOrError =
+            ReplaceTextWithTransaction(
+                MOZ_KnownLive(*atCollapsibleWhiteSpace.ContainerAs<Text>()),
+                atCollapsibleWhiteSpace.Offset(), 1u, u"\xA0"_ns);
+        if (MOZ_UNLIKELY(replaceToNBSPResultOrError.isErr())) {
+          NS_WARNING("HTMLEditor::ReplaceTextWithTransaction() failed");
+          continue;
+        }
+        doRestoreSelection = true;
+        replaceToNBSPResultOrError.unwrap().IgnoreCaretPointSuggestion();
       }
-      const Element* const editingHost =
-          atCollapsibleWhiteSpace.ContainerAs<Text>()->GetEditingHost();
-      MOZ_ASSERT(editingHost);
-      const WSScanResult nextThing =
-          WSRunScanner::ScanInclusiveNextVisibleNodeOrBlockBoundary(
-              editingHost,
-              atCollapsibleWhiteSpace.AfterContainer<EditorRawDOMPoint>(),
-              BlockInlineCheck::UseComputedDisplayStyle);
-      if (!nextThing.ReachedBlockBoundary()) {
-        continue;
+      if (!doRestoreSelection) {
+        restoreSelection.Abort();
       }
-      Result<InsertTextResult, nsresult> replaceToNBSPResultOrError =
-          ReplaceTextWithTransaction(
-              MOZ_KnownLive(*atCollapsibleWhiteSpace.ContainerAs<Text>()),
-              atCollapsibleWhiteSpace.Offset(), 1u, u"\xA0"_ns);
-      if (MOZ_UNLIKELY(replaceToNBSPResultOrError.isErr())) {
-        NS_WARNING("HTMLEditor::ReplaceTextWithTransaction() failed");
-        continue;
-      }
-      doRestoreSelection = true;
-      replaceToNBSPResultOrError.unwrap().IgnoreCaretPointSuggestion();
-    }
-    if (!doRestoreSelection) {
-      restoreSelection.Abort();
     }
   }
 
@@ -7884,7 +7906,9 @@ void HTMLEditor::DocumentModifiedEvent::MaybeAppendNewInvisibleWhiteSpace(
   }
   const Element* const editingHost =
       const_cast<nsIContent*>(aContentWillBeRemoved)->GetEditingHost();
-  MOZ_ASSERT(editingHost);
+  if (MOZ_UNLIKELY(!editingHost)) {
+    return;
+  }
   const WSScanResult nextThing =
       WSRunScanner::ScanInclusiveNextVisibleNodeOrBlockBoundary(
           editingHost, EditorRawDOMPoint::After(*aContentWillBeRemoved),

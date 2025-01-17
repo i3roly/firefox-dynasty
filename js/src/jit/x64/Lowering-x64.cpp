@@ -519,6 +519,21 @@ void LIRGeneratorX64::lowerBigIntPtrMod(MBigIntPtrMod* ins) {
   defineFixed(lir, ins, LAllocation(AnyRegister(rdx)));
 }
 
+void LIRGeneratorX64::lowerTruncateDToInt32(MTruncateToInt32* ins) {
+  MDefinition* opd = ins->input();
+  MOZ_ASSERT(opd->type() == MIRType::Double);
+
+  define(new (alloc()) LTruncateDToInt32(useRegister(opd), tempShift()), ins);
+}
+
+void LIRGeneratorX64::lowerTruncateFToInt32(MTruncateToInt32* ins) {
+  MDefinition* opd = ins->input();
+  MOZ_ASSERT(opd->type() == MIRType::Float32);
+
+  LDefinition maybeTemp = LDefinition::BogusTemp();
+  define(new (alloc()) LTruncateFToInt32(useRegister(opd), maybeTemp), ins);
+}
+
 void LIRGenerator::visitWasmTruncateToInt64(MWasmTruncateToInt64* ins) {
   MDefinition* opd = ins->input();
   MOZ_ASSERT(opd->type() == MIRType::Double || opd->type() == MIRType::Float32);
@@ -541,6 +556,24 @@ void LIRGenerator::visitInt64ToFloatingPoint(MInt64ToFloatingPoint* ins) {
 
   LDefinition maybeTemp = ins->isUnsigned() ? temp() : LDefinition::BogusTemp();
   define(new (alloc()) LInt64ToFloatingPoint(useInt64Register(opd), maybeTemp),
+         ins);
+}
+
+void LIRGeneratorX64::lowerWasmBuiltinTruncateToInt32(
+    MWasmBuiltinTruncateToInt32* ins) {
+  MDefinition* opd = ins->input();
+  MOZ_ASSERT(opd->type() == MIRType::Double || opd->type() == MIRType::Float32);
+
+  if (opd->type() == MIRType::Double) {
+    define(new (alloc()) LWasmBuiltinTruncateDToInt32(
+               useRegister(opd), LAllocation(), tempShift()),
+           ins);
+    return;
+  }
+
+  LDefinition maybeTemp = LDefinition::BogusTemp();
+  define(new (alloc()) LWasmBuiltinTruncateFToInt32(useRegister(opd),
+                                                    LAllocation(), maybeTemp),
          ins);
 }
 

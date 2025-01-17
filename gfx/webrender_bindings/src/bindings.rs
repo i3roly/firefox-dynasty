@@ -1922,14 +1922,15 @@ pub extern "C" fn wr_window_new(
                     use_native_compositor,
                 )),
             }
-    } else if use_layer_compositor {
-        let compositor = Box::new(WrLayerCompositor::new(compositor)) as Box<dyn LayerCompositor>;
-        CompositorConfig::Layer {
-            compositor,
-        }
     } else if use_native_compositor {
-        CompositorConfig::Native {
-            compositor: Box::new(WrCompositor(compositor)),
+        if use_layer_compositor {
+            CompositorConfig::Layer {
+                compositor: Box::new(WrLayerCompositor::new(compositor)),
+            }
+        } else {
+            CompositorConfig::Native {
+                compositor: Box::new(WrCompositor(compositor)),
+            }
         }
     } else {
         CompositorConfig::Draw {
@@ -2245,8 +2246,8 @@ pub extern "C" fn wr_transaction_set_document_view(txn: &mut Transaction, doc_re
 }
 
 #[no_mangle]
-pub extern "C" fn wr_transaction_generate_frame(txn: &mut Transaction, id: u64, reasons: RenderReasons) {
-    txn.generate_frame(id, reasons);
+pub extern "C" fn wr_transaction_generate_frame(txn: &mut Transaction, id: u64, present: bool, reasons: RenderReasons) {
+    txn.generate_frame(id, present, reasons);
 }
 
 #[no_mangle]

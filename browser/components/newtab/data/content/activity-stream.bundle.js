@@ -4316,7 +4316,7 @@ const AdBanner = ({
       }]
     }));
   };
-  const onLinkCLick = () => {
+  const onLinkClick = () => {
     dispatch(actionCreators.DiscoveryStreamUserEvent({
       event: "CLICK",
       source: type.toUpperCase(),
@@ -4355,7 +4355,7 @@ const AdBanner = ({
     className: "ad-banner-link",
     url: spoc.url,
     title: spoc.title,
-    onLinkClick: onLinkCLick,
+    onLinkClick: onLinkClick,
     dispatch: dispatch
   }, /*#__PURE__*/external_React_default().createElement(ImpressionStats_ImpressionStats, {
     flightId: spoc.flight_id,
@@ -4801,7 +4801,7 @@ class _CardGrid extends (external_React_default()).PureComponent {
       }) => format === "leaderboard" && leaderboardEnabled) || spocs.data.newtab_spocs.items.find(({
         format
       }) => format === "billboard" && billboardEnabled);
-      if (spocToRender) {
+      if (spocToRender && !spocs.blocked.includes(spocToRender.url)) {
         const row = spocToRender.format === "leaderboard" ? prefs[PREF_LEADERBOARD_POSITION] : prefs[PREF_BILLBOARD_POSITION];
         cards.push( /*#__PURE__*/external_React_default().createElement(AdBanner, {
           spoc: spocToRender,
@@ -5840,7 +5840,7 @@ class _Card extends (external_React_default()).PureComponent {
 
         // Save and remove the promise only while it's pending
         gImageLoading.set(imageUrl, loaderPromise);
-        loaderPromise.catch(ex => ex).then(() => gImageLoading.delete(imageUrl)).catch();
+        loaderPromise.catch(ex => ex).then(() => gImageLoading.delete(imageUrl));
       }
 
       // Wait for the image whether just started loading or reused promise
@@ -10188,7 +10188,7 @@ function CardSection({
     className: following ? "section-follow following" : "section-follow"
   }, /*#__PURE__*/external_React_default().createElement("moz-button", {
     onClick: following ? onUnfollowClick : onFollowClick,
-    type: following ? "destructive" : "default",
+    type: "default",
     index: sectionPosition,
     section: sectionKey
   }, /*#__PURE__*/external_React_default().createElement("span", {

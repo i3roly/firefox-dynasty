@@ -42,15 +42,16 @@ import org.mozilla.fenix.ext.openSetDefaultBrowserOption
 import org.mozilla.fenix.ext.requireComponents
 import org.mozilla.fenix.ext.settings
 import org.mozilla.fenix.nimbus.FxNimbus
+import org.mozilla.fenix.onboarding.store.DefaultOnboardingPreferencesRepository
 import org.mozilla.fenix.onboarding.store.OnboardingAction.OnboardingAddOnsAction
 import org.mozilla.fenix.onboarding.store.OnboardingAddonStatus
+import org.mozilla.fenix.onboarding.store.OnboardingPreferencesMiddleware
 import org.mozilla.fenix.onboarding.store.OnboardingStore
 import org.mozilla.fenix.onboarding.view.Caption
 import org.mozilla.fenix.onboarding.view.ManagePrivacyPreferencesDialogFragment
 import org.mozilla.fenix.onboarding.view.OnboardingAddOn
 import org.mozilla.fenix.onboarding.view.OnboardingPageUiData
 import org.mozilla.fenix.onboarding.view.OnboardingScreen
-import org.mozilla.fenix.onboarding.view.ToolbarOptionType
 import org.mozilla.fenix.onboarding.view.sequencePosition
 import org.mozilla.fenix.onboarding.view.telemetrySequenceId
 import org.mozilla.fenix.onboarding.view.toPageUiData
@@ -82,7 +83,20 @@ class OnboardingFragment : Fragment() {
         )
     }
     private val telemetryRecorder by lazy { OnboardingTelemetryRecorder() }
-    private val onboardingStore by lazyStore { OnboardingStore() }
+
+    private val onboardingStore by lazyStore {
+        OnboardingStore(
+            middleware = listOf(
+                OnboardingPreferencesMiddleware(
+                    repository = DefaultOnboardingPreferencesRepository(
+                        context = requireContext(),
+                        lifecycleOwner = viewLifecycleOwner,
+                    ),
+                ),
+            ),
+        )
+    }
+
     private val pinAppWidgetReceiver = WidgetPinnedReceiver()
 
     @SuppressLint("SourceLockedOrientationActivity")
@@ -101,13 +115,10 @@ class OnboardingFragment : Fragment() {
         LocalBroadcastManager.getInstance(context)
             .registerReceiver(pinAppWidgetReceiver, filter)
 
-        if (isNotDefaultBrowser(context) &&
-            activity?.isDefaultBrowserPromptSupported() == true &&
-            !requireContext().settings().promptToSetAsDefaultBrowserDisplayedInOnboarding
-        ) {
-            requireComponents.strictMode.resetAfter(StrictMode.allowThreadDiskReads()) {
-                promptToSetAsDefaultBrowser()
-            }
+        // We want the prompt to be displayed once per onboarding opening.
+        // In case the host got recreated, we don't reset the flag.
+        if (savedInstanceState == null) {
+            requireContext().settings().promptToSetAsDefaultBrowserDisplayedInOnboarding = false
         }
 
         telemetryRecorder.onOnboardingStarted()
@@ -124,8 +135,6 @@ class OnboardingFragment : Fragment() {
                 ScreenContent()
             }
         }
-
-        requireContext().settings().promptToSetAsDefaultBrowserDisplayedInOnboarding = false
     }
 
     override fun onResume() {
@@ -219,30 +228,35 @@ class OnboardingFragment : Fragment() {
                     pageType = it.type,
                     sequencePosition = pagesToDisplay.sequencePosition(it.type),
                 )
+
+                maybePromptToSetAsDefaultBrowser(
+                    pagesToDisplay = pagesToDisplay,
+                    currentCard = it,
+                )
             },
             onboardingStore = onboardingStore,
             onInstallAddOnButtonClick = { installUrl -> installAddon(installUrl) },
             termsOfServiceEventHandler = termsOfServiceEventHandler,
             onCustomizeToolbarClick = {
-                requireContext().settings().shouldUseBottomToolbar =
-                    onboardingStore.state.toolbarOptionSelected == ToolbarOptionType.TOOLBAR_BOTTOM
-
                 telemetryRecorder.onSelectToolbarPlacementClick(
                     pagesToDisplay.telemetrySequenceId(),
                     pagesToDisplay.sequencePosition(OnboardingPageUiData.Type.TOOLBAR_PLACEMENT),
                     onboardingStore.state.toolbarOptionSelected.id,
                 )
             },
+            onMarketingDataLearnMoreClick = { learnMoreUrl ->
+                launchSandboxCustomTab(learnMoreUrl)
+            },
+            onMarketingDataContinueClick = { allowMarketingDataCollection ->
+                with(requireContext().settings()) {
+                    isMarketingTelemetryEnabled = allowMarketingDataCollection
+                    hasMadeMarketingTelemetrySelection = true
+                }
+                telemetryRecorder.onMarketingDataContinueClicked(allowMarketingDataCollection)
+            },
             onCustomizeThemeClick = {
                 telemetryRecorder.onSelectThemeClick(
                     onboardingStore.state.themeOptionSelected.id,
-                    pagesToDisplay.telemetrySequenceId(),
-                    pagesToDisplay.sequencePosition(OnboardingPageUiData.Type.THEME_SELECTION),
-                )
-            },
-
-            onCustomizeThemeSkip = {
-                telemetryRecorder.onSkipThemeClick(
                     pagesToDisplay.telemetrySequenceId(),
                     pagesToDisplay.sequencePosition(OnboardingPageUiData.Type.THEME_SELECTION),
                 )
@@ -367,6 +381,31 @@ class OnboardingFragment : Fragment() {
                 showAddWidgetPage,
                 jexlConditions,
             ) { condition -> jexlHelper.evalJexlSafe(condition) }
+        }
+    }
+
+    private fun maybePromptToSetAsDefaultBrowser(
+        pagesToDisplay: List<OnboardingPageUiData>,
+        currentCard: OnboardingPageUiData,
+    ) {
+        val shouldWaitForTOSToBeAccepted = pagesToDisplay.find {
+            it.type == OnboardingPageUiData.Type.TERMS_OF_SERVICE
+        }?.let { tosCard ->
+            val tosPosition = pagesToDisplay.indexOfFirst { it.type == tosCard.type }
+            val currentPosition = pagesToDisplay.indexOfFirst { it.type == currentCard.type }
+            tosPosition >= currentPosition
+        } ?: false
+
+        val shouldPromptToSetAsDefaultBrowser = isNotDefaultBrowser(requireContext()) &&
+            activity?.isDefaultBrowserPromptSupported() == true &&
+            !shouldWaitForTOSToBeAccepted &&
+            !requireContext().settings().promptToSetAsDefaultBrowserDisplayedInOnboarding
+
+        if (shouldPromptToSetAsDefaultBrowser) {
+            requireComponents.strictMode.resetAfter(StrictMode.allowThreadDiskReads()) {
+                promptToSetAsDefaultBrowser()
+                requireContext().settings().promptToSetAsDefaultBrowserDisplayedInOnboarding = true
+            }
         }
     }
 

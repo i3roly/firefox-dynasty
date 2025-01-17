@@ -4,12 +4,11 @@
 
 package org.mozilla.fenix.onboarding.store
 
-import android.content.Context
 import androidx.appcompat.app.AppCompatDelegate
 import mozilla.components.lib.state.Action
+import mozilla.components.lib.state.Middleware
 import mozilla.components.lib.state.State
 import mozilla.components.lib.state.Store
-import mozilla.components.support.ktx.android.content.setApplicationNightMode
 import org.mozilla.fenix.onboarding.view.OnboardingAddOn
 import org.mozilla.fenix.onboarding.view.ThemeOptionType
 import org.mozilla.fenix.onboarding.view.ToolbarOptionType
@@ -84,10 +83,12 @@ enum class OnboardingAddonStatus {
  * A [Store] that holds the [OnboardingState] for the add-ons boarding page and reduces [OnboardingAction]s
  * dispatched to the store.
  */
-class OnboardingStore : Store<OnboardingState, OnboardingAction>(
-    initialState = OnboardingState(),
-    reducer = ::reducer,
-) {
+class OnboardingStore(middleware: List<Middleware<OnboardingState, OnboardingAction>> = emptyList()) :
+    Store<OnboardingState, OnboardingAction>(
+        initialState = OnboardingState(),
+        reducer = ::reducer,
+        middleware = middleware,
+    ) {
     init {
         dispatch(OnboardingAction.Init())
     }
@@ -141,8 +142,8 @@ private fun reducer(
  * @param selectedTheme The [ThemeOptionType] selected by the user.
  * This determines which theme to apply.
  */
-fun Context.applyThemeIfRequired(selectedTheme: ThemeOptionType) {
-    setApplicationNightMode(
+fun applyThemeIfRequired(selectedTheme: ThemeOptionType) {
+    AppCompatDelegate.setDefaultNightMode(
         when (selectedTheme) {
             ThemeOptionType.THEME_DARK -> AppCompatDelegate.MODE_NIGHT_YES
             ThemeOptionType.THEME_LIGHT -> AppCompatDelegate.MODE_NIGHT_NO

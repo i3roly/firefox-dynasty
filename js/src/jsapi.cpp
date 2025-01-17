@@ -4372,16 +4372,27 @@ JS_PUBLIC_API void JS_SetGlobalJitCompilerOption(JSContext* cx,
       }
       jit::JitOptions.frequentBailoutThreshold = value;
       break;
-    case JSJITCOMPILER_BASE_REG_FOR_LOCALS:
-      if (value == 0) {
-        jit::JitOptions.baseRegForLocals = jit::BaseRegForAddress::SP;
-      } else if (value == 1) {
-        jit::JitOptions.baseRegForLocals = jit::BaseRegForAddress::FP;
+    case JSJITCOMPILER_BASE_REG_FOR_LOCALS: {
+#ifdef JS_CODEGEN_ARM64
+      bool canUseBaseRegForLocals = !fuzzingSafe;
+#else
+      bool canUseBaseRegForLocals = true;
+#endif
+      if (canUseBaseRegForLocals) {
+        if (value == 0) {
+          jit::JitOptions.baseRegForLocals = jit::BaseRegForAddress::SP;
+        } else if (value == 1) {
+          jit::JitOptions.baseRegForLocals = jit::BaseRegForAddress::FP;
+        } else {
+          jit::DefaultJitOptions defaultValues;
+          jit::JitOptions.baseRegForLocals = defaultValues.baseRegForLocals;
+        }
       } else {
-        jit::DefaultJitOptions defaultValues;
-        jit::JitOptions.baseRegForLocals = defaultValues.baseRegForLocals;
+        JitSpew(js::jit::JitSpew_BaselineScripts,
+                "base-reg-for-locals is always SP.");
       }
       break;
+    }
     case JSJITCOMPILER_BASELINE_INTERPRETER_ENABLE:
       if (value == 1) {
         jit::JitOptions.baselineInterpreter = true;
@@ -4931,14 +4942,16 @@ JS::FirstSubsumedFrame::FirstSubsumedFrame(
 
 JS_PUBLIC_API bool JS::CaptureCurrentStack(
     JSContext* cx, JS::MutableHandleObject stackp,
-    JS::StackCapture&& capture /* = JS::StackCapture(JS::AllFrames()) */) {
+    JS::StackCapture&& capture /* = JS::StackCapture(JS::AllFrames()) */,
+    JS::HandleObject startAt /* = nullptr*/) {
   AssertHeapIsIdle();
   CHECK_THREAD(cx);
   MOZ_RELEASE_ASSERT(cx->realm());
 
   Realm* realm = cx->realm();
   Rooted<SavedFrame*> frame(cx);
-  if (!realm->savedStacks().saveCurrentStack(cx, &frame, std::move(capture))) {
+  if (!realm->savedStacks().saveCurrentStack(cx, &frame, std::move(capture),
+                                             startAt)) {
     return false;
   }
   stackp.set(frame.get());

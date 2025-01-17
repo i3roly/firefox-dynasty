@@ -491,6 +491,34 @@ void MediaFormatReader::DecoderFactory::DoInitDecoder(Data& aData) {
               ownerData.mProcessName = ownerData.mDecoder->GetProcessName();
               ownerData.mCodecName = ownerData.mDecoder->GetCodecName();
             }
+            nsCString needsConversion;
+            switch (ownerData.mDecoder->NeedsConversion()) {
+              case MediaDataDecoder::ConversionRequired::kNeedNone:
+                needsConversion = "false";
+                break;
+              case MediaDataDecoder::ConversionRequired::kNeedAVCC:
+                needsConversion = "AVCC";
+                break;
+              case MediaDataDecoder::ConversionRequired::kNeedAnnexB:
+                needsConversion = "AnnexB";
+                break;
+              default:
+                needsConversion = "Unknown";
+            }
+            nsCString dummy;
+            MOZ_LOG_FMT(sFormatDecoderLog, mozilla::LogLevel::Debug,
+                        "Decoder init finished for "
+                        "{} codec: \"{}\", "
+                        "description: \"{}\", "
+                        "process: \"{}\", "
+                        "hw: \"{}\", "
+                        "needs conversion: \"{}\"",
+                        (aTrack == TrackInfo::kVideoTrack) ? "video" : "audio",
+                        ownerData.mDecoder->GetCodecName(),
+                        ownerData.mDecoder->GetDescriptionName(),
+                        ownerData.mDecoder->GetProcessName(),
+                        ownerData.mDecoder->IsHardwareAccelerated(dummy),
+                        needsConversion);
           },
           [this, &aData, &ownerData](const MediaResult& aError) {
             AUTO_PROFILER_LABEL("DecoderFactory::DoInitDecoder:Rejected",
@@ -1530,6 +1558,11 @@ void MediaFormatReader::OnDemuxFailed(TrackType aTrack,
             aError);
       if (!decoder.mWaitingForDataStartTime) {
         decoder.RequestDrain();
+      } else {
+        // mWaitingForDataStartTime was already set.  The decoder is being
+        // primed after an internal seek.  A drain has already been performed.
+        MOZ_ASSERT(decoder.mTimeThreshold.isSome() ||
+                   decoder.mNumSamplesInput == decoder.mNumSamplesOutput);
       }
       NotifyWaitingForData(aTrack);
       break;
@@ -1606,7 +1639,8 @@ void MediaFormatReader::OnVideoDemuxCompleted(
   DDLOG(DDLogCategory::Log, "video_demuxed_samples",
         uint64_t(aSamples->GetSamples().Length()));
   mVideo.mDemuxRequest.Complete();
-  mVideo.mQueuedSamples.AppendElements(aSamples->GetSamples());
+  MOZ_ASSERT(mVideo.mQueuedSamples.IsEmpty());
+  mVideo.mQueuedSamples = aSamples->GetMovableSamples();
   ScheduleUpdate(TrackInfo::kVideoTrack);
 }
 
@@ -1699,7 +1733,8 @@ void MediaFormatReader::OnAudioDemuxCompleted(
   DDLOG(DDLogCategory::Log, "audio_demuxed_samples",
         uint64_t(aSamples->GetSamples().Length()));
   mAudio.mDemuxRequest.Complete();
-  mAudio.mQueuedSamples.AppendElements(aSamples->GetSamples());
+  MOZ_ASSERT(mAudio.mQueuedSamples.IsEmpty());
+  mAudio.mQueuedSamples = aSamples->GetMovableSamples();
   ScheduleUpdate(TrackInfo::kAudioTrack);
 }
 
@@ -1851,8 +1886,16 @@ void MediaFormatReader::NotifyWaitingForData(TrackType aTrack) {
   MOZ_ASSERT(OnTaskQueue());
   LOGV("%s", TrackTypeToStr(aTrack));
   auto& decoder = GetDecoderData(aTrack);
-  decoder.mWaitingForDataStartTime = Some(TimeStamp::Now());
+  // mWaitingForDataStartTime may have already been set before draining the
+  // decoder.
+  if (!decoder.mWaitingForDataStartTime) {
+    decoder.mWaitingForDataStartTime.emplace(TimeStamp::Now());
+  }
   if (decoder.mTimeThreshold) {
+    // An InternalSeek() is in progress, which might be performed while
+    // mWaitingForDataStartTime is set, such as when priming the decoder after
+    // a drain.  Set mWaiting to indicate that the internal seek cannot make
+    // progress.
     decoder.mTimeThreshold.ref().mWaiting = true;
   }
   ScheduleUpdate(aTrack);
@@ -1944,6 +1987,8 @@ bool MediaFormatReader::UpdateReceivedNewData(TrackType aTrack) {
     LOGV("decoder.HasPendingDrain()");
     // We do not want to clear mWaitingForDataStartTime or mDemuxEOS while
     // a drain is in progress in order to properly complete the operation.
+    // The drain may provide more frames that should be returned before
+    // rejection of a MediaData promise.
     return false;
   }
 
@@ -2378,7 +2423,9 @@ void MediaFormatReader::Update(TrackType aTrack) {
       // We have reached our internal seek target.
       decoder.mTimeThreshold.reset();
       // We might have dropped some keyframes.
-      mPreviousDecodedKeyframeTime_us = sNoPreviousDecodedKeyframe;
+      if (aTrack == TrackType::kVideoTrack) {
+        mPreviousDecodedKeyframeTime_us = sNoPreviousDecodedKeyframe;
+      }
     }
     if (time < target.Time() || (target.mDropTarget && target.Contains(time))) {
       LOGV("Internal Seeking: Dropping %s frame time:%f wanted:%f (kf:%d)",
@@ -2458,7 +2505,7 @@ void MediaFormatReader::Update(TrackType aTrack) {
         if (decoder.mDrainState == DrainState::DrainCompleted &&
             decoder.mLastDecodedSampleTime && !decoder.mNextStreamSourceID) {
           // We have completed draining the decoder following WaitingForData.
-          // Set up the internal seek machinery to be able to resume from the
+          // Prime the decoder so that it is ready to resume from the
           // last sample decoded.
           LOG("Seeking to last sample time: %" PRId64,
               decoder.mLastDecodedSampleTime.ref().mStart.ToMicroseconds());
@@ -2636,7 +2683,11 @@ void MediaFormatReader::Update(TrackType aTrack) {
     return;
   }
 
-  if ((decoder.IsWaitingForData() && !decoder.mTimeThreshold) ||
+  if ((decoder.IsWaitingForData() &&
+       // If mTimeThreshold is set then more samples might need to be demuxed
+       // to advance from the random access point to the target, but if its
+       // mWaiting is set then demuxing would continue to fail.
+       (!decoder.mTimeThreshold || decoder.mTimeThreshold.ref().mWaiting)) ||
       (decoder.IsWaitingForKey())) {
     // Nothing more we can do at present.
     LOGV("Still waiting for data or key. data(%d)/key(%d)",
@@ -2659,6 +2710,10 @@ void MediaFormatReader::Update(TrackType aTrack) {
   RequestDemuxSamples(aTrack);
 
   HandleDemuxedSamples(aTrack, a);
+  // At least one of RequestDemuxSamples() or HandleDemuxedSamples() was a
+  // no-op, so only one operation is in progress at one time.
+  MOZ_ASSERT(!decoder.mDemuxRequest.Exists() ||
+             !decoder.mDecodeRequest.Exists());
 }
 
 void MediaFormatReader::ReturnOutput(MediaData* aData, TrackType aTrack) {

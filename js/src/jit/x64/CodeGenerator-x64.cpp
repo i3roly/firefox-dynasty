@@ -6,6 +6,8 @@
 
 #include "jit/x64/CodeGenerator-x64.h"
 
+#include "mozilla/FloatingPoint.h"
+
 #include "jit/CodeGenerator.h"
 #include "jit/MIR-wasm.h"
 #include "jit/MIR.h"
@@ -475,18 +477,6 @@ void CodeGenerator::visitWasmCompareAndSelect(LWasmCompareAndSelect* ins) {
   }
 }
 
-void CodeGenerator::visitWasmReinterpretFromI64(LWasmReinterpretFromI64* lir) {
-  MOZ_ASSERT(lir->mir()->type() == MIRType::Double);
-  MOZ_ASSERT(lir->mir()->input()->type() == MIRType::Int64);
-  masm.vmovq(ToRegister(lir->input()), ToFloatRegister(lir->output()));
-}
-
-void CodeGenerator::visitWasmReinterpretToI64(LWasmReinterpretToI64* lir) {
-  MOZ_ASSERT(lir->mir()->type() == MIRType::Int64);
-  MOZ_ASSERT(lir->mir()->input()->type() == MIRType::Double);
-  masm.vmovq(ToFloatRegister(lir->input()), ToRegister(lir->output()));
-}
-
 void CodeGenerator::visitWasmUint32ToDouble(LWasmUint32ToDouble* lir) {
   masm.convertUInt32ToDouble(ToRegister(lir->input()),
                              ToFloatRegister(lir->output()));
@@ -702,40 +692,139 @@ void CodeGenerator::visitWasmAtomicBinopHeapForEffect(
   }
 }
 
+class js::jit::OutOfLineTruncate : public OutOfLineCodeBase<CodeGeneratorX64> {
+  FloatRegister input_;
+  Register output_;
+  Register temp_;
+
+ public:
+  OutOfLineTruncate(FloatRegister input, Register output, Register temp)
+      : input_(input), output_(output), temp_(temp) {}
+
+  void accept(CodeGeneratorX64* codegen) override {
+    codegen->visitOutOfLineTruncate(this);
+  }
+
+  FloatRegister input() const { return input_; }
+  Register output() const { return output_; }
+  Register temp() const { return temp_; }
+};
+
+void CodeGeneratorX64::visitOutOfLineTruncate(OutOfLineTruncate* ool) {
+  FloatRegister input = ool->input();
+  Register output = ool->output();
+  Register temp = ool->temp();
+
+  // Inline implementation of `JS::ToInt32(double)` for double values whose
+  // exponent is ≥63.
+
+#ifdef DEBUG
+  Label ok;
+  masm.branchTruncateDoubleMaybeModUint32(input, output, &ok);
+  masm.assumeUnreachable("OOL path only used when vcvttsd2sq failed");
+  masm.bind(&ok);
+#endif
+
+  constexpr uint32_t ShiftedExponentBits =
+      mozilla::FloatingPoint<double>::kExponentBits >>
+      mozilla::FloatingPoint<double>::kExponentShift;
+  static_assert(ShiftedExponentBits == 0x7ff);
+
+  constexpr uint32_t ExponentBiasAndShift =
+      mozilla::FloatingPoint<double>::kExponentBias +
+      mozilla::FloatingPoint<double>::kExponentShift;
+  static_assert(ExponentBiasAndShift == (1023 + 52));
+
+  constexpr size_t ResultWidth = CHAR_BIT * sizeof(int32_t);
+
+  // Extract the bit representation of |input|.
+  masm.moveDoubleToGPR64(input, Register64(output));
+
+  // Extract the exponent.
+  masm.movePtr(output, temp);
+  masm.rshiftPtr(Imm32(mozilla::FloatingPoint<double>::kExponentShift), temp);
+  masm.and32(Imm32(ShiftedExponentBits), temp);
+#ifdef DEBUG
+  // The biased exponent must be at least `1023 + 63`, because otherwise
+  // vcvttsd2sq wouldn't have failed.
+  constexpr uint32_t MinBiasedExponent =
+      mozilla::FloatingPoint<double>::kExponentBias + 63;
+
+  Label exponentOk;
+  masm.branch32(Assembler::GreaterThanOrEqual, temp, Imm32(MinBiasedExponent),
+                &exponentOk);
+  masm.assumeUnreachable("exponent is greater-than-or-equals to 63");
+  masm.bind(&exponentOk);
+#endif
+  masm.sub32(Imm32(ExponentBiasAndShift), temp);
+
+  // If the exponent is greater than or equal to |ResultWidth|, the number is
+  // either infinite, NaN, or too large to have lower-order bits. We have to
+  // return zero in this case.
+  {
+    ScratchRegisterScope scratch(masm);
+    masm.movePtr(ImmWord(0), scratch);
+    masm.cmp32MovePtr(Assembler::AboveOrEqual, temp, Imm32(ResultWidth),
+                      scratch, output);
+  }
+
+  // Negate if the sign bit is set.
+  {
+    ScratchRegisterScope scratch(masm);
+    masm.movePtr(output, scratch);
+    masm.negPtr(scratch);
+    masm.testPtr(output, output);
+    masm.cmovCCq(Assembler::Signed, scratch, output);
+  }
+
+  // The significand contains the bits that will determine the final result.
+  // Shift those bits left by the exponent value in |temp|.
+  masm.lshift32(temp, output);
+
+  // Return from OOL path.
+  masm.jump(ool->rejoin());
+}
+
 void CodeGenerator::visitTruncateDToInt32(LTruncateDToInt32* ins) {
   FloatRegister input = ToFloatRegister(ins->input());
   Register output = ToRegister(ins->output());
+  Register temp = ToRegister(ins->temp0());
 
-  // On x64, branchTruncateDouble uses vcvttsd2sq. Unlike the x86
-  // implementation, this should handle most doubles and we can just
-  // call a stub if it fails.
-  emitTruncateDouble(input, output, ins->mir());
+  auto* ool = new (alloc()) OutOfLineTruncate(input, output, temp);
+  addOutOfLineCode(ool, ins->mir());
+
+  masm.branchTruncateDoubleMaybeModUint32(input, output, ool->entry());
+  masm.bind(ool->rejoin());
 }
 
 void CodeGenerator::visitWasmBuiltinTruncateDToInt32(
     LWasmBuiltinTruncateDToInt32* lir) {
-  FloatRegister input = ToFloatRegister(lir->getOperand(0));
-  Register output = ToRegister(lir->getDef(0));
+  FloatRegister input = ToFloatRegister(lir->in());
+  Register output = ToRegister(lir->output());
+  Register temp = ToRegister(lir->temp0());
+  MOZ_ASSERT(lir->instance()->isBogus(), "instance not used for x64");
 
-  emitTruncateDouble(input, output, lir->mir());
+  auto* ool = new (alloc()) OutOfLineTruncate(input, output, temp);
+  addOutOfLineCode(ool, lir->mir());
+
+  masm.branchTruncateDoubleMaybeModUint32(input, output, ool->entry());
+  masm.bind(ool->rejoin());
 }
 
 void CodeGenerator::visitWasmBuiltinTruncateFToInt32(
     LWasmBuiltinTruncateFToInt32* lir) {
-  FloatRegister input = ToFloatRegister(lir->getOperand(0));
-  Register output = ToRegister(lir->getDef(0));
+  FloatRegister input = ToFloatRegister(lir->in());
+  Register output = ToRegister(lir->output());
+  MOZ_ASSERT(lir->instance()->isBogus(), "instance not used for x64");
 
-  emitTruncateFloat32(input, output, lir->mir());
+  masm.truncateFloat32ModUint32(input, output);
 }
 
 void CodeGenerator::visitTruncateFToInt32(LTruncateFToInt32* ins) {
   FloatRegister input = ToFloatRegister(ins->input());
   Register output = ToRegister(ins->output());
 
-  // On x64, branchTruncateFloat32 uses vcvttss2sq. Unlike the x86
-  // implementation, this should handle most floats and we can just
-  // call a stub if it fails.
-  emitTruncateFloat32(input, output, ins->mir());
+  masm.truncateFloat32ModUint32(input, output);
 }
 
 void CodeGenerator::visitWrapInt64ToInt32(LWrapInt64ToInt32* lir) {

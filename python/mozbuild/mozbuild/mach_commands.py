@@ -1255,6 +1255,7 @@ def install(command_context, **kwargs):
 def _get_android_run_parser():
     parser = argparse.ArgumentParser()
     group = parser.add_argument_group("The compiled program")
+    group.add_argument("url", nargs="?", default=None, help="URL to open")
     group.add_argument(
         "--app",
         default="org.mozilla.geckoview_example",
@@ -1280,7 +1281,6 @@ def _get_android_run_parser():
         help="Path to Gecko profile, like /path/to/host/profile "
         "or /path/to/target/profile",
     )
-    group.add_argument("--url", default=None, help="URL to open")
     group.add_argument(
         "--aab",
         action="store_true",
@@ -2916,6 +2916,12 @@ def repackage_mar(command_context, input, mar, output, arch, mar_channel_id):
     action="store_true",
     help="Prepare everything but stop before actually calling snapcraft. Useful for debugging generated YAML definition.",
 )
+@CommandArgument(
+    "--wmclass",
+    type=str,
+    required=False,
+    help="The StartupWMClass entry key for the desktop file.",
+)
 def repackage_snap(
     command_context,
     snapcraft=None,
@@ -2928,6 +2934,7 @@ def repackage_snap(
     clean=False,
     install=False,
     dry_run=False,
+    wmclass=None,
 ):
     from mozfile import which
 
@@ -3189,12 +3196,19 @@ def repackage_snap_install(command_context, snap_file, snap_name, sudo=None):
     required=True,
     help="The release being shipped. Used to disambiguate nightly/try etc.",
 )
+@CommandArgument(
+    "--wmclass",
+    type=str,
+    required=False,
+    help="The StartupWMClass entry key for the desktop file.",
+)
 def repackage_desktop_file(
     command_context,
     output,
     flavor,
     release_product,
     release_type,
+    wmclass,
 ):
     desktop = None
     if flavor == "flatpak":
@@ -3229,7 +3243,10 @@ def repackage_desktop_file(
         )
 
         desktop = SnapDesktopFile(
-            command_context.log, appname=release_product, branchname=release_type
+            command_context.log,
+            appname=release_product,
+            branchname=release_type,
+            wmclass=wmclass,
         ).repack()
 
     if desktop is None:

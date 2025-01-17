@@ -4176,8 +4176,9 @@ nsDOMWindowUtils::GetContentAPZTestData(
 
 NS_IMETHODIMP
 nsDOMWindowUtils::GetCompositorAPZTestData(
-    JSContext* aContext, JS::MutableHandle<JS::Value> aOutCompositorTestData) {
-  if (nsIWidget* widget = GetWidget()) {
+    Element* aElement, JSContext* aContext,
+    JS::MutableHandle<JS::Value> aOutCompositorTestData) {
+  if (nsIWidget* widget = GetWidgetForElement(aElement)) {
     WindowRenderer* renderer = widget->GetWindowRenderer();
     if (!renderer) {
       return NS_OK;
@@ -4816,16 +4817,12 @@ nsDOMWindowUtils::IsCoepCredentialless(bool* aResult) {
 }
 
 NS_IMETHODIMP
-nsDOMWindowUtils::GetLayersId(uint64_t* aOutLayersId) {
-  nsIWidget* widget = GetWidget();
+nsDOMWindowUtils::GetLayersId(Element* aElement, uint64_t* aOutLayersId) {
+  nsIWidget* widget = GetWidgetForElement(aElement);
   if (!widget) {
     return NS_ERROR_FAILURE;
   }
-  BrowserChild* child = widget->GetOwningBrowserChild();
-  if (!child) {
-    return NS_ERROR_FAILURE;
-  }
-  *aOutLayersId = (uint64_t)child->GetLayersId();
+  *aOutLayersId = (uint64_t)widget->GetLayersId();
   return NS_OK;
 }
 

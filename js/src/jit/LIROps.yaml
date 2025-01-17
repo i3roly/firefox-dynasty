@@ -366,14 +366,23 @@
   result_type: WordSized
   num_temps: 2
 
-- name: WasmReinterpret
-  gen_boilerplate: false
+- name: ReinterpretCast
+  operands:
+    input: WordSized
+  result_type: WordSized
+  mir_op: ReinterpretCast
 
-- name: WasmReinterpretFromI64
-  gen_boilerplate: false
+- name: ReinterpretCastFromI64
+  operands:
+    input: Int64
+  result_type: WordSized
+  mir_op: ReinterpretCast
 
-- name: WasmReinterpretToI64
-  gen_boilerplate: false
+- name: ReinterpretCastToI64
+  operands:
+    input: WordSized
+  result_type: Int64
+  mir_op: ReinterpretCast
 
 - name: Rotate
   gen_boilerplate: false

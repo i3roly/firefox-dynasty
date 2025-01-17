@@ -43,7 +43,6 @@ class OnboardingMapperTest {
             onAddOnsButtonClick = {},
             onCustomizeToolbarButtonClick = {},
             onCustomizeThemeClick = {},
-            onCustomizeThemeSkip = {},
             onTermsOfServiceButtonClick = {},
         )
 
@@ -82,7 +81,6 @@ class OnboardingMapperTest {
             onAddOnsButtonClick = {},
             onCustomizeToolbarButtonClick = {},
             onCustomizeThemeClick = {},
-            onCustomizeThemeSkip = {},
             onTermsOfServiceButtonClick = {},
         )
 
@@ -121,7 +119,6 @@ class OnboardingMapperTest {
             onAddOnsButtonClick = {},
             onCustomizeToolbarButtonClick = {},
             onCustomizeThemeClick = {},
-            onCustomizeThemeSkip = {},
             onTermsOfServiceButtonClick = {},
         )
 
@@ -160,7 +157,6 @@ class OnboardingMapperTest {
             onAddOnsButtonClick = {},
             onCustomizeToolbarButtonClick = {},
             onCustomizeThemeClick = {},
-            onCustomizeThemeSkip = {},
             onTermsOfServiceButtonClick = {},
         )
 
@@ -231,7 +227,6 @@ class OnboardingMapperTest {
             onAddOnsButtonClick = unitLambda,
             onCustomizeToolbarButtonClick = {},
             onCustomizeThemeClick = {},
-            onCustomizeThemeSkip = {},
             onTermsOfServiceButtonClick = {},
         )
 
@@ -283,8 +278,45 @@ class OnboardingMapperTest {
             onAddOnsButtonClick = {},
             onCustomizeToolbarButtonClick = unitLambda,
             onCustomizeThemeClick = {},
-            onCustomizeThemeSkip = {},
             onTermsOfServiceButtonClick = {},
+            onMarketingDataContinueClick = {},
+        )
+
+        assertEquals(expected, actual)
+    }
+
+    @Test
+    fun `GIVEN a marketing data collection opt out page WHEN mapToOnboardingPageState is called THEN creates the expected OnboardingPageState`() {
+        val expected = OnboardingPageState(
+            imageRes = R.drawable.ic_high_five,
+            title = "marketing data title",
+            description = "marketing data body",
+            primaryButton = Action("marketing data button text", unitLambda),
+        )
+
+        val onboardingPageUiData = OnboardingPageUiData(
+            type = OnboardingPageUiData.Type.MARKETING_DATA,
+            imageRes = R.drawable.ic_high_five,
+            title = "marketing data title",
+            description = "marketing data body",
+            primaryButtonLabel = "marketing data button text",
+        )
+
+        val actual = mapToOnboardingPageState(
+            onboardingPageUiData = onboardingPageUiData,
+            onMakeFirefoxDefaultClick = {},
+            onMakeFirefoxDefaultSkipClick = {},
+            onSignInButtonClick = {},
+            onSignInSkipClick = {},
+            onNotificationPermissionButtonClick = {},
+            onNotificationPermissionSkipClick = {},
+            onAddFirefoxWidgetClick = {},
+            onAddFirefoxWidgetSkipClick = {},
+            onAddOnsButtonClick = {},
+            onCustomizeToolbarButtonClick = {},
+            onCustomizeThemeClick = {},
+            onTermsOfServiceButtonClick = {},
+            onMarketingDataContinueClick = unitLambda,
         )
 
         assertEquals(expected, actual)
@@ -297,7 +329,6 @@ class OnboardingMapperTest {
         val title = "Pick a theme"
         val description = "See the web in the best light."
         val primaryButtonLabel = "Save and continue"
-        val secondaryButtonLabel = "Skip"
 
         // Theming options
         val themeOptionSystem = ThemeOption(
@@ -323,7 +354,6 @@ class OnboardingMapperTest {
             title = title,
             description = description,
             primaryButtonLabel = primaryButtonLabel,
-            secondaryButtonLabel = secondaryButtonLabel,
             themeOptions = themeOptions,
         )
 
@@ -332,7 +362,6 @@ class OnboardingMapperTest {
             title = title,
             description = description,
             primaryButton = Action(primaryButtonLabel, unitLambda),
-            secondaryButton = Action(secondaryButtonLabel, unitLambda),
             themeOptions = themeOptions,
         )
 
@@ -349,7 +378,6 @@ class OnboardingMapperTest {
             onAddOnsButtonClick = {},
             onCustomizeToolbarButtonClick = {},
             onCustomizeThemeClick = unitLambda,
-            onCustomizeThemeSkip = unitLambda,
             onTermsOfServiceButtonClick = {},
         )
 

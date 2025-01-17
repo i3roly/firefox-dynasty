@@ -3763,7 +3763,7 @@ static bool DisassFile(JSContext* cx, unsigned argc, Value* vp) {
   if (!sprinter.init()) {
     return false;
   }
-  if (JSScript::dump(cx, script, p.options, &sprinter)) {
+  if (!JSScript::dump(cx, script, p.options, &sprinter)) {
     return false;
   }
 
@@ -9240,10 +9240,14 @@ static bool CompressLZ4(JSContext* cx, unsigned argc, Value* vp) {
   JS::Rooted<ArrayBufferObject*> bytes(
       cx, &args.get(0).toObject().as<ArrayBufferObject>());
   size_t byteLength = bytes->byteLength();
+#ifdef JS_64BIT
   if (byteLength > LZ4MaxSize) {
     ReportOutOfMemory(cx);
     return false;
   }
+#else
+  static_assert(LZ4MaxSize == UINT32_MAX, "don't need to check max on 32-bit");
+#endif
 
   // Create a buffer big enough for the header and the max amount of compressed
   // bytes.
@@ -11377,6 +11381,8 @@ static bool InstanceClassHasProtoAtDepth(const JSClass* clasp, uint32_t protoID,
   return clasp == GetDomClass();
 }
 
+static bool InstanceClassIsError(const JSClass* clasp) { return false; }
+
 static bool ShellBuildId(JS::BuildIdCharVector* buildId) {
   // The browser embeds the date into the buildid and the buildid is embedded
   // in the binary, so every 'make' necessarily builds a new firefox binary.
@@ -11515,7 +11521,8 @@ static JSObject* NewGlobalObject(JSContext* cx, JS::RealmOptions& options,
     }
 
     /* Initialize FakeDOMObject. */
-    static const js::DOMCallbacks DOMcallbacks = {InstanceClassHasProtoAtDepth};
+    static const js::DOMCallbacks DOMcallbacks = {InstanceClassHasProtoAtDepth,
+                                                  InstanceClassIsError};
     SetDOMCallbacks(cx, &DOMcallbacks);
 
     RootedObject domProto(
@@ -12787,6 +12794,8 @@ bool InitOptionParser(OptionParser& op) {
       !op.addIntOption('\0', "available-memory", "SIZE",
                        "Select GC settings based on available memory (MB)",
                        0) ||
+      !op.addBoolOption('\0', "disable-decommit",
+                        "Disable decommitting unsued GC memory") ||
       !op.addStringOption('\0', "arm-hwcap", "[features]",
                           "Specify ARM code generation features, or 'help' to "
                           "list all features.") ||
@@ -12992,7 +13001,7 @@ bool SetGlobalOptionsPreJSInit(const OptionParser& op) {
     JS::Prefs::setAtStartup_experimental_symbols_as_weakmap_keys(true);
   }
   if (op.getBoolOption("enable-error-iserror")) {
-    JS::Prefs::setAtStartup_experimental_error_iserror(true);
+    JS::Prefs::set_experimental_error_iserror(true);
   }
   if (op.getBoolOption("enable-iterator-sequencing")) {
     JS::Prefs::setAtStartup_experimental_iterator_sequencing(true);
@@ -13142,6 +13151,10 @@ bool SetGlobalOptionsPreJSInit(const OptionParser& op) {
     }
   }
 #endif
+
+  if (op.getBoolOption("disable-decommit")) {
+    gc::DisableDecommit();
+  }
 
   return true;
 }

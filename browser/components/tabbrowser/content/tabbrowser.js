@@ -2093,9 +2093,6 @@
         // process so the browser can no longer be considered to be
         // crashed.
         tab.removeAttribute("crashed");
-        // we call updatetabIndicatorAttr here, rather than _tabAttrModified, so as
-        // to be consistent with how "crashed" attribute changes are handled elsewhere
-        this.tabContainer.updateTabIndicatorAttr(tab);
       }
 
       // If the findbar has been initialised, reset its browser reference.
@@ -4949,12 +4946,17 @@
       if (tabs.some(tab => tab.selected)) {
         // Unloading the currently selected tab.
         // Need to select a different one before unloading.
+        // Avoid selecting any tab we're unloading now or
+        // any tab that is already unloaded.
         unloadSelectedTab = true;
-        let newTab = this._findTabToBlurTo(this.selectedTab, tabs);
+        const tabsToExclude = tabs.concat(
+          this.tabContainer.allTabs.filter(tab => !tab.linkedPanel)
+        );
+        let newTab = this._findTabToBlurTo(this.selectedTab, tabsToExclude);
         if (newTab) {
           this.selectedTab = newTab;
-        } else if (FirefoxViewHandler.tab) {
-          // probably unloading all tabs - show Firefox View
+        } else {
+          // all tabs are unloaded - show Firefox View
           FirefoxViewHandler.openTab("opentabs");
           allTabsUnloaded = true;
         }
@@ -6488,8 +6490,13 @@
       event.stopPropagation();
       let tab = event.target.triggerNode?.closest("tab");
       if (!tab) {
-        event.preventDefault();
-        return;
+        if (event.target.triggerNode?.getRootNode()?.host?.closest("tab")) {
+          // Check if triggerNode is within shadowRoot of moz-button
+          tab = event.target.triggerNode?.getRootNode().host.closest("tab");
+        } else {
+          event.preventDefault();
+          return;
+        }
       }
 
       const tooltip = event.target;
@@ -6498,7 +6505,7 @@
       const tabCount = this.selectedTabs.includes(tab)
         ? this.selectedTabs.length
         : 1;
-      if (tab._overPlayingIcon) {
+      if (tab._overPlayingIcon || tab._overAudioButton) {
         let l10nId;
         const l10nArgs = { tabCount };
         if (tab.selected) {
@@ -7112,7 +7119,6 @@
             // process so the browser can no longer be considered to be
             // crashed.
             tab.removeAttribute("crashed");
-            gBrowser.tabContainer.updateTabIndicatorAttr(tab);
           }
 
           if (this.isFindBarInitialized(tab)) {
@@ -7437,7 +7443,6 @@
           delete this.mBrowser.initialPageLoadedFromUserAction;
           // If the browser is loading it must not be crashed anymore
           this.mTab.removeAttribute("crashed");
-          gBrowser.tabContainer.updateTabIndicatorAttr(this.mTab);
         }
 
         if (this._shouldShowProgress(aRequest)) {
@@ -8704,6 +8709,7 @@ var TabContextMenu = {
     group.addTabs(
       this.contextTab.multiselected ? gBrowser.selectedTabs : [this.contextTab]
     );
+    group.ownerGlobal.focus();
   },
 
   ungroupTabs() {

@@ -694,7 +694,8 @@ class Document : public nsINode,
   // nsINode
   void InsertChildBefore(nsIContent* aKid, nsIContent* aBeforeThis,
                          bool aNotify, ErrorResult& aRv) override;
-  void RemoveChildNode(nsIContent* aKid, bool aNotify) final;
+  void RemoveChildNode(nsIContent* aKid, bool aNotify,
+                       const BatchRemovalState* = nullptr) final;
   nsresult Clone(dom::NodeInfo* aNodeInfo, nsINode** aResult) const override {
     return NS_ERROR_NOT_IMPLEMENTED;
   }
@@ -4206,6 +4207,12 @@ class Document : public nsINode,
   // Recompute the current resist fingerprinting state. Returns true when
   // the state was changed.
   bool RecomputeResistFingerprinting();
+
+  // Recompute the partitionKey for this document if needed. This is for
+  // handling the case where the principal of the document is changed during the
+  // loading, e.g. a sandboxed document. We only need to recompute for the
+  // top-level content document.
+  void MaybeRecomputePartitionKey();
 
   void RecordCanvasUsage(CanvasUsage& aUsage);
   void RecordFontFingerprinting();

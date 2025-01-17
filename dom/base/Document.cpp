@@ -2939,6 +2939,7 @@ void Document::Reset(nsIChannel* aChannel, nsILoadGroup* aLoadGroup) {
 
   mChannel = aChannel;
   RecomputeResistFingerprinting();
+  MaybeRecomputePartitionKey();
 }
 
 void Document::DisconnectNodeTree() {
@@ -2961,7 +2962,7 @@ void Document::DisconnectNodeTree() {
 
     while (nsCOMPtr<nsIContent> content = GetLastChild()) {
       nsMutationGuard::DidMutate();
-      MutationObservers::NotifyContentWillBeRemoved(this, content);
+      MutationObservers::NotifyContentWillBeRemoved(this, content, nullptr);
       DisconnectChild(content);
       if (content == mCachedRootElement) {
         // Immediately clear mCachedRootElement, now that it's been removed
@@ -3676,6 +3677,8 @@ nsresult Document::StartDocumentLoad(const char* aCommand, nsIChannel* aChannel,
 
   rv = loadInfo->GetCookieJarSettings(getter_AddRefs(mCookieJarSettings));
   NS_ENSURE_SUCCESS(rv, rv);
+
+  MaybeRecomputePartitionKey();
 
   // Generally XFO and CSP frame-ancestors is handled within
   // DocumentLoadListener. However, the DocumentLoadListener can not handle
@@ -7361,7 +7364,7 @@ bool Document::ShouldThrottleFrameRequests() const {
     return false;
   }
 
-  if (Hidden()) {
+  if (Hidden() && !StaticPrefs::layout_testing_top_level_always_active()) {
     // We're not visible (probably in a background tab or the bf cache).
     return true;
   }
@@ -7629,7 +7632,8 @@ void Document::InsertChildBefore(nsIContent* aKid, nsIContent* aBeforeThis,
   nsINode::InsertChildBefore(aKid, aBeforeThis, aNotify, aRv);
 }
 
-void Document::RemoveChildNode(nsIContent* aKid, bool aNotify) {
+void Document::RemoveChildNode(nsIContent* aKid, bool aNotify,
+                               const BatchRemovalState* aState) {
   Maybe<mozAutoDocUpdate> updateBatch;
   const bool removingRoot = aKid->IsElement();
   if (removingRoot) {
@@ -7640,7 +7644,7 @@ void Document::RemoveChildNode(nsIContent* aKid, bool aNotify) {
     // Notify early so that we can clear the cached element after notifying,
     // without having to slow down nsINode::RemoveChildNode.
     if (aNotify) {
-      MutationObservers::NotifyContentWillBeRemoved(this, aKid);
+      MutationObservers::NotifyContentWillBeRemoved(this, aKid, aState);
       aNotify = false;
     }
 
@@ -16780,6 +16784,56 @@ void Document::SendPageUseCounters() {
   wgc->SendAccumulatePageUseCounters(counters);
 }
 
+void Document::MaybeRecomputePartitionKey() {
+  // We only need to recompute the partition key for the top-level content
+  // document.
+  if (!IsTopLevelContentDocument()) {
+    return;
+  }
+
+  // Bail out early if there is no cookieJarSettings for this document. For
+  // example, a chrome document.
+  if (!mCookieJarSettings) {
+    return;
+  }
+
+  // Check whether the partition key matches the document's node principal. They
+  // can be different if the document is sandboxed. In this case, the node
+  // principal is a null principal. But the partitionKey of the
+  // cookieJarSettings was derived from the channel URI of the top-level
+  // loading, which isn't a null principal. Therefore, we need to recompute
+  // the partition Key from the document's node principal to reflect the actual
+  // partition Key.
+  nsAutoCString originNoSuffix;
+  nsresult rv = NodePrincipal()->GetOriginNoSuffix(originNoSuffix);
+  NS_ENSURE_SUCCESS_VOID(rv);
+
+  nsCOMPtr<nsIURI> originURI;
+  rv = NS_NewURI(getter_AddRefs(originURI), originNoSuffix);
+  NS_ENSURE_SUCCESS_VOID(rv);
+
+  // Bail out early if we don't have a principal URI.
+  if (!originURI) {
+    return;
+  }
+
+  OriginAttributes attrs;
+  attrs.SetPartitionKey(originURI, false);
+
+  // We don't need to set the partition key if the cooieJarSettings'
+  // partitionKey matches the document's node principal.
+  if (attrs.mPartitionKey.Equals(
+          net::CookieJarSettings::Cast(mCookieJarSettings)
+              ->GetPartitionKey())) {
+    return;
+  }
+
+  // Set the partition key to the document's node principal. So we will use the
+  // right partition key afterward.
+  mozilla::net::CookieJarSettings::Cast(mCookieJarSettings)
+      ->SetPartitionKey(originURI, false);
+}
+
 bool Document::RecomputeResistFingerprinting() {
   mOverriddenFingerprintingSettings.reset();
   const bool previous = mShouldResistFingerprinting;
@@ -19453,9 +19507,19 @@ nsIPrincipal* Document::EffectiveStoragePrincipal() const {
     return mActiveStoragePrincipal = NodePrincipal();
   }
 
-  StorageAccess storageAccess = StorageAllowedForDocument(this);
-  if (!ShouldPartitionStorage(storageAccess) ||
-      !StoragePartitioningEnabled(storageAccess, cookieJarSettings)) {
+  // We use the lower-level ContentBlocking API here to ensure this
+  // check doesn't send notifications.
+  uint32_t rejectedReason = 0;
+  if (ShouldAllowAccessFor(inner, GetDocumentURI(), false, &rejectedReason)) {
+    return mActiveStoragePrincipal = NodePrincipal();
+  }
+
+  // Let's use the storage principal only if we need to partition the cookie
+  // jar. When the permission is granted, access will be different and the
+  // normal principal will be used.
+  if (ShouldPartitionStorage(rejectedReason) &&
+      !StoragePartitioningEnabled(
+          rejectedReason, const_cast<Document*>(this)->CookieJarSettings())) {
     return mActiveStoragePrincipal = NodePrincipal();
   }
 
@@ -19494,7 +19558,7 @@ nsIPrincipal* Document::EffectiveCookiePrincipal() const {
   // We use the lower-level ContentBlocking API here to ensure this
   // check doesn't send notifications.
   uint32_t rejectedReason = 0;
-  if (ShouldAllowAccessFor(inner, GetDocumentURI(), &rejectedReason)) {
+  if (ShouldAllowAccessFor(inner, GetDocumentURI(), true, &rejectedReason)) {
     return mActiveCookiePrincipal = NodePrincipal();
   }
 

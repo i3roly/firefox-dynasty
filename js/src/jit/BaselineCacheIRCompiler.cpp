@@ -2043,6 +2043,7 @@ bool BaselineCacheIRCompiler::init(CacheKind kind) {
     case CacheKind::NewObject:
     case CacheKind::Lambda:
     case CacheKind::LazyConstant:
+    case CacheKind::GetImport:
       MOZ_ASSERT(numInputs == 0);
       outputUnchecked_.emplace(R0);
       break;
@@ -2683,9 +2684,11 @@ ICAttachResult js::jit::AttachBaselineCacheIRStub(
   JS::AutoCheckCannotGC nogc;
 
   if (writer.tooLarge()) {
+    cx->runtime()->setUseCounter(cx->global(), JSUseCounter::IC_STUB_TOO_LARGE);
     return ICAttachResult::TooLarge;
   }
   if (writer.oom()) {
+    cx->runtime()->setUseCounter(cx->global(), JSUseCounter::IC_STUB_OOM);
     return ICAttachResult::OOM;
   }
   MOZ_ASSERT(!writer.failed());

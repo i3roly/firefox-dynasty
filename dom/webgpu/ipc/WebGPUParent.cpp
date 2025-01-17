@@ -113,8 +113,8 @@ extern int32_t wgpu_server_get_dma_buf_fd(void* aParam, WGPUTextureId aId) {
 }
 
 #if !defined(XP_MACOSX)
-extern WGPUVkImageHandle* wgpu_server_get_vk_image_handle(void* aParam,
-                                                          WGPUTextureId aId) {
+extern const WGPUVkImageHandle* wgpu_server_get_vk_image_handle(
+    void* aParam, WGPUTextureId aId) {
   auto* parent = static_cast<WebGPUParent*>(aParam);
 
   auto texture = parent->GetExternalTexture(aId);
@@ -1319,6 +1319,7 @@ ipc::IPCResult WebGPUParent::RecvSwapChainPresent(
     ffi::wgpu_server_encoder_finish(mContext.get(), aCommandEncoderId,
                                     &commandDesc, error.ToFFI());
     if (ForwardError(data->mDeviceId, error)) {
+      ffi::wgpu_server_encoder_drop(mContext.get(), aCommandEncoderId);
       return IPC_OK();
     }
   }
@@ -1327,6 +1328,7 @@ ipc::IPCResult WebGPUParent::RecvSwapChainPresent(
     ErrorBuffer error;
     ffi::wgpu_server_queue_submit(mContext.get(), data->mQueueId,
                                   &aCommandEncoderId, 1, error.ToFFI());
+    ffi::wgpu_server_encoder_drop(mContext.get(), aCommandEncoderId);
     if (ForwardError(data->mDeviceId, error)) {
       return IPC_OK();
     }
@@ -1687,5 +1689,19 @@ Maybe<ffi::WGPUFfiLUID> WebGPUParent::GetCompositorDeviceLuid() {
   return Nothing();
 #endif
 }
+
+#if !defined(XP_MACOSX)
+VkImageHandle::~VkImageHandle() {
+  if (!mParent) {
+    return;
+  }
+  auto* context = mParent->GetContext();
+  if (!context || !mVkImageHandle) {
+    return;
+  }
+  wgpu_vkimage_delete(context, mDeviceId,
+                      const_cast<ffi::WGPUVkImageHandle*>(mVkImageHandle));
+}
+#endif
 
 }  // namespace mozilla::webgpu

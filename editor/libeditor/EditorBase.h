@@ -1279,6 +1279,7 @@ class EditorBase : public nsIEditor,
         case EditSubAction::eRedo:
         case EditSubAction::eComputeTextToOutput:
         case EditSubAction::eCreatePaddingBRElementForEmptyEditor:
+        case EditSubAction::eMaintainWhiteSpaceVisibility:
         case EditSubAction::eNone:
         case EditSubAction::eReplaceHeadWithHTMLSource:
           MOZ_ASSERT(aDirection == eNone);
@@ -1821,6 +1822,14 @@ class EditorBase : public nsIEditor,
    */
   [[nodiscard]] MOZ_CAN_RUN_SCRIPT nsresult
   UpdateBRElementType(dom::HTMLBRElement& aBRElement, BRElementType aNewType);
+
+  /**
+   * Create and insert a line break to aPointToInsert.
+   */
+  [[nodiscard]] MOZ_CAN_RUN_SCRIPT Result<CreateElementResult, nsresult>
+  InsertBRElement(WithTransaction aWithTransaction,
+                  BRElementType aBRElementType,
+                  const EditorDOMPoint& aPointToInsert);
 
   /**
    * CloneAttributesWithTransaction() clones all attributes from

@@ -133,6 +133,16 @@ class OnboardingTelemetryRecorder {
                     ),
                 )
             }
+            OnboardingPageUiData.Type.MARKETING_DATA -> {
+                Onboarding.marketingDataCardViewed.record(
+                    Onboarding.MarketingDataCardViewedExtra(
+                        action = ACTION_IMPRESSION,
+                        elementType = ET_ONBOARDING_CARD,
+                        sequenceId = sequenceId,
+                        sequencePosition = sequencePosition,
+                    ),
+                )
+            }
         }
     }
 
@@ -300,22 +310,6 @@ class OnboardingTelemetryRecorder {
     }
 
     /**
-     * Records skip theme click event.
-     * @param sequenceId The identifier of the onboarding sequence shown to the user.
-     * @param sequencePosition The sequence position of the page for which the impression occurred.
-     */
-    fun onSkipThemeClick(sequenceId: String, sequencePosition: String) {
-        Onboarding.skipTheme.record(
-            Onboarding.SkipThemeExtra(
-                action = ACTION_CLICK,
-                elementType = ET_PRIMARY_BUTTON,
-                sequenceId = sequenceId,
-                sequencePosition = sequencePosition,
-            ),
-        )
-    }
-
-    /**
      * Records privacy policy link text click event.
      * @param sequenceId The identifier of the onboarding sequence shown to the user.
      * @param sequencePosition The sequence position of the page on which the link click event occurred.
@@ -385,6 +379,18 @@ class OnboardingTelemetryRecorder {
      */
     fun onTermsOfServiceManagerAcceptTermsButtonClick() {
         Onboarding.termsOfServiceAccepted.record()
+    }
+
+    /**
+     * Records the marketing data card continue button click event
+     * @param optIn If the user chose to opt in to marketing data collection
+     */
+    fun onMarketingDataContinueClicked(optIn: Boolean) {
+        Onboarding.marketingDataContinueClicked.record(
+            Onboarding.MarketingDataContinueClickedExtra(
+                optIn = optIn,
+            ),
+        )
     }
 
     companion object {

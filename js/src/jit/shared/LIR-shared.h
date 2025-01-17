@@ -265,47 +265,6 @@ class LNewObject : public LInstructionHelper<1, 0, 1> {
   MNewObject* mir() const { return mir_->toNewObject(); }
 };
 
-template <size_t Defs, size_t Ops>
-class LWasmReinterpretBase : public LInstructionHelper<Defs, Ops, 0> {
-  using Base = LInstructionHelper<Defs, Ops, 0>;
-
- protected:
-  explicit LWasmReinterpretBase(LNode::Opcode opcode) : Base(opcode) {}
-
- public:
-  const LAllocation* input() { return Base::getOperand(0); }
-  MWasmReinterpret* mir() const { return Base::mir_->toWasmReinterpret(); }
-};
-
-class LWasmReinterpret : public LWasmReinterpretBase<1, 1> {
- public:
-  LIR_HEADER(WasmReinterpret);
-  explicit LWasmReinterpret(const LAllocation& input)
-      : LWasmReinterpretBase(classOpcode) {
-    setOperand(0, input);
-  }
-};
-
-class LWasmReinterpretFromI64 : public LWasmReinterpretBase<1, INT64_PIECES> {
- public:
-  static const size_t Input = 0;
-
-  LIR_HEADER(WasmReinterpretFromI64);
-  explicit LWasmReinterpretFromI64(const LInt64Allocation& input)
-      : LWasmReinterpretBase(classOpcode) {
-    setInt64Operand(Input, input);
-  }
-};
-
-class LWasmReinterpretToI64 : public LWasmReinterpretBase<INT64_PIECES, 1> {
- public:
-  LIR_HEADER(WasmReinterpretToI64);
-  explicit LWasmReinterpretToI64(const LAllocation& input)
-      : LWasmReinterpretBase(classOpcode) {
-    setOperand(0, input);
-  }
-};
-
 namespace details {
 template <size_t Defs, size_t Ops, size_t Temps>
 class RotateBase : public LInstructionHelper<Defs, Ops, Temps> {

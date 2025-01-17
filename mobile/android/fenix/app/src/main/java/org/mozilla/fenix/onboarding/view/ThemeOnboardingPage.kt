@@ -30,7 +30,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
@@ -43,7 +42,6 @@ import mozilla.components.lib.state.ext.observeAsState
 import mozilla.components.ui.colors.PhotonColors
 import org.mozilla.fenix.R
 import org.mozilla.fenix.compose.button.PrimaryButton
-import org.mozilla.fenix.compose.button.SecondaryButton
 import org.mozilla.fenix.onboarding.store.OnboardingStore
 import org.mozilla.fenix.onboarding.store.applyThemeIfRequired
 import org.mozilla.fenix.theme.FirefoxTheme
@@ -107,9 +105,8 @@ fun ThemeOnboardingPage(
                 val state by onboardingStore.observeAsState(initialValue = onboardingStore.state) { state -> state }
 
                 if (!inComposePreview) {
-                    val context = LocalContext.current
                     LaunchedEffect(onboardingStore.state.themeOptionSelected) {
-                        context.applyThemeIfRequired(onboardingStore.state.themeOptionSelected)
+                        applyThemeIfRequired(onboardingStore.state.themeOptionSelected)
                     }
                 }
 
@@ -126,29 +123,13 @@ fun ThemeOnboardingPage(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            Column {
-                PrimaryButton(
-                    text = primaryButton.text,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .semantics { testTag = title + "onboarding_card.positive_button" },
-                    onClick = { primaryButton.onClick() },
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                pageState.secondaryButton?.let {
-                    SecondaryButton(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .semantics {
-                                testTag = pageState.title + "onboarding_card.negative_button"
-                            },
-                        text = it.text,
-                        onClick = it.onClick,
-                    )
-                }
-            }
+            PrimaryButton(
+                text = primaryButton.text,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .semantics { testTag = title + "onboarding_card.positive_button" },
+                onClick = { primaryButton.onClick() },
+            )
         }
     }
 
@@ -261,12 +242,6 @@ private fun OnboardingPagePreview() {
                 primaryButton = Action(
                     text = stringResource(
                         id = R.string.onboarding_save_and_continue_button,
-                    ),
-                    onClick = {},
-                ),
-                secondaryButton = Action(
-                    text = stringResource(
-                        id = R.string.onboarding_customize_theme_not_now_button,
                     ),
                     onClick = {},
                 ),

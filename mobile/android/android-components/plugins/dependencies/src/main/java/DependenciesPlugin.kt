@@ -48,7 +48,7 @@ object Versions {
     const val compose_compiler = "1.5.14"
 
     object AndroidX {
-        const val activity = "1.9.3"
+        const val activity = "1.10.0"
         const val annotation = "1.9.1"
         const val appcompat = "1.7.0"
         const val arch = "2.2.0"
@@ -65,7 +65,7 @@ object Versions {
         const val coordinatorlayout = "1.2.0"
         const val core = "1.15.0"
         const val core_splashscreen = "1.0.1"
-        const val datastore="1.1.1"
+        const val datastore="1.1.2"
         const val drawerlayout = "1.2.0"
         const val fragment = "1.8.5"
         const val lifecycle = "2.8.7"
@@ -76,7 +76,7 @@ object Versions {
         const val palette = "1.0.0"
         const val preferences = "1.2.1"
         const val profileinstaller = "1.4.0"
-        const val recyclerview = "1.3.2"
+        const val recyclerview = "1.4.0"
         const val room = "2.6.1"
         const val savedstate = "1.2.1"
         const val swiperefreshlayout = "1.1.0"

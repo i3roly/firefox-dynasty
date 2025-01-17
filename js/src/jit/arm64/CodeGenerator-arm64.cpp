@@ -1129,14 +1129,15 @@ void CodeGenerator::visitWasmBuiltinTruncateDToInt32(
 }
 
 void CodeGenerator::visitTruncateFToInt32(LTruncateFToInt32* ins) {
-  emitTruncateFloat32(ToFloatRegister(ins->input()), ToRegister(ins->output()),
-                      ins->mir());
+  masm.truncateFloat32ModUint32(ToFloatRegister(ins->input()),
+                                ToRegister(ins->output()));
 }
 
 void CodeGenerator::visitWasmBuiltinTruncateFToInt32(
     LWasmBuiltinTruncateFToInt32* lir) {
-  emitTruncateFloat32(ToFloatRegister(lir->getOperand(0)),
-                      ToRegister(lir->getDef(0)), lir->mir());
+  MOZ_ASSERT(lir->instance()->isBogus(), "instance not used for arm64");
+  masm.truncateFloat32ModUint32(ToFloatRegister(lir->in()),
+                                ToRegister(lir->output()));
 }
 
 ValueOperand CodeGeneratorARM64::ToValue(LInstruction* ins, size_t pos) {
@@ -2343,32 +2344,6 @@ void CodeGenerator::visitSignExtendInt64(LSignExtendInt64* ins) {
   }
 }
 
-void CodeGenerator::visitWasmReinterpret(LWasmReinterpret* lir) {
-  MOZ_ASSERT(gen->compilingWasm());
-  MWasmReinterpret* ins = lir->mir();
-
-  MIRType to = ins->type();
-  mozilla::DebugOnly<MIRType> from = ins->input()->type();
-
-  switch (to) {
-    case MIRType::Int32:
-      MOZ_ASSERT(from == MIRType::Float32);
-      masm.moveFloat32ToGPR(ToFloatRegister(lir->input()),
-                            ToRegister(lir->output()));
-      break;
-    case MIRType::Float32:
-      MOZ_ASSERT(from == MIRType::Int32);
-      masm.moveGPRToFloat32(ToRegister(lir->input()),
-                            ToFloatRegister(lir->output()));
-      break;
-    case MIRType::Double:
-    case MIRType::Int64:
-      MOZ_CRASH("not handled by this LIR opcode");
-    default:
-      MOZ_CRASH("unexpected WasmReinterpret");
-  }
-}
-
 void CodeGenerator::visitWasmStackArgI64(LWasmStackArgI64* ins) {
   const MWasmStackArg* mir = ins->mir();
   Address dst(masm.getStackPointer(), mir->spOffset());
@@ -2532,20 +2507,6 @@ void CodeGeneratorARM64::visitOutOfLineWasmTruncateCheck(
   } else {
     MOZ_CRASH("unexpected type");
   }
-}
-
-void CodeGenerator::visitWasmReinterpretToI64(LWasmReinterpretToI64* lir) {
-  MOZ_ASSERT(lir->mir()->type() == MIRType::Int64);
-  MOZ_ASSERT(lir->mir()->input()->type() == MIRType::Double);
-  masm.moveDoubleToGPR64(ToFloatRegister(lir->input()), ToOutRegister64(lir));
-}
-
-void CodeGenerator::visitWasmReinterpretFromI64(LWasmReinterpretFromI64* lir) {
-  MOZ_ASSERT(lir->mir()->type() == MIRType::Double);
-  MOZ_ASSERT(lir->mir()->input()->type() == MIRType::Int64);
-  masm.moveGPR64ToDouble(
-      ToRegister64(lir->getInt64Operand(LWasmReinterpretFromI64::Input)),
-      ToFloatRegister(lir->output()));
 }
 
 void CodeGenerator::visitAtomicTypedArrayElementBinop(

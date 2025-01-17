@@ -449,6 +449,7 @@
   movable: true
   congruent_to: if_operands_equal
   alias_set: none
+  folds_to: custom
   clone: true
 
 - name: SameValue
@@ -459,6 +460,7 @@
   movable: true
   congruent_to: if_operands_equal
   alias_set: none
+  folds_to: custom
   clone: true
 
 - name: Box
@@ -3602,7 +3604,7 @@
 - name: WasmSelect
   gen_boilerplate: false
 
-- name: WasmReinterpret
+- name: ReinterpretCast
   gen_boilerplate: false
 
 - name: Rotate
