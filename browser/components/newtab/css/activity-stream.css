@@ -4674,6 +4674,12 @@ main section {
   align-items: center;
   column-gap: var(--space-small);
 }
+.lightWallpaper .ds-section-wrapper .section-context-wrapper {
+  color-scheme: light;
+}
+.darkWallpaper .ds-section-wrapper .section-context-wrapper {
+  color-scheme: dark;
+}
 .ds-section-wrapper .section-follow .section-button-following-text {
   display: none;
 }
@@ -4685,11 +4691,6 @@ main section {
 }
 .ds-section-wrapper .section-follow.following .section-button-following-text {
   display: block;
-}
-.ds-section-wrapper .section-follow.following:not(:hover) moz-button {
-  --button-background-color-destructive: var(--button-background-color);
-  --button-text-color-destructive: var(--button-text-color);
-  --button-border-color-destructive: var(--button-border-color);
 }
 .ds-section-wrapper .section-follow.following:hover .section-button-following-text {
   display: none;

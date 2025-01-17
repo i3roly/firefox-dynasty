@@ -42,15 +42,16 @@ import org.mozilla.fenix.ext.openSetDefaultBrowserOption
 import org.mozilla.fenix.ext.requireComponents
 import org.mozilla.fenix.ext.settings
 import org.mozilla.fenix.nimbus.FxNimbus
+import org.mozilla.fenix.onboarding.store.DefaultOnboardingPreferencesRepository
 import org.mozilla.fenix.onboarding.store.OnboardingAction.OnboardingAddOnsAction
 import org.mozilla.fenix.onboarding.store.OnboardingAddonStatus
+import org.mozilla.fenix.onboarding.store.OnboardingPreferencesMiddleware
 import org.mozilla.fenix.onboarding.store.OnboardingStore
 import org.mozilla.fenix.onboarding.view.Caption
 import org.mozilla.fenix.onboarding.view.ManagePrivacyPreferencesDialogFragment
 import org.mozilla.fenix.onboarding.view.OnboardingAddOn
 import org.mozilla.fenix.onboarding.view.OnboardingPageUiData
 import org.mozilla.fenix.onboarding.view.OnboardingScreen
-import org.mozilla.fenix.onboarding.view.ToolbarOptionType
 import org.mozilla.fenix.onboarding.view.sequencePosition
 import org.mozilla.fenix.onboarding.view.telemetrySequenceId
 import org.mozilla.fenix.onboarding.view.toPageUiData
@@ -82,7 +83,20 @@ class OnboardingFragment : Fragment() {
         )
     }
     private val telemetryRecorder by lazy { OnboardingTelemetryRecorder() }
-    private val onboardingStore by lazyStore { OnboardingStore() }
+
+    private val onboardingStore by lazyStore {
+        OnboardingStore(
+            middleware = listOf(
+                OnboardingPreferencesMiddleware(
+                    repository = DefaultOnboardingPreferencesRepository(
+                        context = requireContext(),
+                        lifecycleOwner = viewLifecycleOwner,
+                    ),
+                ),
+            ),
+        )
+    }
+
     private val pinAppWidgetReceiver = WidgetPinnedReceiver()
 
     @SuppressLint("SourceLockedOrientationActivity")
@@ -223,9 +237,6 @@ class OnboardingFragment : Fragment() {
             onInstallAddOnButtonClick = { installUrl -> installAddon(installUrl) },
             termsOfServiceEventHandler = termsOfServiceEventHandler,
             onCustomizeToolbarClick = {
-                requireContext().settings().shouldUseBottomToolbar =
-                    onboardingStore.state.toolbarOptionSelected == ToolbarOptionType.TOOLBAR_BOTTOM
-
                 telemetryRecorder.onSelectToolbarPlacementClick(
                     pagesToDisplay.telemetrySequenceId(),
                     pagesToDisplay.sequencePosition(OnboardingPageUiData.Type.TOOLBAR_PLACEMENT),
@@ -235,13 +246,6 @@ class OnboardingFragment : Fragment() {
             onCustomizeThemeClick = {
                 telemetryRecorder.onSelectThemeClick(
                     onboardingStore.state.themeOptionSelected.id,
-                    pagesToDisplay.telemetrySequenceId(),
-                    pagesToDisplay.sequencePosition(OnboardingPageUiData.Type.THEME_SELECTION),
-                )
-            },
-
-            onCustomizeThemeSkip = {
-                telemetryRecorder.onSkipThemeClick(
                     pagesToDisplay.telemetrySequenceId(),
                     pagesToDisplay.sequencePosition(OnboardingPageUiData.Type.THEME_SELECTION),
                 )

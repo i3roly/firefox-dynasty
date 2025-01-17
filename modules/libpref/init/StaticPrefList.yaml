@@ -1607,7 +1607,7 @@
 
 - name: browser.navigation.requireUserInteraction
   type: bool
-  value: @IS_EARLY_BETA_OR_EARLIER@
+  value: true
   mirror: always
 
 # Indicates if about:newtab shows content (enabled) or just blank.
@@ -14377,11 +14377,7 @@
 # Has no effect unless security.tls.enable_kyber is true.
 - name: network.http.http3.enable_kyber
   type: RelaxedAtomicBool
-#ifdef EARLY_BETA_OR_EARLIER
   value: @IS_NOT_ANDROID@
-#else
-  value: false
-#endif
   mirror: always
   rust: true
 
