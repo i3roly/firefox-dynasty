@@ -1023,6 +1023,12 @@ struct GetDoublyLinkedListElement<arena_chunk_t> {
 }  // namespace mozilla
 #endif
 
+enum class purge_action_t {
+  None,
+  PurgeNow,
+  Queue,
+};
+
 struct arena_run_t {
 #if defined(MOZ_DIAGNOSTIC_ASSERT_ENABLED)
   uint32_t mMagic;
@@ -1157,6 +1163,9 @@ struct arena_t {
   // Operations on this arena require that lock be locked. The MaybeMutex
   // class will elude locking if the arena is accessed from a single thread
   // only (currently only the main thread can be used like this).
+  // Can be acquired while holding gArenas.mLock, but must not be acquired or
+  // held while holding or acquiring gArenas.mPurgeListLock.
+  //
   MaybeMutex mLock MOZ_UNANNOTATED;
 
   // The lock is required to write to fields of mStats, but it is not needed to
@@ -1199,6 +1208,13 @@ struct arena_t {
   // Needs no lock, read-only.
   bool mRandomizeSmallAllocations;
 
+  // A pseudorandom number generator. Initially null, it gets initialized
+  // on first use to avoid recursive malloc initialization (e.g. on OSX
+  // arc4random allocates memory).
+  mozilla::non_crypto::XorShift128PlusRNG* mPRNG MOZ_GUARDED_BY(mLock);
+  bool mIsPRNGInitializing MOZ_GUARDED_BY(mLock);
+
+ public:
   // Whether this is a private arena. Multiple public arenas are just a
   // performance optimization and not a safety feature.
   //
@@ -1209,18 +1225,14 @@ struct arena_t {
   // Needs no lock, read-only.
   bool mIsPrivate;
 
-  // A pseudorandom number generator. Initially null, it gets initialized
-  // on first use to avoid recursive malloc initialization (e.g. on OSX
-  // arc4random allocates memory).
-  mozilla::non_crypto::XorShift128PlusRNG* mPRNG MOZ_GUARDED_BY(mLock);
-  bool mIsPRNGInitializing MOZ_GUARDED_BY(mLock);
-
- public:
   // Current count of pages within unused runs that are potentially
   // dirty, and for which madvise(... MADV_FREE) has not been called.  By
   // tracking this, we can institute a limit on how much dirty unused
   // memory is mapped for each arena.
   size_t mNumDirty MOZ_GUARDED_BY(mLock);
+
+  // Precalculated value for faster checks.
+  size_t mMaxDirty MOZ_GUARDED_BY(mLock);
 
   // The current number of pages that are available without a system call (but
   // probably a page fault).
@@ -1229,11 +1241,25 @@ struct arena_t {
 
   // Maximum value allowed for mNumDirty.
   // Needs no lock, read-only.
-  size_t mMaxDirty;
+  size_t mMaxDirtyBase;
 
   // Needs no lock, read-only.
   int32_t mMaxDirtyIncreaseOverride;
   int32_t mMaxDirtyDecreaseOverride;
+
+  // The link to gArenas.mOutstandingPurges.
+  // Note that this must only be accessed while holding gArenas.mPurgeListLock
+  // (but not arena_t.mLock !) through gArenas.mOutstandingPurges.
+  DoublyLinkedListElement<arena_t> mPurgeListElem;
+  // A flag that indicates if arena is (or will be) in mOutstandingPurges.
+  // When set true a thread has committed to adding a purge request for this
+  // arena. Cleared only by Purge when we know we are completely done.
+  // This is necessary to avoid accessing the list (and list lock) on
+  // every call to ShouldStartPurge();
+  bool mIsDeferredPurgePending MOZ_GUARDED_BY(mLock);
+  // A mirror of ArenaCollection::mIsDeferredPurgeEnabled, here only to
+  // optimize memory reads in ShouldStartPurge().
+  bool mIsDeferredPurgeEnabled MOZ_GUARDED_BY(mLock);
 
  private:
   // Size/address-ordered tree of this arena's available runs.  This tree
@@ -1362,7 +1388,7 @@ struct arena_t {
 
   void* Ralloc(void* aPtr, size_t aSize, size_t aOldSize) MOZ_EXCLUDES(mLock);
 
-  size_t EffectiveMaxDirty();
+  void UpdateMaxDirty() MOZ_EXCLUDES(mLock);
 
 #ifdef MALLOC_DECOMMIT
   // During a commit operation (for aReqPages) we have the opportunity of
@@ -1374,13 +1400,13 @@ struct arena_t {
 
   // Purge some dirty pages.
   //
-  // If this arena has more than EffectiveMaxDirty() dirty pages or aForce is
+  // If this arena has more than mMaxDirty dirty pages or aForce is
   // true, then purge one run of dirty pages.
   //
   // This must be called without the mLock held (it'll take the lock).
   //
   // To release more than a single run of pages then it's best to call Purge
-  // in a loop.  It returns true if mNumDirty > EffectiveMaxDirty() so that the
+  // in a loop.  It returns true if mNumDirty > mMaxDirty so that the
   // caller knows if the loop should continue.
   //
   bool Purge(bool aForce = false) MOZ_EXCLUDES(mLock);
@@ -1436,6 +1462,27 @@ struct arena_t {
 
   void HardPurge();
 
+  // Check mNumDirty against EffectiveMaxDirty and return the appropriate
+  // action to be taken by MayDoOrQueuePurge (outside mLock's scope).
+  //
+  // None:     Nothing to do.
+  // PurgeNow: Immediate synchronous purge.
+  // Queue:    Add a new purge request.
+  //
+  // Note that in the case of deferred purge this function takes into account
+  // mIsDeferredPurgeNeeded to avoid useless operations on the purge list
+  // that would require gArenas.mPurgeListLock.
+  inline purge_action_t ShouldStartPurge() MOZ_REQUIRES(mLock);
+
+  // Take action according to ShouldStartPurge.
+  inline void MayDoOrQueuePurge(purge_action_t aAction) MOZ_EXCLUDES(mLock);
+
+  // Check the EffectiveHalfMaxDirty threshold to decide if we continue purge.
+  // This threshold is lower than ShouldStartPurge to have some hysteresis.
+  bool ShouldContinuePurge(bool aForce = false) MOZ_REQUIRES(mLock) {
+    return (mNumDirty > ((aForce) ? 0 : mMaxDirty >> 1));
+  }
+
   bool IsMainThreadOnly() const { return !mLock.LockIsEnabled(); }
 
   void* operator new(size_t aCount) = delete;
@@ -1444,6 +1491,17 @@ struct arena_t {
 
   void operator delete(void*);
 };
+
+namespace mozilla {
+
+template <>
+struct GetDoublyLinkedListElement<arena_t> {
+  static DoublyLinkedListElement<arena_t>& Get(arena_t* aThis) {
+    return aThis->mPurgeListElem;
+  }
+};
+
+}  // namespace mozilla
 
 struct ArenaTreeTrait {
   static RedBlackTreeNode<arena_t>& GetTreeNode(arena_t* aThis) {
@@ -1475,9 +1533,12 @@ class ArenaCollection {
     params.mMaxDirty = opt_dirty_max;
     mDefaultArena =
         mLock.Init() ? CreateArena(/* aIsPrivate = */ false, &params) : nullptr;
+    mPurgeListLock.Init();
+    mIsDeferredPurgeEnabled = false;
     return bool(mDefaultArena);
   }
 
+  // The requested arena must exist.
   inline arena_t* GetById(arena_id_t aArenaId, bool aIsPrivate)
       MOZ_EXCLUDES(mLock);
 
@@ -1485,20 +1546,31 @@ class ArenaCollection {
       MOZ_EXCLUDES(mLock);
 
   void DisposeArena(arena_t* aArena) MOZ_EXCLUDES(mLock) {
-    MutexAutoLock lock(mLock);
-    Tree& tree =
-        aArena->IsMainThreadOnly() ? mMainThreadArenas : mPrivateArenas;
+    // This will not call MayPurge but only unlink the element in case.
+    RemoveObsoletePurgeFromList(aArena);
+    {
+      MutexAutoLock lock(mLock);
+      Tree& tree =
+          aArena->IsMainThreadOnly() ? mMainThreadArenas : mPrivateArenas;
 
-    MOZ_RELEASE_ASSERT(tree.Search(aArena), "Arena not in tree");
-    tree.Remove(aArena);
-    mNumOperationsDisposedArenas += aArena->Operations();
+      MOZ_RELEASE_ASSERT(tree.Search(aArena), "Arena not in tree");
+      tree.Remove(aArena);
+      mNumOperationsDisposedArenas += aArena->Operations();
 
-    delete aArena;
+      delete aArena;
+    }
   }
 
   void SetDefaultMaxDirtyPageModifier(int32_t aModifier) {
-    mDefaultMaxDirtyPageModifier = aModifier;
+    {
+      MutexAutoLock lock(mLock);
+      mDefaultMaxDirtyPageModifier = aModifier;
+      for (auto* arena : iter()) {
+        arena->UpdateMaxDirty();
+      }
+    }
   }
+
   int32_t DefaultMaxDirtyPageModifier() { return mDefaultMaxDirtyPageModifier; }
 
   using Tree = RedBlackTree<arena_t, ArenaTreeTrait>;
@@ -1543,7 +1615,14 @@ class ArenaCollection {
 
   inline arena_t* GetDefault() { return mDefaultArena; }
 
+  // Guards the collection of arenas. Must not be acquired while holding
+  // a single arena's lock or mPurgeListLock.
   Mutex mLock MOZ_UNANNOTATED;
+
+  // Guards only the list of outstanding purge requests. Can be acquired
+  // while holding gArenas.mLock, but must not be acquired or held while
+  // holding or acquiring a single arena's lock.
+  Mutex mPurgeListLock;
 
   // We're running on the main thread which is set by a call to SetMainThread().
   bool IsOnMainThread() const {
@@ -1576,6 +1655,50 @@ class ArenaCollection {
     return mNumOperationsDisposedArenas;
   }
 
+  // Enable or disable the lazy purge.
+  //
+  // Returns the former state of enablement.
+  // This is a global setting for all arenas. Changing it may cause an
+  // immediate purge for all arenas.
+  bool SetDeferredPurge(bool aEnable) {
+    MOZ_ASSERT(IsOnMainThreadWeak());
+
+    bool ret = mIsDeferredPurgeEnabled;
+    {
+      MutexAutoLock lock(mLock);
+      mIsDeferredPurgeEnabled = aEnable;
+      for (auto* arena : iter()) {
+        MaybeMutexAutoLock lock(arena->mLock);
+        arena->mIsDeferredPurgeEnabled = aEnable;
+      }
+    }
+    if (ret != aEnable) {
+      MayPurgeAll(false);
+    }
+    return ret;
+  }
+
+  bool IsDeferredPurgeEnabled() { return mIsDeferredPurgeEnabled; }
+
+  // Set aside a new purge request for aArena.
+  void AddToOutstandingPurges(arena_t* aArena) MOZ_EXCLUDES(mPurgeListLock);
+
+  // Remove an unhandled purge request for aArena.
+  void RemoveObsoletePurgeFromList(arena_t* aArena)
+      MOZ_EXCLUDES(mPurgeListLock);
+
+  // Execute all outstanding purge requests, if any.
+  void MayPurgeAll(bool aForce);
+
+  // Execute at most one request and return, if there are more to process.
+  //
+  // aPeekOnly - If true, check only if there is work to do without doing it.
+  //
+  // Note that this executes at most one call to arena_t::Purge for at most
+  // one arena, which will purge at most one chunk from that arena. This is the
+  // smallest possible fraction we can purge currently.
+  bool MayPurgeStep(bool aPeekOnly);
+
  private:
   const static arena_id_t MAIN_THREAD_ARENA_BIT = 0x1;
 
@@ -1605,6 +1728,12 @@ class ArenaCollection {
   // The number of operations that happened in arenas that have since been
   // destroyed.
   uint64_t mNumOperationsDisposedArenas = 0;
+
+  // Linked list of outstanding purges.
+  DoublyLinkedList<arena_t> mOutstandingPurges MOZ_GUARDED_BY(mPurgeListLock);
+  // Flag if we should defer purge to later. Only ever set when holding the
+  // collection lock.
+  Atomic<bool, Relaxed> mIsDeferredPurgeEnabled;
 };
 
 MOZ_RUNINIT static ArenaCollection gArenas;
@@ -3151,7 +3280,8 @@ arena_run_t* arena_t::AllocRun(size_t aSize, bool aLarge, bool aZero) {
   return SplitRun(run, aSize, aLarge, aZero) ? run : nullptr;
 }
 
-size_t arena_t::EffectiveMaxDirty() {
+void arena_t::UpdateMaxDirty() {
+  MaybeMutexAutoLock lock(mLock);
   int32_t modifier = gArenas.DefaultMaxDirtyPageModifier();
   if (modifier) {
     int32_t arenaOverride =
@@ -3161,7 +3291,8 @@ size_t arena_t::EffectiveMaxDirty() {
     }
   }
 
-  return modifier >= 0 ? mMaxDirty << modifier : mMaxDirty >> -modifier;
+  mMaxDirty =
+      modifier >= 0 ? mMaxDirtyBase << modifier : mMaxDirtyBase >> -modifier;
 }
 
 #ifdef MALLOC_DECOMMIT
@@ -3173,7 +3304,7 @@ size_t arena_t::ExtraCommitPages(size_t aReqPages, size_t aRemainingPages) {
   }
 
   // The maximum size of the page cache
-  const size_t max_page_cache = EffectiveMaxDirty();
+  const size_t max_page_cache = mMaxDirty;
 
   // The current size of the page cache, note that we use mNumFresh +
   // mNumMAdvised here but Purge() does not.
@@ -3196,7 +3327,7 @@ size_t arena_t::ExtraCommitPages(size_t aReqPages, size_t aRemainingPages) {
   // The rest is arbitrary and involves a some assumptions.  I've broken it down
   // into simple expressions to document them more clearly.
 
-  // Assumption 1: a quarter of EffectiveMaxDirty() is a sensible "minimum
+  // Assumption 1: a quarter of mMaxDirty is a sensible "minimum
   // target" for the dirty page cache.  Likewise 3 quarters is a sensible
   // "maximum target".  Note that for the maximum we avoid using the whole page
   // cache now so that a free that follows this allocation doesn't immeidatly
@@ -3265,7 +3396,8 @@ bool arena_t::Purge(bool aForce) {
     MOZ_ASSERT(ndirty <= mNumDirty);
 #endif
 
-    if (mNumDirty <= (aForce ? 0 : EffectiveMaxDirty() >> 1)) {
+    if (!ShouldContinuePurge(aForce)) {
+      mIsDeferredPurgePending = false;
       return false;
     }
 
@@ -3315,8 +3447,13 @@ bool arena_t::Purge(bool aForce) {
       MOZ_ASSERT(chunk->mIsPurging);
 
       continue_purge_chunk = purge_info.FindDirtyPages(purged_once);
-      continue_purge_arena =
-          purge_info.mArena.mNumDirty > (aForce ? 0 : EffectiveMaxDirty() >> 1);
+      continue_purge_arena = purge_info.mArena.ShouldContinuePurge(aForce);
+
+      // The code below will exit returning false if these are both false, so
+      // clear mIsDeferredPurgeNeeded while we still hold the lock.
+      if (!continue_purge_chunk && !continue_purge_arena) {
+        purge_info.mArena.mIsDeferredPurgePending = false;
+      }
     }
     if (!continue_purge_chunk) {
       if (chunk->mDying) {
@@ -3350,12 +3487,12 @@ bool arena_t::Purge(bool aForce) {
       auto [cpc, ctr] = purge_info.UpdatePagesAndCounts();
       continue_purge_chunk = cpc;
       chunk_to_release = ctr;
-      continue_purge_arena =
-          purge_info.mArena.mNumDirty > (aForce ? 0 : EffectiveMaxDirty() >> 1);
+      continue_purge_arena = purge_info.mArena.ShouldContinuePurge(aForce);
 
       if (!continue_purge_chunk || !continue_purge_arena) {
         // We're going to stop purging here so update the chunk's bookkeeping.
         purge_info.FinishPurgingInChunk(true);
+        purge_info.mArena.mIsDeferredPurgePending = false;
       }
     }  // MaybeMutexAutoLock
 
@@ -4431,7 +4568,7 @@ static inline void arena_dalloc(void* aPtr, size_t aOffset, arena_t* aArena) {
   }
 
   arena_chunk_t* chunk_dealloc_delay = nullptr;
-  bool should_purge;
+  purge_action_t purge_action;
   {
     MaybeMutexAutoLock lock(arena->mLock);
     arena_chunk_map_t* mapelm = &chunk->map[pageind];
@@ -4449,16 +4586,14 @@ static inline void arena_dalloc(void* aPtr, size_t aOffset, arena_t* aArena) {
       chunk_dealloc_delay = arena->DallocLarge(chunk, aPtr);
     }
 
-    should_purge = arena->mNumDirty > arena->EffectiveMaxDirty();
+    purge_action = arena->ShouldStartPurge();
   }
 
   if (chunk_dealloc_delay) {
     chunk_dealloc((void*)chunk_dealloc_delay, kChunkSize, ARENA_CHUNK);
   }
 
-  while (should_purge) {
-    should_purge = arena->Purge();
-  }
+  arena->MayDoOrQueuePurge(purge_action);
 }
 
 static inline void idalloc(void* ptr, arena_t* aArena) {
@@ -4474,24 +4609,51 @@ static inline void idalloc(void* ptr, arena_t* aArena) {
   }
 }
 
+inline purge_action_t arena_t::ShouldStartPurge() {
+  if (mNumDirty > mMaxDirty) {
+    if (!mIsDeferredPurgeEnabled) {
+      return purge_action_t::PurgeNow;
+    }
+    if (mIsDeferredPurgePending) {
+      return purge_action_t::None;
+    }
+    mIsDeferredPurgePending = true;
+    return purge_action_t::Queue;
+  }
+  return purge_action_t::None;
+}
+
+inline void arena_t::MayDoOrQueuePurge(purge_action_t aAction) {
+  switch (aAction) {
+    case purge_action_t::Queue:
+      gArenas.AddToOutstandingPurges(this);
+      break;
+    case purge_action_t::PurgeNow:
+      while (Purge()) {
+      }
+      break;
+    case purge_action_t::None:
+      // do nothing.
+      break;
+  }
+}
+
 void arena_t::RallocShrinkLarge(arena_chunk_t* aChunk, void* aPtr, size_t aSize,
                                 size_t aOldSize) {
   MOZ_ASSERT(aSize < aOldSize);
 
   // Shrink the run, and make trailing pages available for other
   // allocations.
-  bool should_purge;
+  purge_action_t purge_action;
   {
     MaybeMutexAutoLock lock(mLock);
     TrimRunTail(aChunk, (arena_run_t*)aPtr, aOldSize, aSize, true);
     mStats.allocated_large -= aOldSize - aSize;
     mStats.operations++;
 
-    should_purge = mNumDirty > EffectiveMaxDirty();
+    purge_action = ShouldStartPurge();
   }
-  while (should_purge) {
-    should_purge = Purge();
-  }
+  MayDoOrQueuePurge(purge_action);
 }
 
 // Returns whether reallocation was successful.
@@ -4500,35 +4662,38 @@ bool arena_t::RallocGrowLarge(arena_chunk_t* aChunk, void* aPtr, size_t aSize,
   size_t pageind = (uintptr_t(aPtr) - uintptr_t(aChunk)) >> gPageSize2Pow;
   size_t npages = aOldSize >> gPageSize2Pow;
 
-  MaybeMutexAutoLock lock(mLock);
-  MOZ_DIAGNOSTIC_ASSERT(aOldSize ==
-                        (aChunk->map[pageind].bits & ~gPageSizeMask));
+  {
+    MaybeMutexAutoLock lock(mLock);
+    MOZ_DIAGNOSTIC_ASSERT(aOldSize ==
+                          (aChunk->map[pageind].bits & ~gPageSizeMask));
 
-  // Try to extend the run.
-  MOZ_ASSERT(aSize > aOldSize);
-  if (pageind + npages < gChunkNumPages - 1 &&
-      (aChunk->map[pageind + npages].bits &
-       (CHUNK_MAP_ALLOCATED | CHUNK_MAP_BUSY)) == 0 &&
-      (aChunk->map[pageind + npages].bits & ~gPageSizeMask) >=
-          aSize - aOldSize) {
-    // The next run is available and sufficiently large.  Split the
-    // following run, then merge the first part with the existing
-    // allocation.
-    if (!SplitRun((arena_run_t*)(uintptr_t(aChunk) +
-                                 ((pageind + npages) << gPageSize2Pow)),
-                  aSize - aOldSize, true, false)) {
-      return false;
+    // Try to extend the run.
+    MOZ_ASSERT(aSize > aOldSize);
+    if (pageind + npages < gChunkNumPages - 1 &&
+        (aChunk->map[pageind + npages].bits &
+         (CHUNK_MAP_ALLOCATED | CHUNK_MAP_BUSY)) == 0 &&
+        (aChunk->map[pageind + npages].bits & ~gPageSizeMask) >=
+            aSize - aOldSize) {
+      // The next run is available and sufficiently large.  Split the
+      // following run, then merge the first part with the existing
+      // allocation.
+      if (!SplitRun((arena_run_t*)(uintptr_t(aChunk) +
+                                   ((pageind + npages) << gPageSize2Pow)),
+                    aSize - aOldSize, true, false)) {
+        return false;
+      }
+
+      aChunk->map[pageind].bits = aSize | CHUNK_MAP_LARGE | CHUNK_MAP_ALLOCATED;
+      aChunk->map[pageind + npages].bits =
+          CHUNK_MAP_LARGE | CHUNK_MAP_ALLOCATED;
+
+      mStats.allocated_large += aSize - aOldSize;
+      mStats.operations++;
+
+      return true;
     }
-
-    aChunk->map[pageind].bits = aSize | CHUNK_MAP_LARGE | CHUNK_MAP_ALLOCATED;
-    aChunk->map[pageind + npages].bits = CHUNK_MAP_LARGE | CHUNK_MAP_ALLOCATED;
-
-    mStats.allocated_large += aSize - aOldSize;
-    mStats.operations++;
-    return true;
+    return false;
   }
-
-  return false;
 }
 
 void* arena_t::RallocSmallOrLarge(void* aPtr, size_t aSize, size_t aOldSize) {
@@ -4653,6 +4818,9 @@ arena_t::arena_t(arena_params_t* aParams, bool aIsPrivate) {
     mMaxDirtyDecreaseOverride = 0;
   }
 
+  mIsDeferredPurgePending = false;
+  mIsDeferredPurgeEnabled = gArenas.IsDeferredPurgeEnabled();
+
   MOZ_RELEASE_ASSERT(mLock.Init(doLock));
 
   mPRNG = nullptr;
@@ -4665,8 +4833,9 @@ arena_t::arena_t(arena_params_t* aParams, bool aIsPrivate) {
   mNumMAdvised = 0;
   // The default maximum amount of dirty pages allowed on arenas is a fraction
   // of opt_dirty_max.
-  mMaxDirty = (aParams && aParams->mMaxDirty) ? aParams->mMaxDirty
-                                              : (opt_dirty_max / 8);
+  mMaxDirtyBase = (aParams && aParams->mMaxDirty) ? aParams->mMaxDirty
+                                                  : (opt_dirty_max / 8);
+  UpdateMaxDirty();
 
   mRunsAvail.Init();
 
@@ -4693,6 +4862,7 @@ arena_t::arena_t(arena_params_t* aParams, bool aIsPrivate) {
 arena_t::~arena_t() {
   size_t i;
   MaybeMutexAutoLock lock(mLock);
+
   MOZ_RELEASE_ASSERT(!mLink.Left() && !mLink.Right(),
                      "Arena is still registered");
   MOZ_RELEASE_ASSERT(!mStats.allocated_small && !mStats.allocated_large,
@@ -5590,26 +5760,13 @@ inline void MozJemalloc::jemalloc_purge_freed_pages() {
 
 inline void MozJemalloc::jemalloc_free_dirty_pages(void) {
   if (malloc_initialized) {
-    MutexAutoLock lock(gArenas.mLock);
-    MOZ_ASSERT(gArenas.IsOnMainThreadWeak());
-    for (auto* arena : gArenas.iter()) {
-      bool do_purge = true;
-      while (do_purge) {
-        do_purge = arena->Purge(true);
-      }
-    }
+    gArenas.MayPurgeAll(true);
   }
 }
 
 inline void MozJemalloc::jemalloc_free_excess_dirty_pages(void) {
   if (malloc_initialized) {
-    MutexAutoLock lock(gArenas.mLock);
-    for (auto* arena : gArenas.iter()) {
-      bool do_purge = true;
-      while (do_purge) {
-        do_purge = arena->Purge();
-      }
-    }
+    gArenas.MayPurgeAll(false);
   }
 }
 
@@ -5671,7 +5828,9 @@ inline void MozJemalloc::moz_dispose_arena(arena_id_t aArenaId) {
 }
 
 inline void MozJemalloc::moz_set_max_dirty_page_modifier(int32_t aModifier) {
-  gArenas.SetDefaultMaxDirtyPageModifier(aModifier);
+  if (malloc_init()) {
+    gArenas.SetDefaultMaxDirtyPageModifier(aModifier);
+  }
 }
 
 inline void MozJemalloc::jemalloc_reset_small_alloc_randomization(
@@ -5706,6 +5865,83 @@ inline void MozJemalloc::jemalloc_reset_small_alloc_randomization(
   for (auto* arena : gArenas.iter()) {
     arena->ResetSmallAllocRandomization();
   }
+}
+
+inline bool MozJemalloc::moz_enable_deferred_purge(bool aEnabled) {
+  return gArenas.SetDeferredPurge(aEnabled);
+}
+
+inline bool MozJemalloc::moz_may_purge_one_now(bool aPeekOnly) {
+  return gArenas.MayPurgeStep(aPeekOnly);
+}
+
+inline void ArenaCollection::AddToOutstandingPurges(arena_t* aArena) {
+  MOZ_ASSERT(aArena);
+
+  // We cannot trust the caller to know whether the element was already added
+  // from another thread given we have our own lock.
+  MutexAutoLock lock(mPurgeListLock);
+  if (!mOutstandingPurges.ElementProbablyInList(aArena)) {
+    mOutstandingPurges.pushBack(aArena);
+  }
+}
+
+inline void ArenaCollection::RemoveObsoletePurgeFromList(arena_t* aArena) {
+  // We cannot trust the caller to know whether the element was already added
+  // from another thread given we have our own lock.
+  MutexAutoLock lock(mPurgeListLock);
+  if (mOutstandingPurges.ElementProbablyInList(aArena)) {
+    mOutstandingPurges.remove(aArena);
+  }
+}
+
+void ArenaCollection::MayPurgeAll(bool aForce) {
+  MutexAutoLock lock(mLock);
+  for (auto* arena : iter()) {
+    // Arenas that are not IsMainThreadOnly can be purged from any thread.
+    // So we do what we can even if called from another thread.
+    if (!arena->IsMainThreadOnly() || IsOnMainThreadWeak()) {
+      while (arena->Purge(aForce)) {
+      }
+      RemoveObsoletePurgeFromList(arena);
+    }
+  }
+}
+
+bool ArenaCollection::MayPurgeStep(bool aPeekOnly) {
+  // If we'd want to allow to call this from non-main threads, we would need
+  // to ensure that arenas cannot be disposed while here, see bug 1364359.
+  MOZ_ASSERT(gArenas.IsOnMainThreadWeak());
+
+  if (!aPeekOnly) {
+    arena_t* current = nullptr;
+    {
+      MutexAutoLock lock(mPurgeListLock);
+      if (!mOutstandingPurges.isEmpty()) {
+        current = mOutstandingPurges.popFront();
+      }
+    }
+    // Note that Purge will clear mIsDeferredPurgePending while holding the
+    // arena's lock when it's done and thus returns false.
+    if (current && current->Purge(false)) {
+      MutexAutoLock lock(mPurgeListLock);
+      // Another thread may have inserted the arena in the list,
+      // we must recheck it.
+      if (!mOutstandingPurges.ElementProbablyInList(current)) {
+        // We pushFront here to ensure our CPU caches are still loaded for this
+        // arena if whoever calls us for the next round, does so immediately.
+        mOutstandingPurges.pushFront(current);
+      }
+      return true;
+    }
+  }
+
+  bool hasMore = false;
+  {
+    MutexAutoLock lock(mPurgeListLock);
+    hasMore = !mOutstandingPurges.isEmpty();
+  }
+  return hasMore;
 }
 
 #define MALLOC_DECL(name, return_type, ...)                          \
@@ -5754,6 +5990,8 @@ void _malloc_prefork(void) MOZ_NO_THREAD_SAFETY_ANALYSIS {
     }
   }
 
+  gArenas.mPurgeListLock.Lock();
+
   base_mtx.Lock();
 
   huge_mtx.Lock();
@@ -5765,6 +6003,8 @@ void _malloc_postfork_parent(void) MOZ_NO_THREAD_SAFETY_ANALYSIS {
   huge_mtx.Unlock();
 
   base_mtx.Unlock();
+
+  gArenas.mPurgeListLock.Unlock();
 
   for (auto arena : gArenas.iter()) {
     if (arena->mLock.LockIsEnabled()) {
@@ -5784,6 +6024,8 @@ void _malloc_postfork_child(void) {
   huge_mtx.Init();
 
   base_mtx.Init();
+
+  gArenas.mPurgeListLock.Init();
 
   MOZ_PUSH_IGNORE_THREAD_SAFETY
   for (auto arena : gArenas.iter()) {

@@ -2209,6 +2209,12 @@ main section {
   position: relative;
   transition: margin-top 250ms cubic-bezier(0.82, 0.085, 0.395, 0.895);
 }
+.home-section .section .more-info-pocket-wrapper .more-information {
+  position: static;
+}
+.home-section .section .more-info-pocket-wrapper .check-wrapper {
+  margin-block-end: var(--space-small);
+}
 .home-section .section .more-info-top-wrapper .check-wrapper {
   margin-block-start: var(--space-large);
 }
@@ -2281,6 +2287,133 @@ main section {
 .home-section .section .sponsored-checkbox:is(:active), .home-section .section .selector:is(:active) {
   box-shadow: 0 0 0 2px var(--color-accent-primary-active);
   outline: 0;
+}
+
+.sections-mgmt-panel {
+  /* XXXdholbert The 32px subtraction here is to account for our 16px of
+  * margin on top and bottom. Ideally this should change to use
+  * 'height: stretch' when bug 1789477 lands. */
+  height: calc(100% - var(--space-xxlarge));
+  inset-inline-start: var(--space-xlarge);
+  position: absolute;
+  top: 0;
+  width: 380px;
+  z-index: 2;
+  transform: translateX(100%);
+  margin-block: var(--space-large) 0;
+  padding: 0;
+  background-color: var(--newtab-background-color-secondary);
+}
+.sections-mgmt-panel:dir(rtl) {
+  transform: translateX(-100%);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .sections-mgmt-panel.sections-mgmt-panel-enter, .sections-mgmt-panel.sections-mgmt-panel-exit, .sections-mgmt-panel.sections-mgmt-panel-enter-done, .sections-mgmt-panel.sections-mgmt-panel-exit-done {
+    transition: transform 300ms;
+  }
+}
+.sections-mgmt-panel.sections-mgmt-panel-enter-done, .sections-mgmt-panel.sections-mgmt-panel-enter-active {
+  transform: translateX(0);
+}
+.sections-mgmt-panel h3 {
+  margin-block: 0 var(--space-small);
+}
+.sections-mgmt-panel .topic-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-small);
+  margin-block: 0 var(--space-xxlarge);
+  padding-inline: 0;
+  width: 100%;
+}
+.lightWallpaper .sections-mgmt-panel .topic-list {
+  color-scheme: light;
+}
+.darkWallpaper .sections-mgmt-panel .topic-list {
+  color-scheme: dark;
+}
+.sections-mgmt-panel .topic-list li {
+  display: flex;
+  justify-content: space-between;
+}
+.sections-mgmt-panel .topic-list-empty-state {
+  display: block;
+  margin-block-end: var(--space-xxlarge);
+  color: var(--text-color-deemphasized);
+}
+.sections-mgmt-panel .arrow-button {
+  background: url("chrome://global/skin/icons/arrow-left.svg") no-repeat left center;
+  border: none;
+  cursor: pointer;
+  font-size: var(--font-size-root);
+  margin-block-end: var(--space-xlarge);
+  padding-inline-start: var(--space-xlarge);
+  -moz-context-properties: fill;
+  fill: currentColor;
+  min-height: var(--space-large);
+}
+.sections-mgmt-panel .arrow-button:dir(rtl) {
+  background: url("chrome://global/skin/icons/arrow-right.svg") no-repeat right center;
+}
+.sections-mgmt-panel .arrow-button h1 {
+  font-size: var(--font-size-root);
+  margin-block: 0;
+  font-weight: var(--button-font-weight);
+}
+.sections-mgmt-panel .section-block,
+.sections-mgmt-panel .section-follow {
+  cursor: pointer;
+}
+.sections-mgmt-panel .section-block .section-button-blocked-text,
+.sections-mgmt-panel .section-block .section-button-following-text,
+.sections-mgmt-panel .section-follow .section-button-blocked-text,
+.sections-mgmt-panel .section-follow .section-button-following-text {
+  display: none;
+}
+.sections-mgmt-panel .section-block .section-button-unblock-text,
+.sections-mgmt-panel .section-block .section-button-unfollow-text,
+.sections-mgmt-panel .section-follow .section-button-unblock-text,
+.sections-mgmt-panel .section-follow .section-button-unfollow-text {
+  display: none;
+}
+.sections-mgmt-panel .section-block.following .section-button-follow-text,
+.sections-mgmt-panel .section-follow.following .section-button-follow-text {
+  display: none;
+}
+.sections-mgmt-panel .section-block.following .section-button-following-text,
+.sections-mgmt-panel .section-follow.following .section-button-following-text {
+  display: block;
+}
+.sections-mgmt-panel .section-block.following:not(:hover) moz-button,
+.sections-mgmt-panel .section-follow.following:not(:hover) moz-button {
+  --button-background-color-destructive: var(--button-background-color);
+  --button-text-color-destructive: var(--button-text-color);
+  --button-border-color-destructive: var(--button-border-color);
+}
+.sections-mgmt-panel .section-block.following:hover .section-button-following-text,
+.sections-mgmt-panel .section-follow.following:hover .section-button-following-text {
+  display: none;
+}
+.sections-mgmt-panel .section-block.following:hover .section-button-unfollow-text,
+.sections-mgmt-panel .section-follow.following:hover .section-button-unfollow-text {
+  display: block;
+}
+.sections-mgmt-panel .section-block.blocked .section-button-block-text,
+.sections-mgmt-panel .section-follow.blocked .section-button-block-text {
+  display: none;
+}
+.sections-mgmt-panel .section-block.blocked .section-button-blocked-text,
+.sections-mgmt-panel .section-follow.blocked .section-button-blocked-text {
+  display: block;
+}
+.sections-mgmt-panel .section-block.blocked:hover .section-button-blocked-text,
+.sections-mgmt-panel .section-follow.blocked:hover .section-button-blocked-text {
+  display: none;
+}
+.sections-mgmt-panel .section-block.blocked:hover .section-button-unblock-text,
+.sections-mgmt-panel .section-follow.blocked:hover .section-button-unblock-text {
+  display: block;
 }
 
 .category-list {
@@ -4718,9 +4851,6 @@ main section {
   .ds-section-grid.ds-card-grid .col-1-small.ds-card.sections-card-ui {
     padding: unset;
   }
-  .ds-section-grid.ds-card-grid .col-1-small .stp-context-menu {
-    display: block;
-  }
   .ds-section-grid.ds-card-grid .col-1-small .card-stp-thumbs-buttons-wrapper {
     display: none;
   }
@@ -4775,9 +4905,6 @@ main section {
   .ds-section-grid.ds-card-grid .col-1-small .card-stp-button-position-wrapper {
     inset-inline-end: 10px;
   }
-  .ds-section-grid.ds-card-grid .col-1-small .card-stp-button-position-wrapper .card-stp-button {
-    display: none;
-  }
   .ds-section-grid.ds-card-grid .col-1-medium {
     grid-row: span 2;
     grid-column: span 1;
@@ -4786,14 +4913,8 @@ main section {
     align-items: initial;
     gap: initial;
   }
-  .ds-section-grid.ds-card-grid .col-1-medium .stp-context-menu {
-    display: none;
-  }
   .ds-section-grid.ds-card-grid .col-1-medium .card-stp-button-position-wrapper {
     inset-inline-end: 10px;
-  }
-  .ds-section-grid.ds-card-grid .col-1-medium .card-stp-button-position-wrapper .card-stp-button {
-    display: block;
   }
   .ds-section-grid.ds-card-grid .col-1-medium .card-stp-thumbs-buttons-wrapper {
     display: block;
@@ -4900,9 +5021,6 @@ main section {
   .ds-section-grid.ds-card-grid .col-2-small.ds-card.sections-card-ui {
     padding: unset;
   }
-  .ds-section-grid.ds-card-grid .col-2-small .stp-context-menu {
-    display: block;
-  }
   .ds-section-grid.ds-card-grid .col-2-small .card-stp-thumbs-buttons-wrapper {
     display: none;
   }
@@ -4957,9 +5075,6 @@ main section {
   .ds-section-grid.ds-card-grid .col-2-small .card-stp-button-position-wrapper {
     inset-inline-end: 10px;
   }
-  .ds-section-grid.ds-card-grid .col-2-small .card-stp-button-position-wrapper .card-stp-button {
-    display: none;
-  }
   .ds-section-grid.ds-card-grid .col-2-medium {
     grid-row: span 2;
     grid-column: span 1;
@@ -4968,14 +5083,8 @@ main section {
     align-items: initial;
     gap: initial;
   }
-  .ds-section-grid.ds-card-grid .col-2-medium .stp-context-menu {
-    display: none;
-  }
   .ds-section-grid.ds-card-grid .col-2-medium .card-stp-button-position-wrapper {
     inset-inline-end: 10px;
-  }
-  .ds-section-grid.ds-card-grid .col-2-medium .card-stp-button-position-wrapper .card-stp-button {
-    display: block;
   }
   .ds-section-grid.ds-card-grid .col-2-medium .card-stp-thumbs-buttons-wrapper {
     display: block;
@@ -5083,9 +5192,6 @@ main section {
   .ds-section-grid.ds-card-grid .col-3-small.ds-card.sections-card-ui {
     padding: unset;
   }
-  .ds-section-grid.ds-card-grid .col-3-small .stp-context-menu {
-    display: block;
-  }
   .ds-section-grid.ds-card-grid .col-3-small .card-stp-thumbs-buttons-wrapper {
     display: none;
   }
@@ -5140,9 +5246,6 @@ main section {
   .ds-section-grid.ds-card-grid .col-3-small .card-stp-button-position-wrapper {
     inset-inline-end: 10px;
   }
-  .ds-section-grid.ds-card-grid .col-3-small .card-stp-button-position-wrapper .card-stp-button {
-    display: none;
-  }
   .ds-section-grid.ds-card-grid .col-3-medium {
     grid-row: span 2;
     grid-column: span 1;
@@ -5151,14 +5254,8 @@ main section {
     align-items: initial;
     gap: initial;
   }
-  .ds-section-grid.ds-card-grid .col-3-medium .stp-context-menu {
-    display: none;
-  }
   .ds-section-grid.ds-card-grid .col-3-medium .card-stp-button-position-wrapper {
     inset-inline-end: 10px;
-  }
-  .ds-section-grid.ds-card-grid .col-3-medium .card-stp-button-position-wrapper .card-stp-button {
-    display: block;
   }
   .ds-section-grid.ds-card-grid .col-3-medium .card-stp-thumbs-buttons-wrapper {
     display: block;
@@ -5265,9 +5362,6 @@ main section {
   .ds-section-grid.ds-card-grid .col-4-small.ds-card.sections-card-ui {
     padding: unset;
   }
-  .ds-section-grid.ds-card-grid .col-4-small .stp-context-menu {
-    display: block;
-  }
   .ds-section-grid.ds-card-grid .col-4-small .card-stp-thumbs-buttons-wrapper {
     display: none;
   }
@@ -5322,9 +5416,6 @@ main section {
   .ds-section-grid.ds-card-grid .col-4-small .card-stp-button-position-wrapper {
     inset-inline-end: 10px;
   }
-  .ds-section-grid.ds-card-grid .col-4-small .card-stp-button-position-wrapper .card-stp-button {
-    display: none;
-  }
   .ds-section-grid.ds-card-grid .col-4-medium {
     grid-row: span 2;
     grid-column: span 1;
@@ -5333,14 +5424,8 @@ main section {
     align-items: initial;
     gap: initial;
   }
-  .ds-section-grid.ds-card-grid .col-4-medium .stp-context-menu {
-    display: none;
-  }
   .ds-section-grid.ds-card-grid .col-4-medium .card-stp-button-position-wrapper {
     inset-inline-end: 10px;
-  }
-  .ds-section-grid.ds-card-grid .col-4-medium .card-stp-button-position-wrapper .card-stp-button {
-    display: block;
   }
   .ds-section-grid.ds-card-grid .col-4-medium .card-stp-thumbs-buttons-wrapper {
     display: block;
@@ -5413,39 +5498,6 @@ main section {
   .ds-section-grid.ds-card-grid .col-4-large.ds-card.sections-card-ui .card-stp-button-hover-background {
     inset-inline-start: 0;
   }
-}
-
-.ds-card.sections-card-ui .ds-compact-pocket-saved-button {
-  opacity: 1;
-}
-.ds-card.sections-card-ui .ds-compact-pocket-saved-button .icon-pocket-save,
-.ds-card.sections-card-ui .ds-compact-pocket-saved-button .icon-pocket {
-  margin-inline-end: 0;
-}
-.ds-card.sections-card-ui .ds-compact-pocket-saved-button .context-menu-position-container {
-  display: none;
-}
-.ds-card.sections-card-ui .ds-compact-pocket-saved-button .card-stp-button {
-  margin-inline-end: 0;
-}
-.ds-card.sections-card-ui .ds-compact-pocket-saved-button .pocket-saved-copy {
-  display: none;
-}
-.ds-card.sections-card-ui .ds-compact-pocket-saved-button:hover .icon-pocket-save,
-.ds-card.sections-card-ui .ds-compact-pocket-saved-button:hover .icon-pocket, .ds-card.sections-card-ui .ds-compact-pocket-saved-button:focus-within .icon-pocket-save,
-.ds-card.sections-card-ui .ds-compact-pocket-saved-button:focus-within .icon-pocket, .ds-card.sections-card-ui .ds-compact-pocket-saved-button:active .icon-pocket-save,
-.ds-card.sections-card-ui .ds-compact-pocket-saved-button:active .icon-pocket {
-  margin-inline-end: 4px;
-}
-.ds-card.sections-card-ui .ds-compact-pocket-saved-button:hover .context-menu-position-container, .ds-card.sections-card-ui .ds-compact-pocket-saved-button:focus-within .context-menu-position-container, .ds-card.sections-card-ui .ds-compact-pocket-saved-button:active .context-menu-position-container {
-  display: revert;
-}
-.ds-card.sections-card-ui .ds-compact-pocket-saved-button:hover .card-stp-button, .ds-card.sections-card-ui .ds-compact-pocket-saved-button:focus-within .card-stp-button, .ds-card.sections-card-ui .ds-compact-pocket-saved-button:active .card-stp-button {
-  margin-inline-end: 7px;
-  display: revert;
-}
-.ds-card.sections-card-ui .ds-compact-pocket-saved-button:hover .pocket-saved-copy, .ds-card.sections-card-ui .ds-compact-pocket-saved-button:focus-within .pocket-saved-copy, .ds-card.sections-card-ui .ds-compact-pocket-saved-button:active .pocket-saved-copy {
-  display: revert;
 }
 
 .ds-dismiss.ds-dismiss-ds-collection .ds-dismiss-button {
@@ -5958,14 +6010,6 @@ main section {
   justify-content: end;
   align-items: center;
 }
-.ds-card .card-stp-button-hover-background .icon-pocket-save,
-.ds-card .card-stp-button-hover-background .icon-pocket {
-  margin-inline-end: 4px;
-  height: 15px;
-  width: 15px;
-  background-size: 15px;
-  fill: #FFF;
-}
 .ds-card .card-stp-button-hover-background .context-menu-position-container {
   position: relative;
 }
@@ -5974,22 +6018,6 @@ main section {
   inset-inline-start: auto;
   position: absolute;
   top: 20.25px;
-}
-.ds-card .card-stp-button-hover-background .card-stp-button {
-  display: flex;
-  margin-inline-end: 7px;
-  font-weight: 400;
-  font-size: 13px;
-  line-height: 16px;
-  background-color: #EF4056;
-  border: 0;
-  border-radius: 4px;
-  padding: 6px;
-  white-space: nowrap;
-  color: #FFF;
-}
-.ds-card .card-stp-button-hover-background .card-stp-button:focus-visible {
-  outline: 2px solid var(--newtab-button-focus-border);
 }
 .ds-card .card-stp-button-hover-background button,
 .ds-card .card-stp-button-hover-background .context-menu {

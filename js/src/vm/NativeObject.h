@@ -17,6 +17,7 @@
 #include "NamespaceImports.h"
 
 #include "gc/Barrier.h"
+#include "gc/BufferAllocator.h"
 #include "gc/MaybeRooted.h"
 #include "gc/ZoneAllocator.h"
 #include "js/shadow/Object.h"  // JS::shadow::Object
@@ -502,8 +503,8 @@ class alignas(HeapSlot) ObjectSlots {
   }
   static constexpr size_t offsetOfSlots() { return sizeof(ObjectSlots); }
 
-  constexpr explicit ObjectSlots(uint32_t capacity, uint32_t dictionarySlotSpan,
-                                 uint64_t maybeUniqueId);
+  constexpr ObjectSlots(uint32_t capacity, uint32_t dictionarySlotSpan,
+                        uint64_t maybeUniqueId);
 
   constexpr uint32_t capacity() const { return capacity_; }
 
@@ -1118,7 +1119,7 @@ class NativeObject : public JSObject {
                                            uint32_t nfixed);
 
   // For use from JSObject::swap.
-  [[nodiscard]] bool prepareForSwap(JSContext* cx,
+  [[nodiscard]] bool prepareForSwap(JSContext* cx, JSObject* other,
                                     MutableHandleValueVector slotValuesOut);
   [[nodiscard]] static bool fixupAfterSwap(JSContext* cx,
                                            Handle<NativeObject*> obj,
@@ -1416,7 +1417,8 @@ class NativeObject : public JSObject {
 
   // The maximum number of usable dense elements in an object.
   static const uint32_t MAX_DENSE_ELEMENTS_COUNT =
-      MAX_DENSE_ELEMENTS_ALLOCATION - ObjectElements::VALUES_PER_HEADER;
+      MAX_DENSE_ELEMENTS_ALLOCATION - ObjectElements::VALUES_PER_HEADER -
+      gc::LargeBufferHeaderSize / sizeof(Value);
 
   static void elementsSizeMustNotOverflow() {
     static_assert(

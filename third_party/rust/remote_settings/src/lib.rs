@@ -1,6 +1,7 @@
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+#![feature(result_option_inspect)]
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -13,7 +14,10 @@ pub mod cache;
 pub mod client;
 pub mod config;
 pub mod error;
+pub mod schema;
 pub mod service;
+#[cfg(feature = "signatures")]
+pub(crate) mod signatures;
 pub mod storage;
 
 #[cfg(feature = "jexl")]

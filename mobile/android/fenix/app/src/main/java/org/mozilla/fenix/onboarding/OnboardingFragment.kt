@@ -17,16 +17,15 @@ import android.view.ViewGroup
 import androidx.annotation.RequiresApi
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.ComposeView
-import androidx.core.app.NotificationManagerCompat
 import androidx.fragment.app.Fragment
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.navigation.fragment.findNavController
 import mozilla.components.concept.engine.webextension.InstallationMethod
 import mozilla.components.service.nimbus.evalJexlSafe
 import mozilla.components.service.nimbus.messaging.use
-import mozilla.components.support.base.ext.areNotificationsEnabledSafe
 import mozilla.components.support.base.log.logger.Logger
 import mozilla.components.support.utils.BrowsersCache
+import org.mozilla.fenix.GleanMetrics.Pings
 import org.mozilla.fenix.R
 import org.mozilla.fenix.components.accounts.FenixFxAEntryPoint
 import org.mozilla.fenix.components.initializeGlean
@@ -75,12 +74,13 @@ class OnboardingFragment : Fragment() {
     }
 
     private val pagesToDisplay by lazy {
-        pagesToDisplay(
-            isNotDefaultBrowser(requireContext()) &&
-                activity?.isDefaultBrowserPromptSupported() == false,
-            canShowNotificationPage(requireContext()),
-            canShowAddSearchWidgetPrompt(),
-        )
+        with(requireContext()) {
+            pagesToDisplay(
+                showDefaultBrowserPage = isNotDefaultBrowser(this) && !isDefaultBrowserPromptSupported(),
+                showNotificationPage = canShowNotificationPage(),
+                showAddWidgetPage = canShowAddSearchWidgetPrompt(),
+            )
+        }
     }
     private val telemetryRecorder by lazy { OnboardingTelemetryRecorder() }
 
@@ -98,6 +98,17 @@ class OnboardingFragment : Fragment() {
     }
 
     private val pinAppWidgetReceiver = WidgetPinnedReceiver()
+    private val defaultBrowserPromptStorage by lazy { DefaultDefaultBrowserPromptStorage(requireContext()) }
+    private val defaultBrowserPromptManager by lazy {
+        DefaultBrowserPromptManager(
+            storage = defaultBrowserPromptStorage,
+            promptToSetAsDefaultBrowser = {
+                requireContext().components.strictMode.resetAfter(StrictMode.allowThreadDiskReads()) {
+                    promptToSetAsDefaultBrowser()
+                }
+            },
+        )
+    }
 
     @SuppressLint("SourceLockedOrientationActivity")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -118,7 +129,7 @@ class OnboardingFragment : Fragment() {
         // We want the prompt to be displayed once per onboarding opening.
         // In case the host got recreated, we don't reset the flag.
         if (savedInstanceState == null) {
-            requireContext().settings().promptToSetAsDefaultBrowserDisplayedInOnboarding = false
+            defaultBrowserPromptStorage.promptToSetAsDefaultBrowserDisplayedInOnboarding = false
         }
 
         telemetryRecorder.onOnboardingStarted()
@@ -229,7 +240,7 @@ class OnboardingFragment : Fragment() {
                     sequencePosition = pagesToDisplay.sequencePosition(it.type),
                 )
 
-                maybePromptToSetAsDefaultBrowser(
+                defaultBrowserPromptManager.maybePromptToSetAsDefaultBrowser(
                     pagesToDisplay = pagesToDisplay,
                     currentCard = it,
                 )
@@ -317,12 +328,16 @@ class OnboardingFragment : Fragment() {
             settings.isTelemetryEnabled,
             requireComponents.core.client,
         )
+        if (!settings.isTelemetryEnabled) {
+            Pings.onboardingOptOut.submit()
+        }
 
         startMetricsIfEnabled(
             logger = logger,
             analytics = requireComponents.analytics,
             isTelemetryEnabled = settings.isTelemetryEnabled,
             isMarketingTelemetryEnabled = settings.isMarketingTelemetryEnabled,
+            isDailyUsagePingEnabled = settings.isDailyUsagePingEnabled,
         )
 
         findNavController().nav(
@@ -342,9 +357,7 @@ class OnboardingFragment : Fragment() {
     private fun isNotDefaultBrowser(context: Context) =
         !BrowsersCache.all(context.applicationContext).isDefaultBrowser
 
-    private fun canShowNotificationPage(context: Context) =
-        !NotificationManagerCompat.from(context.applicationContext)
-            .areNotificationsEnabledSafe() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+    private fun canShowNotificationPage() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
 
     private fun pagesToDisplay(
         showDefaultBrowserPage: Boolean,
@@ -360,11 +373,9 @@ class OnboardingFragment : Fragment() {
                 text = getString(R.string.juno_onboarding_privacy_notice_text),
                 url = SupportUtils.getMozillaPageUrl(SupportUtils.MozillaPage.PRIVATE_NOTICE),
                 onClick = {
-                    startActivity(
-                        SupportUtils.createSandboxCustomTabIntent(
-                            context = requireContext(),
-                            url = it,
-                        ),
+                    SupportUtils.launchSandboxCustomTab(
+                        context = requireContext(),
+                        url = it,
                     )
                     telemetryRecorder.onPrivacyPolicyClick(
                         pagesToDisplay.telemetrySequenceId(),
@@ -381,31 +392,6 @@ class OnboardingFragment : Fragment() {
                 showAddWidgetPage,
                 jexlConditions,
             ) { condition -> jexlHelper.evalJexlSafe(condition) }
-        }
-    }
-
-    private fun maybePromptToSetAsDefaultBrowser(
-        pagesToDisplay: List<OnboardingPageUiData>,
-        currentCard: OnboardingPageUiData,
-    ) {
-        val shouldWaitForTOSToBeAccepted = pagesToDisplay.find {
-            it.type == OnboardingPageUiData.Type.TERMS_OF_SERVICE
-        }?.let { tosCard ->
-            val tosPosition = pagesToDisplay.indexOfFirst { it.type == tosCard.type }
-            val currentPosition = pagesToDisplay.indexOfFirst { it.type == currentCard.type }
-            tosPosition >= currentPosition
-        } ?: false
-
-        val shouldPromptToSetAsDefaultBrowser = isNotDefaultBrowser(requireContext()) &&
-            activity?.isDefaultBrowserPromptSupported() == true &&
-            !shouldWaitForTOSToBeAccepted &&
-            !requireContext().settings().promptToSetAsDefaultBrowserDisplayedInOnboarding
-
-        if (shouldPromptToSetAsDefaultBrowser) {
-            requireComponents.strictMode.resetAfter(StrictMode.allowThreadDiskReads()) {
-                promptToSetAsDefaultBrowser()
-                requireContext().settings().promptToSetAsDefaultBrowserDisplayedInOnboarding = true
-            }
         }
     }
 

@@ -102,9 +102,6 @@ Symbol
    the test. The letter in parentheses identifies the actual test suite.
 Name
    Common name used when referring to the test suite.
-File type
-   When adding a new test, you will generally create a file of this type
-   in the source tree and then declare it in a manifest or makefile.
 Platform
    Most test suites are supported only on a subset of the available
    plaforms and operating systems. Unless otherwise noted:
@@ -287,7 +284,7 @@ that need it as possible. Here are some options:
 
 -  Mochitest plain tests can use
    `SpecialPowers
-   <https://developer.mozilla.org/en-US/docs/Mozilla/Projects/Mochitest/SpecialPowers>`__
+   </testing/mochitest-plain/faq.html#what-if-i-need-to-change-a-preference-to-run-my-test>`__
    to set prefs.
 
 -  All variants of mochitest can set prefs in their manifests. For

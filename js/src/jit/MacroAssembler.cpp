@@ -4108,149 +4108,117 @@ void MacroAssembler::outOfLineTruncateSlow(FloatRegister src, Register dest,
                                            bool widenFloatToDouble,
                                            bool compilingWasm,
                                            wasm::BytecodeOffset callOffset) {
-  if (compilingWasm) {
-    Push(InstanceReg);
-  }
-  int32_t framePushedAfterInstance = framePushed();
-
-#if defined(JS_CODEGEN_ARM) || defined(JS_CODEGEN_ARM64) ||     \
-    defined(JS_CODEGEN_MIPS32) || defined(JS_CODEGEN_MIPS64) || \
-    defined(JS_CODEGEN_LOONG64) || defined(JS_CODEGEN_RISCV64)
   ScratchDoubleScope fpscratch(*this);
   if (widenFloatToDouble) {
     convertFloat32ToDouble(src, fpscratch);
     src = fpscratch;
   }
-#elif defined(JS_CODEGEN_X86) || defined(JS_CODEGEN_X64)
-  FloatRegister srcSingle;
-  if (widenFloatToDouble) {
-    MOZ_ASSERT(src.isSingle());
-    srcSingle = src;
-    src = src.asDouble();
-    Push(srcSingle);
-    convertFloat32ToDouble(srcSingle, src);
-  }
-#else
-  // Also see below
-  MOZ_CRASH("MacroAssembler platform hook: outOfLineTruncateSlow");
-#endif
-
   MOZ_ASSERT(src.isDouble());
 
   if (compilingWasm) {
-    int32_t instanceOffset = framePushed() - framePushedAfterInstance;
+    Push(InstanceReg);
+    int32_t framePushedAfterInstance = framePushed();
+
     setupWasmABICall();
     passABIArg(src, ABIType::Float64);
+
+    int32_t instanceOffset = framePushed() - framePushedAfterInstance;
     callWithABI(callOffset, wasm::SymbolicAddress::ToInt32,
                 mozilla::Some(instanceOffset));
+    storeCallInt32Result(dest);
+
+    Pop(InstanceReg);
   } else {
     using Fn = int32_t (*)(double);
     setupUnalignedABICall(dest);
     passABIArg(src, ABIType::Float64);
     callWithABI<Fn, JS::ToInt32>(ABIType::General,
                                  CheckUnsafeCallWithABI::DontCheckOther);
-  }
-  storeCallInt32Result(dest);
-
-#if defined(JS_CODEGEN_ARM) || defined(JS_CODEGEN_ARM64) ||     \
-    defined(JS_CODEGEN_MIPS32) || defined(JS_CODEGEN_MIPS64) || \
-    defined(JS_CODEGEN_LOONG64) || defined(JS_CODEGEN_RISCV64)
-  // Nothing
-#elif defined(JS_CODEGEN_X86) || defined(JS_CODEGEN_X64)
-  if (widenFloatToDouble) {
-    Pop(srcSingle);
-  }
-#else
-  MOZ_CRASH("MacroAssembler platform hook: outOfLineTruncateSlow");
-#endif
-
-  if (compilingWasm) {
-    Pop(InstanceReg);
+    storeCallInt32Result(dest);
   }
 }
 
-void MacroAssembler::convertDoubleToInt(FloatRegister src, Register output,
-                                        FloatRegister temp, Label* truncateFail,
-                                        Label* fail,
-                                        IntConversionBehavior behavior) {
-  switch (behavior) {
-    case IntConversionBehavior::Normal:
-    case IntConversionBehavior::NegativeZeroCheck:
-      convertDoubleToInt32(
-          src, output, fail,
-          behavior == IntConversionBehavior::NegativeZeroCheck);
-      break;
-    case IntConversionBehavior::Truncate:
-      branchTruncateDoubleMaybeModUint32(src, output,
-                                         truncateFail ? truncateFail : fail);
-      break;
-    case IntConversionBehavior::ClampToUint8:
-      // Clamping clobbers the input register, so use a temp.
-      if (src != temp) {
-        moveDouble(src, temp);
-      }
-      clampDoubleToUint8(temp, output);
-      break;
-  }
-}
-
-void MacroAssembler::convertValueToInt(
-    ValueOperand value, Label* handleStringEntry, Label* handleStringRejoin,
-    Label* truncateDoubleSlow, Register stringReg, FloatRegister temp,
-    Register output, Label* fail, IntConversionBehavior behavior,
-    IntConversionInputKind conversion) {
-  Label done, isInt32, isBool, isDouble, isNull, isString;
-
-  bool handleStrings = (behavior == IntConversionBehavior::Truncate ||
-                        behavior == IntConversionBehavior::ClampToUint8) &&
-                       handleStringEntry && handleStringRejoin;
-
-  MOZ_ASSERT_IF(handleStrings, conversion == IntConversionInputKind::Any);
+void MacroAssembler::convertValueToInt32(ValueOperand value, FloatRegister temp,
+                                         Register output, Label* fail,
+                                         bool negativeZeroCheck,
+                                         IntConversionInputKind conversion) {
+  Label done, isInt32, isBool, isDouble, isString;
 
   {
     ScratchTagScope tag(*this, value);
     splitTagForTest(value, tag);
 
     branchTestInt32(Equal, tag, &isInt32);
+    branchTestDouble(Equal, tag, &isDouble);
     if (conversion == IntConversionInputKind::Any) {
       branchTestBoolean(Equal, tag, &isBool);
-    }
-    branchTestDouble(Equal, tag, &isDouble);
-
-    if (conversion == IntConversionInputKind::Any) {
-      // If we are not truncating, we fail for anything that's not
-      // null. Otherwise we might be able to handle strings and undefined.
-      switch (behavior) {
-        case IntConversionBehavior::Normal:
-        case IntConversionBehavior::NegativeZeroCheck:
-          branchTestNull(Assembler::NotEqual, tag, fail);
-          break;
-
-        case IntConversionBehavior::Truncate:
-        case IntConversionBehavior::ClampToUint8:
-          branchTestNull(Equal, tag, &isNull);
-          if (handleStrings) {
-            branchTestString(Equal, tag, &isString);
-          }
-          branchTestUndefined(Assembler::NotEqual, tag, fail);
-          break;
-      }
+      branchTestNull(Assembler::NotEqual, tag, fail);
     } else {
       jump(fail);
     }
   }
 
-  // The value is null or undefined in truncation contexts - just emit 0.
+  // The value is null - just emit 0.
   if (conversion == IntConversionInputKind::Any) {
-    if (isNull.used()) {
-      bind(&isNull);
-    }
-    mov(ImmWord(0), output);
+    move32(Imm32(0), output);
     jump(&done);
   }
 
+  // Try converting double into integer.
+  {
+    bind(&isDouble);
+    unboxDouble(value, temp);
+    convertDoubleToInt32(temp, output, fail, negativeZeroCheck);
+    jump(&done);
+  }
+
+  // Just unbox a bool, the result is 0 or 1.
+  if (conversion == IntConversionInputKind::Any) {
+    bind(&isBool);
+    unboxBoolean(value, output);
+    jump(&done);
+  }
+
+  // Integers can be unboxed.
+  {
+    bind(&isInt32);
+    unboxInt32(value, output);
+  }
+
+  bind(&done);
+}
+
+void MacroAssembler::truncateValueToInt32(
+    ValueOperand value, Label* handleStringEntry, Label* handleStringRejoin,
+    Label* truncateDoubleSlow, Register stringReg, FloatRegister temp,
+    Register output, Label* fail) {
+  Label done, isInt32, isBool, isDouble, isNull, isString;
+
+  bool handleStrings = handleStringEntry && handleStringRejoin;
+
   // |output| needs to be different from |stringReg| to load string indices.
-  bool handleStringIndices = handleStrings && output != stringReg;
+  MOZ_ASSERT_IF(handleStrings, stringReg != output);
+
+  {
+    ScratchTagScope tag(*this, value);
+    splitTagForTest(value, tag);
+
+    branchTestInt32(Equal, tag, &isInt32);
+    branchTestDouble(Equal, tag, &isDouble);
+    branchTestBoolean(Equal, tag, &isBool);
+    branchTestNull(Equal, tag, &isNull);
+    if (handleStrings) {
+      branchTestString(Equal, tag, &isString);
+    }
+    branchTestUndefined(Assembler::NotEqual, tag, fail);
+  }
+
+  // The value is null or undefined in truncation contexts - just emit 0.
+  {
+    bind(&isNull);
+    move32(Imm32(0), output);
+    jump(&done);
+  }
 
   // First try loading a string index. If that fails, try converting a string
   // into a double, then jump to the double case.
@@ -4258,50 +4226,92 @@ void MacroAssembler::convertValueToInt(
   if (handleStrings) {
     bind(&isString);
     unboxString(value, stringReg);
-    if (handleStringIndices) {
-      loadStringIndexValue(stringReg, output, handleStringEntry);
-      jump(&handleStringIndex);
-    } else {
-      jump(handleStringEntry);
-    }
+    loadStringIndexValue(stringReg, output, handleStringEntry);
+    jump(&done);
   }
 
   // Try converting double into integer.
-  if (isDouble.used() || handleStrings) {
-    if (isDouble.used()) {
-      bind(&isDouble);
-      unboxDouble(value, temp);
-    }
+  {
+    bind(&isDouble);
+    unboxDouble(value, temp);
 
     if (handleStrings) {
       bind(handleStringRejoin);
     }
-
-    convertDoubleToInt(temp, output, temp, truncateDoubleSlow, fail, behavior);
+    branchTruncateDoubleMaybeModUint32(
+        temp, output, truncateDoubleSlow ? truncateDoubleSlow : fail);
     jump(&done);
   }
 
   // Just unbox a bool, the result is 0 or 1.
-  if (isBool.used()) {
+  {
     bind(&isBool);
     unboxBoolean(value, output);
     jump(&done);
   }
 
   // Integers can be unboxed.
-  if (isInt32.used() || handleStringIndices) {
-    if (isInt32.used()) {
-      bind(&isInt32);
-      unboxInt32(value, output);
-    }
+  {
+    bind(&isInt32);
+    unboxInt32(value, output);
+  }
 
-    if (handleStringIndices) {
-      bind(&handleStringIndex);
-    }
+  bind(&done);
+}
 
-    if (behavior == IntConversionBehavior::ClampToUint8) {
-      clampIntToUint8(output);
-    }
+void MacroAssembler::clampValueToUint8(ValueOperand value,
+                                       Label* handleStringEntry,
+                                       Label* handleStringRejoin,
+                                       Register stringReg, FloatRegister temp,
+                                       Register output, Label* fail) {
+  Label done, isInt32, isBool, isDouble, isNull, isString;
+  {
+    ScratchTagScope tag(*this, value);
+    splitTagForTest(value, tag);
+
+    branchTestInt32(Equal, tag, &isInt32);
+    branchTestDouble(Equal, tag, &isDouble);
+    branchTestBoolean(Equal, tag, &isBool);
+    branchTestNull(Equal, tag, &isNull);
+    branchTestString(Equal, tag, &isString);
+    branchTestUndefined(Assembler::NotEqual, tag, fail);
+  }
+
+  // The value is null or undefined in truncation contexts - just emit 0.
+  {
+    bind(&isNull);
+    move32(Imm32(0), output);
+    jump(&done);
+  }
+
+  // Try converting a string into a double, then jump to the double case.
+  {
+    bind(&isString);
+    unboxString(value, stringReg);
+    jump(handleStringEntry);
+  }
+
+  // Try converting double into integer.
+  {
+    bind(&isDouble);
+    unboxDouble(value, temp);
+    bind(handleStringRejoin);
+    clampDoubleToUint8(temp, output);
+    jump(&done);
+  }
+
+  // Just unbox a bool, the result is 0 or 1.
+  {
+    bind(&isBool);
+    unboxBoolean(value, output);
+    jump(&done);
+  }
+
+  // Integers can be unboxed.
+  {
+    bind(&isInt32);
+    unboxInt32(value, output);
+    clampIntToUint8(output);
   }
 
   bind(&done);
@@ -7116,34 +7126,37 @@ void MacroAssembler::branchValueConvertsToWasmAnyRefInline(
   Label checkInt32;
   Label checkDouble;
   Label fallthrough;
-  ScratchTagScope tag(*this, src);
-  splitTagForTest(src, tag);
-  branchTestObject(Assembler::Equal, tag, label);
-  branchTestString(Assembler::Equal, tag, label);
-  branchTestNull(Assembler::Equal, tag, label);
-  branchTestInt32(Assembler::Equal, tag, &checkInt32);
-  branchTestDouble(Assembler::Equal, tag, &checkDouble);
+  {
+    ScratchTagScope tag(*this, src);
+    splitTagForTest(src, tag);
+    branchTestObject(Assembler::Equal, tag, label);
+    branchTestString(Assembler::Equal, tag, label);
+    branchTestNull(Assembler::Equal, tag, label);
+    branchTestInt32(Assembler::Equal, tag, &checkInt32);
+    branchTestDouble(Assembler::Equal, tag, &checkDouble);
+  }
   jump(&fallthrough);
 
   bind(&checkInt32);
-  unboxInt32(src, scratchInt);
-  branch32(Assembler::GreaterThan, scratchInt, Imm32(wasm::AnyRef::MaxI31Value),
-           &fallthrough);
-  branch32(Assembler::LessThan, scratchInt, Imm32(wasm::AnyRef::MinI31Value),
-           &fallthrough);
-  jump(label);
+  {
+    unboxInt32(src, scratchInt);
+    branch32(Assembler::GreaterThan, scratchInt,
+             Imm32(wasm::AnyRef::MaxI31Value), &fallthrough);
+    branch32(Assembler::LessThan, scratchInt, Imm32(wasm::AnyRef::MinI31Value),
+             &fallthrough);
+    jump(label);
+  }
 
   bind(&checkDouble);
   {
-    ScratchTagScopeRelease _(&tag);
-    convertValueToInt32(src, scratchFloat, scratchInt, &fallthrough, true,
-                        IntConversionInputKind::NumbersOnly);
+    unboxDouble(src, scratchFloat);
+    convertDoubleToInt32(scratchFloat, scratchInt, &fallthrough);
+    branch32(Assembler::GreaterThan, scratchInt,
+             Imm32(wasm::AnyRef::MaxI31Value), &fallthrough);
+    branch32(Assembler::LessThan, scratchInt, Imm32(wasm::AnyRef::MinI31Value),
+             &fallthrough);
+    jump(label);
   }
-  branch32(Assembler::GreaterThan, scratchInt, Imm32(wasm::AnyRef::MaxI31Value),
-           &fallthrough);
-  branch32(Assembler::LessThan, scratchInt, Imm32(wasm::AnyRef::MinI31Value),
-           &fallthrough);
-  jump(label);
 
   bind(&fallthrough);
 }
@@ -7164,37 +7177,46 @@ void MacroAssembler::convertValueToWasmAnyRef(ValueOperand src, Register dest,
   }
 
   bind(&doubleValue);
-  convertValueToInt32(src, scratchFloat, dest, oolConvert, true,
-                      IntConversionInputKind::NumbersOnly);
-  branch32(Assembler::GreaterThan, dest, Imm32(wasm::AnyRef::MaxI31Value),
-           oolConvert);
-  branch32(Assembler::LessThan, dest, Imm32(wasm::AnyRef::MinI31Value),
-           oolConvert);
-  lshiftPtr(Imm32(1), dest);
-  or32(Imm32((int32_t)wasm::AnyRefTag::I31), dest);
-  jump(&done);
+  {
+    unboxDouble(src, scratchFloat);
+    convertDoubleToInt32(scratchFloat, dest, oolConvert);
+    branch32(Assembler::GreaterThan, dest, Imm32(wasm::AnyRef::MaxI31Value),
+             oolConvert);
+    branch32(Assembler::LessThan, dest, Imm32(wasm::AnyRef::MinI31Value),
+             oolConvert);
+    truncate32ToWasmI31Ref(dest, dest);
+    jump(&done);
+  }
 
   bind(&int32Value);
-  unboxInt32(src, dest);
-  branch32(Assembler::GreaterThan, dest, Imm32(wasm::AnyRef::MaxI31Value),
-           oolConvert);
-  branch32(Assembler::LessThan, dest, Imm32(wasm::AnyRef::MinI31Value),
-           oolConvert);
-  truncate32ToWasmI31Ref(dest, dest);
-  jump(&done);
+  {
+    unboxInt32(src, dest);
+    branch32(Assembler::GreaterThan, dest, Imm32(wasm::AnyRef::MaxI31Value),
+             oolConvert);
+    branch32(Assembler::LessThan, dest, Imm32(wasm::AnyRef::MinI31Value),
+             oolConvert);
+    truncate32ToWasmI31Ref(dest, dest);
+    jump(&done);
+  }
 
   bind(&nullValue);
-  static_assert(wasm::AnyRef::NullRefValue == 0);
-  xorPtr(dest, dest);
-  jump(&done);
+  {
+    static_assert(wasm::AnyRef::NullRefValue == 0);
+    xorPtr(dest, dest);
+    jump(&done);
+  }
 
   bind(&stringValue);
-  unboxString(src, dest);
-  orPtr(Imm32((int32_t)wasm::AnyRefTag::String), dest);
-  jump(&done);
+  {
+    unboxString(src, dest);
+    orPtr(Imm32((int32_t)wasm::AnyRefTag::String), dest);
+    jump(&done);
+  }
 
   bind(&objectValue);
-  unboxObject(src, dest);
+  {
+    unboxObject(src, dest);
+  }
 
   bind(&done);
 }

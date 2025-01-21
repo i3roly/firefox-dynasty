@@ -354,6 +354,12 @@ class Settings(private val appContext: Context) : PreferencesHolder {
         default = false,
     )
 
+    var isDailyUsagePingEnabled by booleanPreference(
+        appContext.getPreferenceKey(R.string.pref_key_daily_usage_ping),
+        default = isTelemetryEnabled,
+        persistDefaultIfNotExists = true,
+    )
+
     var isExperimentationEnabled by booleanPreference(
         appContext.getPreferenceKey(R.string.pref_key_experimentation_v2),
         default = isTelemetryEnabled,
@@ -1705,9 +1711,10 @@ class Settings(private val appContext: Context) : PreferencesHolder {
     /**
      * Indicates if the MARS API integration is used for sponsored content.
      */
-    var marsAPIEnabled by booleanPreference(
+    var marsAPIEnabled by lazyFeatureFlagPreference(
         key = appContext.getPreferenceKey(R.string.pref_key_mars_api_enabled),
-        default = FeatureFlags.marsAPIEnabled,
+        default = { FxNimbus.features.mars.value().enabled },
+        featureFlag = true,
     )
 
     /**

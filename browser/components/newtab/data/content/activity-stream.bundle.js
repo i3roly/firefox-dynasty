@@ -251,6 +251,7 @@ for (const type of [
   "TOP_SITES_UPDATED",
   "TOTAL_BOOKMARKS_REQUEST",
   "TOTAL_BOOKMARKS_RESPONSE",
+  "UNBLOCK_SECTION",
   "UNFOLLOW_SECTION",
   "UNINIT",
   "UPDATE_PINNED_SEARCH_SHORTCUTS",
@@ -1597,14 +1598,13 @@ class _ContextMenuItem extends (external_React_default()).PureComponent {
     const {
       option
     } = this.props;
-    const listItemClassNames = [option.className || ""].join(" ");
-    const buttonClassNames = [option.disabled ? "disabled" : ""].join(" ");
+    const className = [option.disabled ? "disabled" : ""].join(" ");
     return /*#__PURE__*/external_React_default().createElement("li", {
       role: "presentation",
-      className: `context-menu-item ${listItemClassNames}`
+      className: "context-menu-item"
     }, /*#__PURE__*/external_React_default().createElement("button", {
       role: "menuitem",
-      className: buttonClassNames,
+      className: className,
       onClick: this.onClick,
       onKeyDown: this.onKeyDown,
       onKeyUp: this.onKeyUp,
@@ -1885,7 +1885,6 @@ const LinkMenuOptions = {
   SaveToPocket: (site, index, eventSource = "CARDGRID") => ({
     id: "newtab-menu-save-to-pocket",
     icon: "pocket-save",
-    className: "stp-context-menu",
     action: actionCreators.AlsoToMain({
       type: actionTypes.SAVE_TO_POCKET,
       data: {
@@ -2293,11 +2292,9 @@ class DSLinkMenu extends (external_React_default()).PureComponent {
     let pocketMenuOptions = [];
     let TOP_STORIES_CONTEXT_MENU_OPTIONS = ["OpenInNewWindow", "OpenInPrivateWindow"];
     if (!this.props.isRecentSave) {
-      if (this.props.pocket_button_enabled) {
-        pocketMenuOptions = this.props.saveToPocketCard ? ["CheckDeleteFromPocket"] : ["CheckSavedToPocket"];
-      }
-      // Override pocketMenuOptions to add Save to Pocket btn link to all section cards
-      if (this.props.isSectionsCard) {
+      // Show Pocket context menu options if applicable.
+      // Additionally, show these menu options for all section cards.
+      if (this.props.pocket_button_enabled && this.props.saveToPocketCard || this.props.isSectionsCard) {
         pocketMenuOptions = ["CheckSavedToPocket"];
       }
       TOP_STORIES_CONTEXT_MENU_OPTIONS = ["CheckBookmark", "CheckArchiveFromPocket", ...pocketMenuOptions, "Separator", "OpenInNewWindow", "OpenInPrivateWindow", "Separator", "BlockUrl", ...(this.props.showPrivacyInfo ? ["ShowPrivacyInfo"] : [])];
@@ -3219,7 +3216,6 @@ class _DSCard extends (external_React_default()).PureComponent {
     super(props);
     this.onLinkClick = this.onLinkClick.bind(this);
     this.doesLinkTopicMatchSelectedTopic = this.doesLinkTopicMatchSelectedTopic.bind(this);
-    this.onSaveClick = this.onSaveClick.bind(this);
     this.onMenuUpdate = this.onMenuUpdate.bind(this);
     this.onMenuShow = this.onMenuShow.bind(this);
     this.onThumbsUpClick = this.onThumbsUpClick.bind(this);
@@ -3371,74 +3367,6 @@ class _DSCard extends (external_React_default()).PureComponent {
           }]
         }));
       }
-    }
-  }
-  onSaveClick() {
-    const matchesSelectedTopic = this.doesLinkTopicMatchSelectedTopic();
-    if (this.props.dispatch) {
-      this.props.dispatch(actionCreators.AlsoToMain({
-        type: actionTypes.SAVE_TO_POCKET,
-        data: {
-          site: {
-            url: this.props.url,
-            title: this.props.title
-          }
-        }
-      }));
-      this.props.dispatch(actionCreators.DiscoveryStreamUserEvent({
-        event: "SAVE_TO_POCKET",
-        source: "CARDGRID_HOVER",
-        action_position: this.props.pos,
-        value: {
-          card_type: this.props.flightId ? "spoc" : "organic",
-          recommendation_id: this.props.recommendation_id,
-          tile_id: this.props.id,
-          ...(this.props.shim && this.props.shim.save ? {
-            shim: this.props.shim.save
-          } : {}),
-          fetchTimestamp: this.props.fetchTimestamp,
-          firstVisibleTimestamp: this.props.firstVisibleTimestamp,
-          corpus_item_id: this.props.corpus_item_id,
-          scheduled_corpus_item_id: this.props.scheduled_corpus_item_id,
-          recommended_at: this.props.recommended_at,
-          received_rank: this.props.received_rank,
-          topic: this.props.topic,
-          matches_selected_topic: matchesSelectedTopic,
-          selected_topics: this.props.selectedTopics,
-          is_list_card: this.props.isListCard,
-          ...(this.props.format ? {
-            format: this.props.format
-          } : {}),
-          ...(this.props.section ? {
-            section: this.props.section,
-            section_position: this.props.sectionPosition,
-            is_secton_followed: this.props.sectionFollowed
-          } : {})
-        }
-      }));
-      this.props.dispatch(actionCreators.ImpressionStats({
-        source: "CARDGRID_HOVER",
-        pocket: 0,
-        tiles: [{
-          id: this.props.id,
-          pos: this.props.pos,
-          ...(this.props.shim && this.props.shim.save ? {
-            shim: this.props.shim.save
-          } : {}),
-          recommendation_id: this.props.recommendation_id,
-          topic: this.props.topic,
-          selected_topics: this.props.selectedTopics,
-          is_list_card: this.props.isListCard,
-          ...(this.props.format ? {
-            format: this.props.format
-          } : {}),
-          ...(this.props.section ? {
-            section: this.props.section,
-            section_position: this.props.sectionPosition,
-            is_secton_followed: this.props.sectionFollowed
-          } : {})
-        }]
-      }));
     }
   }
   onThumbsUpClick(event) {
@@ -3687,9 +3615,6 @@ class _DSCard extends (external_React_default()).PureComponent {
     const descLinesClassName = `ds-card-desc-lines-${descLines}`;
     const isMediumRectangle = format === "rectangle";
     const spocFormatClassName = isMediumRectangle ? `ds-spoc-rectangle` : ``;
-
-    // Only update the "Saved" Pocket button UI for the Sections experiment.
-    const compactPocketSavedButtonClassName = mayHaveSectionsCards && this.props.context_type === "pocket" ? `ds-compact-pocket-saved-button` : ``;
     let sizes = [];
     if (!isMediumRectangle) {
       sizes = isListCard ? this.listCardImageSizes : this.dsImageSizes;
@@ -3697,25 +3622,6 @@ class _DSCard extends (external_React_default()).PureComponent {
 
     // TODO: Add logic to assign this.largeCardImageSizes
 
-    let stpButton = () => {
-      return /*#__PURE__*/external_React_default().createElement("button", {
-        className: "card-stp-button",
-        onClick: this.onSaveClick
-      }, this.props.context_type === "pocket" ? /*#__PURE__*/external_React_default().createElement((external_React_default()).Fragment, null, /*#__PURE__*/external_React_default().createElement("span", {
-        "data-l10n-id": "newtab-pocket-image",
-        role: "img",
-        className: "story-badge-icon icon icon-pocket"
-      }), /*#__PURE__*/external_React_default().createElement("span", {
-        "data-l10n-id": "newtab-pocket-saved",
-        className: "pocket-saved-copy"
-      })) : /*#__PURE__*/external_React_default().createElement((external_React_default()).Fragment, null, /*#__PURE__*/external_React_default().createElement("span", {
-        "data-l10n-id": "newtab-pocket-image",
-        role: "img",
-        className: "story-badge-icon icon icon-pocket-save"
-      }), /*#__PURE__*/external_React_default().createElement("span", {
-        "data-l10n-id": "newtab-pocket-save"
-      })));
-    };
     return /*#__PURE__*/external_React_default().createElement("article", {
       className: `ds-card ${listCardClassName} ${fakespotClassName} ${sectionsCardsClassName} ${compactImagesClassName} ${imageGradientClassName} ${titleLinesName} ${descLinesClassName} ${spocFormatClassName} ${ctaButtonClassName} ${ctaButtonVariantClassName}`,
       ref: this.setContextMenuButtonHostRef,
@@ -3807,10 +3713,10 @@ class _DSCard extends (external_React_default()).PureComponent {
       format: format,
       topic: this.props.topic
     })), /*#__PURE__*/external_React_default().createElement("div", {
-      className: `card-stp-button-hover-background ${compactPocketSavedButtonClassName}`
+      className: "card-stp-button-hover-background"
     }, /*#__PURE__*/external_React_default().createElement("div", {
       className: "card-stp-button-position-wrapper"
-    }, saveToPocketCard && !isListCard && /*#__PURE__*/external_React_default().createElement((external_React_default()).Fragment, null, !this.props.flightId && stpButton()), !isFakespot && /*#__PURE__*/external_React_default().createElement(DSLinkMenu, {
+    }, !isFakespot && /*#__PURE__*/external_React_default().createElement(DSLinkMenu, {
       id: this.props.id,
       index: this.props.pos,
       dispatch: this.props.dispatch,
@@ -10695,6 +10601,219 @@ const DiscoveryStreamBase = (0,external_ReactRedux_namespaceObject.connect)(stat
   document: globalThis.document,
   App: state.App
 }))(_DiscoveryStreamBase);
+;// CONCATENATED MODULE: ./content-src/components/CustomizeMenu/SectionsMgmtPanel/SectionsMgmtPanel.jsx
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this file,
+ * You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+
+
+
+// eslint-disable-next-line no-shadow
+
+const SectionsMgmtPanel_PREF_FOLLOWED_SECTIONS = "discoverystream.sections.following";
+const SectionsMgmtPanel_PREF_BLOCKED_SECTIONS = "discoverystream.sections.blocked";
+
+/**
+ * Transforms a comma-separated string of topics in user preferences
+ * into a cleaned-up array.
+ *
+ * @param pref
+ * @returns string[]
+ */
+// TODO: DRY Issue: Import function from CardSections.jsx?
+const SectionsMgmtPanel_getTopics = pref => {
+  return pref.split(",").map(item => item.trim()).filter(item => item);
+};
+function SectionsMgmtPanel({
+  exitEventFired
+}) {
+  const [showPanel, setShowPanel] = (0,external_React_namespaceObject.useState)(false); // State management with useState
+  const prefs = (0,external_ReactRedux_namespaceObject.useSelector)(state => state.Prefs.values);
+  const layoutComponents = (0,external_ReactRedux_namespaceObject.useSelector)(state => state.DiscoveryStream.layout[0].components);
+  const sections = (0,external_ReactRedux_namespaceObject.useSelector)(state => state.DiscoveryStream.feeds.data);
+  const dispatch = (0,external_ReactRedux_namespaceObject.useDispatch)();
+
+  // TODO: Wrap sectionsFeedName -> sectionsList logic in try...catch?
+  let sectionsFeedName;
+  const cardGridEntry = layoutComponents.find(item => item.type === "CardGrid");
+  if (cardGridEntry) {
+    sectionsFeedName = cardGridEntry.feed.url;
+  }
+  let sectionsList;
+  if (sectionsFeedName) {
+    sectionsList = sections[sectionsFeedName].data.sections;
+  }
+  const followedSectionsPref = prefs[SectionsMgmtPanel_PREF_FOLLOWED_SECTIONS] || "";
+  const blockedSectionsPref = prefs[SectionsMgmtPanel_PREF_BLOCKED_SECTIONS] || "";
+  const followedSections = SectionsMgmtPanel_getTopics(followedSectionsPref);
+  const blockedSections = SectionsMgmtPanel_getTopics(blockedSectionsPref);
+  const [followedSectionsState, setFollowedSectionsState] = (0,external_React_namespaceObject.useState)(followedSectionsPref); // State management with useState
+  const [blockedSectionsState, setBlockedSectionsState] = (0,external_React_namespaceObject.useState)(blockedSectionsPref); // State management with useState
+
+  let followedSectionsData = sectionsList.filter(item => followedSectionsState.includes(item.sectionKey));
+  let blockedSectionsData = sectionsList.filter(item => blockedSectionsState.includes(item.sectionKey));
+  function updateCachedData() {
+    // Reset cached followed/blocked list data while panel is open
+    setFollowedSectionsState(followedSectionsPref);
+    setBlockedSectionsState(blockedSectionsPref);
+    followedSectionsData = sectionsList.filter(item => followedSectionsState.includes(item.sectionKey));
+    blockedSectionsData = sectionsList.filter(item => blockedSectionsState.includes(item.sectionKey));
+  }
+  const onFollowClick = (0,external_React_namespaceObject.useCallback)((sectionKey, receivedRank) => {
+    dispatch(actionCreators.SetPref(SectionsMgmtPanel_PREF_FOLLOWED_SECTIONS, [...followedSections, sectionKey].join(", ")));
+    // Telemetry Event Dispatch
+    dispatch(actionCreators.OnlyToMain({
+      type: "FOLLOW_SECTION",
+      data: {
+        section: sectionKey,
+        section_position: receivedRank,
+        event_source: "CUSTOMIZE_PANEL"
+      }
+    }));
+  }, [dispatch, followedSections]);
+  const onBlockClick = (0,external_React_namespaceObject.useCallback)((sectionKey, receivedRank) => {
+    dispatch(actionCreators.SetPref(SectionsMgmtPanel_PREF_BLOCKED_SECTIONS, [...blockedSections, sectionKey].join(", ")));
+
+    // Telemetry Event Dispatch
+    dispatch(actionCreators.OnlyToMain({
+      type: "BLOCK_SECTION",
+      data: {
+        section: sectionKey,
+        section_position: receivedRank,
+        event_source: "CUSTOMIZE_PANEL"
+      }
+    }));
+  }, [dispatch, blockedSections]);
+  const onUnblockClick = (0,external_React_namespaceObject.useCallback)((sectionKey, receivedRank) => {
+    dispatch(actionCreators.SetPref(SectionsMgmtPanel_PREF_BLOCKED_SECTIONS, [...blockedSections.filter(item => item !== sectionKey)].join(", ")));
+    // Telemetry Event Dispatch
+    dispatch(actionCreators.OnlyToMain({
+      type: "UNBLOCK_SECTION",
+      data: {
+        section: sectionKey,
+        section_position: receivedRank,
+        event_source: "CUSTOMIZE_PANEL"
+      }
+    }));
+  }, [dispatch, blockedSections]);
+  const onUnfollowClick = (0,external_React_namespaceObject.useCallback)((sectionKey, receivedRank) => {
+    dispatch(actionCreators.SetPref(SectionsMgmtPanel_PREF_FOLLOWED_SECTIONS, [...followedSections.filter(item => item !== sectionKey)].join(", ")));
+    // Telemetry Event Dispatch
+    dispatch(actionCreators.OnlyToMain({
+      type: "UNFOLLOW_SECTION",
+      data: {
+        section: sectionKey,
+        section_position: receivedRank,
+        event_source: "CUSTOMIZE_PANEL"
+      }
+    }));
+  }, [dispatch, followedSections]);
+
+  // Close followed/blocked topic subpanel when parent menu is closed
+  (0,external_React_namespaceObject.useEffect)(() => {
+    if (exitEventFired) {
+      setShowPanel(false);
+    }
+  }, [exitEventFired]);
+  const togglePanel = () => {
+    setShowPanel(prevShowPanel => !prevShowPanel);
+
+    // Fire when the panel is open
+    if (!showPanel) {
+      updateCachedData();
+    }
+  };
+  const followedSectionsList = followedSectionsData.map(({
+    sectionKey,
+    title,
+    receivedRank
+  }) => {
+    const following = followedSections.includes(sectionKey);
+    return /*#__PURE__*/external_React_default().createElement("li", {
+      key: sectionKey
+    }, /*#__PURE__*/external_React_default().createElement("label", {
+      htmlFor: `follow-topic-${sectionKey}`
+    }, title), /*#__PURE__*/external_React_default().createElement("div", {
+      className: following ? "section-follow following" : "section-follow"
+    }, /*#__PURE__*/external_React_default().createElement("moz-button", {
+      onClick: () => following ? onUnfollowClick(sectionKey, receivedRank) : onFollowClick(sectionKey, receivedRank),
+      type: following ? "destructive" : "default",
+      index: receivedRank,
+      section: sectionKey,
+      id: `follow-topic-${sectionKey}`
+    }, /*#__PURE__*/external_React_default().createElement("span", {
+      className: "section-button-follow-text",
+      "data-l10n-id": "newtab-section-follow-button"
+    }), /*#__PURE__*/external_React_default().createElement("span", {
+      className: "section-button-following-text",
+      "data-l10n-id": "newtab-section-following-button"
+    }), /*#__PURE__*/external_React_default().createElement("span", {
+      className: "section-button-unfollow-text",
+      "data-l10n-id": "newtab-section-unfollow-button"
+    }))));
+  });
+  const blockedSectionsList = blockedSectionsData.map(({
+    sectionKey,
+    title,
+    receivedRank
+  }) => {
+    const blocked = blockedSections.includes(sectionKey);
+    return /*#__PURE__*/external_React_default().createElement("li", {
+      key: sectionKey
+    }, /*#__PURE__*/external_React_default().createElement("label", {
+      htmlFor: `blocked-topic-${sectionKey}`
+    }, title), /*#__PURE__*/external_React_default().createElement("div", {
+      className: blocked ? "section-block blocked" : "section-block"
+    }, /*#__PURE__*/external_React_default().createElement("moz-button", {
+      onClick: () => blocked ? onUnblockClick(sectionKey, receivedRank) : onBlockClick(sectionKey, receivedRank),
+      type: "default",
+      index: receivedRank,
+      section: sectionKey,
+      id: `blocked-topic-${sectionKey}`
+    }, /*#__PURE__*/external_React_default().createElement("span", {
+      className: "section-button-block-text",
+      "data-l10n-id": "newtab-section-block-button"
+    }), /*#__PURE__*/external_React_default().createElement("span", {
+      className: "section-button-blocked-text",
+      "data-l10n-id": "newtab-section-blocked-button"
+    }), /*#__PURE__*/external_React_default().createElement("span", {
+      className: "section-button-unblock-text",
+      "data-l10n-id": "newtab-section-unblock-button"
+    }))));
+  });
+  return /*#__PURE__*/external_React_default().createElement("div", null, /*#__PURE__*/external_React_default().createElement("moz-box-button", {
+    onClick: togglePanel,
+    "data-l10n-id": "newtab-section-mangage-topics-button"
+  }), /*#__PURE__*/external_React_default().createElement(external_ReactTransitionGroup_namespaceObject.CSSTransition, {
+    in: showPanel,
+    timeout: 300,
+    classNames: "sections-mgmt-panel",
+    unmountOnExit: true
+  }, /*#__PURE__*/external_React_default().createElement("div", {
+    className: "sections-mgmt-panel"
+  }, /*#__PURE__*/external_React_default().createElement("button", {
+    className: "arrow-button",
+    onClick: togglePanel
+  }, /*#__PURE__*/external_React_default().createElement("h1", {
+    "data-l10n-id": "newtab-section-mangage-topics-title"
+  })), /*#__PURE__*/external_React_default().createElement("h3", {
+    "data-l10n-id": "newtab-section-mangage-topics-followed-topics-subtitle"
+  }), followedSectionsData.length ? /*#__PURE__*/external_React_default().createElement("ul", {
+    className: "topic-list"
+  }, followedSectionsList) : /*#__PURE__*/external_React_default().createElement("span", {
+    className: "topic-list-empty-state",
+    "data-l10n-id": "newtab-section-mangage-topics-followed-topics-empty-state"
+  }), /*#__PURE__*/external_React_default().createElement("h3", {
+    "data-l10n-id": "newtab-section-mangage-topics-blocked-topics-subtitle"
+  }), blockedSectionsData.length ? /*#__PURE__*/external_React_default().createElement("ul", {
+    className: "topic-list"
+  }, blockedSectionsList) : /*#__PURE__*/external_React_default().createElement("span", {
+    className: "topic-list-empty-state",
+    "data-l10n-id": "newtab-section-mangage-topics-blocked-topics-empty-state"
+  }))));
+}
+
 ;// CONCATENATED MODULE: ./content-src/components/WallpapersSection/WallpapersSection.jsx
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -11080,6 +11199,7 @@ const WallpaperCategories = (0,external_ReactRedux_namespaceObject.connect)(stat
 
 
 
+
 class ContentSection extends (external_React_default()).PureComponent {
   constructor(props) {
     super(props);
@@ -11162,7 +11282,9 @@ class ContentSection extends (external_React_default()).PureComponent {
       wallpapersEnabled,
       wallpapersV2Enabled,
       activeWallpaper,
-      setPref
+      setPref,
+      mayHaveTopicSections,
+      exitEventFired
     } = this.props;
     const {
       topSitesEnabled,
@@ -11280,7 +11402,9 @@ class ContentSection extends (external_React_default()).PureComponent {
       className: "sponsored",
       htmlFor: "sponsored-pocket",
       "data-l10n-id": "newtab-custom-pocket-sponsored"
-    })), mayHaveRecentSaves && /*#__PURE__*/external_React_default().createElement("div", {
+    })), mayHaveTopicSections && /*#__PURE__*/external_React_default().createElement(SectionsMgmtPanel, {
+      exitEventFired: exitEventFired
+    }), mayHaveRecentSaves && /*#__PURE__*/external_React_default().createElement("div", {
       className: "check-wrapper",
       role: "presentation"
     }, /*#__PURE__*/external_React_default().createElement("input", {
@@ -11349,13 +11473,22 @@ class _CustomizeMenu extends (external_React_default()).PureComponent {
     super(props);
     this.onEntered = this.onEntered.bind(this);
     this.onExited = this.onExited.bind(this);
+    this.state = {
+      exitEventFired: false
+    };
   }
   onEntered() {
+    this.setState({
+      exitEventFired: false
+    });
     if (this.closeButton) {
       this.closeButton.focus();
     }
   }
   onExited() {
+    this.setState({
+      exitEventFired: true
+    });
     if (this.openButton) {
       this.openButton.focus();
     }
@@ -11402,12 +11535,14 @@ class _CustomizeMenu extends (external_React_default()).PureComponent {
       wallpapersV2Enabled: this.props.wallpapersV2Enabled,
       activeWallpaper: this.props.activeWallpaper,
       pocketRegion: this.props.pocketRegion,
+      mayHaveTopicSections: this.props.mayHaveTopicSections,
       mayHaveSponsoredTopSites: this.props.mayHaveSponsoredTopSites,
       mayHaveSponsoredStories: this.props.mayHaveSponsoredStories,
       mayHaveRecentSaves: this.props.DiscoveryStream.recentSavesEnabled,
       mayHaveWeather: this.props.mayHaveWeather,
       spocMessageVariant: this.props.spocMessageVariant,
-      dispatch: this.props.dispatch
+      dispatch: this.props.dispatch,
+      exitEventFired: this.state.exitEventFired
     }))));
   }
 }
@@ -13005,6 +13140,10 @@ class BaseContent extends (external_React_default()).PureComponent {
     const hasThumbsUpDownLayout = prefs["discoverystream.thumbsUpDown.searchTopsitesCompact"];
     const hasThumbsUpDown = prefs["discoverystream.thumbsUpDown.enabled"];
     const sectionsEnabled = prefs["discoverystream.sections.enabled"];
+    const topicLabelsEnabled = prefs["discoverystream.topicLabels.enabled"];
+    const sectionsCustomizeMenuPanelEnabled = prefs["discoverystream.sections.customizeMenuPanel.enabled"];
+    // Logic to show follow/block topic mgmt panel in Customize panel
+    const mayHaveTopicSections = topicLabelsEnabled && sectionsEnabled && sectionsCustomizeMenuPanelEnabled;
     const featureClassName = [weatherEnabled && mayHaveWeather && "has-weather",
     // Show is weather is enabled/visible
     prefs.showSearch ? "has-search" : "no-search", layoutsVariantAEnabled ? "layout-variant-a" : "",
@@ -13030,6 +13169,7 @@ class BaseContent extends (external_React_default()).PureComponent {
       wallpapersV2Enabled: wallpapersV2Enabled,
       activeWallpaper: activeWallpaper,
       pocketRegion: pocketRegion,
+      mayHaveTopicSections: mayHaveTopicSections,
       mayHaveSponsoredTopSites: mayHaveSponsoredTopSites,
       mayHaveSponsoredStories: mayHaveSponsoredStories,
       mayHaveWeather: mayHaveWeather,

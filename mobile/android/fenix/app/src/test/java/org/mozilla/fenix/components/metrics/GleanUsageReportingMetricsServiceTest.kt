@@ -5,16 +5,21 @@
 package org.mozilla.fenix.components.metrics
 
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.mozilla.fenix.components.metrics.fake.FakeGleanProfileId
+import org.mozilla.fenix.components.metrics.fake.FakeGleanProfileIdStore
+import org.mozilla.fenix.components.metrics.fake.FakeGleanUsageReporting
 import org.mozilla.fenix.components.metrics.fake.FakeLifecycleEventObserver
 import org.mozilla.fenix.components.metrics.fake.FakeLifecycleOwner
 
-class GleanUsageReportingMetricsServiceTest {
+internal class GleanUsageReportingMetricsServiceTest {
 
     private val fakeLifecycleOwner = FakeLifecycleOwner()
     private val fakeLifecycleEventObserver = FakeLifecycleEventObserver()
+    private val fakeGleanUsageReporting = FakeGleanUsageReporting()
 
     @Test
     fun `lifecycle is not initially observed`() {
@@ -46,8 +51,30 @@ class GleanUsageReportingMetricsServiceTest {
         assertTrue(fakeLifecycleOwner.observers.isEmpty())
     }
 
+    @Test
+    fun `usage reporting is enabled on start`() {
+        val service = createGleanUsageReportingMetricsService()
+        assertNull(fakeGleanUsageReporting.lastEnabled)
+        service.start()
+        assertNotNull(fakeGleanUsageReporting.lastEnabled)
+        assertTrue(fakeGleanUsageReporting.lastEnabled!!)
+    }
+
+    @Test
+    fun `usage reporting is disabled on start`() {
+        val service = createGleanUsageReportingMetricsService()
+        assertNull(fakeGleanUsageReporting.lastEnabled)
+        service.start()
+        service.stop()
+        assertNotNull(fakeGleanUsageReporting.lastEnabled)
+        assertFalse(fakeGleanUsageReporting.lastEnabled!!)
+    }
+
     private fun createGleanUsageReportingMetricsService() = GleanUsageReportingMetricsService(
         lifecycleOwner = fakeLifecycleOwner,
         gleanUsageReportingLifecycleObserver = fakeLifecycleEventObserver,
+        gleanUsageReporting = fakeGleanUsageReporting,
+        gleanProfileId = FakeGleanProfileId(),
+        gleanProfileIdStore = FakeGleanProfileIdStore(),
     )
 }

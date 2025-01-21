@@ -470,7 +470,13 @@ nsCSPContext::AppendPolicy(const nsAString& aPolicyString, bool aReportOnly,
     }
     if (policy->hasDirective(
             nsIContentSecurityPolicy::REQUIRE_TRUSTED_TYPES_FOR_DIRECTIVE)) {
-      mHasPolicyWithRequireTrustedTypesForDirective = true;
+      if (mRequireTrustedTypesForDirectiveState !=
+          RequireTrustedTypesForDirectiveState::ENFORCE) {
+        mRequireTrustedTypesForDirectiveState =
+            policy->getReportOnlyFlag()
+                ? RequireTrustedTypesForDirectiveState::REPORT_ONLY
+                : RequireTrustedTypesForDirectiveState::ENFORCE;
+      }
       if (nsCOMPtr<Document> doc = do_QueryReferent(mLoadingContext)) {
         doc->SetHasPolicyWithRequireTrustedTypesForDirective(true);
       }
@@ -483,10 +489,11 @@ nsCSPContext::AppendPolicy(const nsAString& aPolicyString, bool aReportOnly,
 }
 
 NS_IMETHODIMP
-nsCSPContext::GetHasPolicyWithRequireTrustedTypesForDirective(
-    bool* aHasPolicyWithRequireTrustedTypesForDirective) {
-  *aHasPolicyWithRequireTrustedTypesForDirective =
-      mHasPolicyWithRequireTrustedTypesForDirective;
+nsCSPContext::GetRequireTrustedTypesForDirectiveState(
+    RequireTrustedTypesForDirectiveState*
+        aRequireTrustedTypesForDirectiveState) {
+  *aRequireTrustedTypesForDirectiveState =
+      mRequireTrustedTypesForDirectiveState;
   return NS_OK;
 }
 
@@ -2074,9 +2081,14 @@ nsCSPContext::Read(nsIObjectInputStream* aStream) {
 
     bool deliveredViaMetaTag = false;
     rv = aStream->ReadBoolean(&deliveredViaMetaTag);
+
+    bool hasRequireTrustedTypesForDirective = false;
+    rv = aStream->ReadBoolean(&hasRequireTrustedTypesForDirective);
+
     NS_ENSURE_SUCCESS(rv, rv);
-    AddIPCPolicy(mozilla::ipc::ContentSecurityPolicy(policyString, reportOnly,
-                                                     deliveredViaMetaTag));
+    AddIPCPolicy(mozilla::ipc::ContentSecurityPolicy(
+        policyString, reportOnly, deliveredViaMetaTag,
+        hasRequireTrustedTypesForDirective));
   }
 
   return NS_OK;
@@ -2103,17 +2115,28 @@ nsCSPContext::Write(nsIObjectOutputStream* aStream) {
     aStream->WriteWStringZ(polStr.get());
     aStream->WriteBoolean(mPolicies[p]->getReportOnlyFlag());
     aStream->WriteBoolean(mPolicies[p]->getDeliveredViaMetaTagFlag());
+    aStream->WriteBoolean(mPolicies[p]->hasRequireTrustedTypesForDirective());
   }
   for (auto& policy : mIPCPolicies) {
     aStream->WriteWStringZ(policy.policy().get());
     aStream->WriteBoolean(policy.reportOnlyFlag());
     aStream->WriteBoolean(policy.deliveredViaMetaTagFlag());
+    aStream->WriteBoolean(policy.hasRequireTrustedTypesForDirective());
   }
   return NS_OK;
 }
 
 void nsCSPContext::AddIPCPolicy(const ContentSecurityPolicy& aPolicy) {
   mIPCPolicies.AppendElement(aPolicy);
+  if (aPolicy.hasRequireTrustedTypesForDirective()) {
+    if (mRequireTrustedTypesForDirectiveState !=
+        RequireTrustedTypesForDirectiveState::ENFORCE) {
+      mRequireTrustedTypesForDirectiveState =
+          aPolicy.reportOnlyFlag()
+              ? RequireTrustedTypesForDirectiveState::REPORT_ONLY
+              : RequireTrustedTypesForDirectiveState::ENFORCE;
+    }
+  }
 }
 
 void nsCSPContext::SerializePolicies(
@@ -2123,7 +2146,8 @@ void nsCSPContext::SerializePolicies(
     policy->toString(policyString);
     aPolicies.AppendElement(
         ContentSecurityPolicy(policyString, policy->getReportOnlyFlag(),
-                              policy->getDeliveredViaMetaTagFlag()));
+                              policy->getDeliveredViaMetaTagFlag(),
+                              policy->hasRequireTrustedTypesForDirective()));
   }
 
   aPolicies.AppendElements(mIPCPolicies);

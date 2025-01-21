@@ -1038,7 +1038,11 @@
 # Limit of recent metadata we keep in memory for faster access, in KB.
 - name: browser.cache.disk.metadata_memory_limit
   type: RelaxedAtomicUint32
-  value: 250   # 0.25 MB
+#ifdef NIGHTLY_BUILD
+  value: 1024   # 1 MB
+#else
+  value: 250    # 0.25 MB
+#endif
   mirror: always
 
 # Does the user want smart-sizing?
@@ -2008,6 +2012,21 @@
     type: bool
     value: @IS_NOT_EARLY_BETA_OR_EARLIER@
     mirror: always
+
+  # On Windows, whether to add PNG before BMP (CF_DIB) in the list of supported
+  # formats when copying an image to the clipboard.
+-   name: clipboard.copy_image.as_png
+    type: RelaxedAtomicBool
+    value: true
+    mirror: always
+
+  # On Windows, whether we encode an image as PNG (instead of the previous
+  # default of BMP) when an application to which we are copying an image
+  # requests that it be provided as a temporary file (CF_HDROP).
+-   name: clipboard.copy_image_file.as_png
+    type: RelaxedAtomicBool
+    value: true
+    mirror: always
 #endif
 
 #---------------------------------------------------------------------------
@@ -2836,7 +2855,7 @@
 # Is support for HTMLElement.autocorrect enabled?
 - name: dom.forms.autocorrect
   type: bool
-  value: @IS_NIGHTLY_BUILD@
+  value: true
   mirror: always
 
 # Only trusted submit event could trigger form submission.
@@ -10358,9 +10377,11 @@
   mirror: always
 
 # Whether <details> is forced to be a block, see bug 1856374
+# The legacy behavior is 'true', i.e. forcing it to be a block.
+# The modern behavior is 'false', i.e. not forcing it to be a block.
 - name: layout.details.force-block-layout
   type: bool
-  value: true
+  value: @IS_NOT_NIGHTLY_BUILD@
   mirror: always
 
 # Whether table cells can generate scroll boxes.
@@ -12295,6 +12316,25 @@
   type: uint32_t
   value: 262144
   mirror: always
+
+# Tell mozjemalloc and the TaskController to use lazy purge.
+- name: memory.lazypurge.enable
+  type: bool
+  value: true
+  mirror: always
+
+# If lazy purge is enabled, the maximum delay we wait for idle time in MS.
+- name: memory.lazypurge.maximum_delay
+  type: uint32_t
+  value: 5000
+  mirror: always
+
+# If lazy purge is enabled, the minimum idle budget we wait for in MS.
+- name: memory.lazypurge.minimum_idle_budget
+  type: uint32_t
+  value: 5
+  mirror: always
+
 
 #---------------------------------------------------------------------------
 # Prefs starting with "middlemouse."

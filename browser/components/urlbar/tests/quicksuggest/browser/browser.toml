@@ -33,10 +33,10 @@ skip-if = ["os == 'linux' && os_version == '18.04' && processor == 'x86_64' && o
 ["browser_quicksuggest_ping_amp.js"]
 tags = "search-telemetry"
 
-["browser_quicksuggest_ping_merinoAndNullValues.js"]
+["browser_quicksuggest_ping_deletionRequest.js"]
 tags = "search-telemetry"
 
-["browser_quicksuggest_ping_wikipedia.js"]
+["browser_quicksuggest_ping_merinoAndNullValues.js"]
 tags = "search-telemetry"
 
 ["browser_quicksuggest_pocket.js"]
@@ -45,9 +45,6 @@ tags = "search-telemetry"
 ["browser_quicksuggest_yelp.js"]
 
 ["browser_telemetry_environment.js"]
-tags = "search-telemetry"
-
-["browser_telemetry_ingestTime.js"]
 tags = "search-telemetry"
 
 ["browser_telemetry_suggestMetrics.js"]
