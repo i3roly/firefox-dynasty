@@ -201,25 +201,41 @@ already_AddRefed<MacIOSurface> MacIOSurface::CreateBiPlanarSurface(
   AddDictionaryInt(props, kIOSurfaceHeight, aYSize.height);
   ::CFDictionaryAddValue(props.get(), kIOSurfaceIsGlobal, kCFBooleanTrue);
 
-  if (aColorRange == ColorRange::LIMITED) {
+  if (aChromaSubsampling == ChromaSubsampling::HALF_WIDTH_AND_HEIGHT) {
+    // 4:2:0 subsampling.
     if (aColorDepth == ColorDepth::COLOR_8) {
-      AddDictionaryInt(
-          props, kIOSurfacePixelFormat,
-          (uint32_t)kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange);
+      if (aColorRange == ColorRange::LIMITED) {
+        AddDictionaryInt(
+            props, kIOSurfacePixelFormat,
+            (uint32_t)kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange);
+      } else {
+        AddDictionaryInt(
+            props, kIOSurfacePixelFormat,
+            (uint32_t)kCVPixelFormatType_420YpCbCr8BiPlanarFullRange);
+      }
     } else {
-      AddDictionaryInt(
-          props, kIOSurfacePixelFormat,
-          (uint32_t)kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange);
+      if (aColorRange == ColorRange::LIMITED) {
+        AddDictionaryInt(
+            props, kIOSurfacePixelFormat,
+            (uint32_t)kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange);
+      } else {
+        AddDictionaryInt(
+            props, kIOSurfacePixelFormat,
+            (uint32_t)kCVPixelFormatType_420YpCbCr10BiPlanarFullRange);
+      }
     }
   } else {
-    if (aColorDepth == ColorDepth::COLOR_8) {
+    // 4:2:2 subsampling. We can only handle 10-bit color.
+    MOZ_ASSERT(aColorDepth == ColorDepth::COLOR_10,
+               "macOS bi-planar 4:2:2 formats must be 10-bit color.");
+    if (aColorRange == ColorRange::LIMITED) {
       AddDictionaryInt(
           props, kIOSurfacePixelFormat,
-          (uint32_t)kCVPixelFormatType_420YpCbCr8BiPlanarFullRange);
+          (uint32_t)kCVPixelFormatType_422YpCbCr10BiPlanarVideoRange);
     } else {
       AddDictionaryInt(
           props, kIOSurfacePixelFormat,
-          (uint32_t)kCVPixelFormatType_420YpCbCr10BiPlanarFullRange);
+          (uint32_t)kCVPixelFormatType_422YpCbCr10BiPlanarFullRange);
     }
   }
 
@@ -294,19 +310,7 @@ already_AddRefed<MacIOSurface> MacIOSurface::CreateSinglePlanarSurface(
     return nullptr;
   }
 
-#ifdef XP_MACOSX
-  // Override the color space to be the same as the main display, so that
-  // CoreAnimation won't try to do any color correction (from the IOSurface
-  // space, to the display). In the future we may want to try specifying this
-  // correctly, but probably only once we do the same for videos drawn through
-  // our gfx code.
-  auto colorSpace = CFTypeRefPtr<CGColorSpaceRef>::WrapUnderCreateRule(
-      CGDisplayCopyColorSpace(CGMainDisplayID()));
-  auto colorData = CFTypeRefPtr<CFDataRef>::WrapUnderCreateRule(
-      CGColorSpaceCopyICCProfile(colorSpace.get()));
-  IOSurfaceSetValue(surfaceRef.get(), CFSTR("IOSurfaceColorSpace"),
-                    colorData.get());
-#endif
+  SetIOSurfaceCommonProperties(surfaceRef, aColorSpace, aTransferFunction);
 
   RefPtr<MacIOSurface> ioSurface =
       new MacIOSurface(std::move(surfaceRef), false, aColorSpace);
@@ -620,6 +624,25 @@ bool MacIOSurface::BindTexImage(mozilla::gl::GLContext* aGL, size_t aPlane,
     type = LOCAL_GL_UNSIGNED_SHORT;
     if (aOutReadFormat) {
       *aOutReadFormat = mozilla::gfx::SurfaceFormat::P010;
+    }
+  } else if (pixelFormat == kCVPixelFormatType_422YpCbCr10BiPlanarVideoRange ||
+             pixelFormat == kCVPixelFormatType_422YpCbCr10BiPlanarFullRange) {
+    MOZ_ASSERT(GetPlaneCount() == 2);
+    MOZ_ASSERT(aPlane < 2);
+
+    // The LOCAL_GL_LUMINANCE and LOCAL_GL_LUMINANCE_ALPHA are the deprecated
+    // format. So, use LOCAL_GL_RED and LOCAL_GL_RB if we use core profile.
+    // https://www.khronos.org/opengl/wiki/Image_Format#Legacy_Image_Formats
+    if (aPlane == 0) {
+      internalFormat = format =
+          (isCompatibilityProfile) ? (LOCAL_GL_LUMINANCE) : (LOCAL_GL_RED);
+    } else {
+      internalFormat = format =
+          (isCompatibilityProfile) ? (LOCAL_GL_LUMINANCE_ALPHA) : (LOCAL_GL_RG);
+    }
+    type = LOCAL_GL_UNSIGNED_SHORT;
+    if (aOutReadFormat) {
+      *aOutReadFormat = mozilla::gfx::SurfaceFormat::NV16;
     }
   } else if (pixelFormat == kCVPixelFormatType_422YpCbCr8_yuvs ||
              pixelFormat == kCVPixelFormatType_422YpCbCr8FullRange) {
