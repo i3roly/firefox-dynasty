@@ -8,6 +8,7 @@
 #define mozilla_LoadInfo_h
 
 #include "mozilla/dom/FeaturePolicy.h"
+#include "mozilla/dom/UserNavigationInvolvement.h"
 #include "nsIInterceptionInfo.h"
 #include "nsILoadInfo.h"
 #include "nsIPrincipal.h"
@@ -94,8 +95,7 @@ class LoadInfo final : public nsILoadInfo {
                Maybe<mozilla::dom::ClientInfo>(),
            const Maybe<mozilla::dom::ServiceWorkerDescriptor>& aController =
                Maybe<mozilla::dom::ServiceWorkerDescriptor>(),
-           uint32_t aSandboxFlags = 0,
-           bool aSkipCheckForBrokenURLOrZeroSized = 0);
+           uint32_t aSandboxFlags = 0);
 
   // Constructor used for TYPE_DOCUMENT loads which have a different
   // loadingContext than other loads. This ContextForTopLevelLoad is
@@ -253,7 +253,7 @@ class LoadInfo final : public nsILoadInfo {
       bool aIsSameDocumentNavigation, bool aAllowDeprecatedSystemRequests,
       bool aIsInDevToolsContext, bool aParserCreatedScript,
       nsILoadInfo::StoragePermissionState aStoragePermission,
-      const Maybe<RFPTarget>& aOverriddenFingerprintingSettings,
+      const Maybe<RFPTargetSet>& aOverriddenFingerprintingSettings,
       bool aIsMetaRefresh, uint32_t aRequestBlockingReason,
       nsINode* aLoadingContext,
       nsILoadInfo::CrossOriginEmbedderPolicy aLoadingEmbedderPolicy,
@@ -262,7 +262,8 @@ class LoadInfo final : public nsILoadInfo {
       bool aHasInjectedCookieForCookieBannerHandling,
       nsILoadInfo::SchemelessInputType aSchemelessInput,
       nsILoadInfo::HTTPSUpgradeTelemetryType aHttpsUpgradeTelemetry,
-      bool aIsNewWindowTarget);
+      bool aIsNewWindowTarget,
+      dom::UserNavigationInvolvement aUserNavigationInvolvement);
 
   LoadInfo(const LoadInfo& rhs);
 
@@ -380,7 +381,7 @@ class LoadInfo final : public nsILoadInfo {
   bool mParserCreatedScript = false;
   nsILoadInfo::StoragePermissionState mStoragePermission =
       nsILoadInfo::NoStoragePermission;
-  Maybe<RFPTarget> mOverriddenFingerprintingSettings;
+  Maybe<RFPTargetSet> mOverriddenFingerprintingSettings;
 #ifdef DEBUG
   // A boolean used to ensure the mOverriddenFingerprintingSettings is set
   // before use it.
@@ -399,8 +400,6 @@ class LoadInfo final : public nsILoadInfo {
 
   // See nsILoadInfo.isFromObjectOrEmbed
   bool mIsFromObjectOrEmbed = false;
-
-  bool mSkipCheckForBrokenURLOrZeroSized = false;
 
   // The cross origin embedder policy that the loading need to respect.
   // If the value is nsILoadInfo::EMBEDDER_POLICY_REQUIRE_CORP, CORP checking
@@ -421,6 +420,9 @@ class LoadInfo final : public nsILoadInfo {
 
   nsILoadInfo::HTTPSUpgradeTelemetryType mHttpsUpgradeTelemetry =
       nsILoadInfo::NOT_INITIALIZED;
+
+  dom::UserNavigationInvolvement mUserNavigationInvolvement =
+      dom::UserNavigationInvolvement::None;
 
   bool mIsNewWindowTarget = false;
   bool mSkipHTTPSUpgrade = false;

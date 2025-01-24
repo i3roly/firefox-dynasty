@@ -16,6 +16,7 @@ use selectors::matching::{ElementSelectorFlags, MatchingForInvalidation, Selecto
 use selectors::{Element, OpaqueElement};
 use servo_arc::{Arc, ArcBorrow};
 use smallvec::SmallVec;
+use style::values::generics::length::AnchorResolutionResult;
 use std::collections::BTreeSet;
 use std::fmt::Write;
 use std::iter;
@@ -103,6 +104,7 @@ use style::invalidation::element::relative_selector::{
 };
 use style::invalidation::element::restyle_hints::RestyleHint;
 use style::invalidation::stylesheets::RuleChangeKind;
+use style::logical_geometry::PhysicalSide;
 use style::media_queries::MediaList;
 use style::parser::{Parse, ParserContext};
 #[cfg(feature = "gecko_debug")]
@@ -149,7 +151,9 @@ use style::values::computed::effects::Filter;
 use style::values::computed::font::{
     FamilyName, FontFamily, FontFamilyList, FontStretch, FontStyle, FontWeight, GenericFontFamily,
 };
-use style::values::computed::{self, Context, ToComputedValue};
+use style::values::computed::length::AnchorSizeFunction;
+use style::values::computed::position::AnchorFunction;
+use style::values::computed::{self, Context, PositionProperty, ToComputedValue};
 use style::values::distance::ComputeSquaredDistance;
 use style::values::generics::color::ColorMixFlags;
 use style::values::generics::easing::BeforeFlag;
@@ -5937,7 +5941,7 @@ pub unsafe extern "C" fn Servo_DeclarationBlock_SetBackgroundImage(
     use style::properties::PropertyDeclaration;
     use style::stylesheets::CorsMode;
     use style::values::generics::image::Image;
-    use style::values::specified::url::SpecifiedImageUrl;
+    use style::values::specified::url::SpecifiedUrl;
 
     let url_data = UrlExtraData::from_ptr_ref(&raw_extra_data);
     let string = value.as_str_unchecked();
@@ -5951,7 +5955,7 @@ pub unsafe extern "C" fn Servo_DeclarationBlock_SetBackgroundImage(
         None,
         None,
     );
-    let url = SpecifiedImageUrl::parse_from_string(string.into(), &context, CorsMode::None);
+    let url = SpecifiedUrl::parse_from_string(string.into(), &context, CorsMode::None);
     let decl = PropertyDeclaration::BackgroundImage(BackgroundImage(vec![Image::Url(url)].into()));
     write_locked_arc(declarations, |decls: &mut PropertyDeclarationBlock| {
         decls.push(decl, Importance::Normal);
@@ -9734,4 +9738,72 @@ pub unsafe extern "C" fn Servo_CSSParser_NextToken(
     }
 
     return true;
+}
+
+/// Result of resolving an anchor positioning function.
+#[repr(u8)]
+pub enum AnchorPositioningFunctionResolution {
+    /// Anchor function invalid.
+    Invalid,
+    /// Anchor function resolved to a reference to fallback.
+    ResolvedReference(*const computed::LengthPercentage),
+    /// Anchor function resolved to a value.
+    Resolved(computed::LengthPercentage),
+}
+
+impl AnchorPositioningFunctionResolution {
+    fn new(result: AnchorResolutionResult<'_, computed::LengthPercentage>) -> Self {
+        match result {
+            AnchorResolutionResult::Resolved(l) => AnchorPositioningFunctionResolution::Resolved(l),
+            AnchorResolutionResult::Fallback(l) => {
+                AnchorPositioningFunctionResolution::ResolvedReference(l as *const _)
+            },
+            AnchorResolutionResult::Invalid => AnchorPositioningFunctionResolution::Invalid,
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn Servo_ResolveAnchorFunction(
+    func: &AnchorFunction,
+    side: PhysicalSide,
+    prop: PositionProperty,
+    out: &mut AnchorPositioningFunctionResolution,
+) {
+    *out = AnchorPositioningFunctionResolution::new(func.resolve(side, prop));
+}
+
+#[no_mangle]
+pub extern "C" fn Servo_ResolveAnchorSizeFunction(
+    func: &AnchorSizeFunction,
+    prop: PositionProperty,
+    out: &mut AnchorPositioningFunctionResolution,
+) {
+    *out = AnchorPositioningFunctionResolution::new(func.resolve(prop));
+}
+
+/// Result of resolving a math function node potentially containing
+/// anchor positioning function.
+#[repr(u8)]
+pub enum CalcAnchorPositioningFunctionResolution {
+    /// Anchor positioning function is used, but at least one of them
+    /// did not resolve to a valid reference - Property using this
+    /// expression is now invalid at computed time.
+    Invalid,
+    /// Anchor positioning function is used, and all of them resolved
+    /// to valid references, or specified a fallback.
+    Valid(computed::LengthPercentage),
+}
+
+#[no_mangle]
+pub extern "C" fn Servo_ResolveAnchorPositioningFunctionInCalc(
+    calc: &computed::length_percentage::CalcLengthPercentage,
+    side: PhysicalSide,
+    prop: PositionProperty,
+    out: &mut CalcAnchorPositioningFunctionResolution,
+) {
+    *out = match calc.resolve_anchor_functions(side, prop) {
+        Ok(l) => CalcAnchorPositioningFunctionResolution::Valid(l.into()),
+        Err(_) => CalcAnchorPositioningFunctionResolution::Invalid,
+    };
 }

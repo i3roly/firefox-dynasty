@@ -679,6 +679,11 @@
   value: @IS_NOT_ANDROID@
   mirror: always
 
+- name: apz.keyboard.focus-optimization
+  type: bool
+  value: false
+  mirror: always
+
 - name: apz.max_tap_time
   type: RelaxedAtomicInt32
   value: 300
@@ -3035,6 +3040,15 @@
   value: false
   mirror: always
 
+# Whether dispatch a redundant `input` event before `compositionend`.
+# Its `.isComposing` is `true`, but it might be useful to store the latest
+# composition string before `compositionend` event listeners (although,
+# `.data` of `compositionend` event contains the value.
+- name: dom.input_events.dispatch_before_compositionend
+  type: bool
+  value: true
+  mirror: always
+
 # The minimum number of ticks after page navigation
 # that need to occur before user input events are allowed to be handled.
 - name: dom.input_events.security.minNumTicks
@@ -4131,6 +4145,18 @@
   value: false
   mirror: always
 
+# If true, HTTPS-First will upgrade local addresses
+- name: dom.security.https_first_for_local_addresses
+  type: RelaxedAtomicBool
+  value: false
+  mirror: always
+
+# If true, HTTPS-First will upgrade unknown suffixes
+- name: dom.security.https_first_for_unknown_suffixes
+  type: RelaxedAtomicBool
+  value: false
+  mirror: always
+
 # If true, top-level requests in Private Browsing Mode will get
 # upgraded to HTTPS. (If dom.security.https_first
 # is set to true then this pref has no effect)
@@ -4576,6 +4602,11 @@
   value: true
   mirror: always
   rust: true
+
+- name: dom.text_fragments.create_text_fragment.enabled
+  type: bool
+  value: false
+  mirror: always
 
 - name: dom.textMetrics.actualBoundingBox.enabled
   type: RelaxedAtomicBool
@@ -9303,16 +9334,6 @@
   value: true
   mirror: always
 
-# Whether computed local-fragment-only image urls serialize using the same
-# rules as filter/mask/etc (not resolving the URL for local refs).
-#
-# See https://github.com/w3c/csswg-drafts/issues/3195
-- name: layout.css.computed-style.dont-resolve-image-local-refs
-  type: RelaxedAtomicBool
-  value: true
-  mirror: always
-  rust: true
-
 # Are implicit tracks in computed grid templates serialized?
 - name: layout.css.serialize-grid-implicit-tracks
   type: RelaxedAtomicBool
@@ -9516,7 +9537,7 @@
 # Whether the `:has-slotted` pseudo class is enabled
 - name: layout.css.has-slotted-selector.enabled
   type: RelaxedAtomicBool
-  value: false
+  value: true
   mirror: always
   rust: true
 
@@ -9720,7 +9741,7 @@
 # also include animation-timeline property.
 - name: layout.css.scroll-driven-animations.enabled
   type: RelaxedAtomicBool
-  value: false
+  value: @IS_NIGHTLY_BUILD@
   mirror: always
   rust: true
 
@@ -14173,11 +14194,11 @@
   value: ""
   mirror: never
 
-# The maximum allowed length for a URL - 32MB default.
+# The maximum allowed length for a URL - 512MB default.
 # If 0 that means no limit.
 - name: network.url.max-length
   type: RelaxedAtomicUint32
-  value: 32 * 1024 * 1024
+  value: 512 * 1024 * 1024
   mirror: always
 
 # When true, if all the cyrillic characters in a label
@@ -15087,6 +15108,13 @@
   value: true
   mirror: always
 
+# Enable the clearing of cache data using the clear-site-data header. If enabled,
+# header values of "cache" and "*" will clear cached data from the site
+- name: privacy.clearSiteDataHeader.cache.enabled
+  type: bool
+  value: @IS_NIGHTLY_BUILD@
+  mirror: always
+
 # First Party Isolation (double keying), disabled by default.
 - name: privacy.firstparty.isolate
   type: RelaxedAtomicBool
@@ -15277,9 +15305,16 @@
 
 - name: privacy.fingerprintingProtection.pbmode
   type: RelaxedAtomicBool
-  value: false
+  value: true
   mirror: always
   do_not_use_directly: true
+
+# Control whether we should check for system principal in the current JSContext
+# when checking for whether we should resist fingerprinting.
+- name: privacy.resistFingerprinting.principalCheckEnabled
+  type: RelaxedAtomicBool
+  value: true
+  mirror: always
 
 # Disables FPP Remote settings bucket. Allows user to stop overriding
 # of FPP overrides
@@ -16182,10 +16217,10 @@
 # 2: Enforce CT.
 - name: security.pki.certificate_transparency.mode
   type: RelaxedAtomicUint32
-#ifdef EARLY_BETA_OR_EARLIER
-  value: 2
-#else
+#if defined(ANDROID) && !defined(EARLY_BETA_OR_EARLIER)
   value: 0
+#else
+  value: 2
 #endif
   mirror: always
 

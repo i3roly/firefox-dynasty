@@ -89,6 +89,7 @@
 #include "mozilla/dom/LoadURIOptionsBinding.h"
 #include "mozilla/dom/JSWindowActorChild.h"
 #include "mozilla/dom/DocumentBinding.h"
+#include "mozilla/glean/DocshellMetrics.h"
 #include "mozilla/ipc/ProtocolUtils.h"
 #include "mozilla/net/DocumentChannel.h"
 #include "mozilla/net/DocumentChannelChild.h"
@@ -3613,10 +3614,16 @@ nsDocShell::DisplayLoadError(nsresult aError, nsIURI* aURI,
         addHostPort = true;
         break;
       case NS_ERROR_BLOCKED_BY_POLICY:
-      case NS_ERROR_DOM_COOP_FAILED:
-      case NS_ERROR_DOM_COEP_FAILED:
         // Page blocked by policy
         error = "blockedByPolicy";
+        break;
+      case NS_ERROR_DOM_COOP_FAILED:
+        error = "blockedByCOOP";
+        errorDescriptionID = "blockedByCORP";
+        break;
+      case NS_ERROR_DOM_COEP_FAILED:
+        error = "blockedByCOEP";
+        errorDescriptionID = "blockedByCORP";
         break;
       case NS_ERROR_NET_HTTP2_SENT_GOAWAY:
       case NS_ERROR_NET_HTTP3_PROTOCOL_ERROR:

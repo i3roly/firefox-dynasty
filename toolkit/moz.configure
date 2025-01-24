@@ -888,7 +888,6 @@ set_define("MOZ_JXL", jxl)
 set_config("MOZ_SAMPLE_TYPE_FLOAT32", True)
 set_define("MOZ_SAMPLE_TYPE_FLOAT32", True)
 
-set_define("MOZ_VORBIS", True)
 set_config("MOZ_VORBIS", True)
 
 option(
@@ -1194,7 +1193,6 @@ def app_system_headers(value):
 
 
 set_config("MOZ_APP_SYSTEM_HEADERS", app_system_headers)
-set_define("MOZ_APP_SYSTEM_HEADERS", app_system_headers)
 
 
 # Printing
@@ -1314,7 +1312,6 @@ def tree_freetype(target, skia_pdf):
 set_define("MOZ_TREE_FREETYPE", tree_freetype)
 set_config("MOZ_TREE_FREETYPE", tree_freetype)
 
-set_define("HAVE_FT_BITMAP_SIZE_Y_PPEM", tree_freetype)
 set_define("HAVE_FT_GLYPHSLOT_EMBOLDEN", tree_freetype)
 set_define("HAVE_FT_LOAD_SFNT_TABLE", tree_freetype)
 
@@ -1489,11 +1486,8 @@ def webrtc(enabled):
 set_config("MOZ_WEBRTC", webrtc)
 set_define("MOZ_WEBRTC", webrtc)
 set_config("MOZ_SCTP", webrtc)
-set_define("MOZ_SCTP", webrtc)
 set_config("MOZ_SRTP", webrtc)
-set_define("MOZ_SRTP", webrtc)
 set_config("MOZ_WEBRTC_SIGNALING", webrtc)
-set_define("MOZ_WEBRTC_SIGNALING", webrtc)
 set_config("MOZ_PEERCONNECTION", webrtc)
 set_define("MOZ_PEERCONNECTION", webrtc)
 # MOZ_WEBRTC_ASSERT_ALWAYS turns on a number of safety asserts in
@@ -2515,7 +2509,7 @@ with only_when(compile_environment):
                 "--with-system-png and set any necessary pkg-config environment variable."
             )
 
-    png = pkg_check_modules("MOZ_PNG", "libpng >= 1.6.35", when="--with-system-png")
+    png = pkg_check_modules("MOZ_PNG", "libpng >= 1.6.45", when="--with-system-png")
 
     check_symbol(
         "png_get_acTL",
@@ -2683,21 +2677,21 @@ set_config("NASM_ASFLAGS", nasm_asflags)
 # ANGLE OpenGL->D3D translator for WebGL
 # ==============================================================
 
-
 with only_when(compile_environment & target_is_windows):
     set_config("MOZ_ANGLE_RENDERER", True)
 
+with only_when(target_is_windows):
     option(
         "--enable-dxcompiler",
         default=milestone.is_nightly,
         help="{Enable|Disable} DXC for WebGPU on Windows",
     )
 
-    @depends("--enable-dxcompiler", target, valid_windows_sdk_dir)
+    @depends("--enable-dxcompiler", target, artifact_builds, valid_windows_sdk_dir)
     @checking("for dxcompiler.dll and dxil.dll")
     @imports("os.path")
-    def dxcompiler(enable_dxc, target, windows_sdk_dir):
-        if not windows_sdk_dir:
+    def dxcompiler(enable_dxc, target, artifact, windows_sdk_dir):
+        if not windows_sdk_dir and not artifact:
             return namespace(enabled=False)
         if not enable_dxc:
             return namespace(enabled=False)
@@ -2705,17 +2699,23 @@ with only_when(compile_environment & target_is_windows):
             "x86_64": "x64",
             "aarch64": "arm64",
         }.get(target.cpu, target.cpu)
-        sdk_d3d_path = os.path.join(windows_sdk_dir.path, "Redist", "D3D", arch)
+
         dxc_name = "dxcompiler.dll"
-        dxc_path = os.path.join(sdk_d3d_path, dxc_name)
-        if not os.path.exists(dxc_path):
-            die("Could not find dxcompiler.dll at {}", dxc_path)
         dxil_name = "dxil.dll"
-        dxil_path = os.path.join(sdk_d3d_path, dxil_name)
-        if not os.path.exists(dxil_path):
-            die("Could not find dxil.dll at {}", dxil_path)
+        dxc_path = ""
+        dxil_path = ""
+        if not artifact:
+            sdk_d3d_path = os.path.join(windows_sdk_dir.path, "Redist", "D3D", arch)
+            dxc_path = os.path.join(sdk_d3d_path, dxc_name)
+            dxil_path = os.path.join(sdk_d3d_path, dxil_name)
+            if not os.path.exists(dxc_path):
+                die("Could not find dxcompiler.dll at {}", dxc_path)
+            if not os.path.exists(dxil_path):
+                die("Could not find dxil.dll at {}", dxil_path)
+
         return namespace(
             enabled=True,
+            from_sdk=not artifact,
             dxc_name=dxc_name,
             dxc_path=dxc_path,
             dxil_name=dxil_name,
@@ -2723,12 +2723,13 @@ with only_when(compile_environment & target_is_windows):
         )
 
     with only_when(dxcompiler.enabled):
+        set_config("MOZ_DXCOMPILER", True)
         set_define("MOZ_DXCOMPILER", 1)
         set_define("MOZ_DXC_DLL_NAME", dxcompiler.dxc_name)
         set_define("MOZ_DXIL_DLL_NAME", dxcompiler.dxil_name)
-        set_config("MOZ_DXCOMPILER", True)
-        set_config("MOZ_DXC_DLL_PATH", dxcompiler.dxc_path)
-        set_config("MOZ_DXIL_DLL_PATH", dxcompiler.dxil_path)
+        with only_when(dxcompiler.from_sdk):
+            set_config("MOZ_DXC_DLL_PATH", dxcompiler.dxc_path)
+            set_config("MOZ_DXIL_DLL_PATH", dxcompiler.dxil_path)
 
 
 # Remoting protocol support
@@ -3238,12 +3239,6 @@ wine = check_prog(
     bootstrap="wine/bin",
 )
 
-# DOM Streams
-# ==============================================================
-# Set this to true so the JS engine knows we're doing a browser build.
-set_config("MOZ_DOM_STREAMS", True)
-set_define("MOZ_DOM_STREAMS", True)
-
 # libevent
 # ==============================================================
 with only_when(compile_environment):
@@ -3417,7 +3412,6 @@ with only_when(toolkit_gtk):
         pkg_check_modules("MOZ_LIBPROXY", "libproxy-1.0")
 
         set_config("MOZ_ENABLE_LIBPROXY", True)
-        set_define("MOZ_ENABLE_LIBPROXY", True)
 
 
 # Enable runtime logging

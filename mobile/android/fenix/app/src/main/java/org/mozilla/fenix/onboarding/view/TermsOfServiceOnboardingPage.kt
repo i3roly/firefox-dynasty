@@ -69,6 +69,15 @@ fun TermsOfServiceOnboardingPage(
                     textAlign = TextAlign.Center,
                     style = FirefoxTheme.typography.headline5,
                 )
+
+                Spacer(Modifier.height(8.dp))
+
+                Text(
+                    text = description,
+                    color = FirefoxTheme.colors.textSecondary,
+                    textAlign = TextAlign.Center,
+                    style = FirefoxTheme.typography.subtitle1,
+                )
             }
 
             Spacer(Modifier.height(50.dp))
@@ -175,12 +184,12 @@ private fun OnboardingPagePreview() {
         TermsOfServiceOnboardingPage(
             pageState = OnboardingPageState(
                 title = stringResource(id = R.string.onboarding_welcome_to_firefox),
-                description = "",
+                description = stringResource(id = R.string.onboarding_terms_of_service_sub_header_2),
                 termsOfService = OnboardingTermsOfService(
-                    lineOneText = stringResource(id = R.string.onboarding_term_of_service_line_one),
-                    lineOneLinkText = stringResource(id = R.string.onboarding_term_of_service_line_one_link_text),
+                    lineOneText = stringResource(id = R.string.onboarding_term_of_service_line_one_2),
+                    lineOneLinkText = stringResource(id = R.string.onboarding_term_of_service_line_one_link_text_2),
                     lineOneLinkUrl = "URL",
-                    lineTwoText = stringResource(id = R.string.onboarding_term_of_service_line_two),
+                    lineTwoText = stringResource(id = R.string.onboarding_term_of_service_line_two_2),
                     lineTwoLinkText = stringResource(id = R.string.onboarding_term_of_service_line_two_link_text),
                     lineTwoLinkUrl = "URL",
                     lineThreeText = stringResource(id = R.string.onboarding_term_of_service_line_three),

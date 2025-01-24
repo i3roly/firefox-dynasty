@@ -939,7 +939,7 @@ void PresShell::Init(nsPresContext* aPresContext, nsViewManager* aViewManager) {
     mAccessibleCaretEventHub->Init();
   }
 
-  mSelection = new nsFrameSelection(this, nullptr, accessibleCaretEnabled);
+  mSelection = new nsFrameSelection(this, accessibleCaretEnabled);
 
   // Important: this has to happen after the selection has been set up
 #ifdef SHOW_CARET
@@ -2462,7 +2462,7 @@ PresShell::CompleteMove(bool aForward, bool aExtend) {
   // Beware! This may flush notifications via synchronous
   // ScrollSelectionIntoView.
   RefPtr<nsFrameSelection> frameSelection = mSelection;
-  nsIContent* limiter = frameSelection->GetAncestorLimiter();
+  Element* const limiter = frameSelection->GetAncestorLimiter();
   nsIFrame* frame = limiter ? limiter->GetPrimaryFrame()
                             : FrameConstructor()->GetRootElementFrame();
   if (!frame) {
@@ -3793,8 +3793,10 @@ bool PresShell::ScrollFrameIntoView(
     // If we're targetting a sticky element, make sure not to apply
     // scroll-padding on the direction we're stuck.
     const auto* stylePosition = aFrame->StylePosition();
+    const auto positionProperty = aFrame->StyleDisplay()->mPosition;
     for (auto side : AllPhysicalSides()) {
-      if (stylePosition->GetInset(side).IsAuto()) {
+      if (stylePosition->GetAnchorResolvedInset(side, positionProperty)
+              .IsAuto()) {
         continue;
       }
       // See if this axis is stuck.
@@ -7153,7 +7155,7 @@ nsresult PresShell::EventHandler::HandleEvent(nsIFrame* aFrameForPresShell,
   // the next transasction that gets sent to the compositor will carry this over
   if (mPresShell->mAPZFocusSequenceNumber < aGUIEvent->mFocusSequenceNumber) {
     mPresShell->mAPZFocusSequenceNumber = aGUIEvent->mFocusSequenceNumber;
-    if (aFrameForPresShell) {
+    if (aFrameForPresShell && StaticPrefs::apz_keyboard_focus_optimization()) {
       aFrameForPresShell->SchedulePaint(nsIFrame::PAINT_COMPOSITE_ONLY);
     }
   }
@@ -11344,7 +11346,7 @@ void PresShell::SetIsActive(bool aIsActive) {
   }
 }
 
-RefPtr<MobileViewportManager> PresShell::GetMobileViewportManager() const {
+MobileViewportManager* PresShell::GetMobileViewportManager() const {
   return mMobileViewportManager;
 }
 
@@ -11416,7 +11418,12 @@ void PresShell::MaybeRecreateMobileViewportManager(bool aAfterInitialization) {
           ("Created MVM %p (type %d) for URI %s", mMobileViewportManager.get(),
            (int)*mvmType, uri ? uri->GetSpecOrDefault().get() : "(null)"));
     }
+    if (BrowserChild* browserChild = BrowserChild::GetFrom(this)) {
+      mMobileViewportManager->UpdateKeyboardHeight(
+          browserChild->GetKeyboardHeight());
+    }
   }
+
   if (aAfterInitialization) {
     // Setting the initial viewport will trigger a reflow.
     if (mMobileViewportManager) {

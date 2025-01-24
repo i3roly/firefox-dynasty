@@ -716,19 +716,40 @@ static inline bool SortBefore(LiveRange* a, LiveRange* b) {
 }
 
 template <typename T>
-static inline void InsertSortedList(InlineForwardList<T>& list, T* value) {
+static void InsertSortedList(InlineForwardList<T>& list, T* value,
+                             T* startAt = nullptr) {
   if (list.empty()) {
+    MOZ_ASSERT(!startAt);
     list.pushFront(value);
     return;
   }
+
+#ifdef DEBUG
+  if (startAt) {
+    // `startAt` must be an element in `list` that sorts before `value`.
+    MOZ_ASSERT(SortBefore(startAt, value));
+    MOZ_ASSERT_IF(*list.begin() == list.back(), list.back() == startAt);
+    MOZ_ASSERT_IF(startAt != *list.begin(), SortBefore(*list.begin(), startAt));
+    MOZ_ASSERT_IF(startAt != list.back(), SortBefore(startAt, list.back()));
+  }
+#endif
 
   if (SortBefore(list.back(), value)) {
     list.pushBack(value);
     return;
   }
 
+  // If `startAt` is non-nullptr, we can start iterating there.
   T* prev = nullptr;
-  for (InlineForwardListIterator<T> iter = list.begin(); iter; iter++) {
+  InlineForwardListIterator<T> iter =
+      startAt ? list.begin(startAt) : list.begin();
+  if (startAt) {
+    // `value` must sort after `startAt` so skip to the next element.
+    MOZ_ASSERT(!SortBefore(value, *iter));
+    ++iter;
+    prev = startAt;
+  }
+  for (; iter; iter++) {
     if (SortBefore(value, *iter)) {
       break;
     }
@@ -925,20 +946,32 @@ LiveRange* LiveBundle::rangeFor(CodePosition pos) const {
   return nullptr;
 }
 
-void LiveBundle::addRange(LiveRange* range) {
+void LiveBundle::addRange(LiveRange* range,
+                          LiveRange* startAt /* = nullptr */) {
   MOZ_ASSERT(!range->bundle());
   MOZ_ASSERT(range->hasVreg());
+  MOZ_ASSERT_IF(startAt, startAt->bundle() == this);
   range->setBundle(this);
-  InsertSortedList(ranges_, range);
+  InsertSortedList(ranges_, range, startAt);
 }
 
-bool LiveBundle::addRange(TempAllocator& alloc, VirtualRegister* vreg,
-                          CodePosition from, CodePosition to) {
+void LiveBundle::addRangeAtEnd(LiveRange* range) {
+  // Note: this method is functionally equivalent to `addRange`, but can be used
+  // when we know `range` must be added after all existing ranges in the bundle.
+  MOZ_ASSERT(!range->bundle());
+  MOZ_ASSERT(range->hasVreg());
+  MOZ_ASSERT_IF(!ranges_.empty(), SortBefore(ranges_.back(), range));
+  range->setBundle(this);
+  ranges_.pushBack(range);
+}
+
+bool LiveBundle::addRangeAtEnd(TempAllocator& alloc, VirtualRegister* vreg,
+                               CodePosition from, CodePosition to) {
   LiveRange* range = LiveRange::FallibleNew(alloc, vreg, from, to);
   if (!range) {
     return false;
   }
-  addRange(range);
+  addRangeAtEnd(range);
   return true;
 }
 
@@ -1408,6 +1441,14 @@ bool BacktrackingAllocator::minimalUse(LiveRange* range, UsePosition* use) {
 }
 
 bool BacktrackingAllocator::minimalBundle(LiveBundle* bundle, bool* pfixed) {
+  // Return true iff |bundle| is a minimal bundle. A minimal bundle is a bundle
+  // that can't be split further. Minimal bundles have a single (very short)
+  // range.
+  //
+  // If the bundle is minimal we also set the |*pfixed| outparam to indicate
+  // whether the bundle must be allocated to a fixed register. The value of
+  // |*pfixed| is undefined if this function returns false.
+
   LiveBundle::RangeIterator iter = bundle->rangesBegin();
   LiveRange* range = *iter;
 
@@ -1421,11 +1462,25 @@ bool BacktrackingAllocator::minimalBundle(LiveBundle* bundle, bool* pfixed) {
 
   if (range->hasDefinition()) {
     VirtualRegister& reg = range->vreg();
+    if (!minimalDef(range, reg.ins())) {
+      return false;
+    }
     if (pfixed) {
       *pfixed = reg.def()->policy() == LDefinition::FIXED &&
                 reg.def()->output()->isRegister();
     }
-    return minimalDef(range, reg.ins());
+    return true;
+  }
+
+  // Performance optimization: |minimalUse| will only return true for length-1
+  // or length-2 ranges so if this is a longer range it can't be minimal.
+  if (range->to() - range->from() > 2) {
+#ifdef DEBUG
+    for (UsePositionIterator iter = range->usesBegin(); iter; iter++) {
+      MOZ_ASSERT(!minimalUse(range, *iter));
+    }
+#endif
+    return false;
   }
 
   bool fixed = false, minimal = false, multiple = false;
@@ -1460,13 +1515,16 @@ bool BacktrackingAllocator::minimalBundle(LiveBundle* bundle, bool* pfixed) {
   // If a range contains a fixed use and at least one other use,
   // splitAtAllRegisterUses will split each use into a different bundle.
   if (multiple && fixed) {
-    minimal = false;
+    return false;
   }
 
+  if (!minimal) {
+    return false;
+  }
   if (pfixed) {
     *pfixed = fixed;
   }
-  return minimal;
+  return true;
 }
 
 size_t BacktrackingAllocator::computeSpillWeight(LiveBundle* bundle) {
@@ -2119,9 +2177,18 @@ bool BacktrackingAllocator::tryMergeBundles(LiveBundle* bundle0,
     }
   }
 
-  // Move all ranges from bundle1 into bundle0.
-  while (LiveRange* range = bundle1->popFirstRange()) {
-    bundle0->addRange(range);
+  // Move all ranges from bundle1 into bundle0. Use a fast path for the case
+  // where we can add all ranges from bundle1 at the end of bundle0.
+  if (SortBefore(bundle0->lastRange(), bundle1->firstRange())) {
+    while (LiveRange* range = bundle1->popFirstRange()) {
+      bundle0->addRangeAtEnd(range);
+    }
+  } else {
+    LiveRange* prevRange = nullptr;
+    while (LiveRange* range = bundle1->popFirstRange()) {
+      bundle0->addRange(range, prevRange);
+      prevRange = range;
+    }
   }
 
   return true;
@@ -2281,7 +2348,7 @@ bool BacktrackingAllocator::tryMergeReusedRegister(VirtualRegister& def,
   if (!secondBundle) {
     return false;
   }
-  secondBundle->addRange(postRange);
+  secondBundle->addRangeAtEnd(postRange);
 
   return tryMergeBundles(def.firstBundle(), input.firstBundle());
 }
@@ -2302,7 +2369,7 @@ bool BacktrackingAllocator::mergeAndQueueRegisters() {
       return false;
     }
     for (VirtualRegister::RangeIterator iter(reg); iter; iter++) {
-      bundle->addRange(*iter);
+      bundle->addRangeAtEnd(*iter);
     }
   }
 
@@ -2712,8 +2779,8 @@ bool BacktrackingAllocator::splitAt(LiveBundle* bundle,
       }
 
       if (from < range->to()) {
-        if (!spillBundle->addRange(alloc(), &range->vreg(), from,
-                                   range->to())) {
+        if (!spillBundle->addRangeAtEnd(alloc(), &range->vreg(), from,
+                                        range->to())) {
           return false;
         }
 
@@ -2754,7 +2821,7 @@ bool BacktrackingAllocator::splitAt(LiveBundle* bundle,
     if (!activeRange) {
       return false;
     }
-    activeBundle->addRange(activeRange);
+    activeBundle->addRangeAtEnd(activeRange);
 
     if (isRegisterDefinition(range)) {
       activeRange->setHasDefinition();
@@ -2792,7 +2859,7 @@ bool BacktrackingAllocator::splitAt(LiveBundle* bundle,
           if (!activeRange) {
             return false;
           }
-          activeBundle->addRange(activeRange);
+          activeBundle->addRangeAtEnd(activeRange);
         }
 
         activeRange->addUse(use);

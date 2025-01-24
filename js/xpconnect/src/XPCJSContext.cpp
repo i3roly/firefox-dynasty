@@ -23,6 +23,7 @@
 #include "nsIDebug2.h"
 #include "nsPIDOMWindow.h"
 #include "nsPrintfCString.h"
+#include "mozilla/AppShutdown.h"
 #include "mozilla/Preferences.h"
 #include "mozilla/Telemetry.h"
 #include "mozilla/MemoryTelemetry.h"
@@ -34,6 +35,7 @@
 #include "mozilla/StaticPrefs_browser.h"
 #include "mozilla/StaticPrefs_javascript.h"
 #include "mozilla/dom/ScriptSettings.h"
+#include "mozilla/glean/JsXpconnectMetrics.h"
 
 #include "nsContentUtils.h"
 #include "nsCCUncollectableMarker.h"

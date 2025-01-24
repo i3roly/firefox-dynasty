@@ -117,6 +117,9 @@ pref("dom.indexedDB.logging.details", true);
 // Enable profiler marks for indexedDB events.
 pref("dom.indexedDB.logging.profiler-marks", false);
 
+// Enable adding/getting ~1042MB of data.
+pref("dom.indexedDB.maxSerializedMsgSize", 1092616192);
+
 // The number of workers per domain allowed to run concurrently.
 // We're going for effectively infinite, while preventing abuse.
 pref("dom.workers.maxPerDomain", 512);
@@ -3081,12 +3084,6 @@ pref("network.tcp.keepalive.idle_time", 600); // seconds; 10 mins
 #if defined(XP_UNIX) && !defined(XP_MACOSX)
   pref("network.tcp.keepalive.probe_count", 4);
 #endif
-
-// This pref controls if we send the "public-suffix-list-updated" notification
-// from PublicSuffixList.onUpdate() - Doing so would cause the PSL graph to
-// be updated while Firefox is running which may cause principals to have an
-// inconsistent state. See bug 1582647 comment 30
-pref("network.psl.onUpdate_notify", false);
 
 #ifdef MOZ_WIDGET_GTK
   pref("widget.disable-workspace-management", false);

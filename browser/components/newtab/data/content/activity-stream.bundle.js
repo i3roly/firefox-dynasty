@@ -210,7 +210,6 @@ for (const type of [
   "SECTION_DEREGISTER",
   "SECTION_DISABLE",
   "SECTION_ENABLE",
-  "SECTION_MOVE",
   "SECTION_OPTIONS_CHANGED",
   "SECTION_REGISTER",
   "SECTION_UPDATE",
@@ -256,7 +255,6 @@ for (const type of [
   "UNINIT",
   "UPDATE_PINNED_SEARCH_SHORTCUTS",
   "UPDATE_SEARCH_SHORTCUTS",
-  "UPDATE_SECTION_PREFS",
   "WALLPAPERS_CATEGORY_SET",
   "WALLPAPERS_FEATURE_HIGHLIGHT_COUNTER_INCREMENT",
   "WALLPAPERS_FEATURE_HIGHLIGHT_CTA_CLICKED",
@@ -4245,7 +4243,7 @@ const AdBanner = ({
   // using clamp to make sure its between valid values (1-9)
   const clampedRow = Math.max(1, Math.min(9, row));
   return /*#__PURE__*/external_React_default().createElement("aside", {
-    className: `ad-banner-wrapper`,
+    className: "ad-banner-wrapper",
     style: {
       gridRow: clampedRow
     }
@@ -4709,14 +4707,37 @@ class _CardGrid extends (external_React_default()).PureComponent {
       }) => format === "billboard" && billboardEnabled);
       if (spocToRender && !spocs.blocked.includes(spocToRender.url)) {
         const row = spocToRender.format === "leaderboard" ? prefs[PREF_LEADERBOARD_POSITION] : prefs[PREF_BILLBOARD_POSITION];
-        cards.push( /*#__PURE__*/external_React_default().createElement(AdBanner, {
-          spoc: spocToRender,
-          key: `dscard-${spocToRender.id}`,
-          dispatch: this.props.dispatch,
-          type: this.props.type,
-          firstVisibleTimestamp: this.props.firstVisibleTimestamp,
-          row: row
-        }));
+        function displayCardsPerRow() {
+          // Determines the number of cards per row based on the window width:
+          // width <= 1122px: 2 cards per row
+          // width 1123px to 1697px: 3 cards per row
+          // width >= 1698px: 4 cards per row
+          if (window.innerWidth <= 1122) {
+            return 2;
+          } else if (window.innerWidth > 1122 && window.innerWidth < 1698) {
+            return 3;
+          }
+          return 4;
+        }
+        const injectAdBanner = bannerIndex => {
+          // .splice() inserts the AdBanner at the desired index, ensuring correct DOM order for accessibility and keyboard navigation.
+          // .push() would place it at the end, which is visually incorrect even if adjusted with CSS.
+          cards.splice(bannerIndex, 0, /*#__PURE__*/external_React_default().createElement(AdBanner, {
+            spoc: spocToRender,
+            key: `dscard-${spocToRender.id}`,
+            dispatch: this.props.dispatch,
+            type: this.props.type,
+            firstVisibleTimestamp: this.props.firstVisibleTimestamp,
+            row: row
+          }));
+        };
+        const getBannerIndex = () => {
+          // Calculate the index for where the AdBanner should be added, depending on number of cards per row on the grid
+          const cardsPerRow = displayCardsPerRow();
+          let bannerIndex = (row - 1) * cardsPerRow;
+          return bannerIndex;
+        };
+        injectAdBanner(getBannerIndex());
       }
     }
     let moreRecsHeader = "";
@@ -7484,11 +7505,19 @@ function Notifications(prevState = INITIAL_STATE.Notifications, action) {
         toastId: action.data.toastId,
         toastQueue: [action.data.toastId],
       };
-    case actionTypes.HIDE_TOAST_MESSAGE:
+    case actionTypes.HIDE_TOAST_MESSAGE: {
+      const { showNotifications, toastId: hiddenToastId } = action.data;
+      const queuedToasts = [...prevState.toastQueue].filter(
+        toastId => toastId !== hiddenToastId
+      );
       return {
         ...prevState,
-        showNotifications: action.data.showNotifications,
+        toastCounter: queuedToasts.length,
+        toastQueue: queuedToasts,
+        toastId: "",
+        showNotifications,
       };
+    }
     default:
       return prevState;
   }
@@ -8090,7 +8119,8 @@ class TopSiteLink extends (external_React_default()).PureComponent {
       onKeyPress: this.onKeyPress,
       onClick: onClick,
       draggable: true,
-      "data-is-sponsored-link": !!link.sponsored_tile_id
+      "data-is-sponsored-link": !!link.sponsored_tile_id,
+      title: title
     }, /*#__PURE__*/external_React_default().createElement("div", {
       className: "tile",
       "aria-hidden": true
@@ -8112,6 +8142,7 @@ class TopSiteLink extends (external_React_default()).PureComponent {
     })), /*#__PURE__*/external_React_default().createElement("div", {
       className: `title${link.isPinned ? " has-icon pinned" : ""}${link.type === SPOC_TYPE || link.show_sponsored_label ? " sponsored" : ""}`
     }, /*#__PURE__*/external_React_default().createElement("span", TopSite_extends({
+      className: "title-label",
       dir: "auto"
     }, isAddButton && {
       ...addButtonl10n
@@ -8290,7 +8321,7 @@ class TopSite extends (external_React_default()).PureComponent {
       link
     } = props;
     const isContextMenuOpen = props.activeIndex === props.index;
-    const title = link.label || link.hostname;
+    const title = link.label || link.title || link.hostname;
     let menuOptions;
     if (link.sponsored_position) {
       menuOptions = TOP_SITES_SPONSORED_POSITION_CONTEXT_MENU_OPTIONS;
@@ -9975,6 +10006,14 @@ function getLayoutData(responsiveLayouts, index) {
       if (tile.position === index) {
         layoutData.classNames.push(`col-${layout.columnCount}-${tile.size}`);
         layoutData.classNames.push(`col-${layout.columnCount}-position-${tileIndex}`);
+
+        // The API tells us whether the tile should show the excerpt or not.
+        // Apply extra styles accordingly.
+        if (tile.hasExcerpt) {
+          layoutData.classNames.push(`col-${layout.columnCount}-show-excerpt`);
+        } else {
+          layoutData.classNames.push(`col-${layout.columnCount}-hide-excerpt`);
+        }
       }
     });
   });
@@ -12138,50 +12177,36 @@ const Weather_Weather = (0,external_ReactRedux_namespaceObject.connect)(state =>
   IntersectionObserver: globalThis.IntersectionObserver,
   document: globalThis.document
 }))(_Weather);
-;// CONCATENATED MODULE: ./content-src/components/Notifications/Toasts/ThumbsUpToast.jsx
+;// CONCATENATED MODULE: ./content-src/components/Notifications/Toasts/ThumbUpThumbDownToast.jsx
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 
-function ThumbsUpToast({
-  onDismissClick
+function ThumbUpThumbDownToast({
+  onDismissClick,
+  onAnimationEnd
 }) {
-  return /*#__PURE__*/external_React_default().createElement("div", {
-    className: "notification-feed-item is-success"
-  }, /*#__PURE__*/external_React_default().createElement("div", {
-    className: "icon icon-check-filled icon-themed"
-  }), /*#__PURE__*/external_React_default().createElement("div", {
-    className: "notification-feed-item-text",
-    "data-l10n-id": "newtab-toast-thumbs-up-or-down"
-  }), /*#__PURE__*/external_React_default().createElement("button", {
-    onClick: onDismissClick,
-    className: "icon icon-dismiss",
-    "data-l10n-id": "newtab-toast-dismiss-button"
-  }));
-}
-
-;// CONCATENATED MODULE: ./content-src/components/Notifications/Toasts/ThumbsDownToast.jsx
-/* This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this file,
- * You can obtain one at http://mozilla.org/MPL/2.0/. */
-
-
-function ThumbsDownToast({
-  onDismissClick
-}) {
-  return /*#__PURE__*/external_React_default().createElement("div", {
-    className: "notification-feed-item is-success"
-  }, /*#__PURE__*/external_React_default().createElement("div", {
-    className: "icon icon-check-filled icon-themed"
-  }), /*#__PURE__*/external_React_default().createElement("div", {
-    className: "notification-feed-item-text",
-    "data-l10n-id": "newtab-toast-thumbs-up-or-down"
-  }), /*#__PURE__*/external_React_default().createElement("button", {
-    onClick: onDismissClick,
-    className: "icon icon-dismiss",
-    "data-l10n-id": "newtab-toast-dismiss-button"
-  }));
+  const mozMessageBarRef = (0,external_React_namespaceObject.useRef)(null);
+  (0,external_React_namespaceObject.useEffect)(() => {
+    const {
+      current: mozMessageBarElement
+    } = mozMessageBarRef;
+    mozMessageBarElement.addEventListener("message-bar:user-dismissed", onDismissClick, {
+      once: true
+    });
+    return () => {
+      mozMessageBarElement.removeEventListener("message-bar:user-dismissed", onDismissClick);
+    };
+  }, [onDismissClick]);
+  return /*#__PURE__*/external_React_default().createElement("moz-message-bar", {
+    type: "success",
+    class: "notification-feed-item",
+    dismissable: true,
+    "data-l10n-id": "newtab-toast-thumbs-up-or-down2",
+    ref: mozMessageBarRef,
+    onAnimationEnd: onAnimationEnd
+  });
 }
 
 ;// CONCATENATED MODULE: ./content-src/components/Notifications/Notifications.jsx
@@ -12193,46 +12218,48 @@ function ThumbsDownToast({
 
 
 
-
 function Notifications_Notifications({
   dispatch
 }) {
   const toastQueue = (0,external_ReactRedux_namespaceObject.useSelector)(state => state.Notifications.toastQueue);
   const toastCounter = (0,external_ReactRedux_namespaceObject.useSelector)(state => state.Notifications.toastCounter);
-  const onDismissClick = (0,external_React_namespaceObject.useCallback)(() => {
+
+  /**
+   * Syncs {@link toastQueue} array so it can be used to
+   * remove the toasts wrapper if there are none after a
+   * toast is auto-hidden (animated out) via CSS.
+   */
+  const syncHiddenToastData = (0,external_React_namespaceObject.useCallback)(() => {
+    const toastId = toastQueue[toastQueue.length - 1];
+    const queuedToasts = [...toastQueue].slice(1);
     dispatch(actionCreators.OnlyToOneContent({
       type: actionTypes.HIDE_TOAST_MESSAGE,
       data: {
+        toastQueue: queuedToasts,
+        toastCounter: queuedToasts.length,
+        toastId,
         showNotifications: false
       }
     }, "ActivityStream:Content"));
-  }, [dispatch]);
+  }, [dispatch, toastQueue]);
   const getToast = (0,external_React_namespaceObject.useCallback)(() => {
     // Note: This architecture could expand to support multiple toast notifications at once
     const latestToastItem = toastQueue[toastQueue.length - 1];
-    switch (latestToastItem) {
-      case "thumbsDownToast":
-        return /*#__PURE__*/external_React_default().createElement(ThumbsDownToast, {
-          onDismissClick: onDismissClick,
-          key: toastCounter
-        });
-      case "thumbsUpToast":
-        return /*#__PURE__*/external_React_default().createElement(ThumbsUpToast, {
-          onDismissClick: onDismissClick,
-          key: toastCounter
-        });
-      default:
-        throw new Error("No toast found");
+    if (!latestToastItem) {
+      throw new Error("No toast found");
     }
-  }, [onDismissClick, toastCounter, toastQueue]);
+    return /*#__PURE__*/external_React_default().createElement(ThumbUpThumbDownToast, {
+      onDismissClick: syncHiddenToastData,
+      onAnimationEnd: syncHiddenToastData,
+      key: toastCounter
+    });
+  }, [syncHiddenToastData, toastCounter, toastQueue]);
   (0,external_React_namespaceObject.useEffect)(() => {
     getToast();
   }, [toastQueue, getToast]);
-  return /*#__PURE__*/external_React_default().createElement("div", {
+  return toastQueue.length ? /*#__PURE__*/external_React_default().createElement("div", {
     className: "notification-wrapper"
-  }, /*#__PURE__*/external_React_default().createElement("ul", {
-    className: "notification-feed"
-  }, getToast()));
+  }, getToast()) : "";
 }
 
 ;// CONCATENATED MODULE: ./content-src/components/DiscoveryStreamComponents/TopicSelection/TopicSelection.jsx

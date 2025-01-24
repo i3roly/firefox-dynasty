@@ -2020,6 +2020,7 @@ __webpack_require__.r(__webpack_exports__);
 
 
 const HEADER_STYLES = ["backgroundColor", "border", "padding", "margin", "width", "height"];
+const TILE_STYLES = ["marginBlock", "marginInline", "paddingBlock", "paddingInline"];
 const ContentTiles = props => {
   const {
     content
@@ -2043,22 +2044,27 @@ const ContentTiles = props => {
     } = tile;
     return /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("div", {
       key: index,
-      className: "content-tile"
+      className: `content-tile ${header ? "has-header" : ""}`,
+      style: _lib_aboutwelcome_utils_mjs__WEBPACK_IMPORTED_MODULE_9__.AboutWelcomeUtils.getValidStyle(tile.style, TILE_STYLES)
     }, header?.title && /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("button", {
       className: "tile-header",
       onClick: () => toggleTile(index, tile),
       "aria-expanded": isExpanded,
       "aria-controls": `tile-content-${index}`,
       style: _lib_aboutwelcome_utils_mjs__WEBPACK_IMPORTED_MODULE_9__.AboutWelcomeUtils.getValidStyle(header.style, HEADER_STYLES)
+    }, /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("div", {
+      className: "header-text-container"
     }, /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement(_MSLocalized__WEBPACK_IMPORTED_MODULE_1__.Localized, {
-      text: header
+      text: header.title
     }, /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("span", {
       className: "header-title"
-    }, header.title)), /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement(_MSLocalized__WEBPACK_IMPORTED_MODULE_1__.Localized, {
-      text: header
-    }, header.subtitle && /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("span", {
+    })), header.subtitle && /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement(_MSLocalized__WEBPACK_IMPORTED_MODULE_1__.Localized, {
+      text: header.subtitle
+    }, /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("span", {
       className: "header-subtitle"
-    }, header.subtitle))), isExpanded || !header ? /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("div", {
+    }))), /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("div", {
+      className: "arrow-icon"
+    })), isExpanded || !header ? /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("div", {
       className: "tile-content",
       id: `tile-content-${index}`
     }, tile.type === "addons-picker" && tile.data && /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement(_AddonsPicker__WEBPACK_IMPORTED_MODULE_2__.AddonsPicker, {
@@ -2476,6 +2482,14 @@ __webpack_require__.r(__webpack_exports__);
 
 
 const MULTI_SELECT_STYLES = [..._MSLocalized__WEBPACK_IMPORTED_MODULE_1__.CONFIGURABLE_STYLES, "flexDirection", "flexWrap", "flexFlow", "flexGrow", "flexShrink", "justifyContent", "alignItems", "gap"];
+const TILE_STYLES = ["marginBlock", "marginInline", "paddingBlock", "paddingInline"];
+
+// Do not include styles applied at the content tile level
+for (let i = MULTI_SELECT_STYLES.length - 1; i >= 0; i--) {
+  if (TILE_STYLES.includes(MULTI_SELECT_STYLES[i])) {
+    MULTI_SELECT_STYLES.splice(i, 1);
+  }
+}
 const MULTI_SELECT_ICON_STYLES = [..._MSLocalized__WEBPACK_IMPORTED_MODULE_1__.CONFIGURABLE_STYLES, "width", "height", "background", "backgroundColor", "backgroundImage", "backgroundSize", "backgroundPosition", "backgroundRepeat", "backgroundOrigin", "backgroundClip", "border", "borderRadius", "appearance", "fill", "stroke", "outline", "outlineOffset", "boxShadow"];
 const MultiSelect = ({
   content,

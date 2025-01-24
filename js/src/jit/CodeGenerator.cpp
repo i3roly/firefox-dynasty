@@ -11304,6 +11304,15 @@ void CodeGenerator::visitSignDI(LSignDI* ins) {
   bailoutFrom(&bail, ins->snapshot());
 }
 
+void CodeGenerator::visitSignID(LSignID* ins) {
+  Register input = ToRegister(ins->input());
+  Register temp = ToRegister(ins->temp0());
+  FloatRegister output = ToFloatRegister(ins->output());
+
+  masm.signInt32(input, temp);
+  masm.convertInt32ToDouble(temp, output);
+}
+
 void CodeGenerator::visitMathFunctionD(LMathFunctionD* ins) {
   FloatRegister input = ToFloatRegister(ins->input());
   MOZ_ASSERT(ToFloatRegister(ins->output()) == ReturnDoubleReg);
@@ -17030,7 +17039,7 @@ bool CodeGenerator::link(JSContext* cx) {
   return true;
 }
 
-// An out-of-line path to convert a boxed int32 to either a float or double.
+// An out-of-line path to convert a boxed int32 to double.
 class OutOfLineUnboxFloatingPoint : public OutOfLineCodeBase<CodeGenerator> {
   LUnboxFloatingPoint* unboxFloatingPoint_;
 
@@ -17060,9 +17069,6 @@ void CodeGenerator::visitUnboxFloatingPoint(LUnboxFloatingPoint* lir) {
   FloatRegister resultReg = ToFloatRegister(result);
   masm.branchTestDouble(Assembler::NotEqual, box, ool->entry());
   masm.unboxDouble(box, resultReg);
-  if (lir->type() == MIRType::Float32) {
-    masm.convertDoubleToFloat32(resultReg, resultReg);
-  }
   masm.bind(ool->rejoin());
 }
 
@@ -17076,13 +17082,8 @@ void CodeGenerator::visitOutOfLineUnboxFloatingPoint(
     masm.branchTestInt32(Assembler::NotEqual, value, &bail);
     bailoutFrom(&bail, ins->snapshot());
   }
-  if (ins->type() == MIRType::Float32) {
-    masm.convertInt32ToFloat32(value.payloadOrValueReg(),
-                               ToFloatRegister(ins->output()));
-  } else {
-    masm.convertInt32ToDouble(value.payloadOrValueReg(),
-                              ToFloatRegister(ins->output()));
-  }
+  masm.convertInt32ToDouble(value.payloadOrValueReg(),
+                            ToFloatRegister(ins->output()));
   masm.jump(ool->rejoin());
 }
 
@@ -18812,114 +18813,6 @@ void CodeGenerator::visitLoadTypedArrayElementHoleBigInt(
   masm.bind(&done);
 }
 
-template <SwitchTableType tableType>
-class OutOfLineSwitch : public OutOfLineCodeBase<CodeGenerator> {
-  using LabelsVector = Vector<Label, 0, JitAllocPolicy>;
-  using CodeLabelsVector = Vector<CodeLabel, 0, JitAllocPolicy>;
-  LabelsVector labels_;
-  CodeLabelsVector codeLabels_;
-  CodeLabel start_;
-  bool isOutOfLine_;
-
-  void accept(CodeGenerator* codegen) override {
-    codegen->visitOutOfLineSwitch(this);
-  }
-
- public:
-  explicit OutOfLineSwitch(TempAllocator& alloc)
-      : labels_(alloc), codeLabels_(alloc), isOutOfLine_(false) {}
-
-  CodeLabel* start() { return &start_; }
-
-  CodeLabelsVector& codeLabels() { return codeLabels_; }
-  LabelsVector& labels() { return labels_; }
-
-  void jumpToCodeEntries(MacroAssembler& masm, Register index, Register temp) {
-    Register base;
-    if (tableType == SwitchTableType::Inline) {
-#if defined(JS_CODEGEN_ARM)
-      base = ::js::jit::pc;
-#else
-      MOZ_CRASH("NYI: SwitchTableType::Inline");
-#endif
-    } else {
-#if defined(JS_CODEGEN_ARM)
-      MOZ_CRASH("NYI: SwitchTableType::OutOfLine");
-#else
-      masm.mov(start(), temp);
-      base = temp;
-#endif
-    }
-    BaseIndex jumpTarget(base, index, ScalePointer);
-    masm.branchToComputedAddress(jumpTarget);
-  }
-
-  // Register an entry in the switch table.
-  void addTableEntry(MacroAssembler& masm) {
-    if ((!isOutOfLine_ && tableType == SwitchTableType::Inline) ||
-        (isOutOfLine_ && tableType == SwitchTableType::OutOfLine)) {
-      CodeLabel cl;
-      masm.writeCodePointer(&cl);
-      masm.propagateOOM(codeLabels_.append(std::move(cl)));
-    }
-  }
-  // Register the code, to which the table will jump to.
-  void addCodeEntry(MacroAssembler& masm) {
-    Label entry;
-    masm.bind(&entry);
-    masm.propagateOOM(labels_.append(std::move(entry)));
-  }
-
-  void setOutOfLine() { isOutOfLine_ = true; }
-};
-
-template <SwitchTableType tableType>
-void CodeGenerator::visitOutOfLineSwitch(
-    OutOfLineSwitch<tableType>* jumpTable) {
-  jumpTable->setOutOfLine();
-  auto& labels = jumpTable->labels();
-
-  if (tableType == SwitchTableType::OutOfLine) {
-#if defined(JS_CODEGEN_ARM)
-    MOZ_CRASH("NYI: SwitchTableType::OutOfLine");
-#elif defined(JS_CODEGEN_NONE)
-    MOZ_CRASH();
-#else
-
-#  if defined(JS_CODEGEN_ARM64)
-    AutoForbidPoolsAndNops afp(
-        &masm,
-        (labels.length() + 1) * (sizeof(void*) / vixl::kInstructionSize));
-#  endif
-
-    masm.haltingAlign(sizeof(void*));
-
-    // Bind the address of the jump table and reserve the space for code
-    // pointers to jump in the newly generated code.
-    masm.bind(jumpTable->start());
-    masm.addCodeLabel(*jumpTable->start());
-    for (size_t i = 0, e = labels.length(); i < e; i++) {
-      jumpTable->addTableEntry(masm);
-    }
-#endif
-  }
-
-  // Register all reserved pointers of the jump table to target labels. The
-  // entries of the jump table need to be absolute addresses and thus must be
-  // patched after codegen is finished.
-  auto& codeLabels = jumpTable->codeLabels();
-  for (size_t i = 0, e = codeLabels.length(); i < e; i++) {
-    auto& cl = codeLabels[i];
-    cl.target()->bind(labels[i].offset());
-    masm.addCodeLabel(cl);
-  }
-}
-
-template void CodeGenerator::visitOutOfLineSwitch(
-    OutOfLineSwitch<SwitchTableType::Inline>* jumpTable);
-template void CodeGenerator::visitOutOfLineSwitch(
-    OutOfLineSwitch<SwitchTableType::OutOfLine>* jumpTable);
-
 template <typename T>
 static inline void StoreToTypedArray(MacroAssembler& masm,
                                      Scalar::Type writeType,
@@ -19958,24 +19851,6 @@ void CodeGenerator::visitIsNullOrUndefinedAndBranch(
   if (!isNextBlock(ins->ifFalse()->lir())) {
     masm.jump(ifFalse);
   }
-}
-
-void CodeGenerator::loadOutermostJSScript(Register reg) {
-  // The "outermost" JSScript means the script that we are compiling
-  // basically; this is not always the script associated with the
-  // current basic block, which might be an inlined script.
-
-  MIRGraph& graph = current->mir()->graph();
-  MBasicBlock* entryBlock = graph.entryBlock();
-  masm.movePtr(ImmGCPtr(entryBlock->info().script()), reg);
-}
-
-void CodeGenerator::loadJSScriptForBlock(MBasicBlock* block, Register reg) {
-  // The current JSScript means the script for the current
-  // basic block. This may be an inlined script.
-
-  JSScript* script = block->info().script();
-  masm.movePtr(ImmGCPtr(script), reg);
 }
 
 void CodeGenerator::visitHasClass(LHasClass* ins) {

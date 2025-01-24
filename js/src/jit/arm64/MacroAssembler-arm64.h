@@ -32,8 +32,6 @@ using vixl::MemOperand;
 using vixl::Operand;
 
 struct ImmShiftedTag : public ImmWord {
-  explicit ImmShiftedTag(JSValueShiftedTag shtag) : ImmWord((uintptr_t)shtag) {}
-
   explicit ImmShiftedTag(JSValueType type)
       : ImmWord(uintptr_t(JSValueShiftedTag(JSVAL_TYPE_TO_SHIFTED_TAG(type)))) {
   }
@@ -593,20 +591,18 @@ class MacroAssemblerCompat : public vixl::MacroAssembler {
 
   using vixl::MacroAssembler::B;
 
+  bool hasFjcvtzs() const {
+    return CPUHas(vixl::CPUFeatures::kFP, vixl::CPUFeatures::kJSCVT);
+  }
+
   void convertDoubleToInt32(FloatRegister src, Register dest, Label* fail,
                             bool negativeZeroCheck = true) {
     ARMFPRegister fsrc64(src, 64);
     ARMRegister dest32(dest, 32);
 
     // ARMv8.3 chips support the FJCVTZS instruction, which handles exactly this
-    // logic.  But the simulator does not implement it.
-#if defined(JS_SIMULATOR_ARM64)
-    const bool fjscvt = false;
-#else
-    const bool fjscvt =
-        CPUHas(vixl::CPUFeatures::kFP, vixl::CPUFeatures::kJSCVT);
-#endif
-    if (fjscvt) {
+    // logic.
+    if (hasFjcvtzs()) {
       // Convert double to integer, rounding toward zero.
       // The Z-flag is set iff the conversion is exact. -0 unsets the Z-flag.
       Fjcvtzs(dest32, fsrc64);

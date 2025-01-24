@@ -51,7 +51,7 @@ import org.mozilla.fenix.theme.FirefoxTheme
 fun MarketingDataOnboardingPage(
     state: OnboardingPageState,
     onMarketingDataContinueClick: (allowMarketingDataCollection: Boolean) -> Unit,
-    onMarketingDataLearnMoreClick: (url: String) -> Unit,
+    onMarketingDataLearnMoreClick: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -87,8 +87,8 @@ fun MarketingDataOnboardingPage(
                 linkTextStates = listOf(
                     LinkTextState(
                         text = marketingData.bodyOneLinkText,
-                        url = marketingData.linkUrl,
-                        onClick = { url -> onMarketingDataLearnMoreClick(url) },
+                        url = "",
+                        onClick = { onMarketingDataLearnMoreClick() },
                     ),
                 ),
                 textAlign = TextAlign.Center,
@@ -167,7 +167,6 @@ private fun MarketingDataOnboardingPagePreview() {
                         " technology partners",
                     bodyThreeText = "This helps us understand how you discovered Firefox and" +
                         " improve our marketing campaigns.",
-                    linkUrl = "",
                 ),
             ),
             onMarketingDataContinueClick = {},

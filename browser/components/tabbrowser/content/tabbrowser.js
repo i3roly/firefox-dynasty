@@ -855,50 +855,6 @@
       }
     }
 
-    syncThrobberAnimations(aTab) {
-      aTab.ownerGlobal.promiseDocumentFlushed(() => {
-        if (!aTab.container) {
-          return;
-        }
-
-        const animations = Array.from(
-          aTab.container.getElementsByTagName("tab")
-        )
-          .filter(tab => tab.hasAttribute("busy"))
-          .flatMap(tab => tab.throbber?.getAnimations({ subtree: true }) ?? [])
-          .filter(
-            anim =>
-              CSSAnimation.isInstance(anim) &&
-              (anim.animationName === "tab-throbber-animation" ||
-                anim.animationName === "tab-throbber-animation-rtl") &&
-              anim.playState === "running"
-          );
-
-        // Synchronize with the oldest running animation, if any.
-        const firstStartTime = Math.min(
-          ...animations.map(anim =>
-            anim.startTime === null ? Infinity : anim.startTime
-          )
-        );
-        if (firstStartTime === Infinity) {
-          return;
-        }
-        requestAnimationFrame(() => {
-          for (let animation of animations) {
-            // If |animation| has been cancelled since this rAF callback
-            // was scheduled we don't want to set its startTime since
-            // that would restart it. We check for a cancelled animation
-            // by looking for a null currentTime rather than checking
-            // the playState, since reading the playState of
-            // a CSSAnimation object will flush style.
-            if (animation.currentTime !== null) {
-              animation.startTime = firstStartTime;
-            }
-          }
-        });
-      });
-    }
-
     getBrowserAtIndex(aIndex) {
       return this.browsers[aIndex];
     }
@@ -4164,7 +4120,7 @@
 
       for (let tab of tabs) {
         if (!skipRemoves) {
-          tab._closedInGroup = true;
+          tab._closedInMultiselection = true;
         }
         if (!skipRemoves && !skipSessionStore) {
           if (tab.group) {
@@ -4396,7 +4352,7 @@
           this.removeTab(tab, aParams);
           if (!tab.closing) {
             // If we abort the closing of the tab.
-            tab._closedInGroup = false;
+            tab._closedInMultiselection = false;
           }
         }
 
@@ -7454,7 +7410,6 @@
             this.mTab.setAttribute("busy", "true");
             gBrowser._tabAttrModified(this.mTab, ["busy"]);
             this.mTab._notselectedsinceload = !this.mTab.selected;
-            gBrowser.syncThrobberAnimations(this.mTab);
           }
 
           if (this.mTab.selected) {
@@ -8173,8 +8128,7 @@ var TabBarVisibility = {
     if (nonPopupWithVerticalTabs) {
       // CustomTitlebar decides if we can draw within the titlebar area.
       // In vertical tabs mode, the toolbar with the horizontal tabstrip gets hidden
-      // and the navbar becomes a titlebar. This makes CustomTitlebar a bit of a misnomer.
-      // We'll fix this in Bug 1921034.
+      // and the navbar becomes a titlebar.
       hideTabstrip = true;
       CustomTitlebar.allowedBy("tabs-visible", true);
     } else {

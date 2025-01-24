@@ -380,22 +380,25 @@ inline const URLExtraData& StyleCssUrl::ExtraData() const {
   return _0->extra_data.get();
 }
 
-inline StyleLoadData& StyleCssUrl::LoadData() const {
+inline const StyleLoadData& StyleCssUrl::LoadData() const {
   if (MOZ_LIKELY(_0->load_data.tag == StyleLoadDataSource::Tag::Owned)) {
-    MOZ_DIAGNOSTIC_ASSERT(NS_IsMainThread() ||
-                          dom::IsCurrentThreadRunningWorker());
-    return const_cast<StyleLoadData&>(_0->load_data.owned._0);
+    return _0->load_data.owned._0;
   }
-  MOZ_DIAGNOSTIC_ASSERT(NS_IsMainThread(),
-                        "Lazy load datas should come from user-agent sheets, "
-                        "which don't make sense on workers");
-  return const_cast<StyleLoadData&>(*Servo_LoadData_GetLazy(&_0->load_data));
+  return *Servo_LoadData_GetLazy(&_0->load_data);
+}
+
+inline StyleLoadData& StyleCssUrl::MutLoadData() const {
+  MOZ_DIAGNOSTIC_ASSERT(NS_IsMainThread() ||
+                        dom::IsCurrentThreadRunningWorker());
+  return const_cast<StyleLoadData&>(LoadData());
 }
 
 inline nsIURI* StyleCssUrl::GetURI() const {
-  auto& loadData = LoadData();
-  if (!(loadData.flags & StyleLoadDataFlags::TRIED_TO_RESOLVE_URI)) {
-    loadData.flags |= StyleLoadDataFlags::TRIED_TO_RESOLVE_URI;
+  auto& loadData = const_cast<StyleLoadData&>(LoadData());
+  // Try to read the flags first. If it's set we can avoid entering the CAS
+  // loop.
+  auto flags = __atomic_load_n(&loadData.flags.bits, __ATOMIC_RELAXED);
+  if (!(flags & StyleLoadDataFlags::TRIED_TO_RESOLVE_URI.bits)) {
     nsDependentCSubstring serialization = SpecifiedSerialization();
     // https://drafts.csswg.org/css-values-4/#url-empty:
     //
@@ -403,14 +406,29 @@ inline nsIURI* StyleCssUrl::GetURI() const {
     //     url()), the url must resolve to an invalid resource (similar to what
     //     the url about:invalid does).
     //
+    nsIURI* resolved = nullptr;
     if (!serialization.IsEmpty()) {
-      RefPtr<nsIURI> resolved;
-      NS_NewURI(getter_AddRefs(resolved), serialization, nullptr,
-                ExtraData().BaseURI());
-      loadData.resolved_uri = resolved.forget().take();
+      nsIURI* old_resolved = nullptr;
+      // NOTE: This addrefs `resolved`, and `resolved` might still be null for
+      // invalid URIs.
+      NS_NewURI(&resolved, serialization, nullptr, ExtraData().BaseURI());
+      if (!__atomic_compare_exchange_n(&loadData.resolved_uri, &old_resolved,
+                                       resolved, /* weak = */ false,
+                                       __ATOMIC_RELEASE, __ATOMIC_RELAXED)) {
+        // In the unlikely case two threads raced to write the url, avoid
+        // leaking resolved. The actual value is in `old_resolved`.
+        NS_IF_RELEASE(resolved);
+        resolved = old_resolved;
+      }
     }
+    // The flag is effectively just an optimization so we can use relaxed
+    // ordering.
+    __atomic_fetch_or(&loadData.flags.bits,
+                      StyleLoadDataFlags::TRIED_TO_RESOLVE_URI.bits,
+                      __ATOMIC_RELAXED);
+    return resolved;
   }
-  return loadData.resolved_uri;
+  return __atomic_load_n(&loadData.resolved_uri, __ATOMIC_ACQUIRE);
 }
 
 inline nsDependentCSubstring StyleComputedUrl::SpecifiedSerialization() const {
@@ -419,8 +437,11 @@ inline nsDependentCSubstring StyleComputedUrl::SpecifiedSerialization() const {
 inline const URLExtraData& StyleComputedUrl::ExtraData() const {
   return _0.ExtraData();
 }
-inline StyleLoadData& StyleComputedUrl::LoadData() const {
+inline const StyleLoadData& StyleComputedUrl::LoadData() const {
   return _0.LoadData();
+}
+inline StyleLoadData& StyleComputedUrl::MutLoadData() const {
+  return _0.MutLoadData();
 }
 inline StyleCorsMode StyleComputedUrl::CorsMode() const {
   return _0._0->cors_mode;
@@ -442,11 +463,11 @@ inline bool StyleComputedUrl::HasRef() const {
   return false;
 }
 
-inline bool StyleComputedImageUrl::IsImageResolved() const {
+inline bool StyleComputedUrl::IsImageResolved() const {
   return bool(LoadData().flags & StyleLoadDataFlags::TRIED_TO_RESOLVE_IMAGE);
 }
 
-inline imgRequestProxy* StyleComputedImageUrl::GetImage() const {
+inline imgRequestProxy* StyleComputedUrl::GetImage() const {
   MOZ_ASSERT(IsImageResolved());
   return LoadData().resolved_image;
 }
@@ -815,6 +836,16 @@ inline bool StyleInset::IsAnchorPositioningFunction() const {
   return IsAnchorFunction() || IsAnchorSizeFunction();
 }
 
+template <>
+inline bool StyleInset::MaybeAuto() const {
+  return IsAuto() || IsAnchorPositioningFunction();
+}
+
+template <>
+inline bool StyleInset::MaybePercentageAware() const {
+  return HasPercent() || IsAnchorPositioningFunction();
+}
+
 #undef IMPL_LENGTHPERCENTAGE_FORWARDS
 
 template <>
@@ -1005,8 +1036,7 @@ inline bool StyleImage::IsImageRequestType() const {
 }
 
 template <>
-inline const StyleComputedImageUrl* StyleImage::GetImageRequestURLValue()
-    const {
+inline const StyleComputedUrl* StyleImage::GetImageRequestURLValue() const {
   const auto& finalImage = FinalImage();
   if (finalImage.IsUrl()) {
     return &finalImage.AsUrl();

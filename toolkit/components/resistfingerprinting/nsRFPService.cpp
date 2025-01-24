@@ -26,7 +26,7 @@
 #include "mozilla/Casting.h"
 #include "mozilla/ClearOnShutdown.h"
 #include "mozilla/ContentBlockingNotifier.h"
-#include "mozilla/glean/GleanMetrics.h"
+#include "mozilla/glean/ResistfingerprintingMetrics.h"
 #include "mozilla/HashFunctions.h"
 #include "mozilla/HelperMacros.h"
 #include "mozilla/Likely.h"
@@ -50,6 +50,7 @@
 #include "mozilla/dom/KeyboardEventBinding.h"
 #include "mozilla/dom/WindowGlobalParent.h"
 #include "mozilla/dom/MediaDeviceInfoBinding.h"
+#include "mozilla/dom/WorkerCommon.h"
 #include "mozilla/fallible.h"
 #include "mozilla/XorShift128PlusRNG.h"
 
@@ -76,6 +77,7 @@
 #include "nsTStringRepr.h"
 #include "nsUserCharacteristics.h"
 #include "nsXPCOM.h"
+#include "nsRFPTargetSetIDL.h"
 
 #include "nsICookieJarSettings.h"
 #include "nsICryptoHash.h"
@@ -127,22 +129,22 @@ static constexpr uint32_t kVideoDroppedRatio = 1;
 
 // Fingerprinting protections that are enabled by default. This can be
 // overridden using the privacy.fingerprintingProtection.overrides pref.
+// NOLINTBEGIN(bugprone-macro-parentheses)
 #if defined(MOZ_WIDGET_ANDROID)
-// NOLINTNEXTLINE(bugprone-macro-parentheses)
-#  define ANDROID_DEFAULT(name) RFPTarget::name |
+#  define ANDROID_DEFAULT(name) RFPTarget::name,
 #  define DESKTOP_DEFAULT(name)
 #else
 #  define ANDROID_DEFAULT(name)
-// NOLINTNEXTLINE(bugprone-macro-parentheses)
-#  define DESKTOP_DEFAULT(name) RFPTarget::name |
+#  define DESKTOP_DEFAULT(name) RFPTarget::name,
 #endif
 
-const RFPTarget kDefaultFingerprintingProtections =
+MOZ_RUNINIT const RFPTargetSet kDefaultFingerprintingProtections = {
 #include "RFPTargetsDefault.inc"
-    static_cast<RFPTarget>(0);
+};
 
 #undef ANDROID_DEFAULT
 #undef DESKTOP_DEFAULT
+// NOLINTEND(bugprone-macro-parentheses)
 
 static constexpr uint32_t kSuspiciousFingerprintingActivityThreshold = 1;
 
@@ -157,7 +159,9 @@ static StaticRefPtr<nsRFPService> sRFPService;
 static bool sInitialized = false;
 
 // Actually enabled fingerprinting protections.
-static Atomic<RFPTarget> sEnabledFingerprintingProtections;
+static StaticMutex sEnabledFingerprintingProtectionsMutex;
+MOZ_CONSTINIT static RFPTargetSet sEnabledFingerprintingProtections
+    MOZ_GUARDED_BY(sEnabledFingerprintingProtectionsMutex);
 
 /* static */
 already_AddRefed<nsRFPService> nsRFPService::GetOrCreate() {
@@ -234,10 +238,72 @@ bool nsRFPService::IsRFPPrefEnabled(bool aIsPrivateMode) {
   return false;
 }
 
+bool IsJSContextCurrentlyChromePrivileged() {
+  // If the current thread is Elevated Javascript (from an actor), we don't want
+  // RFP to apply So we need to check the JSContext at the last second.
+
+  // Elevated Javascript is not going to be on many process types
+  // and the JSContext is not initialized, resulting in asserts.
+  auto processType = XRE_GetProcessType();
+  if (processType == GeckoProcessType_Utility ||
+      processType == GeckoProcessType_Socket ||
+      processType == GeckoProcessType_GPU ||
+      processType == GeckoProcessType_RDD) {
+    return false;
+  }
+
+  // Elevated Javascript can only occur on Main Thread.
+  if (NS_IsMainThread() &&
+      StaticPrefs::privacy_resistFingerprinting_principalCheckEnabled()) {
+    auto* cx = nsContentUtils::GetCurrentJSContext();
+    if (!cx) {
+      return false;
+    }
+
+    JS::Realm* realm = js::GetContextRealm(cx);
+    if (!realm) {
+      return false;
+    }
+
+    JSPrincipals* principals = JS::GetRealmPrincipals(realm);
+    if (!principals) {
+      return false;
+    }
+
+    nsIPrincipal* principal = nsJSPrincipals::get(principals);
+    return principal && principal->IsSystemPrincipal();
+  }
+  return false;
+
+#ifdef DEBUG
+  // At least we're _pretty sure_ that Elevated JavaScript cannot run
+  // off-main-thread. Let's just assert here to be sure.
+  auto* workerCx = dom::GetCurrentWorkerThreadJSContext();
+  if (workerCx) {
+    JS::Realm* realm = js::GetContextRealm(workerCx);
+    MOZ_ASSERT(realm);
+
+    JSPrincipals* principals = JS::GetRealmPrincipals(realm);
+    auto workerCtxPrin = nsJSPrincipals::get(principals);
+
+    auto* wp = dom::GetWorkerPrivateFromContext(workerCx);
+    MOZ_ASSERT(wp, "Did not get WorkerPrivate from worker's JSContext");
+    MOZ_ASSERT(
+        !workerCtxPrin || workerCtxPrin->GetIsNullPrincipal() ||
+            wp->UsesSystemPrincipal() == workerCtxPrin->IsSystemPrincipal(),
+        "System Principal mismatch between WorkerPrivate and Context");
+    // Workers (including System-privileged ones) can create Null-Principaled
+    // objects and that's expected. We're more interested in a Null or
+    // ContentPrincipaled worker suddenlly appearing as System Principaled.
+  }
+#endif
+}
+
 /* static */
 bool nsRFPService::IsRFPEnabledFor(
     bool aIsPrivateMode, RFPTarget aTarget,
-    const Maybe<RFPTarget>& aOverriddenFingerprintingSettings) {
+    const Maybe<RFPTargetSet>& aOverriddenFingerprintingSettings,
+    bool aSkipChromePrincipalCheck /* = false */) {
   MOZ_ASSERT(aTarget != RFPTarget::AllTargets);
 
 #if SPOOFED_MAX_TOUCH_POINTS > 0
@@ -245,6 +311,10 @@ bool nsRFPService::IsRFPEnabledFor(
     return false;
   }
 #endif
+
+  if (!aSkipChromePrincipalCheck && IsJSContextCurrentlyChromePrivileged()) {
+    return false;
+  }
 
   if (StaticPrefs::privacy_resistFingerprinting_DoNotUseDirectly() ||
       (aIsPrivateMode &&
@@ -264,10 +334,11 @@ bool nsRFPService::IsRFPEnabledFor(
     }
 
     if (aOverriddenFingerprintingSettings) {
-      return bool(aOverriddenFingerprintingSettings.ref() & aTarget);
+      return aOverriddenFingerprintingSettings.ref().contains(aTarget);
     }
 
-    return bool(sEnabledFingerprintingProtections & aTarget);
+    StaticMutexAutoLock lock(sEnabledFingerprintingProtectionsMutex);
+    return sEnabledFingerprintingProtections.contains(aTarget);
   }
 
   return false;
@@ -283,9 +354,10 @@ void nsRFPService::UpdateFPPOverrideList() {
     return;
   }
 
-  RFPTarget enabled = CreateOverridesFromText(
+  RFPTargetSet enabled = CreateOverridesFromText(
       targetOverrides, kDefaultFingerprintingProtections);
 
+  StaticMutexAutoLock lock(sEnabledFingerprintingProtectionsMutex);
   sEnabledFingerprintingProtections = enabled;
 }
 
@@ -2013,44 +2085,51 @@ nsresult nsRFPService::CreateOverrideDomainKey(
 }
 
 /* static */
-RFPTarget nsRFPService::CreateOverridesFromText(const nsString& aOverridesText,
-                                                RFPTarget aBaseOverrides) {
-  RFPTarget result = aBaseOverrides;
+RFPTargetSet nsRFPService::CreateOverridesFromText(
+    const nsString& aOverridesText, RFPTargetSet aBaseOverrides) {
+  RFPTargetSet result = aBaseOverrides;
 
   for (const nsAString& each : aOverridesText.Split(',')) {
     Maybe<RFPTarget> mappedValue =
         nsRFPService::TextToRFPTarget(Substring(each, 1, each.Length() - 1));
-    if (mappedValue.isSome()) {
-      RFPTarget target = mappedValue.value();
-      if (target == RFPTarget::IsAlwaysEnabledForPrecompute) {
-        MOZ_LOG(gResistFingerprintingLog, LogLevel::Warning,
-                ("RFPTarget::%s is not a valid value",
-                 NS_ConvertUTF16toUTF8(each).get()));
-      } else if (each[0] == '+') {
-        result |= target;
-        MOZ_LOG(gResistFingerprintingLog, LogLevel::Warning,
-                ("Mapped value %s (0x%" PRIx64
-                 "), to an addition, now we have 0x%" PRIx64,
-                 NS_ConvertUTF16toUTF8(each).get(), uint64_t(target),
-                 uint64_t(result)));
-      } else if (each[0] == '-') {
-        result &= ~target;
-        MOZ_LOG(gResistFingerprintingLog, LogLevel::Warning,
-                ("Mapped value %s (0x%" PRIx64
-                 ") to a subtraction, now we have 0x%" PRIx64,
-                 NS_ConvertUTF16toUTF8(each).get(), uint64_t(target),
-                 uint64_t(result)));
-      } else {
-        MOZ_LOG(gResistFingerprintingLog, LogLevel::Warning,
-                ("Mapped value %s (0x%" PRIx64
-                 ") to an RFPTarget Enum, but the first "
-                 "character wasn't + or -",
-                 NS_ConvertUTF16toUTF8(each).get(), uint64_t(target)));
-      }
-    } else {
+    if (mappedValue.isNothing()) {
       MOZ_LOG(gResistFingerprintingLog, LogLevel::Warning,
               ("Could not map the value %s to an RFPTarget Enum",
                NS_ConvertUTF16toUTF8(each).get()));
+      continue;
+    }
+    RFPTarget target = mappedValue.value();
+    RFPTargetSet targetSet = RFPTargetSet(target);
+    if (target == RFPTarget::AllTargets) {
+      std::bitset<128> allTargets;
+      allTargets.set();
+      targetSet = RFPTargetSet(allTargets);
+    }
+    if (target == RFPTarget::IsAlwaysEnabledForPrecompute) {
+      MOZ_LOG(gResistFingerprintingLog, LogLevel::Warning,
+              ("RFPTarget::%s is not a valid value",
+               NS_ConvertUTF16toUTF8(each).get()));
+    } else if (each[0] == '+') {
+      result += targetSet;
+      MOZ_LOG(
+          gResistFingerprintingLog, LogLevel::Warning,
+          ("Mapped value %s (0x%" PRIx64 "), to an addition, now we have %s",
+           NS_ConvertUTF16toUTF8(each).get(), static_cast<uint64_t>(target),
+           result.serialize().to_string().c_str()));
+    } else if (each[0] == '-') {
+      result -= targetSet;
+      MOZ_LOG(
+          gResistFingerprintingLog, LogLevel::Warning,
+          ("Mapped value %s (0x%" PRIx64 ") to a subtraction, now we have %s",
+           NS_ConvertUTF16toUTF8(each).get(), static_cast<uint64_t>(target),
+           result.serialize().to_string().c_str()));
+    } else {
+      MOZ_LOG(
+          gResistFingerprintingLog, LogLevel::Warning,
+          ("Mapped value %s (0x%" PRIx64
+           ") to an RFPTarget Enum, but the first "
+           "character wasn't + or -",
+           NS_ConvertUTF16toUTF8(each).get(), static_cast<uint64_t>(target)));
     }
   }
 
@@ -2077,7 +2156,8 @@ nsRFPService::SetFingerprintingOverrides(
     rv = fpOverride->GetOverrides(overridesText);
     NS_ENSURE_SUCCESS(rv, rv);
 
-    RFPTarget targets = nsRFPService::CreateOverridesFromText(
+    StaticMutexAutoLock lock(sEnabledFingerprintingProtectionsMutex);
+    RFPTargetSet targets = nsRFPService::CreateOverridesFromText(
         NS_ConvertUTF8toUTF16(overridesText),
         mFingerprintingOverrides.Contains(domainKey)
             ? mFingerprintingOverrides.Get(domainKey)
@@ -2100,25 +2180,32 @@ nsRFPService::SetFingerprintingOverrides(
 }
 
 NS_IMETHODIMP
-nsRFPService::GetEnabledFingerprintingProtections(uint64_t* aProtections) {
-  RFPTarget enabled = sEnabledFingerprintingProtections;
+nsRFPService::GetEnabledFingerprintingProtections(
+    nsIRFPTargetSetIDL** aProtections) {
+  StaticMutexAutoLock lock(sEnabledFingerprintingProtectionsMutex);
+  RFPTargetSet enabled = sEnabledFingerprintingProtections;
 
-  *aProtections = uint64_t(enabled);
+  nsCOMPtr<nsIRFPTargetSetIDL> protections = new nsRFPTargetSetIDL(enabled);
+  protections.forget(aProtections);
+
   return NS_OK;
 }
 
 NS_IMETHODIMP
 nsRFPService::GetFingerprintingOverrides(const nsACString& aDomainKey,
-                                         uint64_t* aOverrides) {
+                                         nsIRFPTargetSetIDL** aOverrides) {
   MOZ_ASSERT(XRE_IsParentProcess());
 
-  Maybe<RFPTarget> overrides = mFingerprintingOverrides.MaybeGet(aDomainKey);
+  Maybe<RFPTargetSet> overrides = mFingerprintingOverrides.MaybeGet(aDomainKey);
 
   if (!overrides) {
     return NS_ERROR_FAILURE;
   }
 
-  *aOverrides = uint64_t(overrides.ref());
+  nsCOMPtr<nsIRFPTargetSetIDL> protections =
+      new nsRFPTargetSetIDL(overrides.ref());
+  protections.forget(aOverrides);
+
   return NS_OK;
 }
 
@@ -2130,7 +2217,7 @@ nsRFPService::CleanAllOverrides() {
 }
 
 /* static */
-Maybe<RFPTarget> nsRFPService::GetOverriddenFingerprintingSettingsForChannel(
+Maybe<RFPTargetSet> nsRFPService::GetOverriddenFingerprintingSettingsForChannel(
     nsIChannel* aChannel) {
   MOZ_ASSERT(aChannel);
   MOZ_ASSERT(XRE_IsParentProcess());
@@ -2262,7 +2349,7 @@ Maybe<RFPTarget> nsRFPService::GetOverriddenFingerprintingSettingsForChannel(
 }
 
 /* static */
-Maybe<RFPTarget> nsRFPService::GetOverriddenFingerprintingSettingsForURI(
+Maybe<RFPTargetSet> nsRFPService::GetOverriddenFingerprintingSettingsForURI(
     nsIURI* aFirstPartyURI, nsIURI* aThirdPartyURI) {
   MOZ_ASSERT(aFirstPartyURI);
   MOZ_ASSERT(XRE_IsParentProcess());
@@ -2278,7 +2365,8 @@ Maybe<RFPTarget> nsRFPService::GetOverriddenFingerprintingSettingsForURI(
   // scope.
 
   // First, we get the overrides that applies to every context.
-  Maybe<RFPTarget> result = service->mFingerprintingOverrides.MaybeGet("*"_ns);
+  Maybe<RFPTargetSet> result =
+      service->mFingerprintingOverrides.MaybeGet("*"_ns);
 
   RefPtr<nsEffectiveTLDService> eTLDService =
       nsEffectiveTLDService::GetInstance();
@@ -2306,7 +2394,7 @@ Maybe<RFPTarget> nsRFPService::GetOverriddenFingerprintingSettingsForURI(
     key.Append(FP_OVERRIDES_DOMAIN_KEY_DELIMITER);
     key.Append("*");
 
-    Maybe<RFPTarget> fpOverrides =
+    Maybe<RFPTargetSet> fpOverrides =
         service->mFingerprintingOverrides.MaybeGet(key);
     if (fpOverrides) {
       result = fpOverrides;
@@ -2341,7 +2429,7 @@ Maybe<RFPTarget> nsRFPService::GetOverriddenFingerprintingSettingsForURI(
   key.Assign(firstPartyDomain);
   key.Append(FP_OVERRIDES_DOMAIN_KEY_DELIMITER);
   key.Append("*");
-  Maybe<RFPTarget> fpOverrides =
+  Maybe<RFPTargetSet> fpOverrides =
       service->mFingerprintingOverrides.MaybeGet(key);
   if (fpOverrides) {
     result = fpOverrides;

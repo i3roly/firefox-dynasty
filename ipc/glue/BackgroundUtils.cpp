@@ -545,13 +545,13 @@ nsresult LoadInfoToLoadInfoArgs(nsILoadInfo* aLoadInfo,
         redirectChain, interceptionInfo->FromThirdParty()));
   }
 
-  Maybe<uint64_t> overriddenFingerprintingSettingsArg;
-  Maybe<RFPTarget> overriddenFingerprintingSettings =
+  Maybe<RFPTargetSet> overriddenFingerprintingSettingsArg;
+  Maybe<RFPTargetSet> overriddenFingerprintingSettings =
       aLoadInfo->GetOverriddenFingerprintingSettings();
 
   if (overriddenFingerprintingSettings) {
     overriddenFingerprintingSettingsArg =
-        Some(uint64_t(overriddenFingerprintingSettings.ref()));
+        Some(overriddenFingerprintingSettings.ref());
   }
 
   *outLoadInfoArgs = LoadInfoArgs(
@@ -602,7 +602,8 @@ nsresult LoadInfoToLoadInfoArgs(nsILoadInfo* aLoadInfo,
       aLoadInfo->GetStoragePermission(), overriddenFingerprintingSettingsArg,
       aLoadInfo->GetIsMetaRefresh(), aLoadInfo->GetLoadingEmbedderPolicy(),
       aLoadInfo->GetIsOriginTrialCoepCredentiallessEnabledForTopLevel(),
-      unstrippedURI, interceptionInfoArg, aLoadInfo->GetIsNewWindowTarget());
+      unstrippedURI, interceptionInfoArg, aLoadInfo->GetIsNewWindowTarget(),
+      aLoadInfo->GetUserNavigationInvolvement());
 
   return NS_OK;
 }
@@ -789,10 +790,10 @@ nsresult LoadInfoArgsToLoadInfo(const LoadInfoArgs& loadInfoArgs,
   CookieJarSettings::Deserialize(loadInfoArgs.cookieJarSettings(),
                                  getter_AddRefs(cookieJarSettings));
 
-  Maybe<RFPTarget> overriddenFingerprintingSettings;
+  Maybe<RFPTargetSet> overriddenFingerprintingSettings;
   if (loadInfoArgs.overriddenFingerprintingSettings().isSome()) {
     overriddenFingerprintingSettings.emplace(
-        RFPTarget(loadInfoArgs.overriddenFingerprintingSettings().ref()));
+        loadInfoArgs.overriddenFingerprintingSettings().ref());
   }
 
   nsCOMPtr<nsIContentSecurityPolicy> cspToInherit;
@@ -897,7 +898,8 @@ nsresult LoadInfoArgsToLoadInfo(const LoadInfoArgs& loadInfoArgs,
       loadInfoArgs.unstrippedURI(), interceptionInfo,
       loadInfoArgs.hasInjectedCookieForCookieBannerHandling(),
       loadInfoArgs.schemelessInput(), loadInfoArgs.httpsUpgradeTelemetry(),
-      loadInfoArgs.isNewWindowTarget());
+      loadInfoArgs.isNewWindowTarget(),
+      loadInfoArgs.userNavigationInvolvement());
 
   if (loadInfoArgs.isFromProcessingFrameAttributes()) {
     loadInfo->SetIsFromProcessingFrameAttributes();
@@ -953,13 +955,13 @@ void LoadInfoToParentLoadInfoForwarder(
         aLoadInfo->GetIsThirdPartyContextToTopWindow());
   }
 
-  Maybe<uint64_t> overriddenFingerprintingSettingsArg;
-  Maybe<RFPTarget> overriddenFingerprintingSettings =
+  Maybe<RFPTargetSet> overriddenFingerprintingSettingsArg;
+  Maybe<RFPTargetSet> overriddenFingerprintingSettings =
       aLoadInfo->GetOverriddenFingerprintingSettings();
 
   if (overriddenFingerprintingSettings) {
     overriddenFingerprintingSettingsArg =
-        Some(uint64_t(overriddenFingerprintingSettings.ref()));
+        Some(overriddenFingerprintingSettings.ref());
   }
 
   *aForwarderArgsOut = ParentLoadInfoForwarderArgs(
@@ -980,7 +982,8 @@ void LoadInfoToParentLoadInfoForwarder(
       aLoadInfo->GetRequestBlockingReason(), aLoadInfo->GetStoragePermission(),
       overriddenFingerprintingSettingsArg, aLoadInfo->GetIsMetaRefresh(),
       isThirdPartyContextToTopWindow, aLoadInfo->GetIsInThirdPartyContext(),
-      aLoadInfo->GetIsOn3PCBExceptionList(), unstrippedURI);
+      aLoadInfo->GetIsOn3PCBExceptionList(), unstrippedURI,
+      aLoadInfo->GetUserNavigationInvolvement());
 }
 
 nsresult MergeParentLoadInfoForwarder(
@@ -1078,11 +1081,11 @@ nsresult MergeParentLoadInfoForwarder(
   rv = aLoadInfo->SetIsMetaRefresh(aForwarderArgs.isMetaRefresh());
   NS_ENSURE_SUCCESS(rv, rv);
 
-  const Maybe<uint64_t> overriddenFingerprintingSettings =
+  const Maybe<RFPTargetSet> overriddenFingerprintingSettings =
       aForwarderArgs.overriddenFingerprintingSettings();
   if (overriddenFingerprintingSettings.isSome()) {
     aLoadInfo->SetOverriddenFingerprintingSettings(
-        RFPTarget(overriddenFingerprintingSettings.ref()));
+        overriddenFingerprintingSettings.ref());
   }
 
   static_cast<LoadInfo*>(aLoadInfo)->ClearIsThirdPartyContextToTopWindow();
@@ -1107,6 +1110,9 @@ nsresult MergeParentLoadInfoForwarder(
     aLoadInfo->SetContainerFeaturePolicyInfo(
         *aForwarderArgs.containerFeaturePolicyInfo());
   }
+
+  aLoadInfo->SetUserNavigationInvolvement(
+      uint8_t(aForwarderArgs.userNavigationInvolvement()));
 
   return NS_OK;
 }

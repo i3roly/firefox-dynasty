@@ -1035,8 +1035,7 @@ class MacroAssembler : public MacroAssemblerSpecific {
   // destination.
   inline void moveValue(const ConstantOrRegister& src,
                         const ValueOperand& dest);
-  void moveValue(const TypedOrValueRegister& src,
-                 const ValueOperand& dest) PER_ARCH;
+  void moveValue(const TypedOrValueRegister& src, const ValueOperand& dest);
   void moveValue(const ValueOperand& src, const ValueOperand& dest) PER_ARCH;
   void moveValue(const Value& src, const ValueOperand& dest) PER_ARCH;
 
@@ -2074,7 +2073,8 @@ class MacroAssembler : public MacroAssemblerSpecific {
   void branchTestValue(Condition cond, const ValueOperand& lhs,
                        const Value& rhs, Label* label) PER_ARCH;
 
-  inline void branchTestValue(Condition cond, const BaseIndex& lhs,
+  template <typename T>
+  inline void branchTestValue(Condition cond, const T& lhs,
                               const ValueOperand& rhs, Label* label) PER_ARCH;
 
   // Checks if given Value is evaluated to true or false in a condition.

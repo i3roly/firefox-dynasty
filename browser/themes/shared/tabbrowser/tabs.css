@@ -384,8 +384,7 @@
           background-repeat: no-repeat;
           width: 480px;
           height: 100%;
-          /* this runs tab-throbber-animation 43 times (~45s) and delays swap-icon-animation by 45s  */
-          animation: tab-throbber-animation 1.05s steps(30) 43, swap-icon-animation 0s linear 45s 1 forwards;
+          animation: tab-throbber-animation 1.05s steps(30) infinite;
           -moz-context-properties: fill;
           fill: currentColor;
           opacity: 0.7;
@@ -416,11 +415,6 @@
 @keyframes tab-throbber-animation-rtl {
   0% { transform: translateX(0); }
   100% { transform: translateX(100%); }
-}
-
-@keyframes swap-icon-animation {
-  0% { background-image: url("chrome://browser/skin/tabbrowser/loading.svg"); transform: translateX(0); }
-  100% { background-image: url("chrome://browser/skin/tabbrowser/hourglass.svg"); transform: translateX(0); }
 }
 
 .tab-icon-pending:is(:not([pendingicon]), [busy], [pinned]) {
@@ -724,7 +718,7 @@
   }
 
   #tabbrowser-tabs[movingtab-createGroup] & {
-    transition: background-color 100ms ease, color 100ms ease, outline-color 100ms ease;
+    transition: background-color 50ms ease, color 50ms ease, outline-color 50ms ease;
 
     &[dragover-createGroup] {
       background-color: light-dark(var(--dragover-tab-group-color-pale), var(--dragover-tab-group-color));
@@ -1012,6 +1006,7 @@
   }
 
   .tab-group-editor-swatch {
+    font-size: 0;
     width: 16px;
     height: 16px;
     padding: var(--focus-outline-offset);
@@ -1043,8 +1038,10 @@
   }
 }
 
-#tabGroupEditor_deleteGroup {
-  color: var(--text-color-error);
+@media not (prefers-contrast) {
+  #tabGroupEditor_deleteGroup {
+    color: var(--text-color-error);
+  }
 }
 
 /* Tab Overflow */

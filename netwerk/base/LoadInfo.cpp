@@ -109,7 +109,7 @@ LoadInfo::LoadInfo(
     nsContentPolicyType aContentPolicyType,
     const Maybe<mozilla::dom::ClientInfo>& aLoadingClientInfo,
     const Maybe<mozilla::dom::ServiceWorkerDescriptor>& aController,
-    uint32_t aSandboxFlags, bool aSkipCheckForBrokenURLOrZeroSized)
+    uint32_t aSandboxFlags)
     : mLoadingPrincipal(aLoadingContext ? aLoadingContext->NodePrincipal()
                                         : aLoadingPrincipal),
       mTriggeringPrincipal(aTriggeringPrincipal ? aTriggeringPrincipal
@@ -121,8 +121,7 @@ LoadInfo::LoadInfo(
       mLoadingContext(do_GetWeakReference(aLoadingContext)),
       mSecurityFlags(aSecurityFlags),
       mSandboxFlags(aSandboxFlags),
-      mInternalContentPolicyType(aContentPolicyType),
-      mSkipCheckForBrokenURLOrZeroSized(aSkipCheckForBrokenURLOrZeroSized) {
+      mInternalContentPolicyType(aContentPolicyType) {
   MOZ_ASSERT(mLoadingPrincipal);
   MOZ_ASSERT(mTriggeringPrincipal);
 
@@ -740,7 +739,7 @@ LoadInfo::LoadInfo(
     bool aIsSameDocumentNavigation, bool aAllowDeprecatedSystemRequests,
     bool aIsInDevToolsContext, bool aParserCreatedScript,
     nsILoadInfo::StoragePermissionState aStoragePermission,
-    const Maybe<RFPTarget>& aOverriddenFingerprintingSettings,
+    const Maybe<RFPTargetSet>& aOverriddenFingerprintingSettings,
     bool aIsMetaRefresh, uint32_t aRequestBlockingReason,
     nsINode* aLoadingContext,
     nsILoadInfo::CrossOriginEmbedderPolicy aLoadingEmbedderPolicy,
@@ -749,7 +748,8 @@ LoadInfo::LoadInfo(
     bool aHasInjectedCookieForCookieBannerHandling,
     nsILoadInfo::SchemelessInputType aSchemelessInput,
     nsILoadInfo::HTTPSUpgradeTelemetryType aHttpsUpgradeTelemetry,
-    bool aIsNewWindowTarget)
+    bool aIsNewWindowTarget,
+    dom::UserNavigationInvolvement aUserNavigationInvolvement)
     : mLoadingPrincipal(aLoadingPrincipal),
       mTriggeringPrincipal(aTriggeringPrincipal),
       mPrincipalToInherit(aPrincipalToInherit),
@@ -833,6 +833,7 @@ LoadInfo::LoadInfo(
           aHasInjectedCookieForCookieBannerHandling),
       mSchemelessInput(aSchemelessInput),
       mHttpsUpgradeTelemetry(aHttpsUpgradeTelemetry),
+      mUserNavigationInvolvement(aUserNavigationInvolvement),
       mIsNewWindowTarget(aIsNewWindowTarget) {
   // Only top level TYPE_DOCUMENT loads can have a null loadingPrincipal
   MOZ_ASSERT(mLoadingPrincipal ||
@@ -995,6 +996,18 @@ LoadInfo::GetLoadingDocument(Document** aResult) {
     RefPtr<Document> context = node->OwnerDoc();
     context.forget(aResult);
   }
+  return NS_OK;
+}
+NS_IMETHODIMP
+LoadInfo::GetUserNavigationInvolvement(uint8_t* aUserNavigationInvolvement) {
+  *aUserNavigationInvolvement = uint8_t(mUserNavigationInvolvement);
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+LoadInfo::SetUserNavigationInvolvement(uint8_t aUserNavigationInvolvement) {
+  mUserNavigationInvolvement =
+      dom::UserNavigationInvolvement(aUserNavigationInvolvement);
   return NS_OK;
 }
 
@@ -1214,7 +1227,7 @@ LoadInfo::SetStoragePermission(
   return NS_OK;
 }
 
-const Maybe<RFPTarget>& LoadInfo::GetOverriddenFingerprintingSettings() {
+const Maybe<RFPTargetSet>& LoadInfo::GetOverriddenFingerprintingSettings() {
 #ifdef DEBUG
   RefPtr<BrowsingContext> browsingContext;
   GetTargetBrowsingContext(getter_AddRefs(browsingContext));
@@ -1228,7 +1241,7 @@ const Maybe<RFPTarget>& LoadInfo::GetOverriddenFingerprintingSettings() {
   return mOverriddenFingerprintingSettings;
 }
 
-void LoadInfo::SetOverriddenFingerprintingSettings(RFPTarget aTargets) {
+void LoadInfo::SetOverriddenFingerprintingSettings(RFPTargetSet aTargets) {
   mOverriddenFingerprintingSettings.reset();
   mOverriddenFingerprintingSettings.emplace(aTargets);
 }
@@ -2155,14 +2168,6 @@ NS_IMETHODIMP
 LoadInfo::GetIsFromObjectOrEmbed(bool* aIsFromObjectOrEmbed) {
   MOZ_ASSERT(aIsFromObjectOrEmbed);
   *aIsFromObjectOrEmbed = mIsFromObjectOrEmbed;
-  return NS_OK;
-}
-
-NS_IMETHODIMP
-LoadInfo::GetShouldSkipCheckForBrokenURLOrZeroSized(
-    bool* aShouldSkipCheckForBrokenURLOrZeroSized) {
-  MOZ_ASSERT(aShouldSkipCheckForBrokenURLOrZeroSized);
-  *aShouldSkipCheckForBrokenURLOrZeroSized = mSkipCheckForBrokenURLOrZeroSized;
   return NS_OK;
 }
 

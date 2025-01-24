@@ -583,6 +583,13 @@ pref("browser.urlbar.quicksuggest.impressionCaps.sponsoredEnabled", false);
 // characters than this threshold.
 pref("browser.urlbar.quicksuggest.ampTopPickCharThreshold", 0);
 
+// The matching strategy for AMP suggestions. Zero is the usual default
+// exact-keyword strategy. Other values are the integers defined on
+// `AmpMatchingStrategy` in `RustSuggest.sys.mjs` (corresponding to the
+// `AmpMatchingStrategy` enum in the Rust component coerced to a 1-based integer
+// value).
+pref("browser.urlbar.quicksuggest.ampMatchingStrategy", 0);
+
 // Comma-separated list of Suggest exposure suggestion types to enable.
 pref("browser.urlbar.quicksuggest.exposureSuggestionTypes", "");
 
@@ -1047,7 +1054,7 @@ pref("browser.tabs.groups.enabled", true);
 pref("browser.tabs.groups.enabled", false);
 #endif
 pref("browser.tabs.groups.dragOverThresholdPercent", 20);
-pref("browser.tabs.groups.dragOverDelayMS", 30);
+pref("browser.tabs.groups.dragOverDelayMS", 120);
 pref("browser.tabs.dragdrop.moveOverThresholdPercent", 70);
 
 pref("browser.tabs.firefox-view.logLevel", "Warn");
@@ -2466,9 +2473,6 @@ pref("privacy.webrtc.deviceGracePeriodTimeoutMs", 3600000);
 // duplicating the macos camera icon. We show the icon by default, users can choose to flip
 // the pref to hide the icons
 pref("privacy.webrtc.showIndicatorsOnMacos14AndAbove", true);
-
-// Enable Fingerprinting Protection in private windows..
-pref("privacy.fingerprintingProtection.pbmode", true);
 
 // Enable Smartblock embed placeholders
 #ifdef NIGHTLY_BUILD
