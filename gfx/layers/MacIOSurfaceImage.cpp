@@ -324,9 +324,11 @@ already_AddRefed<MacIOSurface> MacIOSurfaceRecycleAllocator::Allocate(
   // planar format.
   // 4:2:2 formats with 8 bit color are single planar, otherwise bi-planar.
 
+  //Lion doesn't do 10-bit colour, so we have to always create a single planar
+  //surface for 10.7 and lower lol.
   RefPtr<MacIOSurface> result;
-  if (aChromaSubsampling == gfx::ChromaSubsampling::HALF_WIDTH &&
-      aColorDepth == gfx::ColorDepth::COLOR_8) {
+  if ((aChromaSubsampling == gfx::ChromaSubsampling::HALF_WIDTH &&
+      aColorDepth == gfx::ColorDepth::COLOR_8) || !nsCocoaFeatures::OnMountainLionOrLater()) {
     result = MacIOSurface::CreateSinglePlanarSurface(
         aYSize, aYUVColorSpace, aTransferFunction, aColorRange);
 
@@ -340,6 +342,5 @@ already_AddRefed<MacIOSurface> MacIOSurfaceRecycleAllocator::Allocate(
       mSurfaces.Length() < StaticPrefs::layers_iosurfaceimage_recycle_limit()) {
     mSurfaces.AppendElement(result->GetIOSurfaceRef());
   }
-
   return result.forget();
 }
