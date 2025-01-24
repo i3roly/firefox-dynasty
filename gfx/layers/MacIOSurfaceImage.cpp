@@ -16,6 +16,10 @@
 #include "mozilla/Unused.h"
 #include "YCbCrUtils.h"
 
+#ifdef XP_MACOSX
+#  include "nsCocoaFeatures.h"
+#endif
+
 using namespace mozilla::layers;
 using namespace mozilla::gfx;
 
@@ -308,7 +312,6 @@ already_AddRefed<MacIOSurface> MacIOSurfaceRecycleAllocator::Allocate(
                             (size_t)aCbCrSize.height);
     }
 #endif
-
     return MakeAndAddRef<MacIOSurface>(surf, false, aYUVColorSpace);
   }
 
@@ -326,6 +329,7 @@ already_AddRefed<MacIOSurface> MacIOSurfaceRecycleAllocator::Allocate(
       aColorDepth == gfx::ColorDepth::COLOR_8) {
     result = MacIOSurface::CreateSinglePlanarSurface(
         aYSize, aYUVColorSpace, aTransferFunction, aColorRange);
+
   } else {
     result = MacIOSurface::CreateBiPlanarSurface(
         aYSize, aCbCrSize, aChromaSubsampling, aYUVColorSpace,

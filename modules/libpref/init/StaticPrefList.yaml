@@ -679,6 +679,11 @@
   value: @IS_NOT_ANDROID@
   mirror: always
 
+- name: apz.keyboard.focus-optimization
+  type: bool
+  value: false
+  mirror: always
+
 - name: apz.max_tap_time
   type: RelaxedAtomicInt32
   value: 300
@@ -16090,10 +16095,10 @@
 # 2: Enforce CT.
 - name: security.pki.certificate_transparency.mode
   type: RelaxedAtomicUint32
-#ifdef EARLY_BETA_OR_EARLIER
-  value: 2
-#else
+#if defined(ANDROID) && !defined(EARLY_BETA_OR_EARLIER)
   value: 0
+#else
+  value: 2
 #endif
   mirror: always
 

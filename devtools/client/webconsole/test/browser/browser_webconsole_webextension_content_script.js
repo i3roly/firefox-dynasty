@@ -23,19 +23,52 @@ add_task(async function () {
 
     files: {
       "content-script.js": function () {
+        /* global browser */
+        console.log("def");
+
+        // Create an iframe with a privileged document of the extension
+        const iframe = document.createElement("iframe");
+        iframe.src = browser.runtime.getURL(`iframe.html`);
+        document.body.appendChild(iframe);
+
         Promise.reject("abc");
       },
+
+      "iframe.html": `<div>Extension iframe</div> <script src="iframe.js"></script>`,
+      "iframe.js": `console.log("iframe log"); throw new Error("iframe exception")`,
     },
   });
 
   await extension.startup();
 
   const hud = await openNewTabAndConsole(TEST_URI);
-  await waitFor(() => findErrorMessage(hud, "uncaught exception: abc"));
 
-  // Open the debugger with the content script setting turned on in order
-  // to be able to show the content script target in the console evaluation context
+  // For now, console messages and errors are shown without having to enable the content script targets
+  await checkUniqueMessageExists(hud, "uncaught exception: abc", ".error");
+  await checkUniqueMessageExists(hud, "def", ".console-api");
+
+  await checkUniqueMessageExists(hud, "iframe log", ".console-api");
+  await checkUniqueMessageExists(
+    hud,
+    "Uncaught Error: iframe exception",
+    ".error"
+  );
+
+  // Enable the content script preference in order to see content scripts messages,
+  // sources and target.
+  const onTargetProcessed = waitForTargetProcessed(
+    hud.commands,
+    target => target.targetType == "content_script"
+  );
   await pushPref("devtools.debugger.show-content-scripts", true);
+  await onTargetProcessed;
+
+  // Wait for more to let a chance to process unexpected duplicated messages
+  await wait(500);
+
+  await checkUniqueMessageExists(hud, "uncaught exception: abc", ".error");
+  await checkUniqueMessageExists(hud, "def", ".console-api");
+
   await hud.toolbox.selectTool("jsdebugger");
 
   const evaluationContextSelectorButton = hud.ui.outputNode.querySelector(
