@@ -331,7 +331,6 @@ already_AddRefed<MacIOSurface> MacIOSurfaceRecycleAllocator::Allocate(
       aColorDepth == gfx::ColorDepth::COLOR_8) || !nsCocoaFeatures::OnMountainLionOrLater()) {
     result = MacIOSurface::CreateSinglePlanarSurface(
         aYSize, aYUVColorSpace, aTransferFunction, aColorRange);
-
   } else {
     result = MacIOSurface::CreateBiPlanarSurface(
         aYSize, aCbCrSize, aChromaSubsampling, aYUVColorSpace,
@@ -342,5 +341,6 @@ already_AddRefed<MacIOSurface> MacIOSurfaceRecycleAllocator::Allocate(
       mSurfaces.Length() < StaticPrefs::layers_iosurfaceimage_recycle_limit()) {
     mSurfaces.AppendElement(result->GetIOSurfaceRef());
   }
+
   return result.forget();
 }
