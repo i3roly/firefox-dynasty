@@ -49,7 +49,7 @@ class gfxCoreTextShaper : public gfxFontShaper {
   CFDictionaryRef mAttributesDictRTL;
 
   nsresult SetGlyphsFromRun(gfxShapedText* aShapedText, uint32_t aOffset,
-                            uint32_t aLength, CTRunRef aCTRun);
+                            uint32_t aLength, CTRunRef aCTRun, int32_t aStringOffset);
 
   CTFontRef CreateCTFontWithFeatures(CGFloat aSize,
                                      CTFontDescriptorRef aDescriptor);
