@@ -730,12 +730,18 @@ CFDictionaryRef AppleVTDecoder::CreateOutputConfiguration() {
   // Output format type:
 
   bool is10Bit = (gfx::BitDepthForColorDepth(mColorDepth) == 10);
-  SInt32 PixelFormatTypeValue =
-      mColorRange == gfx::ColorRange::FULL
+  SInt32 PixelFormatTypeValue;
+  if(__builtin_available(macOS 10.8, *)) {
+    PixelFormatTypeValue = mColorRange == gfx::ColorRange::FULL
           ? (is10Bit ? kCVPixelFormatType_420YpCbCr10BiPlanarFullRange
                      : kCVPixelFormatType_420YpCbCr8BiPlanarFullRange)
           : (is10Bit ? kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange
                      : kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange);
+  } else {
+    PixelFormatTypeValue = mColorRange == gfx::ColorRange::FULL
+      ? kCVPixelFormatType_422YpCbCr8FullRange :
+       kCVPixelFormatType_422YpCbCr8_yuvs;
+  }
   AutoCFRelease<CFNumberRef> PixelFormatTypeNumber = CFNumberCreate(
       kCFAllocatorDefault, kCFNumberSInt32Type, &PixelFormatTypeValue);
   // Construct IOSurface Properties
