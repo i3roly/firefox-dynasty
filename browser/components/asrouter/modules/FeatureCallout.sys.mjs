@@ -263,9 +263,8 @@ export class FeatureCallout {
         this._removePanelConflictListeners();
         this.doc.querySelector(`[src="${BUNDLE_SRC}"]`)?.remove();
         if (nextMessage) {
-          const isMessageUnblocked = await lazy.ASRouter.isUnblockedMessage(
-            nextMessage
-          );
+          const isMessageUnblocked =
+            await lazy.ASRouter.isUnblockedMessage(nextMessage);
           if (!isMessageUnblocked) {
             this.endTour();
             return;
@@ -602,6 +601,22 @@ export class FeatureCallout {
           scope = triggerTab;
         } else {
           continue;
+        }
+      }
+      if (selector.includes("::%shadow%")) {
+        let parts = selector.split("::%shadow%");
+        for (let i = 0; i < parts.length; i++) {
+          selector = parts[i].trim();
+          if (i === parts.length - 1) {
+            break;
+          }
+          let el = scope.querySelector(selector);
+          if (!el) {
+            break;
+          }
+          if (el.shadowRoot) {
+            scope = el.shadowRoot;
+          }
         }
       }
       let element = scope.querySelector(selector);

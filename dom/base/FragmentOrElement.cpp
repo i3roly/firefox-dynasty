@@ -238,6 +238,8 @@ dom::Element* nsIContent::GetEditingHost() {
 
   // If this is in designMode, we should return <body>
   if (IsInDesignMode() && !IsInShadowTree()) {
+    // FIXME: There may be no <body>.  In such case and aLimitInBodyElement is
+    // "No", we should use root element instead.
     return doc->GetBodyElement();
   }
 
@@ -637,7 +639,8 @@ void FragmentOrElement::nsExtendedDOMSlots::UnlinkExtendedSlots(
     mAnimations = nullptr;
     aContent.ClearMayHaveAnimations();
   }
-  mExplicitlySetAttrElements.Clear();
+  mExplicitlySetAttrElementMap.Clear();
+  mAttrElementsMap.Clear();
   mRadioGroupContainer = nullptr;
   mPart = nullptr;
 }
@@ -660,6 +663,15 @@ void FragmentOrElement::nsExtendedDOMSlots::TraverseExtendedSlots(
 
   NS_CYCLE_COLLECTION_NOTE_EDGE_NAME(aCb, "mSlots->mPart");
   aCb.NoteXPCOMChild(mPart.get());
+
+  for (auto& tableEntry : mAttrElementsMap) {
+    auto& [explicitlySetElements, cachedAttrElements] =
+        *tableEntry.GetModifiableData();
+    if (cachedAttrElements) {
+      ImplCycleCollectionTraverse(aCb, *cachedAttrElements,
+                                  "cached attribute elements entry", 0);
+    }
+  }
 
   if (mCustomElementData) {
     mCustomElementData->Traverse(aCb);

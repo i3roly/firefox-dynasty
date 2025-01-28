@@ -463,8 +463,10 @@ ChromeUtils.defineLazyGetter(this, "PopupNotifications", () => {
         return anchorElement;
       }
       let fallback = [
+        document.getElementById("searchmode-switcher-icon"),
         document.getElementById("identity-icon"),
         gURLBar.querySelector(".urlbar-search-button"),
+        document.getElementById("remote-control-icon"),
       ];
       return fallback.find(element => element?.checkVisibility()) ?? null;
     };
@@ -2524,10 +2526,8 @@ function FillHistoryMenu(event) {
       if (
         BrowserUtils.navigationRequireUserInteraction &&
         entry.hasUserInteraction === false &&
-        // Always allow going to the first and last navigation points.
+        // Always list the current and last navigation points.
         j != end - 1 &&
-        j != start &&
-        // Always display the current entry
         j != index
       ) {
         continue;
@@ -5846,7 +5846,7 @@ function warnAboutClosingWindow() {
 
   if (!isPBWindow && !toolbar.visible) {
     return gBrowser.warnAboutClosingTabs(
-      gBrowser.openTabCount,
+      gBrowser.openTabs.length,
       gBrowser.closingTabsEnum.ALL
     );
   }
@@ -5886,7 +5886,7 @@ function warnAboutClosingWindow() {
     return (
       isPBWindow ||
       gBrowser.warnAboutClosingTabs(
-        gBrowser.openTabCount,
+        gBrowser.openTabs.length,
         gBrowser.closingTabsEnum.ALL
       )
     );
@@ -5911,7 +5911,7 @@ function warnAboutClosingWindow() {
     AppConstants.platform != "macosx" ||
     isPBWindow ||
     gBrowser.warnAboutClosingTabs(
-      gBrowser.openTabCount,
+      gBrowser.openTabs.length,
       gBrowser.closingTabsEnum.ALL
     )
   );
@@ -6642,7 +6642,7 @@ var ToolbarIconColor = {
   _windowState: {
     active: false,
     fullscreen: false,
-    tabsintitlebar: false,
+    customtitlebar: false,
   },
   init() {
     this._initialized = true;
@@ -6709,8 +6709,8 @@ var ToolbarIconColor = {
       case "toolbarvisibilitychange":
         // toolbar changes dont require reset of the cached color values
         break;
-      case "tabsintitlebar":
-        this._windowState.tabsintitlebar = reasonValue;
+      case "customtitlebar":
+        this._windowState.customtitlebar = reasonValue;
         break;
     }
 
@@ -6777,26 +6777,34 @@ var PanicButtonNotifier = {
       this.createPanelIfNeeded();
       let popup = document.getElementById("panic-button-success-notification");
       popup.hidden = false;
+
       // To close the popup in 3 seconds after the popup is shown but left uninteracted.
-      let onTimeout = () => {
-        PanicButtonNotifier.close();
-        removeListeners();
+      let closePopup = () => {
+        popup.hidePopup();
       };
       popup.addEventListener("popupshown", function () {
-        PanicButtonNotifier.timer = setTimeout(onTimeout, 3000);
+        PanicButtonNotifier.timer = setTimeout(closePopup, 3000);
       });
+
+      let closeButton = document.getElementById(
+        "panic-button-success-closebutton"
+      );
+      closeButton.addEventListener("command", closePopup);
+
       // To prevent the popup from closing when user tries to interact with the
       // popup using mouse or keyboard.
       let onUserInteractsWithPopup = () => {
         clearTimeout(PanicButtonNotifier.timer);
-        removeListeners();
       };
       popup.addEventListener("mouseover", onUserInteractsWithPopup);
       window.addEventListener("keydown", onUserInteractsWithPopup);
+
       let removeListeners = () => {
         popup.removeEventListener("mouseover", onUserInteractsWithPopup);
         window.removeEventListener("keydown", onUserInteractsWithPopup);
         popup.removeEventListener("popuphidden", removeListeners);
+        closeButton.removeEventListener("command", closePopup);
+        clearTimeout(PanicButtonNotifier.timer);
       };
       popup.addEventListener("popuphidden", removeListeners);
 
@@ -6806,10 +6814,6 @@ var PanicButtonNotifier = {
     } catch (ex) {
       console.error(ex);
     }
-  },
-  close() {
-    let popup = document.getElementById("panic-button-success-notification");
-    popup.hidePopup();
   },
 };
 

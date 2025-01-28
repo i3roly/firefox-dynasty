@@ -47,6 +47,10 @@ genai-prompts-quiz =
 genai-prompts-explain =
     .label = Explain this
     .value = Please explain the key concepts in this selection, using simple words. Also, use examples.
+# Prompt purpose: writing tool that helps users with spelling and grammar mistakes and produce a response that identifies errors and rewrites the inputted text correctly
+genai-prompts-proofread =
+    .label = Proofread
+    .value = Please proofread the selection for spelling and grammar errors. Identify any mistakes and provide a corrected version of the text. Maintain the meaning and factual accuracy and output the list of proposed corrections first, followed by the final, corrected version of the text.
 
 ## Chatbot menu shortcuts
 
@@ -62,6 +66,21 @@ genai-input-ask-generic =
 genai-input-ask-provider =
     .placeholder = Ask { $provider }…
 
+# $selectionLength (number) - selected text length
+# $maxLength (number) - max length of what can be selected
+genai-shortcuts-selected-warning-generic =
+    .heading = AI chatbot won’t get your full selection
+    .message = { $selectionLength ->
+        *[other] You’ve selected about { $selectionLength } characters. The number of characters we can send to the AI chatbot is about { $maxLength }.
+    }
+# $provider (string) - name of the provider
+# $selectionLength (number) - selected text length
+# $maxLength (number) - max length of what can be selected
+genai-shortcuts-selected-warning =
+    .heading = { $provider } won’t get your full selection
+    .message = { $selectionLength ->
+        *[other] You’ve selected about { $selectionLength } characters. The number of characters we can send to { $provider } is about { $maxLength }.
+    }
 genai-shortcuts-hide =
     .label = Hide chatbot shortcut
 

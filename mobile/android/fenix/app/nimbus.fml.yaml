@@ -276,6 +276,10 @@ features:
         description: The maximum amount of time in milliseconds the splashscreen will be visible while waiting for initialization calls to complete.
         type: Int
         default: 0
+      off-train-onboarding:
+        description: "If true, the fetched data will be applied and used during the session."
+        type: Boolean
+        default: false
 
   alternative-app-launcher-icon:
     description: A feature that changes the app launcher icon background color.
@@ -616,6 +620,15 @@ features:
           Enables or disables network.fetchpriority.enabled preference.
         type: Boolean
         default: true
+
+  pki:
+    description: Certificate verification configuration
+    variables:
+      certificateTransparencyMode:
+        description: >
+          What mode Certificate Transparency is in (0=disable, 1=telemetry only, 2=enforce).
+        type: Int
+        default: 0
 
   javascript:
     description: Enables Javascript Engine (Spidermonkey) features

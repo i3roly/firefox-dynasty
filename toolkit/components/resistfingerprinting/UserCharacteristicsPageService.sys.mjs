@@ -28,6 +28,14 @@ ChromeUtils.defineLazyGetter(lazy, "contentPrefs", () => {
   );
 });
 
+ChromeUtils.defineLazyGetter(lazy, "isAndroid", () => {
+  return Services.appinfo.OS === "Android";
+});
+
+ChromeUtils.defineLazyGetter(lazy, "windowType", () => {
+  return lazy.isAndroid ? "navigator:geckoview" : "navigator:browser";
+});
+
 export class UserCharacteristicsPageService {
   classId = Components.ID("{ce3e9659-e311-49fb-b18b-7f27c6659b23}");
   QueryInterface = ChromeUtils.generateQI([
@@ -88,29 +96,31 @@ export class UserCharacteristicsPageService {
     return lazy.HiddenBrowserManager.withHiddenBrowser(async browser => {
       lazy.console.debug(`In withHiddenBrowser`);
       try {
-        let { promise, resolve } = Promise.withResolvers();
+        const { promise, resolve } = Promise.withResolvers();
         this._backgroundBrowsers.set(browser, resolve);
 
-        let loadURIOptions = {
+        const loadURIOptions = {
           triggeringPrincipal: principal,
         };
 
-        let userCharacteristicsPageURI = Services.io.newURI(
+        const userCharacteristicsPageURI = Services.io.newURI(
           "about:fingerprintingprotection" +
             (Cu.isInAutomation ? "#automation" : "")
         );
 
         browser.loadURI(userCharacteristicsPageURI, loadURIOptions);
 
-        let data = await promise;
+        const data = await promise;
         if (data.debug) {
           lazy.console.debug(`Debugging Output:`);
-          for (let line of data.debug) {
+          for (const line of data.debug) {
             lazy.console.debug(line);
           }
           lazy.console.debug(`(debugging output done)`);
         }
         lazy.console.debug(`Data:`, data.output);
+
+        lazy.console.debug(`Gamepad data:`, data.gamepads);
 
         lazy.console.debug("Populating Glean metrics...");
 
@@ -150,7 +160,7 @@ export class UserCharacteristicsPageService {
       [this.populateDisabledMediaPrefs, []],
       [this.populateMathOps, []],
       [this.populateMappableData, [data.output]],
-      [this.populateGamepads, [data.output.gamepads]],
+      [this.populateGamepads, [data.gamepads]],
       [this.populateClientInfo, []],
       [this.populateCPUInfo, []],
       [this.populateWindowInfo, []],
@@ -193,8 +203,54 @@ export class UserCharacteristicsPageService {
     data,
     { prefix = "", suffix = "", operation = "set" } = {}
   ) {
-    for (const [key, value] of Object.entries(data)) {
+    const entries = data instanceof Map ? data.entries() : Object.entries(data);
+    for (const [key, value] of entries) {
       Glean.characteristics[prefix + key + suffix][operation](value);
+    }
+  }
+
+  *getActorFromTabsOrWindows(windows, name, diagnostics = {}) {
+    for (const win of windows) {
+      diagnostics.winCount++;
+      if (win.closed) {
+        diagnostics.closed++;
+        continue;
+      }
+
+      if (lazy.isAndroid) {
+        diagnostics.tabCount++;
+        try {
+          const actor = win.moduleManager.getActor(name);
+          diagnostics.noActor += !actor;
+          yield { success: !!actor, actor };
+        } catch (e) {
+          diagnostics.noActor++;
+          yield { success: false, error: e };
+        }
+
+        continue;
+      }
+
+      for (const tab of win.gBrowser.tabs) {
+        diagnostics.tabCount++;
+        diagnostics.remoteTypes?.push(
+          sanitizeRemoteType(tab.linkedBrowser.remoteType)
+        );
+        try {
+          const actor =
+            tab.linkedBrowser.browsingContext?.currentWindowGlobal.getActor(
+              name
+            );
+          diagnostics.noActor += !actor;
+          yield {
+            success: !!actor,
+            actor,
+          };
+        } catch (e) {
+          diagnostics.noActor++;
+          yield { success: false, error: e };
+        }
+      }
     }
   }
 
@@ -212,16 +268,6 @@ export class UserCharacteristicsPageService {
     // existing tabs and continue on a new one before the page
     // is loaded. This is a rare case, but we want to cover it.
 
-    if (Cu.isInAutomation) {
-      // To safeguard against any possible weird empty
-      // documents, we check if the document is empty. If it is
-      // we wait for a valid document to be loaded.
-      // During testing, we load empty.html which doesn't
-      // have any body. So, we end up waiting forever.
-      // Because of this, we skip this part during automation.
-      return;
-    }
-
     const { promise: screenInfoPromise, resolve: screenInfoResolve } =
       Promise.withResolvers();
     const { promise: pointerInfoPromise, resolve: pointerInfoResolve } =
@@ -237,12 +283,13 @@ export class UserCharacteristicsPageService {
       pointerInfoResolve(JSON.parse(data));
     }, "user-characteristics-pointer-info-done");
 
+    const actorName = "UserCharacteristicsWindowInfo";
     Services.obs.addObserver(function observe(_subject, topic, _data) {
       Services.obs.removeObserver(observe, topic);
-      ChromeUtils.unregisterWindowActor("UserCharacteristicsWindowInfo");
+      ChromeUtils.unregisterWindowActor(actorName);
     }, "user-characteristics-window-info-done");
 
-    ChromeUtils.registerWindowActor("UserCharacteristicsWindowInfo", {
+    ChromeUtils.registerWindowActor(actorName, {
       parent: {
         esModuleURI: "resource://gre/actors/UserCharacteristicsParent.sys.mjs",
       },
@@ -255,32 +302,22 @@ export class UserCharacteristicsPageService {
       },
     });
 
-    for (const win of Services.wm.getEnumerator("navigator:browser")) {
-      if (!win.closed) {
-        for (const tab of win.gBrowser.tabs) {
-          const actor = await promiseTry(() =>
-            tab.linkedBrowser.browsingContext?.currentWindowGlobal.getActor(
-              "UserCharacteristicsWindowInfo"
-            )
-          ).catch(async e => {
-            lazy.console.error("Error getting actor", e);
-            this.handledErrors.push(await stringifyError(e));
-          });
-
-          if (!actor) {
-            continue;
-          }
-
-          actor.sendAsyncMessage("WindowInfo:PopulateFromDocument");
-        }
+    for (const { success, actor, error } of this.getActorFromTabsOrWindows(
+      Services.wm.getEnumerator(lazy.windowType),
+      actorName
+    )) {
+      if (success) {
+        actor.sendAsyncMessage("WindowInfo:PopulateFromDocument");
+      } else if (error) {
+        lazy.console.error("Error getting actor", error);
+        this.handledErrors.push(await stringifyError(error));
       }
     }
 
-    const screenResult = await screenInfoPromise;
-    this.collectGleanMetricsFromMap(screenResult);
-
-    const pointerResult = await pointerInfoPromise;
-    this.collectGleanMetricsFromMap(pointerResult);
+    await Promise.all([
+      screenInfoPromise.then(data => this.collectGleanMetricsFromMap(data)),
+      pointerInfoPromise.then(data => this.collectGleanMetricsFromMap(data)),
+    ]);
   }
 
   async populateCanvasData() {
@@ -295,7 +332,7 @@ export class UserCharacteristicsPageService {
       },
     });
 
-    let data = {};
+    let data = new Map();
     // Returns true if we need to try again
     const attemptRender = async allowSoftwareRenderer => {
       const diagnostics = {
@@ -310,55 +347,40 @@ export class UserCharacteristicsPageService {
       // Try to find a window that supports hardware rendering
       let acceleratedActor = null;
       let fallbackActor = null;
-      for (const win of Services.wm.getEnumerator("navigator:browser")) {
-        diagnostics.winCount++;
-        if (win.closed) {
-          diagnostics.closed++;
+      for (const { success, actor, error } of this.getActorFromTabsOrWindows(
+        Services.wm.getEnumerator(lazy.windowType),
+        actorName,
+        diagnostics
+      )) {
+        if (!success) {
+          if (error) {
+            lazy.console.error("Error getting actor", error);
+            this.handledErrors.push(await stringifyError(error));
+          }
           continue;
         }
 
-        for (const tab of win.gBrowser.tabs) {
-          diagnostics.tabCount++;
-          diagnostics.remoteTypes.push(
-            sanitizeRemoteType(tab.linkedBrowser.remoteType)
-          );
-
-          const actor = await promiseTry(() =>
-            tab.linkedBrowser.browsingContext?.currentWindowGlobal.getActor(
-              actorName
-            )
-          ).catch(async e => {
-            lazy.console.error("Error getting actor", e);
-            this.handledErrors.push(await stringifyError(e));
-          });
-
-          if (!actor) {
-            diagnostics.noActor++;
-            continue;
-          }
-
-          // Example data: {"backendType":3,"drawTargetType":0,"isAccelerated":false,"isShared":true}
-          const debugInfo = await timeoutPromise(
-            actor.sendQuery("CanvasRendering:GetDebugInfo"),
-            5000
-          ).catch(async e => {
-            lazy.console.error("Canvas rendering debug info failed", e);
-            this.handledErrors.push(await stringifyError(e));
-          });
-          if (!debugInfo) {
-            diagnostics.noDebugInfo++;
-            continue;
-          }
-
-          lazy.console.debug("Canvas rendering debug info", debugInfo);
-
-          fallbackActor = actor;
-          if (debugInfo.isAccelerated) {
-            acceleratedActor = actor;
-            break;
-          }
-          diagnostics.notHW++;
+        // Example data: {"backendType":3,"drawTargetType":0,"isAccelerated":false,"isShared":true}
+        const debugInfo = await timeoutPromise(
+          actor.sendQuery("CanvasRendering:GetDebugInfo"),
+          5000
+        ).catch(async e => {
+          lazy.console.error("Canvas rendering debug info failed", e);
+          this.handledErrors.push(await stringifyError(e));
+        });
+        if (!debugInfo) {
+          diagnostics.noDebugInfo++;
+          continue;
         }
+
+        lazy.console.debug("Canvas rendering debug info", debugInfo);
+
+        fallbackActor = actor;
+        if (debugInfo.isAccelerated) {
+          acceleratedActor = actor;
+          break;
+        }
+        diagnostics.notHW++;
       }
 
       // If we didn't find a hardware accelerated window, we use the last one
@@ -434,13 +456,13 @@ export class UserCharacteristicsPageService {
     }
 
     // We may have HW + SW, or only SW rendered canvases - populate the metrics with what we have
-    this.collectGleanMetricsFromMap(data.renderings);
+    this.collectGleanMetricsFromMap(data.get("renderings") ?? {});
 
     ChromeUtils.unregisterWindowActor(actorName);
 
     // Record the errors
-    if (data.errors?.length) {
-      this.handledErrors.push(...data.errors);
+    if (data.get("errors")?.length) {
+      this.handledErrors.push(...data.get("errors"));
     }
   }
 
@@ -474,7 +496,7 @@ export class UserCharacteristicsPageService {
   }
 
   async populateGamepads(gamepads) {
-    for (let gamepad of gamepads) {
+    for (const gamepad of gamepads) {
       Glean.characteristics.gamepads.add(gamepad);
     }
   }
@@ -536,7 +558,7 @@ export class UserCharacteristicsPageService {
 
     for (const type in metrics) {
       for (const metric of metrics[type]) {
-        Glean.characteristics[metric][type](data[metric]);
+        Glean.characteristics[metric][type](data.get(metric));
       }
     }
   }
@@ -744,7 +766,7 @@ export class UserCharacteristicsPageService {
         "MEDIUM_INT",
         "HIGH_INT",
       ]) {
-        let { rangeMin, rangeMax, precision } = gl.getShaderPrecisionFormat(
+        const { rangeMin, rangeMax, precision } = gl.getShaderPrecisionFormat(
           gl[shaderType],
           gl[precisionType]
         );
@@ -869,9 +891,9 @@ export class UserCharacteristicsPageService {
       `pageLoaded browsingContext=${browsingContext} data=${data}`
     );
 
-    let browser = browsingContext.embedderElement;
+    const browser = browsingContext.embedderElement;
 
-    let backgroundResolve = this._backgroundBrowsers.get(browser);
+    const backgroundResolve = this._backgroundBrowsers.get(browser);
     if (backgroundResolve) {
       backgroundResolve(data);
       return;
@@ -944,16 +966,6 @@ function timeoutPromise(promise, ms) {
         reject(error);
       }
     );
-  });
-}
-
-function promiseTry(func) {
-  return new Promise((resolve, reject) => {
-    try {
-      resolve(func());
-    } catch (error) {
-      reject(error);
-    }
   });
 }
 

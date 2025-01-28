@@ -35,6 +35,8 @@ from contextlib import closing
 from ctypes.util import find_library
 from datetime import datetime, timedelta
 from shutil import which
+from urllib.parse import quote_plus as encodeURIComponent
+from urllib.request import urlopen
 
 import bisection
 import mozcrash
@@ -92,10 +94,6 @@ try:
     HAVE_PSUTIL = True
 except ImportError:
     pass
-
-import six
-from six.moves.urllib.parse import quote_plus as encodeURIComponent
-from six.moves.urllib_request import urlopen
 
 try:
     from mozbuild.base import MozbuildObject
@@ -209,9 +207,7 @@ class MessageLogger(object):
 
     def _fix_subtest_name(self, message):
         """Make sure subtest name is a string"""
-        if "subtest" in message and not isinstance(
-            message["subtest"], six.string_types
-        ):
+        if "subtest" in message and not isinstance(message["subtest"], str):
             message["subtest"] = str(message["subtest"])
 
     def _fix_test_name(self, message):
@@ -228,13 +224,13 @@ class MessageLogger(object):
         if "message" in message:
             if isinstance(message["message"], bytes):
                 message["message"] = message["message"].decode("utf-8", "replace")
-            elif not isinstance(message["message"], six.text_type):
-                message["message"] = six.text_type(message["message"])
+            elif not isinstance(message["message"], str):
+                message["message"] = str(message["message"])
 
     def parse_line(self, line):
         """Takes a given line of input (structured or not) and
         returns a list of structured messages"""
-        if isinstance(line, six.binary_type):
+        if isinstance(line, bytes):
             # if line is a sequence of bytes, let's decode it
             line = line.rstrip().decode("UTF-8", "replace")
         else:
@@ -602,7 +598,7 @@ class MochitestServer(object):
             while i < 5:
                 try:
                     with closing(urlopen(self.debugURL)) as c:
-                        self._log.info(six.ensure_text(c.read()))
+                        self._log.info(c.read().decode("utf-8"))
                     break
                 except Exception as e:
                     self._log.info("exception when enabling debugging: %s" % str(e))
@@ -629,7 +625,7 @@ class MochitestServer(object):
     def stop(self):
         try:
             with closing(urlopen(self.shutdownURL)) as c:
-                self._log.info(six.ensure_text(c.read()))
+                self._log.info(c.read().decode("utf-8"))
         except Exception:
             self._log.info("Failed to stop web server on %s" % self.shutdownURL)
             traceback.print_exc()
@@ -833,7 +829,7 @@ def checkAndConfigureV4l2loopback(device):
 
     VIDIOC_QUERYCAP = 0x80685600
 
-    fd = libc.open(six.ensure_binary(device), O_RDWR)
+    fd = libc.open(device.encode("ascii"), O_RDWR)
     if fd < 0:
         return False, ""
 
@@ -841,7 +837,7 @@ def checkAndConfigureV4l2loopback(device):
     if libc.ioctl(fd, VIDIOC_QUERYCAP, ctypes.byref(vcap)) != 0:
         return False, ""
 
-    if six.ensure_text(vcap.driver) != "v4l2 loopback":
+    if vcap.driver.decode("utf-8") != "v4l2 loopback":
         return False, ""
 
     class v4l2_control(ctypes.Structure):
@@ -863,7 +859,7 @@ def checkAndConfigureV4l2loopback(device):
     libc.ioctl(fd, VIDIOC_S_CTRL, ctypes.byref(control))
     libc.close(fd)
 
-    return True, six.ensure_text(vcap.card)
+    return True, vcap.card.decode("utf-8")
 
 
 def findTestMediaDevices(log):
@@ -917,9 +913,8 @@ def findTestMediaDevices(log):
         ]
     )
     info["video"] = {"name": name, "process": process}
-
-    # Hardcode the PulseAudio module-null-sink name since it's always the same.
-    info["audio"] = {"name": "Monitor of Null Output"}
+    info["speaker"] = {"name": "44100Hz Null Output"}
+    info["audio"] = {"name": "Monitor of {}".format(info["speaker"]["name"])}
     return info
 
 
@@ -1868,9 +1863,7 @@ toolbar#nav-bar {
         # we can't tell what comes from DEFAULT or not. So to validate this, we
         # stash all args from tests in the same manifest into a set. If the
         # length of the set > 1, then we know 'args' didn't come from DEFAULT.
-        args_not_default = [
-            m for m, p in six.iteritems(self.args_by_manifest) if len(p) > 1
-        ]
+        args_not_default = [m for m, p in self.args_by_manifest.items() if len(p) > 1]
         if args_not_default:
             self.log.error(
                 "The 'args' key must be set in the DEFAULT section of a "
@@ -1881,9 +1874,7 @@ toolbar#nav-bar {
             sys.exit(1)
 
         # The 'prefs' key needs to be set in the DEFAULT section too.
-        pref_not_default = [
-            m for m, p in six.iteritems(self.prefs_by_manifest) if len(p) > 1
-        ]
+        pref_not_default = [m for m, p in self.prefs_by_manifest.items() if len(p) > 1]
         if pref_not_default:
             self.log.error(
                 "The 'prefs' key must be set in the DEFAULT section of a "
@@ -1894,7 +1885,7 @@ toolbar#nav-bar {
             sys.exit(1)
         # The 'environment' key needs to be set in the DEFAULT section too.
         env_not_default = [
-            m for m, p in six.iteritems(self.env_vars_by_manifest) if len(p) > 1
+            m for m, p in self.env_vars_by_manifest.items() if len(p) > 1
         ]
         if env_not_default:
             self.log.error(
@@ -1971,7 +1962,7 @@ toolbar#nav-bar {
         d = dict(
             (k, v)
             for k, v in options.__dict__.items()
-            if (v is None) or isinstance(v, (six.string_types, numbers.Number))
+            if (v is None) or isinstance(v, (str, numbers.Number))
         )
         d["testRoot"] = self.testRoot
         if options.jscov_dir_prefix:
@@ -2063,7 +2054,7 @@ toolbar#nav-bar {
             # opening in profiler.firefox.com.
             self.profiler_tempdir = tempfile.mkdtemp()
             browserEnv["MOZ_PROFILER_SHUTDOWN"] = os.path.join(
-                self.profiler_tempdir, "mochitest-profile.json"
+                self.profiler_tempdir, "profile_mochitest.json"
             )
             browserEnv["MOZ_PROFILER_STARTUP"] = "1"
 
@@ -2073,7 +2064,7 @@ toolbar#nav-bar {
             browserEnv["MOZ_PROFILER_STARTUP"] = "1"
             if "MOZ_UPLOAD_DIR" in browserEnv:
                 browserEnv["MOZ_PROFILER_SHUTDOWN"] = os.path.join(
-                    browserEnv["MOZ_UPLOAD_DIR"], "mochitest-profile.json"
+                    browserEnv["MOZ_UPLOAD_DIR"], "profile_mochitest.json"
                 )
             else:
                 self.log.error(
@@ -2527,7 +2518,7 @@ toolbar#nav-bar {
         if options.useTestMediaDevices:
             prefs["media.audio_loopback_dev"] = self.mediaDevices["audio"]["name"]
             prefs["media.video_loopback_dev"] = self.mediaDevices["video"]["name"]
-            prefs["media.cubeb.output_device"] = "Null Output"
+            prefs["media.cubeb.output_device"] = self.mediaDevices["speaker"]["name"]
             prefs["media.volume_scale"] = "1.0"
             self.gstForV4l2loopbackProcess = self.mediaDevices["video"]["process"]
 
@@ -2608,6 +2599,11 @@ toolbar#nav-bar {
                     return None
 
             self.virtualDeviceIdList = []
+
+        if hasattr(self, "virtualAudioNodeIdList"):
+            for id in self.virtualAudioNodeIdList:
+                subprocess.check_output(["pw-cli", "destroy", str(id)])
+            self.virtualAudioNodeIdList = []
 
     def dumpScreen(self, utilityPath):
         if self.haveDumpedScreen:
@@ -2925,13 +2921,13 @@ toolbar#nav-bar {
                 self.marionette.delete_session()
                 del self.marionette
 
-            except IOError:
+            except IOError as e:
                 # Any IOError as thrown by Marionette means that something is
                 # wrong with the process, like a crash or the socket is no
                 # longer open. We defer raising this specific error so that
                 # post-test checks for leaks and crashes are performed and
                 # reported first.
-                marionette_exception = sys.exc_info()
+                marionette_exception = e
 
             # wait until app is finished
             # XXX copy functionality from
@@ -2972,6 +2968,14 @@ toolbar#nav-bar {
                         "test": self.lastTestSeen,
                         "message": msg,
                     }
+
+                    # for looping scenarios (like --restartAfterFailure), document the test
+                    key = message["test"].split(" ")[0].split("/")[-1].strip()
+                    if key not in self.expectedError:
+                        self.expectedError[key] = message.get(
+                            "message", message["message"]
+                        ).strip()
+
                     # need to send a test_end in order to have mozharness process messages properly
                     # this requires a custom message vs log.error/log.warning/etc.
                     self.message_logger.process_message(message)
@@ -3030,6 +3034,14 @@ toolbar#nav-bar {
                     "test": self.lastTestSeen,
                     "message": "application terminated with exit code %s" % status,
                 }
+
+                # for looping scenarios (like --restartAfterFailure), document the test
+                key = message["test"].split(" ")[0].split("/")[-1].strip()
+                if key not in self.expectedError:
+                    self.expectedError[key] = message.get(
+                        "message", message["message"]
+                    ).strip()
+
                 # need to send a test_end in order to have mozharness process messages properly
                 # this requires a custom message vs log.error/log.warning/etc.
                 self.message_logger.process_message(message)
@@ -3041,8 +3053,7 @@ toolbar#nav-bar {
                 os.remove(p)
 
         if marionette_exception is not None:
-            exc, value, tb = marionette_exception
-            six.reraise(exc, value, tb)
+            raise marionette_exception
 
         return status, self.lastTestSeen
 
@@ -3073,12 +3084,110 @@ toolbar#nav-bar {
         if not mozinfo.isLinux:
             return
 
-        pactl = which("pactl")
+        INPUT_DEVICES_COUNT = 4
+        DEVICES_BASE_FREQUENCY = 110  # Hz
 
+        output_devices = [
+            {"name": "null-44100", "description": "44100Hz Null Output", "rate": 44100},
+            {"name": "null-48000", "description": "48000Hz Null Output", "rate": 48000},
+        ]
+        # We want quite a number of input devices, each with a different tone
+        # frequency and device name so that we can recognize them easily during
+        # testing.
+        input_devices = []
+        for i in range(1, INPUT_DEVICES_COUNT + 1):
+            freq = i * DEVICES_BASE_FREQUENCY
+            input_devices.append(
+                {
+                    "name": "sine-{}".format(freq),
+                    "description": "{}Hz Sine Source".format(freq),
+                    "frequency": freq,
+                }
+            )
+
+        # Determine if this is running PulseAudio or PipeWire
+        # `pactl info` works on both systems, but when running on PipeWire it says
+        # something like:
+        # Server Name: PulseAudio (on PipeWire 1.0.5)
+        pactl = which("pactl")
         if not pactl:
             self.log.error("Could not find pactl on system")
             return
 
+        o = subprocess.check_output([pactl, "info"])
+        if b"PipeWire" in o:
+            self.initializeVirtualAudioDevicesPipeWire(input_devices, output_devices)
+        else:
+            self.initializeVirtualAudioDevicesPulseAudio(
+                pactl, input_devices, output_devices
+            )
+
+    def initializeVirtualAudioDevicesPipeWire(self, input_devices, output_devices):
+        required_commands = ["pw-cli", "pw-dump"]
+        for command in required_commands:
+            cmd = which(command)
+            if not cmd:
+                self.log.error(
+                    "Could not find required program {} on system".format(command)
+                )
+                return
+
+        # Create outputs
+        for device in output_devices:
+            cmd = ["pw-cli", "create-node", "adapter"]
+            device_spec = [
+                (
+                    "{{factory.name=support.null-audio-sink "
+                    'node.name="{}" '
+                    'node.description="{}" '
+                    "media.class=Audio/Sink "
+                    "object.linger=true "
+                    "audio.position=[FL FR] "
+                    "monitor.channel-volumes=true "
+                    "audio.rate={}}}".format(
+                        device["name"], device["description"], device["rate"]
+                    )
+                )
+            ]
+            subprocess.check_output(cmd + device_spec)
+
+        # Create inputs
+        for device in input_devices:
+            cmd = ["pw-cli", "create-node", "adapter"]
+            # The frequency setting doesn't work for now
+            device_spec = [
+                (
+                    "{{factory.name=audiotestsrc "
+                    'node.name="{}" '
+                    'node.description="{}" '
+                    "media.class=Audio/Source "
+                    "object.linger=true "
+                    "node.param.Props={{frequency: {}}} }}".format(
+                        device["name"], device["description"], device["frequency"]
+                    )
+                )
+            ]
+            subprocess.check_output(cmd + device_spec)
+
+        # Get the node ids for cleanup
+        virtual_node_ids = []
+        cmd = ["pw-dump", "Node"]
+        try:
+            nodes = json.loads(subprocess.check_output(cmd))
+        except json.JSONDecodeError as e:
+            # This can happen but I'm not sure why, leaving that in for now
+            print(e, str(cmd))
+            sys.exit(1)
+        for node in nodes:
+            name = node["info"]["props"]["node.name"]
+            if "null-" in name or "sine-" in name:
+                virtual_node_ids.append(node["info"]["props"]["object.id"])
+
+        self.virtualAudioNodeIdList = virtual_node_ids
+
+    def initializeVirtualAudioDevicesPulseAudio(
+        self, pactl, input_devices, output_devices
+    ):
         def getModuleIds(moduleName):
             o = subprocess.check_output([pactl, "list", "modules", "short"])
             list = []
@@ -3088,17 +3197,13 @@ toolbar#nav-bar {
                     list.append(int(device[0]))
             return list
 
-        OUTPUT_DEVICES_COUNT = 2
-        INPUT_DEVICES_COUNT = 4
-        DEVICES_BASE_FREQUENCY = 110  # Hz
         # If the device are already present, find their id and return early
         outputDeviceIdList = getModuleIds("module-null-sink")
         inputDeviceIdList = getModuleIds("module-sine-source")
 
-        if (
-            len(outputDeviceIdList) == OUTPUT_DEVICES_COUNT
-            and len(inputDeviceIdList) == INPUT_DEVICES_COUNT
-        ):
+        if len(outputDeviceIdList) == len(output_devices) and len(
+            inputDeviceIdList
+        ) == len(input_devices):
             self.virtualDeviceIdList = outputDeviceIdList + inputDeviceIdList
             return
         else:
@@ -3112,33 +3217,29 @@ toolbar#nav-bar {
 
         idList = []
         command = [pactl, "load-module", "module-null-sink"]
-        try:  # device for "media.audio_loopback_dev" pref
-            o = subprocess.check_output(command + ["rate=44100"])
-            idList.append(int(o))
-        except subprocess.CalledProcessError:
-            self.log.error("Could not load module-null-sink")
+        for device in output_devices:
+            try:
+                o = subprocess.check_output(
+                    command
+                    + [
+                        "rate={}".format(device["rate"]),
+                        "sink_name='\"{}\"'".format(device["name"]),
+                        "sink_properties='device.description=\"{}\"'".format(
+                            device["description"]
+                        ),
+                    ]
+                )
+                idList.append(int(o))
+            except subprocess.CalledProcessError:
+                self.log.error(
+                    "Could not load module-null-sink at rate={}".format(device["rate"])
+                )
 
-        try:
-            o = subprocess.check_output(
-                command
-                + [
-                    "rate=48000",
-                    "sink_properties='device.description=\"48000 Hz Null Output\"'",
-                ]
-            )
-            idList.append(int(o))
-        except subprocess.CalledProcessError:
-            self.log.error("Could not load module-null-sink at rate=48000")
-
-        # We want quite a number of input devices, each with a different tone
-        # frequency and device name so that we can recognize them easily during
-        # testing.
         command = [pactl, "load-module", "module-sine-source", "rate=44100"]
-        for i in range(1, INPUT_DEVICES_COUNT + 1):
-            freq = i * DEVICES_BASE_FREQUENCY
+        for device in input_devices:
             complete_command = command + [
-                "source_name=sine-{}".format(freq),
-                "frequency={}".format(freq),
+                'source_name="{}"'.format(device["name"]),
+                "frequency={}".format(device["frequency"]),
             ]
             try:
                 o = subprocess.check_output(complete_command)
@@ -3147,7 +3248,7 @@ toolbar#nav-bar {
             except subprocess.CalledProcessError:
                 self.log.error(
                     "Could not create device with module-sine-source"
-                    " (freq={})".format(freq)
+                    " (freq={})".format(device["frequency"])
                 )
 
         self.virtualDeviceIdList = idList
@@ -3412,6 +3513,7 @@ toolbar#nav-bar {
                 "swgl": self.extraPrefs.get("gfx.webrender.software", False),
                 "verify": options.verify,
                 "verify_fission": options.verify_fission,
+                "vertical_tab": self.extraPrefs.get("sidebar.verticalTabs", False),
                 "webgl_ipc": self.extraPrefs.get("webgl.out-of-process", False),
                 "wmfme": (
                     self.extraPrefs.get("media.wmf.media-engine.enabled", 0)
@@ -3885,6 +3987,12 @@ toolbar#nav-bar {
             "message": "application timed out after %d seconds with no output"
             % int(timeout),
         }
+
+        # for looping scenarios (like --restartAfterFailure), document the test
+        key = message["test"].split(" ")[0].split("/")[-1].strip()
+        if key not in self.expectedError:
+            self.expectedError[key] = message.get("message", message["message"]).strip()
+
         # need to send a test_end in order to have mozharness process messages properly
         # this requires a custom message vs log.error/log.warning/etc.
         self.message_logger.process_message(message)
@@ -4237,7 +4345,7 @@ def run_test_harness(parser, options):
 
     logger_options = {
         key: value
-        for key, value in six.iteritems(vars(options))
+        for key, value in vars(options).items()
         if key.startswith("log") or key == "valgrind"
     }
 

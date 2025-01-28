@@ -46,7 +46,7 @@
     <string name="tab_tray_collection_button_multiselect_content_description">Cadw’r tabiau hyn i Gasgliad</string>
 
     <!-- Content description on checkmark while tab is selected in multiselect mode in tab tray -->
-    <string name="tab_tray_multiselect_selected_content_description">Dewiswyd</string>
+    <string name="tab_tray_multiselect_selected_content_description" moz:removedIn="136" tools:ignore="UnusedResources">Dewiswyd</string>
 
     <!-- Home - Bookmarks -->
     <!-- Title for the home screen section with bookmarks. -->
@@ -363,11 +363,11 @@
     <!-- Browser menu label that the saves the currently visited page as a PDF -->
     <string name="browser_menu_save_as_pdf">Cadw fel PDF…</string>
     <!-- Browser menu label for turning ON reader view of the current visited page -->
-    <string name="browser_menu_turn_on_reader_view">Trowch y Golwg Darllen ymlaen</string>
+    <string name="browser_menu_turn_on_reader_view">Troi\'r Golwg Darllen ymlaen</string>
     <!-- Browser menu label for turning OFF reader view of the current visited page -->
     <string name="browser_menu_turn_off_reader_view">Diffodd y Golwg Darllen</string>
     <!-- Browser menu button that reopens a private tab as a regular tab -->
-    <string name="browser_menu_open_in_normal_tab">Symud i tab nad yw\'n breifat</string>dsa
+    <string name="browser_menu_open_in_normal_tab">Symud i tab nad yw\'n breifat</string>
     <!-- Browser menu label for navigating to the translation feature, which provides language translation options the current visited page -->
     <string name="browser_menu_translate_page">Cyfieithu tudalen…</string>
     <!-- Browser menu label for navigating to the Web Compat Reporter feature, which provides users the ability to send bug reports for broken sites. -->
@@ -417,8 +417,6 @@
 
     <!-- Search Fragment -->
     <!-- Button in the search view that lets a user search by scanning a QR code -->
-    <string name="search_scan_button" moz:removedIn="133" tools:ignore="UnusedResources">Sganio</string>
-    <!-- Button in the search view that lets a user search by scanning a QR code -->
     <string name="search_scan_button_2">Sganiwch y cod QR</string>
     <!-- Button in the search view when shortcuts are displayed that takes a user to the search engine settings -->
     <string name="search_shortcuts_engine_settings">Gosodiadau peiriannau chwilio</string>
@@ -444,12 +442,14 @@
     <!-- Header text for the search selector menu -->
     <string name="search_header_menu_item_2">Y tro hwn chwiliwch yn:</string>
 
-    <!-- Content description (not visible, for screen readers etc.): Search engine icon. The first parameter is the search engine name (for example: DuckDuckGo). -->
-    <string name="search_engine_icon_content_description" tools:ignore="UnusedResources" moz:removedIn="133">Peiriant chwilio %s</string>
-
     <!-- Content description (not visible, for screen readers etc.): Search engine icon.
     The parameter is the search engine name (for example: DuckDuckGo). -->
     <string name="search_engine_icon_content_description_1">Peiriant chwilio: %s</string>
+
+    <!-- Content description (not visible, for screen readers etc.) of the search engine selector from the search toolbar.
+    The parameter is the search engine name (for example: DuckDuckGo).
+    The colon character (in "%s:") is intended to have the screen reader make a small pause between the search engine name and the description of the button. -->
+    <string name="search_engine_selector_content_description">%s: dewisydd peiriant chwilio</string>
 
     <!-- Home onboarding -->
     <!-- Home onboarding dialog welcome screen title text. -->
@@ -530,10 +530,6 @@
     <!-- Onboarding sub header for the add-ons card, used by Nimbus experiments. -->
     <string name="onboarding_add_on_sub_header" tools:ignore="UnusedResources">Ychwanegwch estyniadau trydydd parti i wella eich diogelwch, cynhyrchiant, a mwy.</string>
     <!-- Onboarding add-ons card, for checking more add-ons on, used by Nimbus experiments. -->
-    <string name="onboarding_add_on_explore_more_extensions" tools:ignore="UnusedResources" moz:removedIn="133">Edrychwch ar ragor o estyniadau.</string>
-    <!-- Onboarding add-ons card, button for start browsing, used by Nimbus experiments. -->
-    <string name="onboarding_add_on_start_browsing_button" tools:ignore="UnusedResources" moz:removedIn="133">Dechreuwch bori.</string>
-    <!-- Onboarding add-ons card, for checking more add-ons on, used by Nimbus experiments. -->
     <string name="onboarding_add_on_explore_more_extensions_2">Gweld rhagor o estyniadau</string>
     <!-- Onboarding add-ons card, button for start browsing, used by Nimbus experiments. -->
     <string name="onboarding_add_on_start_browsing_button_2">Dechreuwch bori</string>
@@ -568,40 +564,49 @@
     <string name="onboarding_add_on_star_rating_content_description">Graddiwyd %1$s allan o 5</string>
 
     <!-- Title for the privacy preferences dialog shown during onboarding. Note: The word "Firefox" should NOT be translated. -->
-    <string name="onboarding_preferences_dialog_title" tools:ignore="BrandUsage,UnusedResources">Helpwch ni i wneud Firefox yn well</string>
+    <string name="onboarding_preferences_dialog_title" tools:ignore="BrandUsage">Helpwch ni i wneud Firefox yn well</string>
     <!-- Title for the crash reporting option in the privacy preferences dialog shown during onboarding. -->
-    <string name="onboarding_preferences_dialog_crash_reporting_title" tools:ignore="UnusedResources">Anfonwch adroddiadau chwalu\'n awtomatig</string>
+    <string name="onboarding_preferences_dialog_crash_reporting_title">Anfonwch adroddiadau chwalu\'n awtomatig</string>
     <!-- Description for the crash reporting option in the privacy preferences dialog shown during onboarding. -->
-    <string name="onboarding_preferences_dialog_crash_reporting_description" tools:ignore="UnusedResources">Mae adroddiadau chwalu\'n ein galluogi i wneud diagnosis a thrwsio problemau gyda\'r porwr. Gall adroddiadau gynnwys data personol neu sensitif.</string>
+    <string name="onboarding_preferences_dialog_crash_reporting_description">Mae adroddiadau chwalu\'n ein galluogi i wneud diagnosis a thrwsio problemau gyda\'r porwr. Gall adroddiadau gynnwys data personol neu sensitif.</string>
     <!-- Learn more link for the crash reporting option in the privacy preferences dialog shown during onboarding. -->
-    <string name="onboarding_preferences_dialog_crash_reporting_learn_more" tools:ignore="UnusedResources">Darllen rhagor am adroddiadau chwalu</string>
+    <string name="onboarding_preferences_dialog_crash_reporting_learn_more" moz:removedIn="136" tools:ignore="UnusedResources">Darllen rhagor am adroddiadau chwalu</string>
+    <string name="onboarding_preferences_dialog_crash_reporting_learn_more_2">Dysgu rhagor</string>
     <!-- Title for the usage data option in the privacy preferences dialog shown during onboarding. Note: The word "Mozilla" should NOT be translated. -->
-    <string name="onboarding_preferences_dialog_usage_data_title" tools:ignore="UnusedResources">Anfon data technegol a rhyngweithio i Mozilla</string>
+    <string name="onboarding_preferences_dialog_usage_data_title">Anfon data technegol a rhyngweithio i Mozilla</string>
     <!-- Description for the usage data option in the privacy preferences dialog shown during onboarding. Note: The word "Firefox" should NOT be translated. -->
-    <string name="onboarding_preferences_dialog_usage_data_description" tools:ignore="BrandUsage,UnusedResources">Mae data am eich dyfais, ffurfweddiad caledwedd, a sut rydych chi\'n defnyddio Firefox yn helpu i wella nodweddion, perfformiad a sefydlogrwydd i ddefnyddwyr ym mhobman.</string>
+    <string name="onboarding_preferences_dialog_usage_data_description" moz:removedIn="136" tools:ignore="BrandUsage,UnusedResources">Mae data am eich dyfais, ffurfweddiad caledwedd, a sut rydych chi\'n defnyddio Firefox yn helpu i wella nodweddion, perfformiad a sefydlogrwydd i ddefnyddwyr ym mhobman.</string>
+    <string name="onboarding_preferences_dialog_usage_data_description_2" tools:ignore="BrandUsage">Mae data am eich dyfais, ffurfweddiad caledwedd, a sut rydych chi\'n defnyddio Firefox yn helpu i wella nodweddion, perfformiad, a sefydlogrwydd i bawb.</string>
     <!-- Learn more link for the usage data option in the privacy preferences dialog shown during onboarding. -->
-    <string name="onboarding_preferences_dialog_usage_data_learn_more" tools:ignore="UnusedResources">Darllen rhagor am ddata defnydd</string>
+    <string name="onboarding_preferences_dialog_usage_data_learn_more" moz:removedIn="136" tools:ignore="UnusedResources">Darllen rhagor am ddata defnydd</string>
+    <string name="onboarding_preferences_dialog_usage_data_learn_more_2">Dysgu rhagor</string>
     <!-- Positive button label for the privacy preferences dialog shown during onboarding. -->
-    <string name="onboarding_preferences_dialog_positive_button" tools:ignore="UnusedResources">Gorffen</string>
+    <string name="onboarding_preferences_dialog_positive_button">Gorffen</string>
     <!-- Negative button label for the privacy preferences dialog shown during onboarding. -->
-    <string name="onboarding_preferences_dialog_negative_button" tools:ignore="UnusedResources">Diddymu</string>
+    <string name="onboarding_preferences_dialog_negative_button">Na</string>
 
     <!-- Terms of service onboarding title card label. 'Firefox' intentionally hardcoded here-->
-    <string name="onboarding_welcome_to_firefox" tools:ignore="UnusedResources,BrandUsage">Croeso i Firefox</string>
+    <string name="onboarding_welcome_to_firefox" tools:ignore="BrandUsage">Croeso i Firefox</string>
+    <!-- Terms of service sub header label. -->
+    <string name="onboarding_terms_of_service_sub_header" tools:ignore="UnusedResources" moz:removedIn="136">Pori gwe cyflym a diogel.</string>
+    <string name="onboarding_terms_of_service_sub_header_2">Pori gwe cyflym a diogel</string>
     <!-- Terms of service onboarding page continue button label. -->
-    <string name="onboarding_term_of_service_agree_and_continue_button_label" tools:ignore="UnusedResources">Cytuno a pharhau</string>
-    <!-- Line one of the terms of service onboarding page. 'Firefox' is intentionally hardcoded. %1$s is replaced by an active link, using onboarding_term_of_service_line_one_link_text as text (“Terms of Service”). -->
-    <string name="onboarding_term_of_service_line_one" tools:ignore="UnusedResources,BrandUsage">Trwy barhau, rydych yn cytuno i %1$s Firefox.</string>
+    <string name="onboarding_term_of_service_agree_and_continue_button_label">Cytuno a pharhau</string>
+    <!-- Line one of the terms of service onboarding page. %1$s is replaced by an active link, using onboarding_term_of_service_line_one_link_text as text (“Firefox Terms of Use”). -->
+    <string name="onboarding_term_of_service_line_one" moz:removedIn="136" tools:ignore="BrandUsage, UnusedResources">Trwy barhau, rydych yn cytuno i %1$s Firefox.</string>
+    <string name="onboarding_term_of_service_line_one_2">Drwy barhau, rydych yn cytuno i\'r %1$s.</string>
     <!-- Used as text for the link in onboarding_term_of_service_line_one. -->
-    <string name="onboarding_term_of_service_line_one_link_text" tools:ignore="UnusedResources,BrandUsage">Amodau Gwasanaeth</string>
-    <!-- Line two of the terms of service onboarding page. 'Firefox' is intentionally hardcoded. %1$s is replaced by an active link, using onboarding_term_of_service_line_two_link_text as text (Privacy Notice”). -->
-    <string name="onboarding_term_of_service_line_two" tools:ignore="UnusedResources,BrandUsage">Mae Firefox yn ofalus o\'ch preifatrwydd. Darllenwch fwy yn ein %1$s.</string>
+    <string name="onboarding_term_of_service_line_one_link_text" moz:removedIn="136" tools:ignore="UnusedResources">Amodau Gwasanaeth</string>
+    <string name="onboarding_term_of_service_line_one_link_text_2" tools:ignore="BrandUsage">Telerau Defnyddio Firefox</string>
+    <!-- Line two of the terms of service onboarding page. 'Firefox' is intentionally hardcoded. %1$s is replaced by an active link, using onboarding_term_of_service_line_two_link_text as text (“Privacy Notice”). -->
+    <string name="onboarding_term_of_service_line_two" moz:removedIn="136" tools:ignore="UnusedResources,BrandUsage">Mae Firefox yn ofalus o\'ch preifatrwydd. Darllenwch fwy yn ein %1$s.</string>
+    <string name="onboarding_term_of_service_line_two_2" tools:ignore="BrandUsage">Mae Firefox yn poeni am eich preifatrwydd. Dysgwch fwy yn ein %1$s.</string>
     <!-- Used as text for the link in onboarding_term_of_service_line_two. -->
-    <string name="onboarding_term_of_service_line_two_link_text" tools:ignore="UnusedResources,BrandUsage">Hysbysiad Preifatrwydd</string>
-    <!-- Line three of the terms of service onboarding page. 'Firefox' and 'Mozilla' are intentionally hardcoded. %1$S is replaced by an active link, using onboarding_term_of_service_line_three_link_text as text (Manage”). -->
-    <string name="onboarding_term_of_service_line_three" tools:ignore="UnusedResources,BrandUsage">Er mwyn helpu i wella\'r porwr, mae Firefox yn anfon data diagnostig a rhyngweithio i Mozilla. %1$s</string>
+    <string name="onboarding_term_of_service_line_two_link_text">Hysbysiad Preifatrwydd</string>
+    <!-- Line three of the terms of service onboarding page. 'Firefox' and 'Mozilla' are intentionally hardcoded. %1$S is replaced by an active link, using onboarding_term_of_service_line_three_link_text as text (“Manage”). -->
+    <string name="onboarding_term_of_service_line_three" tools:ignore="BrandUsage">Er mwyn helpu i wella\'r porwr, mae Firefox yn anfon data diagnostig a rhyngweithio i Mozilla. %1$s</string>
     <!-- Used as text for the link in onboarding_term_of_service_line_three. -->
-    <string name="onboarding_term_of_service_line_three_link_text" tools:ignore="UnusedResources,BrandUsage">Rheoli</string>
+    <string name="onboarding_term_of_service_line_three_link_text">Rheoli</string>
     <!-- Onboarding header for the toolbar selection card, used by Nimbus experiments. -->
     <string name="onboarding_customize_toolbar_title" tools:ignore="UnusedResources">Dewiswch leoliad eich bar offer</string>
     <!-- Onboarding sub header for toolbar selection card, used by Nimbus experiments. -->
@@ -609,20 +614,23 @@
     <!-- Onboarding label for 'Save and continue' button, used by Nimbus experiments. -->
     <string name="onboarding_save_and_continue_button">Cadw a pharhau</string>
     <!-- Onboarding toolbar selection card label for 'skip' button, used by Nimbus experiments. -->
-    <string name="onboarding_customize_toolbar_skip_button">Hepgor</string>
+    <string name="onboarding_customize_toolbar_skip_button" moz:removedIn="135" tools:ignore="UnusedResources">Hepgor</string>
     <!-- Onboarding toolbar selection card label for 'top' option, used by Nimbus experiments. -->
     <string name="onboarding_customize_toolbar_top_option">Brig</string>
     <!-- Onboarding toolbar selection card label for 'bottom' option, used by Nimbus experiments. -->
     <string name="onboarding_customize_toolbar_bottom_option">Gwaelod</string>
 
     <!-- Onboarding toolbar selection card content description for the main image. -->
-    <string name="onboarding_customize_toolbar_main_image_content_description">Delwedd pennawd mawr o\'r olygfa dewis bar offer yn dangos bar offer darluniadol.</string>
+    <string name="onboarding_customize_toolbar_main_image_content_description">Delwedd pennyn mawr o\'r olwg dewis bar offer yn dangos bar offer darluniadol.</string>
     <!-- Onboarding toolbar selection card content description for the toolbar placement image. %1$s is placeholder for either 'top' or 'bottom'. -->
     <string name="onboarding_customize_toolbar_placement_content_description" moz:removedIn="135" tools:ignore="UnusedResources">Delwedd o\'r bar offer %1$s</string>
 
     <!-- Onboarding toolbar selection card content description for the toolbar placement image. -->
     <string name="onboarding_customize_toolbar_placement_bottom_content_description">Delwedd o\'r bar offer gwaelod</string>
     <string name="onboarding_customize_toolbar_placement_top_content_description">Delwedd o\'r bar offer uchaf</string>
+
+    <!-- Onboarding toolbar selection card label for 'Not now' button, used by Nimbus experiments. -->
+    <string name="onboarding_customize_toolbar_not_now_button" moz:removedIn="136" tools:ignore="UnusedResources">Nid nawr</string>
 
     <!-- Onboarding header for the theme selection card, used by Nimbus experiments. -->
     <string name="onboarding_customize_theme_title" tools:ignore="UnusedResources">Dewiswch thema</string>
@@ -631,7 +639,7 @@
     <!-- Onboarding label for 'Save and start browsing' button, used by Nimbus experiments. -->
     <string name="onboarding_save_and_start_button">Cadw a dechrau pori</string>
     <!-- Onboarding theme selection card label for 'skip' button, used by Nimbus experiments. -->
-    <string name="onboarding_customize_theme_skip_button">Hepgor</string>
+    <string name="onboarding_customize_theme_skip_button" moz:removedIn="135" tools:ignore="UnusedResources">Hepgor</string>
     <!-- Onboarding theme selection card label for 'dark' option, used by Nimbus experiments. -->
     <string name="onboarding_customize_theme_dark_option">Tywyll</string>
     <!-- Onboarding theme selection card label for 'light' option, used by Nimbus experiments. -->
@@ -639,9 +647,12 @@
     <!-- Onboarding theme selection card label for 'System auto' option, used by Nimbus experiments. -->
     <string name="onboarding_customize_theme_system_option">Auto system</string>
     <!-- Onboarding theme selection card content description for the main image. -->
-    <string name="onboarding_customize_theme_main_image_content_description">Delwedd pennawd mawr o\'r olygfa dewis thema yn dangos offer arlunydd ac adeiladwr darluniadol.</string>
+    <string name="onboarding_customize_theme_main_image_content_description">Delwedd pennyn mawr o\'r olwg dewis thema yn dangos offer arlunydd ac adeiladwr darluniadol.</string>
     <!-- Onboarding theme selection card content description for the theme selection image. %1$s is placeholder for either 'system', 'light' or 'dark'. -->
     <string name="onboarding_customize_theme_content_description">Delwedd o\'r thema %1$s</string>
+
+    <!-- Onboarding theme selection card label for 'Not now' button, used by Nimbus experiments. -->
+    <string name="onboarding_customize_theme_not_now_button" moz:removedIn="136" tools:ignore="UnusedResources">Nid nawr</string>
 
     <!-- Search Widget -->
     <!-- Content description for searching with a widget. The first parameter is the name of the application.-->
@@ -695,8 +706,6 @@
     <string name="preferences_category_advanced">Uwch</string>
     <!-- Preference category for privacy and security settings -->
     <string name="preferences_category_privacy_security">Preifatrwydd a diogelwch</string>
-    <!-- Preference for advanced site permissions -->
-    <string name="preferences_site_permissions" moz:removedIn="133" tools:ignore="UnusedResources">Caniatâd gwefan</string>
     <!-- Preference for advanced site settings -->
     <string name="preferences_site_settings">Gosodiadau gwefan</string>
     <!-- Preference for private browsing options -->
@@ -720,7 +729,7 @@
     <!-- Text for indicating cookie banner handling is off this site, this is shown as part of the protections panel with the tracking protection toggle -->
     <string name="reduce_cookie_banner_off_for_site">Diffodd ar gyfer y wefan hon</string>
     <!-- Text for cancel button indicating that cookie banner reduction is not supported for the current site, this is shown as part of the cookie banner details view. -->
-    <string name="cookie_banner_handling_details_site_is_not_supported_cancel_button">Diddymu</string>
+    <string name="cookie_banner_handling_details_site_is_not_supported_cancel_button">Na</string>
     <!-- Text for request support button indicating that cookie banner reduction is not supported for the current site, this is shown as part of the cookie banner details view. -->
     <string name="cookie_banner_handling_details_site_is_not_supported_request_support_button_2">Anfon cais</string>
     <!-- Text for title indicating that cookie banner reduction is not supported for the current site, this is shown as part of the cookie banner details view. -->
@@ -735,7 +744,7 @@
     <!-- Text for indicating cookie banner handling is currently not supported for this site, this is shown as part of the protections panel with the tracking protection toggle -->
     <string name="reduce_cookie_banner_unsupported_site">Nid yw’r wefan yn cael ei chefnogi ar hyn o bryd</string>
     <!-- Title text for a detail explanation indicating cookie banner handling is on this site, this is shown as part of the cookie banner panel in the toolbar. The first parameter is a shortened URL of the current site-->
-    <string name="reduce_cookie_banner_details_panel_title_on_for_site_1">Trowch y Rhwystrydd Baner Cwci ymlaen ar gyfer %1$s?</string>
+    <string name="reduce_cookie_banner_details_panel_title_on_for_site_1">Troi\'r Rhwystrydd Baner Cwci ymlaen ar gyfer %1$s?</string>
     <!-- Title text for a detail explanation indicating cookie banner handling is off this site, this is shown as part of the cookie banner panel in the toolbar. The first parameter is a shortened URL of the current site-->
     <string name="reduce_cookie_banner_details_panel_title_off_for_site_1">Diffoddwch y Rhwystrydd Baner Cwcis ar gyfer %1$s?</string>
     <!-- Title text for a detail explanation indicating cookie banner reducer didn't work for the current site, this is shown as part of the cookie banner panel in the toolbar. The first parameter is the application name-->
@@ -744,7 +753,7 @@
     <!-- Long text for a detail explanation indicating what will happen if cookie banner handling is off for a site, this is shown as part of the cookie banner panel in the toolbar. The first parameter is the application name -->
     <string name="reduce_cookie_banner_details_panel_description_off_for_site_1">Diffoddwch a bydd %1$s yn clirio cwcis ac yn ail-lwytho’r wefan hon. Gall hyn eich allgofnodi neu wagio cartiau siopa.</string>
     <!-- Long text for a detail explanation indicating what will happen if cookie banner handling is on for a site, this is shown as part of the cookie banner panel in the toolbar. The first parameter is the application name -->
-    <string name="reduce_cookie_banner_details_panel_description_on_for_site_3">Trowch ymlaen a bydd %1$s yn ceisio gwrthod pob baner cwci ar y wefan hon yn awtomatig.</string>
+    <string name="reduce_cookie_banner_details_panel_description_on_for_site_3">Trowchhwn  ymlaen a bydd %1$s yn ceisio gwrthod pob baner cwci ar y wefan hon yn awtomatig.</string>
 
     <!--Title for the cookie banner re-engagement CFR, the placeholder is replaced with app name -->
     <string name="cookie_banner_cfr_title">Mae %1$s newydd wrthod cwcis i chi</string>
@@ -883,7 +892,7 @@
     <!-- Button caption to confirm the add-on collection configuration -->
     <string name="customize_addon_collection_ok">Iawn</string>
     <!-- Button caption to abort the add-on collection configuration -->
-    <string name="customize_addon_collection_cancel">Diddymu</string>
+    <string name="customize_addon_collection_cancel">Na</string>
     <!-- Hint displayed on input field for custom collection name -->
     <string name="customize_addon_collection_hint">Enw’r casgliad</string>
     <!-- Hint displayed on input field for custom collection user ID-->
@@ -1055,8 +1064,12 @@
     <!-- Learn more link for marketing data preference -->
     <string name="preferences_marketing_data_learn_more">Dysgwch fwy am ddata marchnata</string>
 
+    <!-- Preference switch for daily usage ping data collection -->
+    <string name="preferences_daily_usage_ping_title">Defnydd dyddiol ping</string>
+    <string name="preferences_daily_usage_ping_description">Mae hyn yn helpu Mozilla amcangyfrif defnyddwyr gweithredol.</string>
+    <string name="preferences_daily_usage_ping_learn_more">Dysgwch fwy am ping defnydd dyddiol</string>
     <!-- Preference switch title for automatically submitting crash reports -->
-    <string name="preferences_automatically_send_crashes_title">Anfonwch adroddiadau damwain yn awtomatig</string>
+    <string name="preferences_automatically_send_crashes_title">Yn anfon adroddiadau chwalu\'n awtomatig</string>
     <string name="preferences_automatically_submit_crashes_title" moz:removedIn="136" tools:ignore="UnusedResources">Cyflwynwch adroddiadau chwalu\'n awtomatig</string>
 
     <!-- Preference switch description for automatically submitting crash reports -->
@@ -1140,7 +1153,7 @@
     <!-- Dialog button text for confirming open all tabs -->
     <string name="open_all_warning_confirm">Agor tabiau</string>
     <!-- Dialog button text for canceling open all tabs -->
-    <string name="open_all_warning_cancel">Diddymu</string>
+    <string name="open_all_warning_cancel">Na</string>
 
     <!-- Text to show users they have one page in the history group section of the History fragment.
     %d is a placeholder for the number of pages in the group. -->
@@ -1233,18 +1246,24 @@
     <!-- Dialog button to confirm the removing a study. -->
     <string name="studies_restart_dialog_ok" moz:removedIn="135">Iawn</string>
     <!-- Dialog button text for canceling removing a study. -->
-    <string name="studies_restart_dialog_cancel" moz:removedIn="135">Diddymu</string>
+    <string name="studies_restart_dialog_cancel" moz:removedIn="135">Na</string>
 
     <!-- Toast shown after turning on/off studies preferences -->
     <string name="studies_toast_quit_application" moz:removedIn="135" tools:ignore="UnusedResources">Yn gadael y rhaglen er mwyn gosod y newidiadau…</string>
 
     <!-- Sessions -->
     <!-- Title for the list of tabs -->
-    <string name="tab_header_label">Agor tabiau</string>
+    <string name="tab_header_label" moz:removedIn="135" tools:ignore="UnusedResources">Agor tabiau</string>
     <!-- Title for the list of tabs in the current private session -->
-    <string name="tabs_header_private_tabs_title">Tabiau preifat</string>
+    <string name="tabs_header_private_tabs_title" moz:removedIn="136" tools:ignore="UnusedResources">Tabiau preifat</string>
+    <!-- Title for the list of tabs in the current private session used by a11y services
+    The %1$s will be replaced by the number of opened private tabs -->
+    <string name="tabs_header_private_tabs_counter_title">Tabiau Preifat ac ar Agor: %1$s. Tapiwch i newid tab.</string>
     <!-- Title for the list of tabs in the synced tabs -->
-    <string name="tabs_header_synced_tabs_title">Tabiau wedi’u cydweddu</string>
+    <string name="tabs_header_synced_tabs_title" moz:removedIn="136" tools:ignore="UnusedResources">Tabiau wedi’u cydweddu</string>
+    <!-- Title for the list of tabs in the synced tabs used by a11y services
+    The %1$s will be replaced by the number of opened synced tabs -->
+    <string name="tabs_header_synced_tabs_counter_title">Tabiau wedi\'u Cydweddu ac ar Agor: %1$s. Tapiwch i newid tab.</string>
     <!-- Content description (not visible, for screen readers etc.): Add tab button. Adds a news tab when pressed -->
     <string name="add_tab">Ychwanegu tab</string>
     <!-- Content description (not visible, for screen readers etc.): Add tab button. Adds a news tab when pressed -->
@@ -1358,18 +1377,27 @@
     <!-- The error message of the URL text field when an invalid URL has been entered. -->
     <string name="webcompat_reporter_url_error_invalid">Rhowch URL dilys</string>
     <!-- The label/title of an optional field in the Web Compat Reporter feature for explaining a high-level reason why the site is broken. -->
-    <string name="webcompat_reporter_label_whats_broken">Beth sydd wedi torri? (dewisol)</string>
-    <!-- The placeholder text for the dropdown where a user can select a high-level reason why the site is broken. -->
+    <string name="webcompat_reporter_label_whats_broken" moz:removedIn="136" tools:ignore="UnusedResources">Beth sydd wedi torri? (dewisol)</string>
+    <!-- The label/title of a field in the Web Compat Reporter feature for explaining a high-level reason why the site is broken. -->
+    <string name="webcompat_reporter_label_whats_broken_2">Beth sydd wedi torri?</string>
+    <!-- The placeholder text for the dropdown where a user selects a high-level reason why the site is broken. -->
     <string name="webcompat_reporter_choose_reason">Dewiswch reswm</string>
+    <!-- The error message of the dropdown, prompting the user to select a high-level reason why the site is broken. -->
+    <string name="webcompat_reporter_choose_reason_error">Dewiswch reswm</string>
     <!-- The label/title of an optional field in the Web Compat Reporter feature for adding additional information. -->
     <string name="webcompat_reporter_label_description">Disgrifiwch y broblem (dewisol)</string>
     <!-- The button text for navigating away from the feature to provide more information on the broken site's bug report. -->
     <string name="webcompat_reporter_send_more_info">Anfon rhagor o wybodaeth</string>
     <!-- The button text for the cancel button to leave the Web Compat Reporter feature. -->
-    <string name="webcompat_reporter_cancel">Diddymu</string>
+    <string name="webcompat_reporter_cancel">Na</string>
     <!-- The button text for the send button to submit the provided form data. -->
     <string name="webcompat_reporter_send">Anfon</string>
 
+
+    <!-- Text for a snackbar to confirm the successful submission of a WebCompat report. -->
+    <string name="webcompat_reporter_success_snackbar_text">Anfonwyd eich adroddiad</string>
+    <!-- Button text for closing or dismissing the snackbar shown after successfully submitting a WebCompat report. -->
+    <string name="webcompat_reporter_dismiss_success_snackbar_text">Cau</string>
 
     <!-- These reason strings are dropdown options on a WebCompat reporter form, indicating what is broken on the site. -->
     <!-- Broken site reason text for site slow or not working -->
@@ -1413,7 +1441,7 @@
     <!-- Confirmation message for a dialog confirming if the user wants to delete multiple items including folders. Parameter will be replaced by app name. -->
     <string name="bookmark_delete_multiple_folders_confirmation_dialog">Bydd %s yn dileu’r eitemau hyn.</string>
     <!-- Text for the cancel button on delete bookmark dialog -->
-    <string name="bookmark_delete_negative">Diddymu</string>
+    <string name="bookmark_delete_negative">Na</string>
     <!-- Screen title for adding a bookmarks folder -->
     <string name="bookmark_add_folder">Ychwanegu ffolder</string>
     <!-- Snackbar title that confirms a bookmark was saved into a folder. Parameter will be replaced by the name of the folder the bookmark was saved into. -->
@@ -1528,13 +1556,13 @@
     <!-- Text for the OK button on Clear permissions dialog -->
     <string name="clear_permissions_positive">Iawn</string>
     <!-- Text for the cancel button on Clear permissions dialog -->
-    <string name="clear_permissions_negative">Diddymu</string>
+    <string name="clear_permissions_negative">Na</string>
     <!-- Button label for clearing a site permission-->
     <string name="clear_permission">Clirio caniatâd</string>
     <!-- Text for the OK button on Clear permission dialog -->
     <string name="clear_permission_positive">Iawn</string>
     <!-- Text for the cancel button on Clear permission dialog -->
-    <string name="clear_permission_negative">Diddymu</string>
+    <string name="clear_permission_negative">Na</string>
     <!-- Button label for clearing all the information on all sites-->
     <string name="clear_permissions_on_all_sites">Clirio caniatâd ar bob gwefan</string>
     <!-- Preference for altering video and audio autoplay for all websites -->
@@ -1648,7 +1676,7 @@
     <!-- Text for the OK button from collection dialogs -->
     <string name="create_collection_positive">Iawn</string>
     <!-- Text for the cancel button from collection dialogs -->
-    <string name="create_collection_negative">Diddymu</string>
+    <string name="create_collection_negative">Na</string>
 
     <!-- Default name for a new collection in "name new collection" step of the collection creator. %d is a placeholder for the number of collections-->
     <string name="create_collection_default_name">Casgliad %d</string>
@@ -1851,7 +1879,7 @@
     <!-- Dialog message to the user asking to delete browsing data. Parameter will be replaced by app name. -->
     <string name="delete_browsing_data_prompt_message_3">Bydd %s yn dileu’r data pori hyn.</string>
     <!-- Text for the cancel button for the data deletion dialog -->
-    <string name="delete_browsing_data_prompt_cancel">Diddymu</string>
+    <string name="delete_browsing_data_prompt_cancel">Na</string>
     <!-- Text for the allow button for the data deletion dialog -->
     <string name="delete_browsing_data_prompt_allow">Dileu</string>
     <!-- Text for the snackbar confirmation that the data was deleted -->
@@ -1862,7 +1890,7 @@
     <!-- Dialog message to the user asking to delete all history items inside the opened group. Parameter will be replaced by a history group name. -->
     <string name="delete_all_history_group_prompt_message">Dileu pob gwefan yn “%s”</string>
     <!-- Text for the cancel button for the history group deletion dialog -->
-    <string name="delete_history_group_prompt_cancel">Diddymu</string>
+    <string name="delete_history_group_prompt_cancel">Na</string>
     <!-- Text for the allow button for the history group dialog -->
     <string name="delete_history_group_prompt_allow">Dileu</string>
     <!-- Text for the snackbar confirmation that the history group was deleted -->
@@ -1898,7 +1926,7 @@
     <!-- Option to continue signing out of account shown in confirmation dialog to sign out of account -->
     <string name="sign_out_disconnect">Datgysylltu</string>
     <!-- Option to cancel signing out shown in confirmation dialog to sign out of account -->
-    <string name="sign_out_cancel">Diddymu</string>
+    <string name="sign_out_cancel">Na</string>
     <!-- Error message snackbar shown after the user tried to select a default folder which cannot be altered -->
     <string name="bookmark_cannot_edit_root">Methu golygu’r ffolderi rhagosodedig</string>
 
@@ -2052,7 +2080,7 @@
     <!-- Title text for the Add To Homescreen dialog -->
     <string name="add_to_homescreen_title">Ychwanegu i’r sgrin Cartref</string>
     <!-- Cancel button text for the Add to Homescreen dialog -->
-    <string name="add_to_homescreen_cancel">Diddymu</string>
+    <string name="add_to_homescreen_cancel">Na</string>
     <!-- Add button text for the Add to Homescreen dialog -->
     <string name="add_to_homescreen_add">Ychwanegu</string>
     <!-- Continue to website button text for the first-time Add to Homescreen dialog -->
@@ -2213,7 +2241,7 @@
     <!-- The text for the "Save" button for saving a credit card -->
     <string name="credit_cards_save_button">Cadw</string>
     <!-- The text for the "Cancel" button for cancelling adding, updating or deleting a credit card -->
-    <string name="credit_cards_cancel_button">Diddymu</string>
+    <string name="credit_cards_cancel_button">Na</string>
 
     <!-- Title of the "Saved cards" screen -->
     <string name="credit_cards_saved_cards">Cardiau wedi’u cadw</string>
@@ -2264,7 +2292,7 @@
     <!-- The text for the "Save" button for saving an address -->
     <string name="addresses_save_button">Cadw</string>
     <!-- The text for the "Cancel" button for cancelling adding, updating or deleting an address -->
-    <string name="addresses_cancel_button">Diddymu</string>
+    <string name="addresses_cancel_button">Na</string>
     <!-- The text for the "Delete address" button for deleting an address -->
     <string name="addressess_delete_address_button">Dileu cyfeiriad</string>
 
@@ -2273,7 +2301,7 @@
     <!-- The text for the positive button on "Delete address" dialog -->
     <string name="addressess_confirm_dialog_ok_button">Dileu</string>
     <!-- The text for the negative button on "Delete address" dialog -->
-    <string name="addressess_confirm_dialog_cancel_button">Diddymu</string>
+    <string name="addressess_confirm_dialog_cancel_button">Na</string>
     <!-- The text for the "Save address" menu item for saving an address -->
     <string name="address_menu_save_address">Cadw cyfeiriad</string>
     <!-- The text for the "Delete address" menu item for deleting an address -->
@@ -2371,7 +2399,7 @@
     <!-- Positive action of a dialog asking to delete  -->
     <string name="dialog_delete_positive">Dileu</string>
     <!-- Negative action of a dialog asking to delete login -->
-    <string name="dialog_delete_negative">Diddymu</string>
+    <string name="dialog_delete_negative">Na</string>
     <!--  The saved password options menu description. -->
     <string name="login_options_menu_2">Dewisiadau cyfrineiriau</string>
     <!--  The editable text field for a website address. -->
@@ -2449,7 +2477,7 @@
     <!-- Hint for editing URL of a shortcut. -->
     <string name="shortcut_url_hint">URL llwybr byr</string>
     <!-- Dialog button text for canceling the rename top site prompt. -->
-    <string name="top_sites_rename_dialog_cancel">Diddymu</string>
+    <string name="top_sites_rename_dialog_cancel">Na</string>
 
     <!-- Text for the menu button to open the homepage settings. -->
     <string name="top_sites_menu_settings">Gosodiadau</string>
@@ -2542,150 +2570,150 @@
 
     <!-- Review quality check feature-->
     <!-- Name for the review quality check feature used as title for the panel. -->
-    <string name="review_quality_check_feature_name_2">Gwirydd Adolygiadau</string>
+    <string name="review_quality_check_feature_name_2" moz:removedIn="136" tools:ignore="UnusedResources">Gwirydd Adolygiadau</string>
     <!-- Summary for grades A and B for review quality check adjusted grading. -->
-    <string name="review_quality_check_grade_a_b_description">Adolygiadau dibynadwy</string>
+    <string name="review_quality_check_grade_a_b_description" moz:removedIn="136" tools:ignore="UnusedResources">Adolygiadau dibynadwy</string>
     <!-- Summary for grade C for review quality check adjusted grading. -->
-    <string name="review_quality_check_grade_c_description">Cymysgedd o adolygiadau dibynadwy ac annibynadwy</string>
+    <string name="review_quality_check_grade_c_description" moz:removedIn="136" tools:ignore="UnusedResources">Cymysgedd o adolygiadau dibynadwy ac annibynadwy</string>
     <!-- Summary for grades D and F for review quality check adjusted grading. -->
-    <string name="review_quality_check_grade_d_f_description">Adolygiadau annibynadwy</string>
+    <string name="review_quality_check_grade_d_f_description" moz:removedIn="136" tools:ignore="UnusedResources">Adolygiadau annibynadwy</string>
     <!-- Text for title presenting the reliability of a product's reviews. -->
-    <string name="review_quality_check_grade_title">Pa mor ddibynadwy yw’r adolygiadau hyn?</string>
+    <string name="review_quality_check_grade_title" moz:removedIn="136" tools:ignore="UnusedResources">Pa mor ddibynadwy yw’r adolygiadau hyn?</string>
     <!-- Title for when the rating has been updated by the review checker -->
-    <string name="review_quality_check_adjusted_rating_title">Gradd wedi’i haddasu</string>
+    <string name="review_quality_check_adjusted_rating_title" moz:removedIn="136" tools:ignore="UnusedResources">Gradd wedi’i haddasu</string>
     <!-- Description for a product's adjusted star rating. The text presents that the product's reviews which were evaluated as unreliable were removed from the adjusted rating. -->
-    <string name="review_quality_check_adjusted_rating_description_2">Ar sail adolygiadau dibynadwy</string>
+    <string name="review_quality_check_adjusted_rating_description_2" moz:removedIn="136" tools:ignore="UnusedResources">Ar sail adolygiadau dibynadwy</string>
     <!-- Title for list of highlights from a product's review emphasizing a product's important traits. -->
-    <string name="review_quality_check_highlights_title">Uchafbwyntiau o adolygiadau diweddar</string>
+    <string name="review_quality_check_highlights_title" moz:removedIn="136" tools:ignore="UnusedResources">Uchafbwyntiau o adolygiadau diweddar</string>
     <!-- Title for section explaining how we analyze the reliability of a product's reviews. -->
-    <string name="review_quality_check_explanation_title">Sut rydym yn mesur ansawdd adolygiadau</string>
+    <string name="review_quality_check_explanation_title" moz:removedIn="136" tools:ignore="UnusedResources">Sut rydym yn mesur ansawdd adolygiadau</string>
     <!-- Paragraph explaining how we analyze the reliability of a product's reviews. First parameter is the Fakespot product name. In the phrase "Fakespot by Mozilla", "by" can be localized. Does not need to stay by. -->
-    <string name="review_quality_check_explanation_body_reliability">Rydym yn defnyddio technoleg AI o %s gan Mozilla i wirio dibynadwyedd adolygiadau cynnyrch. Bydd hyn dim ond yn eich helpu i asesu ansawdd adolygiad, nid ansawdd y cynnyrch.</string>
+    <string name="review_quality_check_explanation_body_reliability" moz:removedIn="136" tools:ignore="UnusedResources">Rydym yn defnyddio technoleg AI o %s gan Mozilla i wirio dibynadwyedd adolygiadau cynnyrch. Bydd hyn dim ond yn eich helpu i asesu ansawdd adolygiad, nid ansawdd y cynnyrch.</string>
     <!-- Paragraph explaining the grading system we use to classify the reliability of a product's reviews. -->
-    <string name="review_quality_check_info_review_grade_header"><![CDATA[Rydym yn gosod <b>gradd llythyren</b> o A i F i adolygiadau pob cynnyrch.]]></string>
+    <string name="review_quality_check_info_review_grade_header" moz:removedIn="136" tools:ignore="UnusedResources"><![CDATA[Rydym yn gosod <b>gradd llythyren</b> o A i F i adolygiadau pob cynnyrch.]]></string>
     <!-- Description explaining grades A and B for review quality check adjusted grading. -->
-    <string name="review_quality_check_info_grade_info_AB">Adolygiadau dibynadwy. Rydym yn credu fod yr adolygiadau’n debygol o fod gan gwsmeriaid go iawn sydd wedi gadael adolygiadau gonest, diduedd.</string>
+    <string name="review_quality_check_info_grade_info_AB" moz:removedIn="136" tools:ignore="UnusedResources">Adolygiadau dibynadwy. Rydym yn credu fod yr adolygiadau’n debygol o fod gan gwsmeriaid go iawn sydd wedi gadael adolygiadau gonest, diduedd.</string>
     <!-- Description explaining grade C for review quality check adjusted grading. -->
-    <string name="review_quality_check_info_grade_info_C">Rydym yn credu fod yna gymysgedd o adolygiadau dibynadwy ac annibynadwy.</string>
+    <string name="review_quality_check_info_grade_info_C" moz:removedIn="136" tools:ignore="UnusedResources">Rydym yn credu fod yna gymysgedd o adolygiadau dibynadwy ac annibynadwy.</string>
     <!-- Description explaining grades D and F for review quality check adjusted grading. -->
-    <string name="review_quality_check_info_grade_info_DF">Adolygiadau annibynadwy. Rydym yn credu fod yr adolygiadau yn debygol o fod yn rhai ffug neu gan adolygwyr rhagfarnllyd.</string>
+    <string name="review_quality_check_info_grade_info_DF" moz:removedIn="136" tools:ignore="UnusedResources">Adolygiadau annibynadwy. Rydym yn credu fod yr adolygiadau yn debygol o fod yn rhai ffug neu gan adolygwyr rhagfarnllyd.</string>
     <!-- Paragraph explaining how a product's adjusted grading is calculated. -->
-    <string name="review_quality_check_explanation_body_adjusted_grading"><![CDATA[Mae’r <b>gradd wedi’i addasu</b> yn seiliedig ar adolygiadau y credwn eu bod yn ddibynadwy yn unig.]]></string>
+    <string name="review_quality_check_explanation_body_adjusted_grading" moz:removedIn="136" tools:ignore="UnusedResources"><![CDATA[Mae’r <b>gradd wedi’i addasu</b> yn seiliedig ar adolygiadau y credwn eu bod yn ddibynadwy yn unig.]]></string>
     <!-- Paragraph explaining product review highlights. First parameter is the name of the retailer (e.g. Amazon). -->
-    <string name="review_quality_check_explanation_body_highlights"><![CDATA[Daw’r <b>Uchafbwyntiau</b> o adolygiadau %s o fewn yr 80 diwrnod diwethaf y credwn eu bod yn ddibynadwy.]]></string>
+    <string name="review_quality_check_explanation_body_highlights" moz:removedIn="136" tools:ignore="UnusedResources"><![CDATA[Daw’r <b>Uchafbwyntiau</b> o adolygiadau %s o fewn yr 80 diwrnod diwethaf y credwn eu bod yn ddibynadwy.]]></string>
     <!-- Text for learn more caption presenting a link with information about review quality. First parameter is for clickable text defined in review_quality_check_info_learn_more_link. -->
-    <string name="review_quality_check_info_learn_more">Dysgwch ragor am %s.</string>
+    <string name="review_quality_check_info_learn_more" moz:removedIn="136" tools:ignore="UnusedResources">Dysgwch ragor am %s.</string>
     <!-- Clickable text that links to review quality check SuMo page. First parameter is the Fakespot product name. -->
-    <string name="review_quality_check_info_learn_more_link_2">sut mae %s yn pennu ansawdd adolygu</string>
+    <string name="review_quality_check_info_learn_more_link_2" moz:removedIn="136" tools:ignore="UnusedResources">sut mae %s yn pennu ansawdd adolygu</string>
     <!-- Text for title of settings section. -->
-    <string name="review_quality_check_settings_title">Gosodiadau</string>
+    <string name="review_quality_check_settings_title" moz:removedIn="136" tools:ignore="UnusedResources">Gosodiadau</string>
     <!-- Text for label for switch preference to show recommended products from review quality check settings section. -->
-    <string name="review_quality_check_settings_recommended_products">Dangos hysbysebion yn y gwirydd adolygiadau</string>
+    <string name="review_quality_check_settings_recommended_products" moz:removedIn="136" tools:ignore="UnusedResources">Dangos hysbysebion yn y gwirydd adolygiadau</string>
     <!-- Description for switch preference to show recommended products from review quality check settings section. First parameter is for clickable text defined in review_quality_check_settings_recommended_products_learn_more.-->
-    <string name="review_quality_check_settings_recommended_products_description_2" tools:ignore="UnusedResources">Byddwch yn gweld hysbysebion achlysurol ar gyfer cynnyrch perthnasol. Dim ond cynnyrch gydag adolygiadau dibynadwy rydym yn eu hysbysebu. %s</string>
+    <string name="review_quality_check_settings_recommended_products_description_2" moz:removedIn="136" tools:ignore="UnusedResources">Byddwch yn gweld hysbysebion achlysurol ar gyfer cynnyrch perthnasol. Dim ond cynnyrch gydag adolygiadau dibynadwy rydym yn eu hysbysebu. %s</string>
     <!-- Clickable text that links to review quality check recommended products support article. -->
-    <string name="review_quality_check_settings_recommended_products_learn_more" tools:ignore="UnusedResources">Dysgu rhagor</string>
+    <string name="review_quality_check_settings_recommended_products_learn_more" moz:removedIn="136" tools:ignore="UnusedResources">Dysgu rhagor</string>
     <!-- Text for turning sidebar off button from review quality check settings section. -->
-    <string name="review_quality_check_settings_turn_off">Diffodd y gwirydd adolygiadau</string>
+    <string name="review_quality_check_settings_turn_off" moz:removedIn="136" tools:ignore="UnusedResources">Diffodd y gwirydd adolygiadau</string>
     <!-- Text for title of recommended product section. This is displayed above a product image, suggested as an alternative to the product reviewed. -->
-    <string name="review_quality_check_ad_title" tools:ignore="UnusedResources">Rhagor i feddwl amdanyn nhw</string>
+    <string name="review_quality_check_ad_title" moz:removedIn="136" tools:ignore="UnusedResources">Rhagor i feddwl amdanyn nhw</string>
     <!-- Caption for recommended product section indicating this is an ad by Fakespot. First parameter is the Fakespot product name. -->
-    <string name="review_quality_check_ad_caption" tools:ignore="UnusedResources">Hysbyseb gan %s</string>
+    <string name="review_quality_check_ad_caption" moz:removedIn="136" tools:ignore="UnusedResources">Hysbyseb gan %s</string>
     <!-- Caption for review quality check panel. First parameter is for clickable text defined in review_quality_check_powered_by_link. -->
-    <string name="review_quality_check_powered_by_2">Mae’r gwirydd adolygiadau yn cael ei bweru gan %s</string>
+    <string name="review_quality_check_powered_by_2" moz:removedIn="136" tools:ignore="UnusedResources">Mae’r gwirydd adolygiadau yn cael ei bweru gan %s</string>
     <!-- Clickable text that links to Fakespot.com. First parameter is the Fakespot product name. In the phrase "Fakespot by Mozilla", "by" can be localized. Does not need to stay by. -->
-    <string name="review_quality_check_powered_by_link" tools:ignore="UnusedResources">%s gan Mozilla</string>
+    <string name="review_quality_check_powered_by_link" moz:removedIn="136" tools:ignore="UnusedResources">%s gan Mozilla</string>
     <!-- Text for title of warning card informing the user that the current analysis is outdated. -->
-    <string name="review_quality_check_outdated_analysis_warning_title" tools:ignore="UnusedResources">Gwybodaeth newydd i’w wirio</string>
+    <string name="review_quality_check_outdated_analysis_warning_title" moz:removedIn="136" tools:ignore="UnusedResources">Gwybodaeth newydd i’w wirio</string>
     <!-- Text for button from warning card informing the user that the current analysis is outdated. Clicking this should trigger the product's re-analysis. -->
-    <string name="review_quality_check_outdated_analysis_warning_action" tools:ignore="UnusedResources">Gwirio nawr</string>
+    <string name="review_quality_check_outdated_analysis_warning_action" moz:removedIn="136" tools:ignore="UnusedResources">Gwirio nawr</string>
     <!-- Title for warning card informing the user that the current product does not have enough reviews for a review analysis. -->
-    <string name="review_quality_check_no_reviews_warning_title">Dim digon o adolygiadau eto</string>
+    <string name="review_quality_check_no_reviews_warning_title" moz:removedIn="136" tools:ignore="UnusedResources">Dim digon o adolygiadau eto</string>
     <!-- Text for body of warning card informing the user that the current product does not have enough reviews for a review analysis. -->
-    <string name="review_quality_check_no_reviews_warning_body">Pan fydd gan y cynnyrch hwn fwy o adolygiadau, byddwn yn gallu gwirio eu hansawdd.</string>
+    <string name="review_quality_check_no_reviews_warning_body" moz:removedIn="136" tools:ignore="UnusedResources">Pan fydd gan y cynnyrch hwn fwy o adolygiadau, byddwn yn gallu gwirio eu hansawdd.</string>
     <!-- Title for warning card informing the user that the current product is currently not available. -->
-    <string name="review_quality_check_product_availability_warning_title">Nid yw’r cynnyrch ar gael</string>
+    <string name="review_quality_check_product_availability_warning_title" moz:removedIn="136" tools:ignore="UnusedResources">Nid yw’r cynnyrch ar gael</string>
     <!-- Text for the body of warning card informing the user that the current product is currently not available. -->
-    <string name="review_quality_check_product_availability_warning_body">Os ydych yn gweld fod y cynnyrch hwn nôl mewn stoc, rhowch wybod i ni ac fe wnawn ni ddiweddaru’r dadansoddiad.</string>
+    <string name="review_quality_check_product_availability_warning_body" moz:removedIn="136" tools:ignore="UnusedResources">Os ydych yn gweld fod y cynnyrch hwn nôl mewn stoc, rhowch wybod i ni ac fe wnawn ni ddiweddaru’r dadansoddiad.</string>
     <!-- Clickable text for warning card informing the user that the current product is currently not available. Clicking this should inform the server that the product is available. -->
-    <string name="review_quality_check_product_availability_warning_action_2">Adrodd fod cynnyrch mewn stoc</string>
+    <string name="review_quality_check_product_availability_warning_action_2" moz:removedIn="136" tools:ignore="UnusedResources">Adrodd fod cynnyrch mewn stoc</string>
     <!-- Title for warning card informing the user that the current product's analysis is still processing. The parameter is the percentage progress (0-100%) of the analysis process (e.g. 56%). -->
-    <string name="review_quality_check_analysis_in_progress_warning_title_2">Yn gwirio ansawdd adolygiadau (%s)</string>
+    <string name="review_quality_check_analysis_in_progress_warning_title_2" moz:removedIn="136" tools:ignore="UnusedResources">Yn gwirio ansawdd adolygiadau (%s)</string>
     <!-- Text for body of warning card informing the user that the current product's analysis is still processing. -->
-    <string name="review_quality_check_analysis_in_progress_warning_body">Gall hyn gymryd tua 60 eiliad.</string>
+    <string name="review_quality_check_analysis_in_progress_warning_body" moz:removedIn="136" tools:ignore="UnusedResources">Gall hyn gymryd tua 60 eiliad.</string>
     <!-- Title for info card displayed after the user reports a product is back in stock. -->
-    <string name="review_quality_check_analysis_requested_info_title">Diolch am adrodd!</string>
+    <string name="review_quality_check_analysis_requested_info_title" moz:removedIn="136" tools:ignore="UnusedResources">Diolch am adrodd!</string>
     <!-- Text for body of info card displayed after the user reports a product is back in stock. -->
-    <string name="review_quality_check_analysis_requested_info_body">Dylai fod gennym dadansoddiad wedi’i ddiweddaru o fewn 24 awr. Dewch nôl i weld.</string>
+    <string name="review_quality_check_analysis_requested_info_body" moz:removedIn="136" tools:ignore="UnusedResources">Dylai fod gennym dadansoddiad wedi’i ddiweddaru o fewn 24 awr. Dewch nôl i weld.</string>
     <!-- Title for info card displayed when the user review checker while on a product that Fakespot does not analyze (e.g. gift cards, music). -->
-    <string name="review_quality_check_not_analyzable_info_title">Methu gwirio’r adolygiadau hyn</string>
+    <string name="review_quality_check_not_analyzable_info_title" moz:removedIn="136" tools:ignore="UnusedResources">Methu gwirio’r adolygiadau hyn</string>
     <!-- Text for body of info card displayed when the user review checker while on a product that Fakespot does not analyze (e.g. gift cards, music). -->
-    <string name="review_quality_check_not_analyzable_info_body">Yn anffodus, allwn ni ddim gwirio ansawdd adolygu rhai mathau o gynnyrch. Er enghraifft, cardiau rhodd a ffrydio fideo, cerddoriaeth a gemau.</string>
+    <string name="review_quality_check_not_analyzable_info_body" moz:removedIn="136" tools:ignore="UnusedResources">Yn anffodus, allwn ni ddim gwirio ansawdd adolygu rhai mathau o gynnyrch. Er enghraifft, cardiau rhodd a ffrydio fideo, cerddoriaeth a gemau.</string>
     <!-- Title for info card displayed when another user reported the displayed product is back in stock. -->
-    <string name="review_quality_check_analysis_requested_other_user_info_title" tools:ignore="UnusedResources">Gwybodaeth yn dod cyn hir</string>
+    <string name="review_quality_check_analysis_requested_other_user_info_title" moz:removedIn="136" tools:ignore="UnusedResources">Gwybodaeth yn dod cyn hir</string>
     <!-- Text for body of info card displayed when another user reported the displayed product is back in stock. -->
-    <string name="review_quality_check_analysis_requested_other_user_info_body" tools:ignore="UnusedResources">Dylai fod gennym dadansoddiad wedi’i ddiweddaru o fewn 24 awr. Dewch nôl i weld.</string>
+    <string name="review_quality_check_analysis_requested_other_user_info_body" moz:removedIn="136" tools:ignore="UnusedResources">Dylai fod gennym dadansoddiad wedi’i ddiweddaru o fewn 24 awr. Dewch nôl i weld.</string>
     <!-- Title for info card displayed to the user when analysis finished updating. -->
-    <string name="review_quality_check_analysis_updated_confirmation_title" tools:ignore="UnusedResources">Mae’r dadansoddiad yn gyfredol</string>
+    <string name="review_quality_check_analysis_updated_confirmation_title" moz:removedIn="136" tools:ignore="UnusedResources">Mae’r dadansoddiad yn gyfredol</string>
     <!-- Text for the action button from info card displayed to the user when analysis finished updating. -->
-    <string name="review_quality_check_analysis_updated_confirmation_action" tools:ignore="UnusedResources">Iawn</string>
+    <string name="review_quality_check_analysis_updated_confirmation_action" moz:removedIn="136" tools:ignore="UnusedResources">Iawn</string>
     <!-- Title for error card displayed to the user when an error occurred. -->
-    <string name="review_quality_check_generic_error_title">Dim gwybodaeth ar gael ar hyn o bryd</string>
+    <string name="review_quality_check_generic_error_title" moz:removedIn="136" tools:ignore="UnusedResources">Dim gwybodaeth ar gael ar hyn o bryd</string>
     <!-- Text for body of error card displayed to the user when an error occurred. -->
-    <string name="review_quality_check_generic_error_body">Rydym yn gweithio i ddatrys y mater. Dewch nôl cyn bo hir.</string>
+    <string name="review_quality_check_generic_error_body" moz:removedIn="136" tools:ignore="UnusedResources">Rydym yn gweithio i ddatrys y mater. Dewch nôl cyn bo hir.</string>
     <!-- Title for error card displayed to the user when the device is disconnected from the network. -->
-    <string name="review_quality_check_no_connection_title">Dim cysylltiad rhwydwaith</string>
+    <string name="review_quality_check_no_connection_title" moz:removedIn="136" tools:ignore="UnusedResources">Dim cysylltiad rhwydwaith</string>
     <!-- Text for body of error card displayed to the user when the device is disconnected from the network. -->
-    <string name="review_quality_check_no_connection_body">Gwiriwch eich cysylltiad rhwydwaith ac yna ceisiwch ail-lwytho’r dudalen.</string>
+    <string name="review_quality_check_no_connection_body" moz:removedIn="136" tools:ignore="UnusedResources">Gwiriwch eich cysylltiad rhwydwaith ac yna ceisiwch ail-lwytho’r dudalen.</string>
     <!-- Title for card displayed to the user for products whose reviews were not analyzed yet. -->
-    <string name="review_quality_check_no_analysis_title">Dim gwybodaeth am yr adolygiadau hyn eto</string>
+    <string name="review_quality_check_no_analysis_title" moz:removedIn="136" tools:ignore="UnusedResources">Dim gwybodaeth am yr adolygiadau hyn eto</string>
     <!-- Text for the body of card displayed to the user for products whose reviews were not analyzed yet. -->
-    <string name="review_quality_check_no_analysis_body">I wybod a yw adolygiadau’r cynnyrch hwn yn ddibynadwy, gwiriwch ansawdd yr adolygiadau. Dim ond tua 60 eiliad y mae’n ei gymryd.</string>
+    <string name="review_quality_check_no_analysis_body" moz:removedIn="136" tools:ignore="UnusedResources">I wybod a yw adolygiadau’r cynnyrch hwn yn ddibynadwy, gwiriwch ansawdd yr adolygiadau. Dim ond tua 60 eiliad y mae’n ei gymryd.</string>
     <!-- Text for button from body of card displayed to the user for products whose reviews were not analyzed yet. Clicking this should trigger a product analysis. -->
-    <string name="review_quality_check_no_analysis_link">Gwirio ansawdd yr adolygiad</string>
+    <string name="review_quality_check_no_analysis_link" moz:removedIn="136" tools:ignore="UnusedResources">Gwirio ansawdd yr adolygiad</string>
     <!-- Headline for review quality check contextual onboarding card. -->
-    <string name="review_quality_check_contextual_onboarding_title">Rhowch gynnig ar ein canllaw dibynadwy i adolygiadau cynnyrch</string>
+    <string name="review_quality_check_contextual_onboarding_title" moz:removedIn="136" tools:ignore="UnusedResources">Rhowch gynnig ar ein canllaw dibynadwy i adolygiadau cynnyrch</string>
     <!-- Description for review quality check contextual onboarding card. The first and last two parameters are for retailer names (e.g. Amazon, Walmart). The second parameter is for the name of the application (e.g. Firefox). -->
-    <string name="review_quality_check_contextual_onboarding_description">Gweld pa mor ddibynadwy yw adolygiadau cynnyrch ar %1$s cyn i chi brynu. Mae gwirydd adolygiadau, nodwedd arbrofol gan %2$s, wedi’i gynnwys yn y porwr. Mae’n gweithio ar %3$s a %4$s hefyd.</string>
+    <string name="review_quality_check_contextual_onboarding_description" moz:removedIn="136" tools:ignore="UnusedResources">Gweld pa mor ddibynadwy yw adolygiadau cynnyrch ar %1$s cyn i chi brynu. Mae gwirydd adolygiadau, nodwedd arbrofol gan %2$s, wedi’i gynnwys yn y porwr. Mae’n gweithio ar %3$s a %4$s hefyd.</string>
     <!-- Description for review quality check contextual onboarding card. The first parameters is for retailer name (e.g. Amazon). The second parameter is for the name of the application (e.g. Firefox). -->
-    <string name="review_quality_check_contextual_onboarding_description_one_vendor">Gweld pa mor ddibynadwy yw adolygiadau cynnyrch ar %1$s cyn i chi brynu. Mae\'r Gwirydd Adolygiadau, nodwedd arbrofol gan %2$s, wedi\'i gynnwys yn y porwr.</string>
+    <string name="review_quality_check_contextual_onboarding_description_one_vendor" moz:removedIn="136" tools:ignore="UnusedResources">Gweld pa mor ddibynadwy yw adolygiadau cynnyrch ar %1$s cyn i chi brynu. Mae\'r Gwirydd Adolygiadau, nodwedd arbrofol gan %2$s, wedi\'i gynnwys yn y porwr.</string>
     <!-- Paragraph presenting review quality check feature. First parameter is the Fakespot product name. Second parameter is for clickable text defined in review_quality_check_contextual_onboarding_learn_more_link. In the phrase "Fakespot by Mozilla", "by" can be localized. Does not need to stay by. -->
-    <string name="review_quality_check_contextual_onboarding_learn_more">Gan ddefnyddio pŵer %1$s gan Mozilla, rydym yn eich helpu i osgoi adolygiadau rhagfarnllyd ac annilys. Mae ein model AI bob amser yn gwella i’ch diogelu wrth i chi siopa. %2$s</string>
+    <string name="review_quality_check_contextual_onboarding_learn_more" moz:removedIn="136" tools:ignore="UnusedResources">Gan ddefnyddio pŵer %1$s gan Mozilla, rydym yn eich helpu i osgoi adolygiadau rhagfarnllyd ac annilys. Mae ein model AI bob amser yn gwella i’ch diogelu wrth i chi siopa. %2$s</string>
     <!-- Clickable text from the contextual onboarding card that links to review quality check support article. -->
-    <string name="review_quality_check_contextual_onboarding_learn_more_link">Dysgu rhagor</string>
+    <string name="review_quality_check_contextual_onboarding_learn_more_link" moz:removedIn="136" tools:ignore="UnusedResources">Dysgu rhagor</string>
     <!-- Caption text to be displayed in review quality check contextual onboarding card above the opt-in button. First parameter is Firefox app name, third parameter is the Fakespot product name. Second & fourth are for clickable texts defined in review_quality_check_contextual_onboarding_privacy_policy_3 and review_quality_check_contextual_onboarding_terms_use. -->
-    <string name="review_quality_check_contextual_onboarding_caption_4">Drwy ddewis “Iawn, rhoi cynnig arni” rydych yn cytuno i %1$s %2$s a %3$s %4$s.</string>
+    <string name="review_quality_check_contextual_onboarding_caption_4" moz:removedIn="136" tools:ignore="UnusedResources">Drwy ddewis “Iawn, rhoi cynnig arni” rydych yn cytuno i %1$s %2$s a %3$s %4$s.</string>
     <!-- Clickable text from the review quality check contextual onboarding card that links to Fakespot privacy notice. -->
-    <string name="review_quality_check_contextual_onboarding_privacy_policy_3">hysbysiad preifatrwydd</string>
+    <string name="review_quality_check_contextual_onboarding_privacy_policy_3" moz:removedIn="136" tools:ignore="UnusedResources">hysbysiad preifatrwydd</string>
     <!-- Clickable text from the review quality check contextual onboarding card that links to Fakespot terms of use. -->
-    <string name="review_quality_check_contextual_onboarding_terms_use">telerau defnydd</string>
+    <string name="review_quality_check_contextual_onboarding_terms_use" moz:removedIn="136" tools:ignore="UnusedResources">telerau defnydd</string>
     <!-- Text for opt-in button from the review quality check contextual onboarding card. -->
-    <string name="review_quality_check_contextual_onboarding_primary_button_text">Iawn, rhoi cynnig arno</string>
+    <string name="review_quality_check_contextual_onboarding_primary_button_text" moz:removedIn="136" tools:ignore="UnusedResources">Iawn, rhoi cynnig arno</string>
     <!-- Text for opt-out button from the review quality check contextual onboarding card. -->
-    <string name="review_quality_check_contextual_onboarding_secondary_button_text">Nid nawr</string>
+    <string name="review_quality_check_contextual_onboarding_secondary_button_text" moz:removedIn="136" tools:ignore="UnusedResources">Nid nawr</string>
     <!-- Content description (not visible, for screen readers etc.) for opening browser menu button to open review quality check bottom sheet. -->
-    <string name="review_quality_check_open_handle_content_description">Agor y gwirydd adolygiadau</string>
+    <string name="review_quality_check_open_handle_content_description" moz:removedIn="136" tools:ignore="UnusedResources">Agor y gwirydd adolygiadau</string>
     <!-- Content description (not visible, for screen readers etc.) for closing browser menu button to open review quality check bottom sheet. -->
-    <string name="review_quality_check_close_handle_content_description">Cau’r gwirydd adolygiadau</string>
+    <string name="review_quality_check_close_handle_content_description" moz:removedIn="136" tools:ignore="UnusedResources">Cau’r gwirydd adolygiadau</string>
     <!-- Content description (not visible, for screen readers etc.) for review quality check star rating. First parameter is the number of stars (1-5) representing the rating. -->
-    <string name="review_quality_check_star_rating_content_description">%1$s allan o 5 seren</string>
+    <string name="review_quality_check_star_rating_content_description" moz:removedIn="136" tools:ignore="UnusedResources">%1$s allan o 5 seren</string>
     <!-- Text for minimize button from highlights card. When clicked the highlights card should reduce its size. -->
-    <string name="review_quality_check_highlights_show_less">Dangos llai</string>
+    <string name="review_quality_check_highlights_show_less" moz:removedIn="136" tools:ignore="UnusedResources">Dangos llai</string>
     <!-- Text for maximize button from highlights card. When clicked the highlights card should expand to its full size. -->
-    <string name="review_quality_check_highlights_show_more">Dangos rhagor</string>
+    <string name="review_quality_check_highlights_show_more" moz:removedIn="136" tools:ignore="UnusedResources">Dangos rhagor</string>
     <!-- Text for highlights card quality category header. Reviews shown under this header should refer the product's quality. -->
-    <string name="review_quality_check_highlights_type_quality">Ansawdd</string>
+    <string name="review_quality_check_highlights_type_quality" moz:removedIn="136" tools:ignore="UnusedResources">Ansawdd</string>
     <!-- Text for highlights card price category header. Reviews shown under this header should refer the product's price. -->
-    <string name="review_quality_check_highlights_type_price">Pris</string>
+    <string name="review_quality_check_highlights_type_price" moz:removedIn="136" tools:ignore="UnusedResources">Pris</string>
     <!-- Text for highlights card shipping category header. Reviews shown under this header should refer the product's shipping. -->
-    <string name="review_quality_check_highlights_type_shipping">Cludiant</string>
+    <string name="review_quality_check_highlights_type_shipping" moz:removedIn="136" tools:ignore="UnusedResources">Cludiant</string>
     <!-- Text for highlights card packaging and appearance category header. Reviews shown under this header should refer the product's packaging and appearance. -->
-    <string name="review_quality_check_highlights_type_packaging_appearance">Pecynnu ac ymddangosiad</string>
+    <string name="review_quality_check_highlights_type_packaging_appearance" moz:removedIn="136" tools:ignore="UnusedResources">Pecynnu ac ymddangosiad</string>
     <!-- Text for highlights card competitiveness category header. Reviews shown under this header should refer the product's competitiveness. -->
-    <string name="review_quality_check_highlights_type_competitiveness">Cystadleurwydd</string>
+    <string name="review_quality_check_highlights_type_competitiveness" moz:removedIn="136" tools:ignore="UnusedResources">Cystadleurwydd</string>
 
     <!-- Text that is surrounded by quotes. The parameter is the actual text that is in quotes. An example of that text could be: Excellent craftsmanship, and that is displayed as “Excellent craftsmanship”. The text comes from a buyer's review that the feature is highlighting"   -->
-    <string name="surrounded_with_quotes">“%s”</string>
+    <string name="surrounded_with_quotes" moz:removedIn="136" tools:ignore="UnusedResources">“%s”</string>
 
     <!-- Accessibility services actions labels. These will be appended to accessibility actions like "Double tap to.." but not by or applications but by services like Talkback. -->
     <!-- Action label for elements that can be collapsed if interacting with them. Talkback will append this to say "Double tap to collapse". -->
@@ -2848,7 +2876,7 @@
     <!-- The Delete site dialogue positive button will appear when the user clicks on a list item. The site will be deleted. -->
     <string name="never_translate_site_dialog_confirm_delete_preference">Dileu</string>
     <!-- The Delete site dialogue negative button will appear when the user clicks on a list item. The dialog will be dismissed. -->
-    <string name="never_translate_site_dialog_cancel_preference">Diddymu</string>
+    <string name="never_translate_site_dialog_cancel_preference">Na</string>
 
     <!-- Download languages preference screen -->
     <!-- Title of the toolbar for the translation feature screen where users may download different languages for translation. -->
@@ -2906,7 +2934,7 @@
     <!-- Button text on the dialog used by the translations feature to confirm deleting a language. -->
     <string name="delete_language_file_dialog_positive_button_text">Dileu</string>
     <!-- Button text on the dialog used by the translations feature to cancel deleting a language. -->
-    <string name="delete_language_file_dialog_negative_button_text">Diddymu</string>
+    <string name="delete_language_file_dialog_negative_button_text">Na</string>
 
     <!-- Title for the data saving mode warning dialog used by the translations feature.
     This dialog will be presented when the user attempts to download a language or perform
@@ -2922,7 +2950,7 @@
     <!-- Button text on the data saving mode warning dialog used by the translations feature to allow users to confirm they wish to continue and download the language file and perform a translation. -->
     <string name="download_language_file_dialog_positive_button_text_all_languages">Llwytho i lawr a chyfieithu</string>
     <!-- Button text on the data saving mode warning dialog used by the translations feature to allow users to cancel the action and not perform a download of the language file. -->
-    <string name="download_language_file_dialog_negative_button_text">Diddymu</string>
+    <string name="download_language_file_dialog_negative_button_text">Na</string>
 
     <!-- Unified Trust Panel -->
     <!-- Title text for the protection panel banner when the site is not secure. -->
@@ -3064,6 +3092,13 @@
     <string name="debug_drawer_addresses_title">Cyfeiriadau</string>
     <!-- The title of the section header for the list of debug locales that can be enabled and disabled. -->
     <string name="debug_drawer_addresses_debug_locales_header">Dadfygio localau i\'w alluogi</string>
+
+    <!-- The title of the section header for the list of debug locales that can be enabled and disabled. -->
+    <string name="debug_drawer_addresses_management_header">Rheoli cyfeiriadau</string>
+    <!-- The title of the button in the debug drawer for adding a new address. -->
+    <string name="debug_drawer_add_new_address">Ychwanegu cyfeiriad newydd ar gyfer y locale a ddewiswyd</string>
+    <!-- The title of the button for deleting in the debug drawer all addresses. -->
+    <string name="debug_drawer_delete_all_addresses">Dileu pob cyfeiriad</string>
 
     <!-- Debug drawer "contextual feature recommendation" (CFR) tools -->
     <!-- The title of the CFR Tools feature in the Debug Drawer -->

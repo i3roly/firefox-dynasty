@@ -58,6 +58,11 @@ object FeatureFlags {
     const val composeTopSites = false
 
     /**
+     * Enables the MARS API integration for sponsored content.
+     */
+    const val marsAPIEnabled = false
+
+    /**
      * Enables new search settings UI with two extra fragments, for managing the default engine
      * and managing search shortcuts in the quick search menu.
      */
@@ -92,4 +97,14 @@ object FeatureFlags {
      * Enables Merino content recommendations.
      */
     const val merinoContentRecommendations = false
+
+    /**
+     * Enables the Unified Trust Panel.
+     */
+    const val unifiedTrustPanel = false
+
+    /**
+     * Enables native WebCompat Reporter.
+     */
+    val webCompatReporter = Config.channel.isDebug
 }

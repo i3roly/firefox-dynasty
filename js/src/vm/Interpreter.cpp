@@ -1746,9 +1746,18 @@ ErrorObject* js::CreateSuppressedError(JSContext* cx,
   JS_ReportErrorNumberUTF8(cx, GetErrorMessage, nullptr,
                            JSMSG_ERROR_WAS_SUPPRESSED);
 
+  if (cx->isThrowingOutOfMemory()) {
+    return nullptr;
+  }
+
   JS::Rooted<JS::Value> thrownSuppressed(cx);
 
   if (!cx->getPendingException(&thrownSuppressed)) {
+    return nullptr;
+  }
+
+  if (!thrownSuppressed.isObject() ||
+      !thrownSuppressed.toObject().is<ErrorObject>()) {
     return nullptr;
   }
 
@@ -5014,15 +5023,6 @@ bool js::DeleteNameOperation(JSContext* cx, Handle<PropertyName*> name,
 
   bool status = result.ok();
   res.setBoolean(status);
-
-#ifndef NIGHTLY_BUILD
-  if (status) {
-    // Deleting a name from the global object removes it from [[VarNames]].
-    if (pobj == env && env->is<GlobalObject>()) {
-      env->as<GlobalObject>().removeFromVarNames(name);
-    }
-  }
-#endif
 
   return true;
 }

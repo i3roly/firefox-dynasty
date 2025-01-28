@@ -192,14 +192,14 @@ class InputModule extends WindowGlobalBiDiModule {
     }
   }
 
-  _finalizeAction() {
+  async _finalizeAction() {
     // Terminate the current wheel transaction if there is one. Wheel
     // transactions should not live longer than a single action chain.
     ChromeUtils.endWheelTransaction();
 
     // Wait for the next animation frame to make sure the page's content
     // was updated.
-    return lazy.AnimationFramePromise(this.messageHandler.window);
+    await lazy.AnimationFramePromise(this.messageHandler.window);
   }
 
   async _getClientRects(options) {
@@ -234,9 +234,8 @@ class InputModule extends WindowGlobalBiDiModule {
   async setFiles(options) {
     const { element: sharedReference, files } = options;
 
-    const element = await this.#deserializeElementSharedReference(
-      sharedReference
-    );
+    const element =
+      await this.#deserializeElementSharedReference(sharedReference);
 
     if (
       !HTMLInputElement.isInstance(element) ||

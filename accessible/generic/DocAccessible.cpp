@@ -7,6 +7,7 @@
 #include "LocalAccessible-inl.h"
 #include "AccIterator.h"
 #include "AccAttributes.h"
+#include "ARIAMap.h"
 #include "CachedTableAccessible.h"
 #include "DocAccessible-inl.h"
 #include "EventTree.h"
@@ -803,11 +804,10 @@ void DocAccessible::AttributeWillChange(dom::Element* aElement,
 
   // Update dependent IDs cache. Take care of elements that are accessible
   // because dependent IDs cache doesn't contain IDs from non accessible
-  // elements.
-  if (aModType != dom::MutationEvent_Binding::ADDITION) {
-    RemoveDependentIDsFor(accessible, aAttribute);
-    RemoveDependentElementsFor(accessible, aAttribute);
-  }
+  // elements. We do this for attribute additions as well because there might
+  // be an ElementInternals default value.
+  RemoveDependentIDsFor(accessible, aAttribute);
+  RemoveDependentElementsFor(accessible, aAttribute);
 
   if (aAttribute == nsGkAtoms::id) {
     if (accessible->IsActiveDescendantId()) {
@@ -1096,8 +1096,7 @@ void DocAccessible::ContentInserted(nsIContent* aChild) {
   MaybeHandleChangeToHiddenNameOrDescription(aChild);
 }
 
-void DocAccessible::ContentRemoved(nsIContent* aChildNode,
-                                   nsIContent* aPreviousSiblingNode) {
+void DocAccessible::ContentWillBeRemoved(nsIContent* aChildNode) {
 #ifdef A11Y_LOG
   if (logging::IsEnabled(logging::eTree)) {
     logging::MsgBegin("TREE", "DOM content removed; doc: %p", this);
@@ -1247,7 +1246,7 @@ void DocAccessible::BindToDocument(LocalAccessible* aAccessible,
 
     nsIContent* content = aAccessible->GetContent();
     if (content->IsElement() &&
-        content->AsElement()->HasAttr(nsGkAtoms::aria_owns)) {
+        nsAccUtils::HasARIAAttr(content->AsElement(), nsGkAtoms::aria_owns)) {
       mNotificationController->ScheduleRelocation(aAccessible);
     }
   }
@@ -1751,6 +1750,7 @@ void DocAccessible::DoInitialUpdate() {
       for (auto idx = 0U; idx < mChildren.Length(); idx++) {
         ipcDoc->InsertIntoIpcTree(mChildren.ElementAt(idx), true);
       }
+      ipcDoc->SendQueuedMutationEvents();
     }
   }
 }
@@ -1808,7 +1808,7 @@ void DocAccessible::AddDependentIDsFor(LocalAccessible* aRelProvider,
       }
     }
 
-    IDRefsIterator iter(this, relProviderEl, relAttr);
+    AssociatedElementsIterator iter(this, relProviderEl, relAttr);
     while (true) {
       const nsDependentSubstring id = iter.NextID();
       if (id.IsEmpty()) break;
@@ -1851,7 +1851,7 @@ void DocAccessible::RemoveDependentIDsFor(LocalAccessible* aRelProvider,
     nsStaticAtom* relAttr = kRelationAttrs[idx];
     if (aRelAttr && aRelAttr != kRelationAttrs[idx]) continue;
 
-    IDRefsIterator iter(this, relProviderElm, relAttr);
+    AssociatedElementsIterator iter(this, relProviderElm, relAttr);
     while (true) {
       const nsDependentSubstring id = iter.NextID();
       if (id.IsEmpty()) break;
@@ -1897,6 +1897,28 @@ void DocAccessible::AddDependentElementsFor(LocalAccessible* aRelProvider,
       break;
     }
   }
+
+  aria::AttrWithCharacteristicsIterator multipleElementsRelationIter(
+      ATTR_REFLECT_ELEMENTS);
+  while (multipleElementsRelationIter.Next()) {
+    nsStaticAtom* attr = multipleElementsRelationIter.AttrName();
+    if (aRelAttr && aRelAttr != attr) {
+      continue;
+    }
+    nsTArray<dom::Element*> elements;
+    nsAccUtils::GetARIAElementsAttr(providerEl, attr, elements);
+    for (dom::Element* targetEl : elements) {
+      AttrRelProviders& providers =
+          mDependentElementsMap.LookupOrInsert(targetEl);
+      AttrRelProvider* provider = new AttrRelProvider(attr, providerEl);
+      providers.AppendElement(provider);
+    }
+    // If the relation attribute was given, we've already handled it. We don't
+    // have anything else to check.
+    if (aRelAttr) {
+      break;
+    }
+  }
 }
 
 void DocAccessible::RemoveDependentElementsFor(LocalAccessible* aRelProvider,
@@ -1921,6 +1943,34 @@ void DocAccessible::RemoveDependentElementsFor(LocalAccessible* aRelProvider,
         }
       }
     }
+    // If the relation attribute was given, we've already handled it. We don't
+    // have anything else to check.
+    if (aRelAttr) {
+      break;
+    }
+  }
+
+  aria::AttrWithCharacteristicsIterator multipleElementsRelationIter(
+      ATTR_REFLECT_ELEMENTS);
+  while (multipleElementsRelationIter.Next()) {
+    nsStaticAtom* attr = multipleElementsRelationIter.AttrName();
+    if (aRelAttr && aRelAttr != attr) {
+      continue;
+    }
+    nsTArray<dom::Element*> elements;
+    nsAccUtils::GetARIAElementsAttr(providerEl, attr, elements);
+    for (dom::Element* targetEl : elements) {
+      if (auto providers = mDependentElementsMap.Lookup(targetEl)) {
+        providers.Data().RemoveElementsBy([attr,
+                                           providerEl](const auto& provider) {
+          return provider->mRelAttr == attr && provider->mContent == providerEl;
+        });
+        if (providers.Data().IsEmpty()) {
+          providers.Remove();
+        }
+      }
+    }
+
     // If the relation attribute was given, we've already handled it. We don't
     // have anything else to check.
     if (aRelAttr) {
@@ -2385,20 +2435,10 @@ void DocAccessible::ContentRemoved(nsIContent* aContentNode) {
 }
 
 bool DocAccessible::RelocateARIAOwnedIfNeeded(nsIContent* aElement) {
-  if (!aElement->HasID()) return false;
-
-  AttrRelProviders* list = GetRelProviders(
-      aElement->AsElement(), nsDependentAtomString(aElement->GetID()));
-  if (list) {
-    for (uint32_t idx = 0; idx < list->Length(); idx++) {
-      if (list->ElementAt(idx)->mRelAttr == nsGkAtoms::aria_owns) {
-        LocalAccessible* owner = GetAccessible(list->ElementAt(idx)->mContent);
-        if (owner) {
-          mNotificationController->ScheduleRelocation(owner);
-          return true;
-        }
-      }
-    }
+  RelatedAccIterator owners(mDoc, aElement, nsGkAtoms::aria_owns);
+  if (Accessible* owner = owners.Next()) {
+    mNotificationController->ScheduleRelocation(owner->AsLocal());
+    return true;
   }
 
   return false;
@@ -2415,7 +2455,7 @@ void DocAccessible::DoARIAOwnsRelocation(LocalAccessible* aOwner) {
   nsTArray<RefPtr<LocalAccessible>>* owned =
       mARIAOwnsHash.GetOrInsertNew(aOwner);
 
-  IDRefsIterator iter(this, aOwner->Elm(), nsGkAtoms::aria_owns);
+  AssociatedElementsIterator iter(this, aOwner->Elm(), nsGkAtoms::aria_owns);
   uint32_t idx = 0;
   while (nsIContent* childEl = iter.NextElem()) {
     LocalAccessible* child = GetAccessible(childEl);

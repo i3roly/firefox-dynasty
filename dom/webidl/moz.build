@@ -423,7 +423,6 @@ WEBIDL_FILES = [
     "AnimationTimeline.webidl",
     "AnonymousContent.webidl",
     "AppInfo.webidl",
-    "AppNotificationServiceOptions.webidl",
     "APZTestData.webidl",
     "ARIAMixin.webidl",
     "Attr.webidl",
@@ -766,6 +765,7 @@ WEBIDL_FILES = [
     "MIDIPort.webidl",
     "MimeType.webidl",
     "MimeTypeArray.webidl",
+    "MLS.webidl",
     "MouseEvent.webidl",
     "MouseScrollEvent.webidl",
     "MozFrameLoaderOwner.webidl",
@@ -1101,7 +1101,6 @@ if CONFIG["MOZ_WEBRTC"]:
         "RTCSessionDescription.webidl",
         "RTCStatsReport.webidl",
         "RTCTransformEvent.webidl",
-        "WebrtcGlobalInformation.webidl",
     ]
 
 if CONFIG["MOZ_WEBSPEECH"]:
@@ -1164,6 +1163,11 @@ WEBIDL_FILES += [
 if CONFIG["FUZZING"]:
     WEBIDL_FILES += [
         "FuzzingFunctions.webidl",
+    ]
+
+if CONFIG["FUZZING_SNAPSHOT"]:
+    WEBIDL_FILES += [
+        "Nyx.webidl",
     ]
 
 GENERATED_EVENTS_WEBIDL_FILES = [

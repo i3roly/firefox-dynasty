@@ -252,7 +252,10 @@ export var ExtensionsUI = {
       if (
         info.unsigned &&
         Cu.isInAutomation &&
-        Services.prefs.getBoolPref("extensions.ui.ignoreUnsigned", false)
+        Services.prefs.getBoolPref(
+          "extensions.ui.showAddonIconForUnsigned",
+          false
+        )
       ) {
         info.unsigned = false;
       }
@@ -336,7 +339,22 @@ export var ExtensionsUI = {
         resolve(true);
         return;
       }
-      resolve(this.showPermissionsPrompt(browser, strings, icon));
+      // "userScripts" is an OptionalOnlyPermission, which means that it can
+      // only be requested through the permissions.request() API, without other
+      // permissions in the same request.
+      let isUserScriptsRequest =
+        permissions.permissions.length === 1 &&
+        permissions.permissions[0] === "userScripts";
+      resolve(
+        this.showPermissionsPrompt(
+          browser,
+          strings,
+          icon,
+          /* addon */ undefined,
+          /* shouldShowIncognitoCheckbox */ false,
+          isUserScriptsRequest
+        )
+      );
     } else if (topic == "webextension-defaultsearch-prompt") {
       let { browser, name, icon, respond, currentEngine, newEngine } =
         subject.wrappedJSObject;
@@ -395,7 +413,8 @@ export var ExtensionsUI = {
     strings,
     icon,
     addon = undefined,
-    shouldShowIncognitoCheckbox = false
+    shouldShowIncognitoCheckbox = false,
+    isUserScriptsRequest = false
   ) {
     let { browser, window } = getTabBrowser(target);
 
@@ -468,6 +487,7 @@ export var ExtensionsUI = {
           onPrivateBrowsingAllowedChanged(value) {
             grantPrivateBrowsingAllowed = value;
           },
+          isUserScriptsRequest,
         },
       };
       // The prompt/notification machinery has a special affordance wherein

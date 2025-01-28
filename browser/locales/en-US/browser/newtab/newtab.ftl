@@ -117,6 +117,12 @@ newtab-menu-delete-pocket = Delete from { -pocket-brand-name }
 newtab-menu-archive-pocket = Archive in { -pocket-brand-name }
 newtab-menu-show-privacy-info = Our sponsors & your privacy
 newtab-menu-about-fakespot = About { -fakespot-brand-name }
+# Context menu option to personalize New Tab recommended stories by blocking a section of stories,
+# e.g. "Sports". "Block" is a verb here.
+newtab-menu-section-block = Block
+# "Follow", "unfollow", and "following" are social media terms that refer to subscribing to or unsubscribing from a section of stories.
+# e.g. Following the travel section of stories.
+newtab-menu-section-unfollow = Unfollow Topic
 
 ## Message displayed in a modal window to explain privacy and provide context for sponsored content.
 
@@ -430,3 +436,18 @@ newtab-topic-selection-button-maybe-later = Maybe later
 newtab-topic-selection-privacy-link = Learn how we protect and manage data
 newtab-topic-selection-button-update-interests = Update your interests
 newtab-topic-selection-button-pick-interests = Pick your interests
+
+## Content Feed Sections
+## "Follow", "unfollow", and "following" are social media terms that refer to subscribing to or unsubscribing from a section of stories.
+## e.g. Following the travel section of stories.
+
+newtab-section-follow-button = Follow
+newtab-section-following-button = Following
+newtab-section-unfollow-button = Unfollow
+
+## Confirmation modal for blocking a section
+
+newtab-section-confirm-block-section-p1 = Are you sure you want to block this section?
+newtab-section-confirm-block-section-p2 = Blocked section will no longer appear in your feed.
+newtab-section-block-section-button = Block this section
+newtab-section-cancel-button = Not now

@@ -348,12 +348,12 @@ class EngineDispatcher {
 
     // If the merged options don't have a modelId and we have a default modelId, we set it
     if (!mergedOptions.modelId) {
-      const defaultModel = lazy.DEFAULT_MODELS[this.#taskName];
-      if (defaultModel) {
+      const defaultModelEntry = lazy.DEFAULT_MODELS[this.#taskName];
+      if (defaultModelEntry) {
         lazy.console.debug(
-          `Using default model ${defaultModel} for task ${this.#taskName}`
+          `Using default model ${defaultModelEntry.modelId} for task ${this.#taskName}`
         );
-        mergedOptions.modelId = defaultModel;
+        mergedOptions.updateOptions(defaultModelEntry);
       } else {
         throw new Error(`No default model found for task ${this.#taskName}`);
       }
@@ -529,7 +529,7 @@ class EngineDispatcher {
           break;
         }
         case "EnginePort:Run": {
-          const { requestId, request } = data;
+          const { requestId, request, engineRunOptions } = data;
           try {
             await this.ensureInferenceEngineIsReady();
           } catch (error) {
@@ -556,7 +556,11 @@ class EngineDispatcher {
             port.postMessage({
               type: "EnginePort:RunResponse",
               requestId,
-              response: await this.#engine.run(request),
+              response: await this.#engine.run(
+                request,
+                requestId,
+                engineRunOptions
+              ),
               error: null,
             });
           } catch (error) {
@@ -790,6 +794,7 @@ class InferenceEngine {
             modelHubUrlTemplate: pipelineOptions.modelHubUrlTemplate,
           }),
         getInferenceProcessInfo: getInferenceProcessInfoFn,
+        onInferenceProgress: notificationsCallback,
       }
     );
 
@@ -809,10 +814,13 @@ class InferenceEngine {
 
   /**
    * @param {string} request
+   * @param {string} requestId - The identifier used to internally track this request.
+   * @param {object} engineRunOptions - Additional run options for the engine.
+   * @param {boolean} engineRunOptions.enableInferenceProgress - Whether to enable inference progress.
    * @returns {Promise<string>}
    */
-  run(request) {
-    return this.#worker.post("run", [request]);
+  run(request, requestId, engineRunOptions) {
+    return this.#worker.post("run", [request, requestId, engineRunOptions]);
   }
 
   terminate() {

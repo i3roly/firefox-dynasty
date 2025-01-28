@@ -280,6 +280,8 @@ class ImageDocument;
 class Touch;
 class TouchList;
 class TreeWalker;
+class TrustedHTMLOrString;
+class OwningTrustedHTMLOrString;
 enum class ViewportFitType : uint8_t;
 class ViewTransition;
 class ViewTransitionUpdateCallback;
@@ -1594,22 +1596,26 @@ class Document : public nsINode,
   // Get the root <html> element, or return null if there isn't one (e.g.
   // if the root isn't <html>)
   Element* GetHtmlElement() const;
-  // Returns the first child of GetHtmlContent which has the given tag,
-  // or nullptr if that doesn't exist.
-  Element* GetHtmlChildElement(nsAtom* aTag);
+  // Returns the first child of GetHtmlContent which has the given tag and is
+  // not aContentToIgnore, or nullptr if that doesn't exist.
+  Element* GetHtmlChildElement(
+      nsAtom* aTag, const nsIContent* aContentToIgnore = nullptr) const;
   // Get the canonical <body> element, or return null if there isn't one (e.g.
   // if the root isn't <html> or if the <body> isn't there)
-  HTMLBodyElement* GetBodyElement();
+  HTMLBodyElement* GetBodyElement(
+      const nsIContent* aContentToIgnore = nullptr) const;
   // Get the canonical <head> element, or return null if there isn't one (e.g.
   // if the root isn't <html> or if the <head> isn't there)
-  Element* GetHeadElement() { return GetHtmlChildElement(nsGkAtoms::head); }
+  Element* GetHeadElement() const {
+    return GetHtmlChildElement(nsGkAtoms::head);
+  }
   // Get the "body" in the sense of document.body: The first <body> or
   // <frameset> that's a child of a root <html>
-  nsGenericHTMLElement* GetBody();
+  nsGenericHTMLElement* GetBody() const;
   // Set the "body" in the sense of document.body.
   void SetBody(nsGenericHTMLElement* aBody, ErrorResult& rv);
   // Get the "head" element in the sense of document.head.
-  HTMLSharedElement* GetHead();
+  HTMLSharedElement* GetHead() const;
 
   ServoStyleSet* StyleSetForPresShell() const {
     MOZ_ASSERT(!!mStyleSet.get());
@@ -3337,10 +3343,12 @@ class Document : public nsINode,
       const nsAString& aURL, const nsAString& aName, const nsAString& aFeatures,
       mozilla::ErrorResult& rv);
   void Close(mozilla::ErrorResult& rv);
-  void Write(const mozilla::dom::Sequence<nsString>& aText,
-             mozilla::ErrorResult& rv);
-  void Writeln(const mozilla::dom::Sequence<nsString>& aText,
-               mozilla::ErrorResult& rv);
+  MOZ_CAN_RUN_SCRIPT void Write(
+      const mozilla::dom::Sequence<OwningTrustedHTMLOrString>& aText,
+      mozilla::ErrorResult& rv);
+  MOZ_CAN_RUN_SCRIPT void Writeln(
+      const mozilla::dom::Sequence<OwningTrustedHTMLOrString>& aText,
+      mozilla::ErrorResult& rv);
   Nullable<WindowProxyHolder> GetDefaultView() const;
   Element* GetActiveElement();
   enum class IncludeChromeOnly : bool { No, Yes };
@@ -3367,8 +3375,8 @@ class Document : public nsINode,
   void SetDocumentEditableFlag(bool);
   MOZ_CAN_RUN_SCRIPT
   bool ExecCommand(const nsAString& aHTMLCommandName, bool aShowUI,
-                   const nsAString& aValue, nsIPrincipal& aSubjectPrincipal,
-                   mozilla::ErrorResult& aRv);
+                   const TrustedHTMLOrString& aValue,
+                   nsIPrincipal& aSubjectPrincipal, mozilla::ErrorResult& aRv);
   MOZ_CAN_RUN_SCRIPT bool QueryCommandEnabled(const nsAString& aHTMLCommandName,
                                               nsIPrincipal& aSubjectPrincipal,
                                               mozilla::ErrorResult& aRv);
@@ -3680,6 +3688,9 @@ class Document : public nsINode,
     mHasPolicyWithRequireTrustedTypesForDirective =
         aHasPolicyWithRequireTrustedTypesForDirective;
   }
+  bool IsClipboardCopyTriggered() const { return mClipboardCopyTriggered; }
+  void ClearClipboardCopyTriggered() { mClipboardCopyTriggered = false; }
+  void SetClipboardCopyTriggered() { mClipboardCopyTriggered = true; }
 
   // Even if mutation events are disabled by default,
   // dom.mutation_events.forceEnable can be used to enable them per site.
@@ -4276,11 +4287,13 @@ class Document : public nsINode,
   already_AddRefed<nsIURI> RegistrableDomainSuffixOfInternal(
       const nsAString& aHostSuffixString, nsIURI* aOrigHost);
 
-  void WriteCommon(const nsAString& aText, bool aNewlineTerminate,
-                   mozilla::ErrorResult& aRv);
+  MOZ_CAN_RUN_SCRIPT void WriteCommon(const nsAString& aText,
+                                      bool aNewlineTerminate, bool aIsTrusted,
+                                      mozilla::ErrorResult& aRv);
   // A version of WriteCommon used by WebIDL bindings
-  void WriteCommon(const mozilla::dom::Sequence<nsString>& aText,
-                   bool aNewlineTerminate, mozilla::ErrorResult& rv);
+  MOZ_CAN_RUN_SCRIPT void WriteCommon(
+      const mozilla::dom::Sequence<OwningTrustedHTMLOrString>& aText,
+      bool aNewlineTerminate, mozilla::ErrorResult& rv);
 
   void* GenerateParserKey(void);
 
@@ -4403,6 +4416,7 @@ class Document : public nsINode,
    *                            execCommand().
    * @param aValue              The value which is set to the 3rd parameter
    *                            of execCommand().
+   * @param aRv                 ErrorResult used for Trusted Type conversion.
    * @param aAdjustedValue      [out] Must be empty string if set non-nullptr.
    *                            Will be set to adjusted value for executing
    *                            the internal command.
@@ -4415,8 +4429,9 @@ class Document : public nsINode,
    *                            instance registered in
    *                            sInternalCommandDataHashtable.
    */
-  static InternalCommandData ConvertToInternalCommand(
-      const nsAString& aHTMLCommandName, const nsAString& aValue = u""_ns,
+  MOZ_CAN_RUN_SCRIPT InternalCommandData ConvertToInternalCommand(
+      const nsAString& aHTMLCommandName,
+      const TrustedHTMLOrString* aValue = nullptr, ErrorResult* aRv = nullptr,
       nsAString* aAdjustedValue = nullptr);
 
   /**
@@ -4954,6 +4969,10 @@ class Document : public nsINode,
   // Whether the document's CSP contains a require-trusted-types-for directive.
   bool mHasPolicyWithRequireTrustedTypesForDirective : 1;
 
+  // Whether a copy event happened. Used to detect when this happens
+  // while a paste event is being handled in JS.
+  bool mClipboardCopyTriggered : 1;
+
   Maybe<bool> mMutationEventsEnabled;
 
   // The fingerprinting protections overrides for this document. The value will
@@ -5477,8 +5496,9 @@ class Document : public nsINode,
 
   RadioGroupContainer& OwnedRadioGroupContainer();
 
-  static already_AddRefed<Document> ParseHTMLUnsafe(GlobalObject& aGlobal,
-                                                    const nsAString& aHTML);
+  MOZ_CAN_RUN_SCRIPT static already_AddRefed<Document> ParseHTMLUnsafe(
+      GlobalObject& aGlobal, const TrustedHTMLOrString& aHTML,
+      ErrorResult& aError);
 };
 
 NS_DEFINE_STATIC_IID_ACCESSOR(Document, NS_IDOCUMENT_IID)

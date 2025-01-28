@@ -17,7 +17,10 @@ use crate::private::MetricId;
 /// Records a single numeric value of a specific unit.
 #[derive(Clone)]
 pub enum QuantityMetric {
-    Parent(Arc<glean::private::QuantityMetric>),
+    Parent {
+        id: MetricId,
+        inner: Arc<glean::private::QuantityMetric>,
+    },
     Child(QuantityMetricIpc),
 }
 #[derive(Clone, Debug)]
@@ -25,18 +28,21 @@ pub struct QuantityMetricIpc;
 
 impl QuantityMetric {
     /// Create a new quantity metric.
-    pub fn new(_id: MetricId, meta: CommonMetricData) -> Self {
+    pub fn new(id: MetricId, meta: CommonMetricData) -> Self {
         if need_ipc() {
             QuantityMetric::Child(QuantityMetricIpc)
         } else {
-            QuantityMetric::Parent(Arc::new(glean::private::QuantityMetric::new(meta)))
+            QuantityMetric::Parent {
+                id,
+                inner: Arc::new(glean::private::QuantityMetric::new(meta)),
+            }
         }
     }
 
     #[cfg(test)]
     pub(crate) fn child_metric(&self) -> Self {
         match self {
-            QuantityMetric::Parent(_) => QuantityMetric::Child(QuantityMetricIpc),
+            QuantityMetric::Parent { .. } => QuantityMetric::Child(QuantityMetricIpc),
             QuantityMetric::Child(_) => panic!("Can't get a child metric from a child metric"),
         }
     }
@@ -55,8 +61,18 @@ impl Quantity for QuantityMetric {
     /// Logs an error if the `value` is negative.
     pub fn set(&self, value: i64) {
         match self {
-            QuantityMetric::Parent(p) => {
-                p.set(value);
+            #[allow(unused)]
+            QuantityMetric::Parent { id, inner } => {
+                #[cfg(feature = "with_gecko")]
+                if gecko_profiler::can_accept_markers() {
+                    gecko_profiler::add_marker(
+                        "Quantity::set",
+                        super::profiler_utils::TelemetryProfilerCategory,
+                        Default::default(),
+                        super::profiler_utils::IntLikeMetricMarker::new(*id, None, value),
+                    );
+                }
+                inner.set(value);
             }
             QuantityMetric::Child(_) => {
                 log::error!("Unable to set quantity metric in non-main process. This operation will be ignored.");
@@ -83,7 +99,7 @@ impl Quantity for QuantityMetric {
     pub fn test_get_value<'a, S: Into<Option<&'a str>>>(&self, ping_name: S) -> Option<i64> {
         let ping_name = ping_name.into().map(|s| s.to_string());
         match self {
-            QuantityMetric::Parent(p) => p.test_get_value(ping_name),
+            QuantityMetric::Parent { inner, .. } => inner.test_get_value(ping_name),
             QuantityMetric::Child(_) => {
                 panic!("Cannot get test value for quantity metric in non-main process!",)
             }
@@ -105,7 +121,7 @@ impl Quantity for QuantityMetric {
     /// The number of errors reported.
     pub fn test_get_num_recorded_errors(&self, error: glean::ErrorType) -> i32 {
         match self {
-            QuantityMetric::Parent(p) => p.test_get_num_recorded_errors(error),
+            QuantityMetric::Parent { inner, .. } => inner.test_get_num_recorded_errors(error),
             QuantityMetric::Child(_) => panic!(
                 "Cannot get the number of recorded errors for quantity metric in non-main process!"
             ),
@@ -124,7 +140,7 @@ mod test {
         let metric = &metrics::test_only_ipc::a_quantity;
         metric.set(14);
 
-        assert_eq!(14, metric.test_get_value("store1").unwrap());
+        assert_eq!(14, metric.test_get_value("test-ping").unwrap());
     }
 
     #[test]

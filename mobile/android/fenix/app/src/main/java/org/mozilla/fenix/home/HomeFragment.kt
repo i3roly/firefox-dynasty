@@ -74,6 +74,7 @@ import mozilla.components.browser.state.state.BrowserState
 import mozilla.components.browser.state.state.TabSessionState
 import mozilla.components.browser.state.state.selectedOrDefaultSearchEngine
 import mozilla.components.browser.state.store.BrowserStore
+import mozilla.components.compose.base.Divider
 import mozilla.components.compose.cfr.CFRPopup
 import mozilla.components.compose.cfr.CFRPopupLayout
 import mozilla.components.compose.cfr.CFRPopupProperties
@@ -124,14 +125,12 @@ import org.mozilla.fenix.components.toolbar.FenixTabCounterMenu
 import org.mozilla.fenix.components.toolbar.navbar.HomeNavBar
 import org.mozilla.fenix.components.toolbar.navbar.shouldAddNavigationBar
 import org.mozilla.fenix.components.toolbar.navbar.updateNavBarForConfigurationChange
-import org.mozilla.fenix.compose.Divider
 import org.mozilla.fenix.compose.snackbar.Snackbar
 import org.mozilla.fenix.compose.snackbar.SnackbarState
 import org.mozilla.fenix.databinding.FragmentHomeBinding
 import org.mozilla.fenix.ext.components
 import org.mozilla.fenix.ext.containsQueryParameters
 import org.mozilla.fenix.ext.hideToolbar
-import org.mozilla.fenix.ext.isLargeWindow
 import org.mozilla.fenix.ext.isToolbarAtBottom
 import org.mozilla.fenix.ext.nav
 import org.mozilla.fenix.ext.openSetDefaultBrowserOption
@@ -323,22 +322,38 @@ class HomeFragment : Fragment() {
         components.appStore.dispatch(AppAction.ModeChange(browsingModeManager.mode))
 
         lifecycleScope.launch(IO) {
-            if (requireContext().settings().showPocketRecommendationsFeature) {
+            // Show Merino content recommendations.
+            val showContentRecommendations = requireContext().settings().showContentRecommendations
+            // Show Pocket recommended stories.
+            val showPocketRecommendationsFeature =
+                requireContext().settings().showPocketRecommendationsFeature
+            // Show sponsored stories if recommended stories are enabled.
+            val showSponsoredStories = requireContext().settings().showPocketSponsoredStories &&
+                (showContentRecommendations || showPocketRecommendationsFeature)
+
+            if (showContentRecommendations) {
+                components.appStore.dispatch(
+                    ContentRecommendationsAction.ContentRecommendationsFetched(
+                        recommendations = components.core.pocketStoriesService.getContentRecommendations(),
+                    ),
+                )
+            } else if (showPocketRecommendationsFeature) {
                 val categories = components.core.pocketStoriesService.getStories()
                     .groupBy { story -> story.category }
                     .map { (category, stories) -> PocketRecommendedStoriesCategory(category, stories) }
 
                 components.appStore.dispatch(ContentRecommendationsAction.PocketStoriesCategoriesChange(categories))
-
-                if (requireContext().settings().showPocketSponsoredStories) {
-                    components.appStore.dispatch(
-                        ContentRecommendationsAction.PocketSponsoredStoriesChange(
-                            components.core.pocketStoriesService.getSponsoredStories(),
-                        ),
-                    )
-                }
             } else {
                 components.appStore.dispatch(ContentRecommendationsAction.PocketStoriesClean)
+            }
+
+            if (showSponsoredStories) {
+                components.appStore.dispatch(
+                    ContentRecommendationsAction.PocketSponsoredStoriesChange(
+                        sponsoredStories = components.core.pocketStoriesService.getSponsoredStories(),
+                        showContentRecommendations = showContentRecommendations,
+                    ),
+                )
             }
         }
 
@@ -559,7 +574,7 @@ class HomeFragment : Fragment() {
 
         // If the navbar feature could be visible, we should update it's state.
         val shouldUpdateNavBarState =
-            requireContext().settings().navigationToolbarEnabled && !isLargeWindow()
+            requireContext().settings().navigationToolbarEnabled
         if (shouldUpdateNavBarState) {
             updateNavBarForConfigurationChange(
                 context = requireContext(),
@@ -599,6 +614,8 @@ class HomeFragment : Fragment() {
         activity: HomeActivity,
         isConfigChange: Boolean = false,
     ) {
+        NavigationBar.homeInitializeTimespan.start()
+
         val context = requireContext()
         val isToolbarAtBottom = context.isToolbarAtBottom()
 
@@ -635,10 +652,12 @@ class HomeFragment : Fragment() {
                         val shouldShowNavBarCFR =
                             context.shouldAddNavigationBar() && context.settings().shouldShowNavigationBarCFR
                         val shouldShowMicrosurveyPrompt = !activity.isMicrosurveyPromptDismissed.value
+                        var isMicrosurveyShown = false
 
                         if (!isSearchActive && shouldShowMicrosurveyPrompt && !shouldShowNavBarCFR) {
                             currentMicrosurvey
                                 ?.let {
+                                    isMicrosurveyShown = true
                                     if (isToolbarAtBottom) {
                                         updateToolbarViewUIForMicrosurveyPrompt()
                                     }
@@ -675,11 +694,6 @@ class HomeFragment : Fragment() {
 
                         if (isToolbarAtBottom) {
                             AndroidView(factory = { _ -> binding.toolbarLayout })
-                        } else if (
-                            currentMicrosurvey == null ||
-                            (shouldShowMicrosurveyPrompt && !shouldShowNavBarCFR)
-                        ) {
-                            Divider()
                         }
 
                         val showCFR = !isSearchActive &&
@@ -764,7 +778,9 @@ class HomeFragment : Fragment() {
                             if (!isSearchActive) {
                                 HomeNavBar(
                                     isPrivateMode = activity.browsingModeManager.mode.isPrivate,
+                                    showDivider = !isMicrosurveyShown && !isToolbarAtBottom,
                                     browserStore = context.components.core.store,
+                                    appStore = context.components.appStore,
                                     menuButton = menuButton,
                                     tabsCounterMenu = tabCounterMenu,
                                     onSearchButtonClick = {
@@ -811,6 +827,8 @@ class HomeFragment : Fragment() {
                 }
             },
         )
+
+        NavigationBar.homeInitializeTimespan.stop()
     }
 
     @VisibleForTesting
@@ -1200,6 +1218,7 @@ class HomeFragment : Fragment() {
                         state = HomepageState.build(
                             appState = appState,
                             settings = settings,
+                            browsingModeManager = browsingModeManager,
                         ),
                         interactor = sessionControlInteractor,
                         onTopSitesItemBound = {

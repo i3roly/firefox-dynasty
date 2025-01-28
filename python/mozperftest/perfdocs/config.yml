@@ -59,9 +59,10 @@ suites:
         tests:
             "ML Test Model": ""
             "ML Test Multi Model": ""
+            "ML Suggest Feature": ""
             "ML Suggest Inference Model": ""
-            "ML Suggest Intent Model": ""
-            "ML Suggest NER Model": ""
+            "ML Autofill Model": ""
+            "ML Summarizer Model": ""
 
     intl/benchmarks/test/xpcshell:
         description: "Performance tests running through XPCShell for Intl code"

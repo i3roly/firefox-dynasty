@@ -1236,8 +1236,7 @@ void nsXPLookAndFeel::RecordTelemetry() {
   sRecordedLookAndFeelTelemetry = true;
 
   int32_t i;
-  Telemetry::ScalarSet(
-      Telemetry::ScalarID::WIDGET_DARK_MODE,
+  glean::widget::dark_mode.Set(
       NS_SUCCEEDED(GetIntValue(IntID::SystemUsesDarkTheme, i)) && i != 0);
 
   auto devices =

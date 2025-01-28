@@ -8,7 +8,7 @@
   --toolbox-bgcolor-inactive: -moz-headerbarinactive;
   --toolbox-textcolor-inactive: -moz-headerbarinactivetext;
 
-  &:where([tabsintitlebar]) {
+  &:where([customtitlebar]) {
     --toolbox-bgcolor: ActiveCaption;
     --toolbox-textcolor: CaptionText;
     --toolbox-bgcolor-inactive: InactiveCaption;
@@ -24,6 +24,7 @@
 
   --short-notification-background: #0250BB;
   --short-notification-gradient: #9059FF;
+  --warning-icon-bgcolor: light-dark(#FFA436, #FFBD4F);
 
   --urlbar-box-bgcolor: var(--button-background-color-hover);
   --urlbar-box-focus-bgcolor: var(--button-background-color);
@@ -111,7 +112,7 @@
       --toolbox-textcolor: light-dark(rgb(21, 20, 26), rgb(251, 251, 254));
       --toolbox-bgcolor-inactive: var(--toolbox-bgcolor);
       --toolbox-textcolor-inactive: var(--toolbox-textcolor);
-      &:where([tabsintitlebar]) {
+      &:where([customtitlebar]) {
         --toolbox-bgcolor-inactive: light-dark(rgb(235, 235, 239), rgb(31, 30, 37));
       }
     }

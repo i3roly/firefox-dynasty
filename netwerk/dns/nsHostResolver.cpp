@@ -166,38 +166,12 @@ NS_IMPL_ISUPPORTS(DnsThreadListener, nsIThreadPoolListener)
 
 //----------------------------------------------------------------------------
 
-static const char kPrefGetTtl[] = "network.dns.get-ttl";
-static const char kPrefNativeIsLocalhost[] = "network.dns.native-is-localhost";
-static const char kPrefThreadIdleTime[] =
-    "network.dns.resolver-thread-extra-idle-time-seconds";
-static bool sGetTtlEnabled = false;
-mozilla::Atomic<bool, mozilla::Relaxed> gNativeIsLocalhost;
 mozilla::Atomic<bool, mozilla::Relaxed> sNativeHTTPSSupported{false};
-
-static void DnsPrefChanged(const char* aPref, void* aSelf) {
-  MOZ_ASSERT(NS_IsMainThread(),
-             "Should be getting pref changed notification on main thread!");
-
-  MOZ_ASSERT(aSelf);
-
-  if (!strcmp(aPref, kPrefGetTtl)) {
-#ifdef DNSQUERY_AVAILABLE
-    sGetTtlEnabled = Preferences::GetBool(kPrefGetTtl);
-#endif
-  } else if (!strcmp(aPref, kPrefNativeIsLocalhost)) {
-    gNativeIsLocalhost = Preferences::GetBool(kPrefNativeIsLocalhost);
-  }
-}
 
 NS_IMPL_ISUPPORTS0(nsHostResolver)
 
-nsHostResolver::nsHostResolver(uint32_t maxCacheEntries,
-                               uint32_t defaultCacheEntryLifetime,
-                               uint32_t defaultGracePeriod)
-    : mMaxCacheEntries(maxCacheEntries),
-      mDefaultCacheLifetime(defaultCacheEntryLifetime),
-      mDefaultGracePeriod(defaultGracePeriod),
-      mIdleTaskCV(mLock, "nsHostResolver.mIdleTaskCV") {
+nsHostResolver::nsHostResolver()
+    : mIdleTaskCV(mLock, "nsHostResolver.mIdleTaskCV") {
   mCreationTime = PR_Now();
 
   mLongIdleTimeout = TimeDuration::FromSeconds(LongIdleTimeoutSeconds);
@@ -217,21 +191,6 @@ nsresult nsHostResolver::Init() MOZ_NO_THREAD_SAFETY_ANALYSIS {
   mShutdown = false;
   mNCS = NetworkConnectivityService::GetSingleton();
 
-  // The preferences probably haven't been loaded from the disk yet, so we
-  // need to register a callback that will set up the experiment once they
-  // are. We also need to explicitly set a value for the props otherwise the
-  // callback won't be called.
-  {
-    DebugOnly<nsresult> rv = Preferences::RegisterCallbackAndCall(
-        &DnsPrefChanged, kPrefGetTtl, this);
-    NS_WARNING_ASSERTION(NS_SUCCEEDED(rv),
-                         "Could not register DNS TTL pref callback.");
-    rv = Preferences::RegisterCallbackAndCall(&DnsPrefChanged,
-                                              kPrefNativeIsLocalhost, this);
-    NS_WARNING_ASSERTION(NS_SUCCEEDED(rv),
-                         "Could not register DNS pref callback.");
-  }
-
 #if defined(HAVE_RES_NINIT)
   // We want to make sure the system is using the correct resolver settings,
   // so we force it to reload those settings whenever we startup a subsequent
@@ -247,7 +206,8 @@ nsresult nsHostResolver::Init() MOZ_NO_THREAD_SAFETY_ANALYSIS {
 
   // We can configure the threadpool to keep threads alive for a while after
   // the last ThreadFunc task has been executed.
-  int32_t poolTimeoutSecs = Preferences::GetInt(kPrefThreadIdleTime, 60);
+  int32_t poolTimeoutSecs =
+      StaticPrefs::network_dns_resolver_thread_extra_idle_time_seconds();
   uint32_t poolTimeoutMs;
   if (poolTimeoutSecs < 0) {
     // This means never shut down the idle threads
@@ -353,13 +313,6 @@ void nsHostResolver::FlushCache(bool aTrrToo) {
 void nsHostResolver::Shutdown() {
   LOG(("Shutting down host resolver.\n"));
 
-  {
-    DebugOnly<nsresult> rv =
-        Preferences::UnregisterCallback(&DnsPrefChanged, kPrefGetTtl, this);
-    NS_WARNING_ASSERTION(NS_SUCCEEDED(rv),
-                         "Could not unregister DNS TTL pref callback.");
-  }
-
   LinkedList<RefPtr<nsHostRecord>> pendingQHigh, pendingQMed, pendingQLow,
       evictionQ;
 
@@ -464,8 +417,9 @@ already_AddRefed<nsHostRecord> nsHostResolver::InitLoopbackRecord(
   RefPtr<AddrHostRecord> addrRec = do_QueryObject(rec);
   MutexAutoLock lock(addrRec->addr_info_lock);
   addrRec->addr_info = ai;
-  addrRec->SetExpiration(TimeStamp::NowLoRes(), mDefaultCacheLifetime,
-                         mDefaultGracePeriod);
+  addrRec->SetExpiration(TimeStamp::NowLoRes(),
+                         StaticPrefs::network_dnsCacheExpiration(),
+                         StaticPrefs::network_dnsCacheExpirationGracePeriod());
   addrRec->negative = false;
 
   *aRv = NS_OK;
@@ -1334,7 +1288,8 @@ bool nsHostResolver::GetHostToLookup(nsHostRecord** result) {
     // remove next record from Q; hand over owning reference. Check high, then
     // med, then low
 
-#define SET_GET_TTL(var, val) (var)->StoreGetTtl(sGetTtlEnabled && (val))
+#define SET_GET_TTL(var, val) \
+  (var)->StoreGetTtl(StaticPrefs::network_dns_get_ttl() && (val))
 
     RefPtr<nsHostRecord> rec = mQueue.Dequeue(true, lock);
     if (rec) {
@@ -1400,11 +1355,11 @@ void nsHostResolver::PrepareRecordExpirationAddrRecord(
     return;
   }
 
-  unsigned int lifetime = mDefaultCacheLifetime;
-  unsigned int grace = mDefaultGracePeriod;
+  unsigned int lifetime = StaticPrefs::network_dnsCacheExpiration();
+  unsigned int grace = StaticPrefs::network_dnsCacheExpirationGracePeriod();
 
-  unsigned int ttl = mDefaultCacheLifetime;
-  if (sGetTtlEnabled || rec->addr_info->IsTRR()) {
+  unsigned int ttl = StaticPrefs::network_dnsCacheExpiration();
+  if (StaticPrefs::network_dns_get_ttl() || rec->addr_info->IsTRR()) {
     if (rec->addr_info && rec->addr_info->TTL() != AddrInfo::NO_TTL_DATA) {
       ttl = rec->addr_info->TTL();
     }
@@ -1453,7 +1408,8 @@ static bool different_rrset(AddrInfo* rrset1, AddrInfo* rrset2) {
 
 void nsHostResolver::AddToEvictionQ(nsHostRecord* rec,
                                     const MutexAutoLock& aLock) {
-  mQueue.AddToEvictionQ(rec, mMaxCacheEntries, mRecordDB, aLock);
+  mQueue.AddToEvictionQ(rec, StaticPrefs::network_dnsCacheEntries(), mRecordDB,
+                        aLock);
 }
 
 // After a first lookup attempt with TRR in mode 2, we may:
@@ -1736,7 +1692,7 @@ nsHostResolver::LookupStatus nsHostResolver::CompleteLookupLocked(
     }
   }
   if (hasNativeResult && !mShutdown && !addrRec->LoadGetTtl() &&
-      !rec->mResolving && sGetTtlEnabled) {
+      !rec->mResolving && StaticPrefs::network_dns_get_ttl()) {
     LOG(("Issuing second async lookup for TTL for host [%s].",
          addrRec->host.get()));
     addrRec->flags =
@@ -1816,7 +1772,9 @@ nsHostResolver::LookupStatus nsHostResolver::CompleteLookupByTypeLocked(
          typeRec.get(), typeRec->host.get(), recordCount));
     MutexAutoLock typeLock(typeRec->mResultsLock);
     typeRec->mResults = aResult;
-    typeRec->SetExpiration(TimeStamp::NowLoRes(), aTtl, mDefaultGracePeriod);
+    typeRec->SetExpiration(
+        TimeStamp::NowLoRes(), aTtl,
+        StaticPrefs::network_dnsCacheExpirationGracePeriod());
     typeRec->negative = false;
     typeRec->mTRRSuccess = !rec->LoadNative();
     typeRec->mNativeSuccess = rec->LoadNative();
@@ -2009,21 +1967,8 @@ void nsHostResolver::ThreadFunc() {
   LOG(("DNS lookup thread - queue empty, task finished.\n"));
 }
 
-void nsHostResolver::SetCacheLimits(uint32_t aMaxCacheEntries,
-                                    uint32_t aDefaultCacheEntryLifetime,
-                                    uint32_t aDefaultGracePeriod) {
-  MutexAutoLock lock(mLock);
-  mMaxCacheEntries = aMaxCacheEntries;
-  mDefaultCacheLifetime = aDefaultCacheEntryLifetime;
-  mDefaultGracePeriod = aDefaultGracePeriod;
-}
-
-nsresult nsHostResolver::Create(uint32_t maxCacheEntries,
-                                uint32_t defaultCacheEntryLifetime,
-                                uint32_t defaultGracePeriod,
-                                nsHostResolver** result) {
-  RefPtr<nsHostResolver> res = new nsHostResolver(
-      maxCacheEntries, defaultCacheEntryLifetime, defaultGracePeriod);
+nsresult nsHostResolver::Create(nsHostResolver** result) {
+  RefPtr<nsHostResolver> res = new nsHostResolver();
 
   nsresult rv = res->Init();
   if (NS_FAILED(rv)) {

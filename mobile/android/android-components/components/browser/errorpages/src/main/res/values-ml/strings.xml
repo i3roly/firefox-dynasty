@@ -40,6 +40,14 @@
     <!-- The document title and heading of the error page shown when a website uses HSTS. -->
     <string name="mozac_browser_errorpages_security_bad_hsts_cert_title">ഈ വെബ്സ്ഥാനത്തിനൊരു സുരക്ഷിതമായ സമ്പർക്കത്തിന്റെ ആവശ്യമുണ്ടു്.</string>
 
+    <!-- The error message shown when a website uses HSTS. -->
+    <string name="mozac_browser_errorpages_security_bad_hsts_cert_message"><![CDATA[      <ul>
+         <li>താങ്ങൾ കാണാൻ ശ്രമിക്കുന്ന താൾ കാണിപ്പിക്കാൻ പറ്റത്തില്ല, കാരണം ഈ വെബ്സ്ഥാനത്തിനൊരു സുരക്ഷിതമായ സമ്പർക്കത്തിന്റെ ആവശ്യമുണ്ടു്.</li>
+         <li>കുഴപ്പം മിക്കവാറും വെബ്സ്ഥാനത്തിലായിരിക്കും അതു് പരിഹരിക്കാനും താങ്ങൾക്കു് ഒന്നും ചെയ്യാൻ പറ്റില്ല</li>
+         <li>താങ്ങൾക്കു് വേണമെങ്കിൽ ഈ വെബ്സ്ഥാനത്തിന്റെ അധികാരിയെ ഈ കുഴപ്പത്തെക്കുറിച്ചു് അറിയിക്കാം.</li>
+         </ul>
+]]></string>
+
     <!-- The text shown inside the advanced button used to expand the advanced options. It's only shown when a website uses HSTS. -->
     <string name="mozac_browser_errorpages_security_bad_hsts_cert_advanced">കൂടുതൽ…</string>
 
@@ -140,7 +148,7 @@
       </ul>]]></string>
 
     <!-- The document title and heading of an error page. -->
-    <string name="mozac_browser_errorpages_invalid_content_encoding_title">ഉള്ളടക്കം എന്‍കോഡ് ചെയ്യുന്നതില്‍ പിശകു് സംഭവിച്ചു</string>
+    <string name="mozac_browser_errorpages_invalid_content_encoding_title">ഉള്ളടക്കം ഇഴചേ‌ർക്കലിൽ സംഭവിച്ചു</string>
 
     <string name="mozac_browser_errorpages_invalid_content_encoding_message"><![CDATA[<p>നിങ്ങള്‍ ഇപ്പോള്‍ കാണുവാന്‍ ശ്രമിക്കുന്ന പോജ് ലഭ്യമല്ല. കാരണം അതു് തെറ്റായ ആല്ലെങ്കില്‍ പിന്തുണ ലഭ്യമല്ലാത്ത രീതിയിലുള്ള കംപ്രഷന്‍ ഉപയോഗിക്കുന്നു.</p>
       <ul>
@@ -160,11 +168,7 @@
       </ul>]]></string>
 
     <!-- The document title and heading of an error page. -->
-    <string name="mozac_browser_errorpages_no_internet_title" moz:removedIn="133" tools:ignore="UnusedResources">ഇന്റർനെറ്റ് കണക്ഷൻ ലഭ്യമല്ല</string>
-    <!-- The document title and heading of an error page. -->
     <string name="mozac_browser_errorpages_no_internet_title_2">താങ്ങളുടെ അന്തരവല സമ്പർക്കത്തിൽ കുഴപ്പം ഉണ്ടു്</string>
-    <!-- The main body text of this error page. It will be shown beneath the title -->
-    <string name="mozac_browser_errorpages_no_internet_message" moz:removedIn="133" tools:ignore="UnusedResources">നിങ്ങളുടെ നെറ്റ്‌വർക്ക് കണക്ഷൻ പരിശോധിക്കുക അല്ലെങ്കിൽ കുറച്ച് നിമിഷങ്ങൾക്ക് ശേഷം പേജ് വീണ്ടും ലഭ്യമാക്കാൻ ശ്രമിക്കുക.</string>
     <!-- The main body text of this error page. It will be shown beneath the title -->
     <string name="mozac_browser_errorpages_no_internet_message_2">മറ്റൊരു ഉപകരണത്തോറു ബന്ധപ്പെടാൻ ശ്രമിക്കുക. താങ്ങളുടെ മോഡം പരിശോധിക്കുക. വൈഫൈ-ലേക്കു് വിച്ഛേതിച്ചും വീണ്ടും ബന്ധപ്പെടിയിട്ടു് ശ്രമിക്കുക </string>
     <!-- The document title and heading of an error page. -->

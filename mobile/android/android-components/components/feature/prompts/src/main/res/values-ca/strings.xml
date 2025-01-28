@@ -47,6 +47,8 @@
     <string name="mozac_feature_prompts_allow">Permet</string>
     <!-- Text of a negative button in dialog requesting to open a new window. -->
     <string name="mozac_feature_prompts_deny">Denega</string>
+    <!-- Text of the title of a dialog when a page is requesting to open a new window. -->
+    <string name="mozac_feature_prompts_popup_dialog_title">Voleu permetre que s’obri aquest lloc?</string>
     <!-- Title of the dialog shown when a user is leaving a website and there is still data not saved yet. -->
     <string name="mozac_feature_prompt_before_unload_dialog_title">Segur?</string>
     <!-- Body text of the dialog shown when a user is leaving a website and there is still data not saved yet. -->
@@ -102,8 +104,6 @@
 
     <!-- Title for using the suggest strong password confirmation dialog -->
     <string name="mozac_feature_prompts_suggest_strong_password_title">Voleu utilitzar una contrasenya segura?</string>
-    <!-- Content description for the suggest strong password confirmation dialog -->
-    <string name="mozac_feature_prompts_suggest_strong_password_description_2" moz:removedIn="133" tools:ignore="UnusedResources">Protegiu els vostres comptes amb una contrasenya segura generada aleatòriament. Es desarà al vostre compte per a usar-la més endavant.</string>
 
     <!-- Content description for the suggest strong password confirmation dialog -->
     <string name="mozac_feature_prompts_suggest_strong_password_description_3">Protegiu el vostre compte amb una contrasenya segura generada aleatòriament. Es desarà al vostre compte per a usar-la més endavant.</string>

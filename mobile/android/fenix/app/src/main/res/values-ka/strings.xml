@@ -45,7 +45,7 @@
     <!-- Content description for save to collection button while in multiselect mode in tab tray -->
     <string name="tab_tray_collection_button_multiselect_content_description">შერჩეული ჩანართების კრებულში შენახვა</string>
     <!-- Content description on checkmark while tab is selected in multiselect mode in tab tray -->
-    <string name="tab_tray_multiselect_selected_content_description">მონიშნულია</string>
+    <string name="tab_tray_multiselect_selected_content_description" moz:removedIn="136" tools:ignore="UnusedResources">მონიშნულია</string>
 
     <!-- Home - Bookmarks -->
     <!-- Title for the home screen section with bookmarks. -->
@@ -61,7 +61,8 @@
     <!-- Private Browsing -->
     <!-- Explanation for private browsing displayed to users on home view when they first enable private mode
         The first parameter is the name of the app defined in app_name (for example: Fenix) -->
-    <string name="private_browsing_placeholder_description_2">%1$s გაასუფთავებს თქვენი ძიებისა და ნახვების ისტორიას ყველა პირადი ჩანართის დახურვისას ან პროგრამიდან გამოსვლისას. მართალია, ეს არ დაფარავს თქვენს ვინაობას საიტებისა და ინტერნეტის მომწოდებლისგან, მაგრამ დაგეხმარებათ დაიცვათ პირადი მონაცემები ამ მოწყობილობის სხვა მომხმარებლებისგან.</string>
+    <string name="private_browsing_placeholder_description_2">
+        %1$s გაასუფთავებს თქვენი ძიებისა და ნახვების ისტორიას ყველა პირადი ჩანართის დახურვისას ან გამოსვლისას. მართალია, ეს ვერ დაფარავს თქვენს ვინაობას საიტებისა და ინტერნეტის მომწოდებლისგან, მაგრამ გაგიადვილებთ, დაიცვათ პირადი მონაცემები, თუ ამ მოწყობილობის სხვაც გამოიყენებს.</string>
     <string name="private_browsing_common_myths">
        ცრუ წარმოდგენები პირადი თვალიერების შესახებ
     </string>
@@ -362,7 +363,7 @@
     <!-- Browser menu label for turning OFF reader view of the current visited page -->
     <string name="browser_menu_turn_off_reader_view">საკითხავი ხედის გამორთვა</string>
     <!-- Browser menu button that reopens a private tab as a regular tab -->
-    <string name="browser_menu_open_in_normal_tab">გადასვლა ჩვეულებრივ ჩანართზე</string>dsa
+    <string name="browser_menu_open_in_normal_tab">გადასვლა ჩვეულებრივ ჩანართზე</string>
     <!-- Browser menu label for navigating to the translation feature, which provides language translation options the current visited page -->
     <string name="browser_menu_translate_page">გვერდის თარგმნა…</string>
 
@@ -414,8 +415,6 @@
 
     <!-- Search Fragment -->
     <!-- Button in the search view that lets a user search by scanning a QR code -->
-    <string name="search_scan_button" moz:removedIn="133" tools:ignore="UnusedResources">წაკითხვა</string>
-    <!-- Button in the search view that lets a user search by scanning a QR code -->
     <string name="search_scan_button_2">QR-კოდის წაკითხვა</string>
     <!-- Button in the search view when shortcuts are displayed that takes a user to the search engine settings -->
     <string name="search_shortcuts_engine_settings">საძიებო სისტემის პარამეტრები</string>
@@ -441,12 +440,14 @@
     <!-- Header text for the search selector menu -->
     <string name="search_header_menu_item_2">საძიებოდ გამოიყენეთ:</string>
 
-    <!-- Content description (not visible, for screen readers etc.): Search engine icon. The first parameter is the search engine name (for example: DuckDuckGo). -->
-    <string name="search_engine_icon_content_description" tools:ignore="UnusedResources" moz:removedIn="133">%s საძიებო </string>
-
     <!-- Content description (not visible, for screen readers etc.): Search engine icon.
     The parameter is the search engine name (for example: DuckDuckGo). -->
     <string name="search_engine_icon_content_description_1">საძიებო სისტემა: %s</string>
+
+    <!-- Content description (not visible, for screen readers etc.) of the search engine selector from the search toolbar.
+    The parameter is the search engine name (for example: DuckDuckGo).
+    The colon character (in "%s:") is intended to have the screen reader make a small pause between the search engine name and the description of the button. -->
+    <string name="search_engine_selector_content_description">%s: საძიებო სისტემის ამრჩევი</string>
 
     <!-- Home onboarding -->
     <!-- Home onboarding dialog welcome screen title text. -->
@@ -528,10 +529,6 @@
     <!-- Onboarding sub header for the add-ons card, used by Nimbus experiments. -->
     <string name="onboarding_add_on_sub_header" tools:ignore="UnusedResources">დაამატეთ გარეშე მხარის გაფართოებები გაუმჯობესებული უსაფრთხოებისთვის, სარგებლიანობისთვის და ა. შ.</string>
     <!-- Onboarding add-ons card, for checking more add-ons on, used by Nimbus experiments. -->
-    <string name="onboarding_add_on_explore_more_extensions" tools:ignore="UnusedResources" moz:removedIn="133">მოიძიეთ სხვა გაფართოებები.</string>
-    <!-- Onboarding add-ons card, button for start browsing, used by Nimbus experiments. -->
-    <string name="onboarding_add_on_start_browsing_button" tools:ignore="UnusedResources" moz:removedIn="133">დაიწყეთ გვერდების მონახულება.</string>
-    <!-- Onboarding add-ons card, for checking more add-ons on, used by Nimbus experiments. -->
     <string name="onboarding_add_on_explore_more_extensions_2">მოიძიეთ სხვა გაფართოებები</string>
     <!-- Onboarding add-ons card, button for start browsing, used by Nimbus experiments. -->
     <string name="onboarding_add_on_start_browsing_button_2">დაიწყეთ მოგზაურობა ინტერნეტში</string>
@@ -565,40 +562,49 @@
     <!-- Content description for the star rating group. -->
     <string name="onboarding_add_on_star_rating_content_description">%1$s შეფასება 5-იდან</string>
     <!-- Title for the privacy preferences dialog shown during onboarding. Note: The word "Firefox" should NOT be translated. -->
-    <string name="onboarding_preferences_dialog_title" tools:ignore="BrandUsage,UnusedResources">დაგვეხმარეთ, გავაუმჯობესოთ Firefox</string>
+    <string name="onboarding_preferences_dialog_title" tools:ignore="BrandUsage">დაგვეხმარეთ, გავაუმჯობესოთ Firefox</string>
     <!-- Title for the crash reporting option in the privacy preferences dialog shown during onboarding. -->
-    <string name="onboarding_preferences_dialog_crash_reporting_title" tools:ignore="UnusedResources">უეცარი გათიშვის მოხსენებების თვითგაგზავნა</string>
+    <string name="onboarding_preferences_dialog_crash_reporting_title">უეცარი გათიშვის მოხსენებების თვითგაგზავნა</string>
     <!-- Description for the crash reporting option in the privacy preferences dialog shown during onboarding. -->
-    <string name="onboarding_preferences_dialog_crash_reporting_description" tools:ignore="UnusedResources">უეცარი გათიშვის მოხსენებები საშუალებას გვაძლევს, გამოვავლინოთ და მოვაგვაროთ ბრაუზერის ხარვეზები. მოხსენებები შეიძლება შეიცავდეს პირად ან საფრთხილო მონაცემებს.</string>
+    <string name="onboarding_preferences_dialog_crash_reporting_description">უეცარი გათიშვის მოხსენებები საშუალებას გვაძლევს, გამოვავლინოთ და მოვაგვაროთ ბრაუზერის ხარვეზები. მოხსენებები შეიძლება შეიცავდეს პირად ან საფრთხილო მონაცემებს.</string>
     <!-- Learn more link for the crash reporting option in the privacy preferences dialog shown during onboarding. -->
-    <string name="onboarding_preferences_dialog_crash_reporting_learn_more" tools:ignore="UnusedResources">ვრცლად უეცარი გათიშვების მოხსენებებზე</string>
+    <string name="onboarding_preferences_dialog_crash_reporting_learn_more" moz:removedIn="136" tools:ignore="UnusedResources">ვრცლად უეცარი გათიშვების მოხსენებებზე</string>
+    <string name="onboarding_preferences_dialog_crash_reporting_learn_more_2">ვრცლად</string>
     <!-- Title for the usage data option in the privacy preferences dialog shown during onboarding. Note: The word "Mozilla" should NOT be translated. -->
-    <string name="onboarding_preferences_dialog_usage_data_title" tools:ignore="UnusedResources">ტექნიკური და გამოყენების მონაცემები გაეგზავნოს Mozilla-ს</string>
+    <string name="onboarding_preferences_dialog_usage_data_title">ტექნიკური და გამოყენების მონაცემები გაეგზავნოს Mozilla-ს</string>
 
     <!-- Description for the usage data option in the privacy preferences dialog shown during onboarding. Note: The word "Firefox" should NOT be translated. -->
-    <string name="onboarding_preferences_dialog_usage_data_description" tools:ignore="BrandUsage,UnusedResources">მონაცემები თქვენი მოწყობილობის, აპარატურული გაწყობისა და Firefox-ის მოხმარების შესახებ გვეხმარება შესაძლებლობების, წარმადობისა და მდგრადობის გაუმჯობესებაში ყველა მომხმარებლისთვის.</string>
+    <string name="onboarding_preferences_dialog_usage_data_description" moz:removedIn="136" tools:ignore="BrandUsage,UnusedResources">მონაცემები თქვენი მოწყობილობის, აპარატურული გაწყობისა და იმის შესახებ, თუ როგორ გამოიყენება Firefox, გვეხმარება შესაძლებლობების, წარმადობისა და მდგრადობის გაუმჯობესებაში ყველა მომხმარებლისთვის.</string>
+    <string name="onboarding_preferences_dialog_usage_data_description_2" tools:ignore="BrandUsage">მონაცემები თქვენი მოწყობილობის, აპარატურული გაწყობისა და იმის შესახებ, თუ როგორ გამოიყენება Firefox, გვეხმარება შესაძლებლობების, წარმადობისა და მდგრადობის საყოველთაო გაუმჯობესებაში.</string>
     <!-- Learn more link for the usage data option in the privacy preferences dialog shown during onboarding. -->
-    <string name="onboarding_preferences_dialog_usage_data_learn_more" tools:ignore="UnusedResources">ვრცლად გამოყენების მონაცემებზე</string>
+    <string name="onboarding_preferences_dialog_usage_data_learn_more" moz:removedIn="136" tools:ignore="UnusedResources">ვრცლად გამოყენების მონაცემებზე</string>
+    <string name="onboarding_preferences_dialog_usage_data_learn_more_2">ვრცლად</string>
     <!-- Positive button label for the privacy preferences dialog shown during onboarding. -->
-    <string name="onboarding_preferences_dialog_positive_button" tools:ignore="UnusedResources">მზადაა</string>
+    <string name="onboarding_preferences_dialog_positive_button">მზადაა</string>
     <!-- Negative button label for the privacy preferences dialog shown during onboarding. -->
-    <string name="onboarding_preferences_dialog_negative_button" tools:ignore="UnusedResources">გაუქმება</string>
+    <string name="onboarding_preferences_dialog_negative_button">გაუქმება</string>
     <!-- Terms of service onboarding title card label. 'Firefox' intentionally hardcoded here-->
-    <string name="onboarding_welcome_to_firefox" tools:ignore="UnusedResources,BrandUsage">მოგესალმებათ Firefox</string>
+    <string name="onboarding_welcome_to_firefox" tools:ignore="BrandUsage">მოგესალმებათ Firefox</string>
+    <!-- Terms of service sub header label. -->
+    <string name="onboarding_terms_of_service_sub_header" tools:ignore="UnusedResources" moz:removedIn="136">სწრაფი და დაცული მოგზაურობა ვებსივრცეში.</string>
+    <string name="onboarding_terms_of_service_sub_header_2">გვერდების თვალიერება სწრაფად და დაცულად</string>
     <!-- Terms of service onboarding page continue button label. -->
-    <string name="onboarding_term_of_service_agree_and_continue_button_label" tools:ignore="UnusedResources">თანხმობა და გაგრძელება</string>
-    <!-- Line one of the terms of service onboarding page. 'Firefox' is intentionally hardcoded. %1$s is replaced by an active link, using onboarding_term_of_service_line_one_link_text as text (“Terms of Service”). -->
-    <string name="onboarding_term_of_service_line_one" tools:ignore="UnusedResources,BrandUsage">გაგრძელებით ეთანხმებით %1$s, რომელსაც გთავაზობთ Firefox.</string>
+    <string name="onboarding_term_of_service_agree_and_continue_button_label">თანხმობა და გაგრძელება</string>
+    <!-- Line one of the terms of service onboarding page. %1$s is replaced by an active link, using onboarding_term_of_service_line_one_link_text as text (“Firefox Terms of Use”). -->
+    <string name="onboarding_term_of_service_line_one" moz:removedIn="136" tools:ignore="BrandUsage, UnusedResources">გაგრძელებით ეთანხმებით %1$s, რომელსაც გთავაზობთ Firefox.</string>
+    <string name="onboarding_term_of_service_line_one_2">თუ განაგრძობთ, თანახმა ხართ მიიღოთ %1$s.</string>
     <!-- Used as text for the link in onboarding_term_of_service_line_one. -->
-    <string name="onboarding_term_of_service_line_one_link_text" tools:ignore="UnusedResources,BrandUsage">მომსახურების პირობებს</string>
-    <!-- Line two of the terms of service onboarding page. 'Firefox' is intentionally hardcoded. %1$s is replaced by an active link, using onboarding_term_of_service_line_two_link_text as text (Privacy Notice”). -->
-    <string name="onboarding_term_of_service_line_two" tools:ignore="UnusedResources,BrandUsage">Firefox ზრუნავს თქვენს პირადულობაზე. ვრცლად, იხილეთ %1$s.</string>
+    <string name="onboarding_term_of_service_line_one_link_text" moz:removedIn="136" tools:ignore="UnusedResources">მომსახურების პირობებს</string>
+    <string name="onboarding_term_of_service_line_one_link_text_2" tools:ignore="BrandUsage">გამოყენების პირობები, რომელსაც გთავაზობთ Firefox</string>
+    <!-- Line two of the terms of service onboarding page. 'Firefox' is intentionally hardcoded. %1$s is replaced by an active link, using onboarding_term_of_service_line_two_link_text as text (“Privacy Notice”). -->
+    <string name="onboarding_term_of_service_line_two" moz:removedIn="136" tools:ignore="UnusedResources,BrandUsage">Firefox ზრუნავს თქვენს პირადულობაზე. ვრცლად, იხილეთ %1$s.</string>
+    <string name="onboarding_term_of_service_line_two_2" tools:ignore="BrandUsage">Firefox ზრუნავს თქვენს პირადულობაზე. ვრცლად, იხილეთ %1$s.</string>
     <!-- Used as text for the link in onboarding_term_of_service_line_two. -->
-    <string name="onboarding_term_of_service_line_two_link_text" tools:ignore="UnusedResources,BrandUsage">პირადულობის დებულება</string>
-    <!-- Line three of the terms of service onboarding page. 'Firefox' and 'Mozilla' are intentionally hardcoded. %1$S is replaced by an active link, using onboarding_term_of_service_line_three_link_text as text (Manage”). -->
-    <string name="onboarding_term_of_service_line_three" tools:ignore="UnusedResources,BrandUsage">ბრაუზერის გასაუმჯობესებლად Firefox აგზავნის Mozilla-ში შემოწმებისა და გამოყენების შედეგებს. %1$s</string>
+    <string name="onboarding_term_of_service_line_two_link_text">პირადულობის დებულება</string>
+    <!-- Line three of the terms of service onboarding page. 'Firefox' and 'Mozilla' are intentionally hardcoded. %1$S is replaced by an active link, using onboarding_term_of_service_line_three_link_text as text (“Manage”). -->
+    <string name="onboarding_term_of_service_line_three" tools:ignore="BrandUsage">ბრაუზერის გასაუმჯობესებლად Firefox აგზავნის Mozilla-ში შემოწმებისა და გამოყენების შედეგებს. %1$s</string>
     <!-- Used as text for the link in onboarding_term_of_service_line_three. -->
-    <string name="onboarding_term_of_service_line_three_link_text" tools:ignore="UnusedResources,BrandUsage">მართვა</string>
+    <string name="onboarding_term_of_service_line_three_link_text">მართვა</string>
     <!-- Onboarding header for the toolbar selection card, used by Nimbus experiments. -->
     <string name="onboarding_customize_toolbar_title" tools:ignore="UnusedResources">ხელსაწყოთა ზოლის განთავსება</string>
     <!-- Onboarding sub header for toolbar selection card, used by Nimbus experiments. -->
@@ -606,7 +612,7 @@
     <!-- Onboarding label for 'Save and continue' button, used by Nimbus experiments. -->
     <string name="onboarding_save_and_continue_button">შეინახეთ და განაგრძეთ</string>
     <!-- Onboarding toolbar selection card label for 'skip' button, used by Nimbus experiments. -->
-    <string name="onboarding_customize_toolbar_skip_button">გამოტოვება</string>
+    <string name="onboarding_customize_toolbar_skip_button" moz:removedIn="135" tools:ignore="UnusedResources">გამოტოვება</string>
     <!-- Onboarding toolbar selection card label for 'top' option, used by Nimbus experiments. -->
     <string name="onboarding_customize_toolbar_top_option">ზემოთ</string>
     <!-- Onboarding toolbar selection card label for 'bottom' option, used by Nimbus experiments. -->
@@ -621,6 +627,9 @@
     <string name="onboarding_customize_toolbar_placement_bottom_content_description">ქვემოთ ხელსაწყოთა ზოლის გამოსახულება</string>
     <string name="onboarding_customize_toolbar_placement_top_content_description">ზემოთ ხელსაწყოთა ზოლის გამოსახულება</string>
 
+    <!-- Onboarding toolbar selection card label for 'Not now' button, used by Nimbus experiments. -->
+    <string name="onboarding_customize_toolbar_not_now_button" moz:removedIn="136" tools:ignore="UnusedResources">ახლა არა</string>
+
     <!-- Onboarding header for the theme selection card, used by Nimbus experiments. -->
     <string name="onboarding_customize_theme_title" tools:ignore="UnusedResources">გაფორმების შერჩევა</string>
     <!-- Onboarding sub header for theme selection card, used by Nimbus experiments. -->
@@ -628,7 +637,7 @@
     <!-- Onboarding label for 'Save and start browsing' button, used by Nimbus experiments. -->
     <string name="onboarding_save_and_start_button">შენახვა და გვერდების თვალიერება</string>
     <!-- Onboarding theme selection card label for 'skip' button, used by Nimbus experiments. -->
-    <string name="onboarding_customize_theme_skip_button">აცილება</string>
+    <string name="onboarding_customize_theme_skip_button" moz:removedIn="135" tools:ignore="UnusedResources">აცილება</string>
     <!-- Onboarding theme selection card label for 'dark' option, used by Nimbus experiments. -->
     <string name="onboarding_customize_theme_dark_option">მუქი</string>
     <!-- Onboarding theme selection card label for 'light' option, used by Nimbus experiments. -->
@@ -639,6 +648,9 @@
     <string name="onboarding_customize_theme_main_image_content_description">თავსართად დიდი სურათი გაფორმების ასარჩევად, რომელზეც გამოსახულია ხელოვანი და ხელსაწყოები.</string>
     <!-- Onboarding theme selection card content description for the theme selection image. %1$s is placeholder for either 'system', 'light' or 'dark'. -->
     <string name="onboarding_customize_theme_content_description">%1$s გაფორმების გამოსახულება</string>
+
+    <!-- Onboarding theme selection card label for 'Not now' button, used by Nimbus experiments. -->
+    <string name="onboarding_customize_theme_not_now_button" moz:removedIn="136" tools:ignore="UnusedResources">ახლა არა</string>
 
     <!-- Search Widget -->
     <!-- Content description for searching with a widget. The first parameter is the name of the application.-->
@@ -693,8 +705,6 @@
     <string name="preferences_category_advanced">დამატებითი</string>
     <!-- Preference category for privacy and security settings -->
     <string name="preferences_category_privacy_security">პირადულობა და უსაფრთხოება</string>
-    <!-- Preference for advanced site permissions -->
-    <string name="preferences_site_permissions" moz:removedIn="133" tools:ignore="UnusedResources">საიტის ნებართვები</string>
     <!-- Preference for advanced site settings -->
     <string name="preferences_site_settings">საიტის პარამეტრები</string>
     <!-- Preference for private browsing options -->
@@ -827,7 +837,7 @@
     <string name="preferences_show_sponsored_suggestions">შემოთავაზებები დამკვეთისგან</string>
     <!-- Summary for preference to show sponsored Firefox Suggest search suggestions.
          The first parameter is the name of the application. -->
-    <string name="preferences_show_sponsored_suggestions_summary">მხარდაჭერა დამკვეთის შეთავაზების ნახვით %1$s დროდადრო რომ გაჩვენებთ</string>
+    <string name="preferences_show_sponsored_suggestions_summary">თანადგომისთვის იხილეთ დამკვეთის შემოთავაზებები, %1$s დროდადრო რომ გაჩვენებთ</string>
     <!-- Preference title for switch preference to show Firefox Suggest search suggestions for web content.
          The first parameter is the name of the application. -->
     <string name="preferences_show_nonsponsored_suggestions">შემოგთავაზებთ %1$s</string>
@@ -842,7 +852,7 @@
     <!-- Preference for open links in third party apps never open in apps option -->
     <string name="preferences_open_links_in_apps_never">არასდროს</string>
     <!-- Preference for open download with an external download manager app -->
-    <string name="preferences_external_download_manager">გარეშე მმართველი ჩამოსატვირთად</string>
+    <string name="preferences_external_download_manager">ჩამოტვირთვის გარეშე მმართველი</string>
     <!-- Preference for enabling gecko engine logs -->
     <string name="preferences_enable_gecko_logs">Gecko-აღრიცხვების ჩართვა</string>
     <!-- Message to indicate users that we are quitting the application to apply the changes -->
@@ -1039,7 +1049,7 @@
     <!-- Preference switch for usage and technical learn more link -->
     <string name="preference_usage_data_learn_more" tools:ignore="UnusedResources">ვრცლად</string>
     <!-- Preference description for usage and technical data collection -->
-    <string name="preferences_usage_data_description">გაუზიარებს წარმადობის, გამოყენების, აპრატურისა და მორგების მონაცემებს Mozilla-ს, რომ %1$s გახდეს კიდევ უფრო უკეთესი</string>
+    <string name="preferences_usage_data_description">გაუზიარებს წარმადობის, გამოყენების, აპრატურისა და მორგების მონაცემებს Mozilla-ს, რომ მეტად გაუმჯობესდეს %1$s</string>
 
     <!-- Preference switch for marketing data collection -->
     <string name="preferences_marketing_data">მარკეტინგული მონაცემები</string>
@@ -1050,6 +1060,10 @@
     <!-- Learn more link for marketing data preference -->
     <string name="preferences_marketing_data_learn_more">ვრცლად მარკეტინგულ მონაცემებზე</string>
 
+    <!-- Preference switch for daily usage ping data collection -->
+    <string name="preferences_daily_usage_ping_title">დღიური გამოყენების უწყება</string>
+    <string name="preferences_daily_usage_ping_description">მისი მეშვეობით %@ მიახლოებით ითვლის მოქმედ მომხმარებლებს.</string>
+    <string name="preferences_daily_usage_ping_learn_more">ვრცლად დღიური გამოყენების უწყების შესახებ</string>
     <!-- Preference switch title for automatically submitting crash reports -->
     <string name="preferences_automatically_send_crashes_title">უეცარი გათიშვის მოხსენებების თვითგაგზავნა</string>
     <string name="preferences_automatically_submit_crashes_title" moz:removedIn="136" tools:ignore="UnusedResources">უეცარი გათიშვის მოხსენებების თვითგაგზავნა</string>
@@ -1185,13 +1199,13 @@
 
     <!-- Opening screen -->
     <!-- Title of a preference that allows a user to choose what screen to show after opening the app -->
-    <string name="preferences_opening_screen">საწყისი ეკრანი</string>
+    <string name="preferences_opening_screen">გახსნისას</string>
     <!-- Option for always opening the homepage when re-opening the app -->
     <string name="opening_screen_homepage">საწყისი გვერდი</string>
     <!-- Option for always opening the user's last-open tab when re-opening the app -->
     <string name="opening_screen_last_tab">ბოლო ჩანართი</string>
     <!-- Option for always opening the homepage when re-opening the app after four hours of inactivity -->
-    <string name="opening_screen_after_four_hours_of_inactivity">საწყისი გვერდი ოთხი საათის უქმობის შემდეგ</string>
+    <string name="opening_screen_after_four_hours_of_inactivity">საწყისი გვერდი ოთხი საათი უქმობისას</string>
     <!-- Summary for tabs preference when auto closing tabs setting is set to manual close-->
     <string name="close_tabs_manually_summary">ხელით დახურვა</string>
     <!-- Summary for tabs preference when auto closing tabs setting is set to auto close tabs after one day-->
@@ -1206,7 +1220,7 @@
     <!-- Summary for homepage preference indicating always opening the last-open tab when re-opening the app -->
     <string name="opening_screen_last_tab_summary">ბოლო ჩანართის გახსნა</string>
     <!-- Summary for homepage preference indicating opening the homepage when re-opening the app after four hours of inactivity -->
-    <string name="opening_screen_after_four_hours_of_inactivity_summary">საწყისი გვერდის გახსნა ოთხი საათის შემდგომ</string>
+    <string name="opening_screen_after_four_hours_of_inactivity_summary">საწყისი გვერდით გახსნა ოთხი საათის შემდგომ</string>
 
     <!-- Inactive tabs -->
     <!-- Category header of a preference that allows a user to enable or disable the inactive tabs feature -->
@@ -1234,11 +1248,17 @@
 
     <!-- Sessions -->
     <!-- Title for the list of tabs -->
-    <string name="tab_header_label">გახსნილი ჩანართები</string>
+    <string name="tab_header_label" moz:removedIn="135" tools:ignore="UnusedResources">გახსნილი ჩანართები</string>
     <!-- Title for the list of tabs in the current private session -->
-    <string name="tabs_header_private_tabs_title">პირადი ჩანართები</string>
+    <string name="tabs_header_private_tabs_title" moz:removedIn="136" tools:ignore="UnusedResources">პირადი ჩანართები</string>
+    <!-- Title for the list of tabs in the current private session used by a11y services
+    The %1$s will be replaced by the number of opened private tabs -->
+    <string name="tabs_header_private_tabs_counter_title">გახსნილი პირადი ჩანართი: %1$s. შეეხეთ გადასაცვლელად.</string>
     <!-- Title for the list of tabs in the synced tabs -->
-    <string name="tabs_header_synced_tabs_title">დასინქ. ჩანართები</string>
+    <string name="tabs_header_synced_tabs_title" moz:removedIn="136" tools:ignore="UnusedResources">დასინქ. ჩანართები</string>
+    <!-- Title for the list of tabs in the synced tabs used by a11y services
+    The %1$s will be replaced by the number of opened synced tabs -->
+    <string name="tabs_header_synced_tabs_counter_title">გახსნილი დასინქ. ჩანართი: %1$s. შეეხეთ გადასაცვლელად.</string>
     <!-- Content description (not visible, for screen readers etc.): Add tab button. Adds a news tab when pressed -->
     <string name="add_tab">ჩანართის დამატება</string>
     <!-- Content description (not visible, for screen readers etc.): Add tab button. Adds a news tab when pressed -->
@@ -1353,9 +1373,13 @@
 
 
     <!-- The label/title of an optional field in the Web Compat Reporter feature for explaining a high-level reason why the site is broken. -->
-    <string name="webcompat_reporter_label_whats_broken">რა დაზიანდა? (არასავალდებულო)</string>
-    <!-- The placeholder text for the dropdown where a user can select a high-level reason why the site is broken. -->
+    <string name="webcompat_reporter_label_whats_broken" moz:removedIn="136" tools:ignore="UnusedResources">რა დაზიანდა? (არასავალდებულო)</string>
+    <!-- The label/title of a field in the Web Compat Reporter feature for explaining a high-level reason why the site is broken. -->
+    <string name="webcompat_reporter_label_whats_broken_2">რა დაზიანდა?</string>
+    <!-- The placeholder text for the dropdown where a user selects a high-level reason why the site is broken. -->
     <string name="webcompat_reporter_choose_reason">მიზეზის არჩევა</string>
+    <!-- The error message of the dropdown, prompting the user to select a high-level reason why the site is broken. -->
+    <string name="webcompat_reporter_choose_reason_error">გთხოვთ მიუთითოთ მიზეზი</string>
     <!-- The label/title of an optional field in the Web Compat Reporter feature for adding additional information. -->
     <string name="webcompat_reporter_label_description">აღწერეთ ხარვეზი (არასავალდებულო)</string>
     <!-- The button text for navigating away from the feature to provide more information on the broken site's bug report. -->
@@ -1365,6 +1389,11 @@
     <!-- The button text for the send button to submit the provided form data. -->
     <string name="webcompat_reporter_send">გაგზავნა</string>
 
+
+    <!-- Text for a snackbar to confirm the successful submission of a WebCompat report. -->
+    <string name="webcompat_reporter_success_snackbar_text">თქვენი მოხსენება გაიგზავნა</string>
+    <!-- Button text for closing or dismissing the snackbar shown after successfully submitting a WebCompat report. -->
+    <string name="webcompat_reporter_dismiss_success_snackbar_text">დახურვა</string>
 
     <!-- These reason strings are dropdown options on a WebCompat reporter form, indicating what is broken on the site. -->
     <!-- Broken site reason text for site slow or not working -->
@@ -1654,7 +1683,7 @@
         "Share" button. Opens the share menu when pressed. -->
     <string name="share_button_content_description">გაზიარება</string>
     <!-- Text for the Save to PDF feature in the share menu -->
-    <string name="share_save_to_pdf">შენახვა PDF-სახით</string>
+    <string name="share_save_to_pdf">შეინახოს PDF</string>
     <!-- Text for error message when generating a PDF file Text. -->
     <string name="unable_to_save_to_pdf_error">ვერ ხერხდება PDF-ის შექმნა</string>
     <!-- Text for standard error snackbar dismiss button. -->
@@ -1676,7 +1705,7 @@
     <!-- An option from the share dialog to sign into sync -->
     <string name="sync_sign_in">დასინქ. შესვლა</string>
      <!-- An option from the three dot menu to sync and save data -->
-    <string name="sync_menu_sync_and_save_data">დასინქრონება და შენახვა</string>
+    <string name="sync_menu_sync_and_save_data">დასინქ. და შენახვა</string>
     <!-- An option from the share dialog to send link to all other sync devices -->
     <string name="sync_send_to_all">ყველა მოწყობილობაზე გაგზავნა</string>
     <!-- An option from the share dialog to reconnect to sync -->
@@ -2081,7 +2110,7 @@
     <!-- Preference for syncing saved passwords in Fenix -->
     <string name="preferences_passwords_sync_logins_2">პაროლების დასინქრონება</string>
     <!-- Preference for syncing saved passwords in Fenix, when not signed in-->
-    <string name="preferences_passwords_sync_logins_across_devices_2">დაასინქრონეთ პაროლები სხვადასხვა მოწყობილობაზე</string>
+    <string name="preferences_passwords_sync_logins_across_devices_2">პაროლების დასინქ. მოწყობილობებზე</string>
     <!-- Preference to access list of saved passwords -->
     <string name="preferences_passwords_saved_logins_2">შენახული პაროლები</string>
     <!-- Description of empty list of saved passwords. Placeholder is replaced with app name.  -->
@@ -2540,152 +2569,152 @@
 
     <!-- Review quality check feature-->
     <!-- Name for the review quality check feature used as title for the panel. -->
-    <string name="review_quality_check_feature_name_2">მიმოხილვის შემმოწმებელი</string>
+    <string name="review_quality_check_feature_name_2" moz:removedIn="136" tools:ignore="UnusedResources">მიმოხილვის შემმოწმებელი</string>
     <!-- Summary for grades A and B for review quality check adjusted grading. -->
-    <string name="review_quality_check_grade_a_b_description">სანდოა მიმოხილვები</string>
+    <string name="review_quality_check_grade_a_b_description" moz:removedIn="136" tools:ignore="UnusedResources">სანდოა მიმოხილვები</string>
     <!-- Summary for grade C for review quality check adjusted grading. -->
-    <string name="review_quality_check_grade_c_description">შერეულადაა სანდო და არასანდო მიმოხილვები</string>
+    <string name="review_quality_check_grade_c_description" moz:removedIn="136" tools:ignore="UnusedResources">შერეულადაა სანდო და არასანდო მიმოხილვები</string>
     <!-- Summary for grades D and F for review quality check adjusted grading. -->
-    <string name="review_quality_check_grade_d_f_description">არასანდოა მიმოხილვები</string>
+    <string name="review_quality_check_grade_d_f_description" moz:removedIn="136" tools:ignore="UnusedResources">არასანდოა მიმოხილვები</string>
     <!-- Text for title presenting the reliability of a product's reviews. -->
-    <string name="review_quality_check_grade_title">რამდენად სანდოა ეს მიმოხილვები?</string>
+    <string name="review_quality_check_grade_title" moz:removedIn="136" tools:ignore="UnusedResources">რამდენად სანდოა ეს მიმოხილვები?</string>
     <!-- Title for when the rating has been updated by the review checker -->
-    <string name="review_quality_check_adjusted_rating_title">შესწორებული შეფასება</string>
+    <string name="review_quality_check_adjusted_rating_title" moz:removedIn="136" tools:ignore="UnusedResources">შესწორებული შეფასება</string>
     <!-- Description for a product's adjusted star rating. The text presents that the product's reviews which were evaluated as unreliable were removed from the adjusted rating. -->
-    <string name="review_quality_check_adjusted_rating_description_2">სანდო მიმოხილვების მიხედვით</string>
+    <string name="review_quality_check_adjusted_rating_description_2" moz:removedIn="136" tools:ignore="UnusedResources">სანდო მიმოხილვების მიხედვით</string>
     <!-- Title for list of highlights from a product's review emphasizing a product's important traits. -->
-    <string name="review_quality_check_highlights_title">გამოსარჩევი ბოლო მიმოხილვებიდან</string>
+    <string name="review_quality_check_highlights_title" moz:removedIn="136" tools:ignore="UnusedResources">გამოსარჩევი ბოლო მიმოხილვებიდან</string>
     <!-- Title for section explaining how we analyze the reliability of a product's reviews. -->
-    <string name="review_quality_check_explanation_title">როგორ განისაზღვრება მიმოხილვის ხარისხი</string>
+    <string name="review_quality_check_explanation_title" moz:removedIn="136" tools:ignore="UnusedResources">როგორ განისაზღვრება მიმოხილვის ხარისხი</string>
     <!-- Paragraph explaining how we analyze the reliability of a product's reviews. First parameter is the Fakespot product name. In the phrase "Fakespot by Mozilla", "by" can be localized. Does not need to stay by. -->
-    <string name="review_quality_check_explanation_body_reliability">%s Mozilla-სგან ხელოვნური ინტელექტის შესაძლებლობებით ამოწმებს მიმოხილვების სანდოობას. ამით მხოლოდ მიმოხილვის ხარისხი დგინდება და არა – ნაწარმის ხარისხი.</string>
+    <string name="review_quality_check_explanation_body_reliability" moz:removedIn="136" tools:ignore="UnusedResources">%s Mozilla-სგან ხელოვნური ინტელექტის შესაძლებლობებით ამოწმებს მიმოხილვების სანდოობას. ამით მხოლოდ მიმოხილვის ხარისხი დგინდება და არა – ნაწარმის ხარისხი.</string>
     <!-- Paragraph explaining the grading system we use to classify the reliability of a product's reviews. -->
-    <string name="review_quality_check_info_review_grade_header"><![CDATA[გასაყიდ ნაწარმზე თითოეულ მიმოხილვას ეწერება <b>ნიშნები</b> A-დან F-მდე.]]></string>
+    <string name="review_quality_check_info_review_grade_header" moz:removedIn="136" tools:ignore="UnusedResources"><![CDATA[გასაყიდ ნაწარმზე თითოეულ მიმოხილვას ეწერება <b>ნიშნები</b> A-დან F-მდე.]]></string>
     <!-- Description explaining grades A and B for review quality check adjusted grading. -->
-    <string name="review_quality_check_info_grade_info_AB">სანდოა მიმოხილვები. მიგვაჩნია, რომ ეს მიმოხილვები მეტწილად ნამდვილი მომხმარებლების დატოვებულია პატიოსნად და მიუკერძოებლად.</string>
+    <string name="review_quality_check_info_grade_info_AB" moz:removedIn="136" tools:ignore="UnusedResources">სანდოა მიმოხილვები. მიგვაჩნია, რომ ეს მიმოხილვები მეტწილად ნამდვილი მომხმარებლების დატოვებულია პატიოსნად და მიუკერძოებლად.</string>
     <!-- Description explaining grade C for review quality check adjusted grading. -->
-    <string name="review_quality_check_info_grade_info_C">მიგვაჩნია, რომ შერეულადაა სანდო და არასანდო მიმოხილვები.</string>
+    <string name="review_quality_check_info_grade_info_C" moz:removedIn="136" tools:ignore="UnusedResources">მიგვაჩნია, რომ შერეულადაა სანდო და არასანდო მიმოხილვები.</string>
     <!-- Description explaining grades D and F for review quality check adjusted grading. -->
-    <string name="review_quality_check_info_grade_info_DF">არასანდოა მიმოხილვები. მიგვაჩნია, რომ ეს მიმოხილვები მეტწილად ყალბი ან მიკერძოებული მიმომხილველებისგანაა.</string>
+    <string name="review_quality_check_info_grade_info_DF" moz:removedIn="136" tools:ignore="UnusedResources">არასანდოა მიმოხილვები. მიგვაჩნია, რომ ეს მიმოხილვები მეტწილად ყალბი ან მიკერძოებული მიმომხილველებისგანაა.</string>
     <!-- Paragraph explaining how a product's adjusted grading is calculated. -->
-    <string name="review_quality_check_explanation_body_adjusted_grading"><![CDATA[<b>შესწორებული შეფასება</b> ეყრდნობა მხოლოდ სანდოდ მიჩნეულ მიმოხილვებს.]]></string>
+    <string name="review_quality_check_explanation_body_adjusted_grading" moz:removedIn="136" tools:ignore="UnusedResources"><![CDATA[<b>შესწორებული შეფასება</b> ეყრდნობა მხოლოდ სანდოდ მიჩნეულ მიმოხილვებს.]]></string>
     <!-- Paragraph explaining product review highlights. First parameter is the name of the retailer (e.g. Amazon). -->
-    <string name="review_quality_check_explanation_body_highlights"><![CDATA[<b>გამოსარჩევი</b> ბოლო 80 დღეში %s-ის სანდოდ მიჩნეული მიმოხილვებიდან.]]></string>
+    <string name="review_quality_check_explanation_body_highlights" moz:removedIn="136" tools:ignore="UnusedResources"><![CDATA[<b>გამოსარჩევი</b> ბოლო 80 დღეში %s-ის სანდოდ მიჩნეული მიმოხილვებიდან.]]></string>
     <!-- Text for learn more caption presenting a link with information about review quality. First parameter is for clickable text defined in review_quality_check_info_learn_more_link. -->
-    <string name="review_quality_check_info_learn_more">უკეთ გაიცანით %s.</string>
+    <string name="review_quality_check_info_learn_more" moz:removedIn="136" tools:ignore="UnusedResources">უკეთ გაიცანით %s.</string>
     <!-- Clickable text that links to review quality check SuMo page. First parameter is the Fakespot product name. -->
-    <string name="review_quality_check_info_learn_more_link_2">როგორ განსაზღვრავს %s მიმოხილვის ხარისხს</string>
+    <string name="review_quality_check_info_learn_more_link_2" moz:removedIn="136" tools:ignore="UnusedResources">როგორ განსაზღვრავს %s მიმოხილვის ხარისხს</string>
     <!-- Text for title of settings section. -->
-    <string name="review_quality_check_settings_title">პარამეტრები</string>
+    <string name="review_quality_check_settings_title" moz:removedIn="136" tools:ignore="UnusedResources">პარამეტრები</string>
     <!-- Text for label for switch preference to show recommended products from review quality check settings section. -->
-    <string name="review_quality_check_settings_recommended_products">რეკლამების ჩვენება მიმოხილვის შემმოწმებელში</string>
+    <string name="review_quality_check_settings_recommended_products" moz:removedIn="136" tools:ignore="UnusedResources">რეკლამების ჩვენება მიმოხილვის შემმოწმებელში</string>
     <!-- Description for switch preference to show recommended products from review quality check settings section. First parameter is for clickable text defined in review_quality_check_settings_recommended_products_learn_more.-->
-    <string name="review_quality_check_settings_recommended_products_description_2" tools:ignore="UnusedResources">დროდადრო იხილავთ რეკლამებს ნაწარმის შესაბამისად. ჩვენ მხოლოდ სანდო მიმოხილვების მქონეს შემოგთავაზებთ. %s</string>
+    <string name="review_quality_check_settings_recommended_products_description_2" moz:removedIn="136" tools:ignore="UnusedResources">დროდადრო იხილავთ რეკლამებს ნაწარმის შესაბამისად. ჩვენ მხოლოდ სანდო მიმოხილვების მქონეს შემოგთავაზებთ. %s</string>
     <!-- Clickable text that links to review quality check recommended products support article. -->
-    <string name="review_quality_check_settings_recommended_products_learn_more" tools:ignore="UnusedResources">ვრცლად</string>
+    <string name="review_quality_check_settings_recommended_products_learn_more" moz:removedIn="136" tools:ignore="UnusedResources">ვრცლად</string>
     <!-- Text for turning sidebar off button from review quality check settings section. -->
-    <string name="review_quality_check_settings_turn_off">მიმოხილვის შემმოწმებლის გამორთვა</string>
+    <string name="review_quality_check_settings_turn_off" moz:removedIn="136" tools:ignore="UnusedResources">მიმოხილვის შემმოწმებლის გამორთვა</string>
     <!-- Text for title of recommended product section. This is displayed above a product image, suggested as an alternative to the product reviewed. -->
-    <string name="review_quality_check_ad_title" tools:ignore="UnusedResources">სხვა მსგავსი</string>
+    <string name="review_quality_check_ad_title" moz:removedIn="136" tools:ignore="UnusedResources">სხვა მსგავსი</string>
     <!-- Caption for recommended product section indicating this is an ad by Fakespot. First parameter is the Fakespot product name. -->
-    <string name="review_quality_check_ad_caption" tools:ignore="UnusedResources">რეკლამა – %s</string>
+    <string name="review_quality_check_ad_caption" moz:removedIn="136" tools:ignore="UnusedResources">რეკლამა – %s</string>
     <!-- Caption for review quality check panel. First parameter is for clickable text defined in review_quality_check_powered_by_link. -->
-    <string name="review_quality_check_powered_by_2">მიმოხილვის შემმოწმებლის უზრუნველმყოფია %s</string>
+    <string name="review_quality_check_powered_by_2" moz:removedIn="136" tools:ignore="UnusedResources">მიმოხილვის შემმოწმებლის უზრუნველმყოფია %s</string>
     <!-- Clickable text that links to Fakespot.com. First parameter is the Fakespot product name. In the phrase "Fakespot by Mozilla", "by" can be localized. Does not need to stay by. -->
-    <string name="review_quality_check_powered_by_link" tools:ignore="UnusedResources">%s Mozilla-სგან</string>
+    <string name="review_quality_check_powered_by_link" moz:removedIn="136" tools:ignore="UnusedResources">%s Mozilla-სგან</string>
     <!-- Text for title of warning card informing the user that the current analysis is outdated. -->
-    <string name="review_quality_check_outdated_analysis_warning_title" tools:ignore="UnusedResources">ახალი მონაცემებია შესამოწმებელი</string>
+    <string name="review_quality_check_outdated_analysis_warning_title" moz:removedIn="136" tools:ignore="UnusedResources">ახალი მონაცემებია შესამოწმებელი</string>
     <!-- Text for button from warning card informing the user that the current analysis is outdated. Clicking this should trigger the product's re-analysis. -->
-    <string name="review_quality_check_outdated_analysis_warning_action" tools:ignore="UnusedResources">შემოწმება ახლავე</string>
+    <string name="review_quality_check_outdated_analysis_warning_action" moz:removedIn="136" tools:ignore="UnusedResources">შემოწმება ახლავე</string>
     <!-- Title for warning card informing the user that the current product does not have enough reviews for a review analysis. -->
-    <string name="review_quality_check_no_reviews_warning_title">საკმარისი მიმოხილვები ჯერ არაა</string>
+    <string name="review_quality_check_no_reviews_warning_title" moz:removedIn="136" tools:ignore="UnusedResources">საკმარისი მიმოხილვები ჯერ არაა</string>
     <!-- Text for body of warning card informing the user that the current product does not have enough reviews for a review analysis. -->
-    <string name="review_quality_check_no_reviews_warning_body">როცა ამ ნაწარმს ექნება მეტი მიმოხილვა, შემდეგ შეგვეძლება მათი ხარისხის შემოწმება.</string>
+    <string name="review_quality_check_no_reviews_warning_body" moz:removedIn="136" tools:ignore="UnusedResources">როცა ამ ნაწარმს ექნება მეტი მიმოხილვა, შემდეგ შეგვეძლება მათი ხარისხის შემოწმება.</string>
     <!-- Title for warning card informing the user that the current product is currently not available. -->
-    <string name="review_quality_check_product_availability_warning_title">გასაყიდი ნაწარმი მიუწვდომელია</string>
+    <string name="review_quality_check_product_availability_warning_title" moz:removedIn="136" tools:ignore="UnusedResources">გასაყიდი ნაწარმი მიუწვდომელია</string>
     <!-- Text for the body of warning card informing the user that the current product is currently not available. -->
-    <string name="review_quality_check_product_availability_warning_body">თუ ნახავთ, რომ ნაწარმი დააბრუნეს გასაყიდად, მოგვახსენეთ და ვიმუშავებთ მიმოხილვების შესამოწმებლად.</string>
+    <string name="review_quality_check_product_availability_warning_body" moz:removedIn="136" tools:ignore="UnusedResources">თუ ნახავთ, რომ ნაწარმი დააბრუნეს გასაყიდად, მოგვახსენეთ და ვიმუშავებთ მიმოხილვების შესამოწმებლად.</string>
     <!-- Clickable text for warning card informing the user that the current product is currently not available. Clicking this should inform the server that the product is available. -->
-    <string name="review_quality_check_product_availability_warning_action_2">მოხსენება გასაყიდი პროდუქტისა</string>
+    <string name="review_quality_check_product_availability_warning_action_2" moz:removedIn="136" tools:ignore="UnusedResources">მოხსენება გასაყიდი პროდუქტისა</string>
     <!-- Title for warning card informing the user that the current product's analysis is still processing. The parameter is the percentage progress (0-100%) of the analysis process (e.g. 56%). -->
-    <string name="review_quality_check_analysis_in_progress_warning_title_2">მოწმდება მიმოხილვის ხარისხი (%s)</string>
+    <string name="review_quality_check_analysis_in_progress_warning_title_2" moz:removedIn="136" tools:ignore="UnusedResources">მოწმდება მიმოხილვის ხარისხი (%s)</string>
     <!-- Text for body of warning card informing the user that the current product's analysis is still processing. -->
-    <string name="review_quality_check_analysis_in_progress_warning_body">შეიძლება გასტანოს 60 წამს.</string>
+    <string name="review_quality_check_analysis_in_progress_warning_body" moz:removedIn="136" tools:ignore="UnusedResources">შეიძლება გასტანოს 60 წამს.</string>
     <!-- Title for info card displayed after the user reports a product is back in stock. -->
-    <string name="review_quality_check_analysis_requested_info_title">გმადლობთ მოხსენებისთვის!</string>
+    <string name="review_quality_check_analysis_requested_info_title" moz:removedIn="136" tools:ignore="UnusedResources">გმადლობთ მოხსენებისთვის!</string>
     <!-- Text for body of info card displayed after the user reports a product is back in stock. -->
-    <string name="review_quality_check_analysis_requested_info_body">ამ ნაწარმის მიმოხილვების შესახებ მონაცემები გვექნება 24 საათში. გთხოვთ, მოგვიანებით დაუბრუნდეთ.</string>
+    <string name="review_quality_check_analysis_requested_info_body" moz:removedIn="136" tools:ignore="UnusedResources">ამ ნაწარმის მიმოხილვების შესახებ მონაცემები გვექნება 24 საათში. გთხოვთ, მოგვიანებით დაუბრუნდეთ.</string>
     <!-- Title for info card displayed when the user review checker while on a product that Fakespot does not analyze (e.g. gift cards, music). -->
-    <string name="review_quality_check_not_analyzable_info_title">ვერ მოწმდება ეს მიმოხილვები</string>
+    <string name="review_quality_check_not_analyzable_info_title" moz:removedIn="136" tools:ignore="UnusedResources">ვერ მოწმდება ეს მიმოხილვები</string>
     <!-- Text for body of info card displayed when the user review checker while on a product that Fakespot does not analyze (e.g. gift cards, music). -->
-    <string name="review_quality_check_not_analyzable_info_body">სამწუხაროდ, გარკვეული სახის ნაწარმზე მიმოხილვის ხარისხი ვერ შემოწმდება. ასეთებია მაგალითად, სასაჩუქრე ბარათები, ეთერით გადასაცემი ვიდეო, მუსიკა და თამაშები.</string>
+    <string name="review_quality_check_not_analyzable_info_body" moz:removedIn="136" tools:ignore="UnusedResources">სამწუხაროდ, გარკვეული სახის ნაწარმზე მიმოხილვის ხარისხი ვერ შემოწმდება. ასეთებია მაგალითად, სასაჩუქრე ბარათები, ეთერით გადასაცემი ვიდეო, მუსიკა და თამაშები.</string>
     <!-- Title for info card displayed when another user reported the displayed product is back in stock. -->
-    <string name="review_quality_check_analysis_requested_other_user_info_title" tools:ignore="UnusedResources">მონაცემები მალე იქნება</string>
+    <string name="review_quality_check_analysis_requested_other_user_info_title" moz:removedIn="136" tools:ignore="UnusedResources">მონაცემები მალე იქნება</string>
     <!-- Text for body of info card displayed when another user reported the displayed product is back in stock. -->
-    <string name="review_quality_check_analysis_requested_other_user_info_body" tools:ignore="UnusedResources">ამ ნაწარმის მიმოხილვების შესახებ მონაცემები გვექნება 24 საათში. გთხოვთ, მოგვიანებით დაუბრუნდეთ.</string>
+    <string name="review_quality_check_analysis_requested_other_user_info_body" moz:removedIn="136" tools:ignore="UnusedResources">ამ ნაწარმის მიმოხილვების შესახებ მონაცემები გვექნება 24 საათში. გთხოვთ, მოგვიანებით დაუბრუნდეთ.</string>
     <!-- Title for info card displayed to the user when analysis finished updating. -->
-    <string name="review_quality_check_analysis_updated_confirmation_title" tools:ignore="UnusedResources">დამუშავებული მონაცემები განახლებულია</string>
+    <string name="review_quality_check_analysis_updated_confirmation_title" moz:removedIn="136" tools:ignore="UnusedResources">დამუშავებული მონაცემები განახლებულია</string>
     <!-- Text for the action button from info card displayed to the user when analysis finished updating. -->
-    <string name="review_quality_check_analysis_updated_confirmation_action" tools:ignore="UnusedResources">გასაგებია</string>
+    <string name="review_quality_check_analysis_updated_confirmation_action" moz:removedIn="136" tools:ignore="UnusedResources">გასაგებია</string>
 
     <!-- Title for error card displayed to the user when an error occurred. -->
-    <string name="review_quality_check_generic_error_title">მონაცემები ამჟამად მიუწვდომელია</string>
+    <string name="review_quality_check_generic_error_title" moz:removedIn="136" tools:ignore="UnusedResources">მონაცემები ამჟამად მიუწვდომელია</string>
     <!-- Text for body of error card displayed to the user when an error occurred. -->
-    <string name="review_quality_check_generic_error_body">ჩვენ ვმუშაობთ საკითხის გადასაწყვეტად. გთხოვთ, მოგვიანებით დაუბრუნდეთ.</string>
+    <string name="review_quality_check_generic_error_body" moz:removedIn="136" tools:ignore="UnusedResources">ჩვენ ვმუშაობთ საკითხის გადასაწყვეტად. გთხოვთ, მოგვიანებით დაუბრუნდეთ.</string>
     <!-- Title for error card displayed to the user when the device is disconnected from the network. -->
-    <string name="review_quality_check_no_connection_title">ქსელთან კავშირი არაა</string>
+    <string name="review_quality_check_no_connection_title" moz:removedIn="136" tools:ignore="UnusedResources">ქსელთან კავშირი არაა</string>
     <!-- Text for body of error card displayed to the user when the device is disconnected from the network. -->
-    <string name="review_quality_check_no_connection_body">შეამოწმეთ ქსელთან კავშირი და სცადეთ გვერდის ხელახლა ჩატვირთვა.</string>
+    <string name="review_quality_check_no_connection_body" moz:removedIn="136" tools:ignore="UnusedResources">შეამოწმეთ ქსელთან კავშირი და სცადეთ გვერდის ხელახლა ჩატვირთვა.</string>
     <!-- Title for card displayed to the user for products whose reviews were not analyzed yet. -->
-    <string name="review_quality_check_no_analysis_title">ამ მიმოხილვების შესახებ მონაცემები ჯერ არაა</string>
+    <string name="review_quality_check_no_analysis_title" moz:removedIn="136" tools:ignore="UnusedResources">ამ მიმოხილვების შესახებ მონაცემები ჯერ არაა</string>
     <!-- Text for the body of card displayed to the user for products whose reviews were not analyzed yet. -->
-    <string name="review_quality_check_no_analysis_body">იმის გასაგებად, სანდოა თუ არა ამ ნაწარმის მიმოხილვები, გაუშვით ხარისხის შემოწმება. მიახლოებით 60 წამს შეიძლება გასტანოს მხოლოდ.</string>
+    <string name="review_quality_check_no_analysis_body" moz:removedIn="136" tools:ignore="UnusedResources">იმის გასაგებად, სანდოა თუ არა ამ ნაწარმის მიმოხილვები, გაუშვით ხარისხის შემოწმება. მიახლოებით 60 წამს შეიძლება გასტანოს მხოლოდ.</string>
     <!-- Text for button from body of card displayed to the user for products whose reviews were not analyzed yet. Clicking this should trigger a product analysis. -->
-    <string name="review_quality_check_no_analysis_link">მიმოხილვის ხარისხის შემოწმება</string>
+    <string name="review_quality_check_no_analysis_link" moz:removedIn="136" tools:ignore="UnusedResources">მიმოხილვის ხარისხის შემოწმება</string>
     <!-- Headline for review quality check contextual onboarding card. -->
-    <string name="review_quality_check_contextual_onboarding_title">გამოცადეთ ჩვენი საიმედო მეგზური საყიდლების მიმოხილვებისთვის</string>
+    <string name="review_quality_check_contextual_onboarding_title" moz:removedIn="136" tools:ignore="UnusedResources">გამოცადეთ ჩვენი საიმედო მეგზური საყიდლების მიმოხილვებისთვის</string>
     <!-- Description for review quality check contextual onboarding card. The first and last two parameters are for retailer names (e.g. Amazon, Walmart). The second parameter is for the name of the application (e.g. Firefox). -->
-    <string name="review_quality_check_contextual_onboarding_description">გადაამოწმეთ შეძენამდე, თუ რამდენად სანდოა გასაყიდი ნაწარმის მიმოხილვები საიტზე %1$s. მიმოხილვის შემმოწმებელი საცდელი შესაძლებლობაა %2$s-სგან და პირდაპირ ბრაუზერშივეა ჩაშენებული. მხარდაჭერილია %3$s და აგრეთვე %4$s.</string>
+    <string name="review_quality_check_contextual_onboarding_description" moz:removedIn="136" tools:ignore="UnusedResources">გადაამოწმეთ შეძენამდე, თუ რამდენად სანდოა გასაყიდი ნაწარმის მიმოხილვები საიტზე %1$s. მიმოხილვის შემმოწმებელი საცდელი შესაძლებლობაა %2$s-სგან და პირდაპირ ბრაუზერშივეა ჩაშენებული. მხარდაჭერილია %3$s და აგრეთვე %4$s.</string>
     <!-- Description for review quality check contextual onboarding card. The first parameters is for retailer name (e.g. Amazon). The second parameter is for the name of the application (e.g. Firefox). -->
-    <string name="review_quality_check_contextual_onboarding_description_one_vendor">გადაამოწმეთ შეძენამდე, თუ რამდენად სანდოა გასაყიდი ნაწარმის მიმოხილვები საიტზე %1$s. მიმოხილვის შემმოწმებელი საცდელი შესაძლებლობაა %2$s-სგან და პირდაპირ ბრაუზერშივეა ჩაშენებული.</string>
+    <string name="review_quality_check_contextual_onboarding_description_one_vendor" moz:removedIn="136" tools:ignore="UnusedResources">გადაამოწმეთ შეძენამდე, თუ რამდენად სანდოა გასაყიდი ნაწარმის მიმოხილვები საიტზე %1$s. მიმოხილვის შემმოწმებელი საცდელი შესაძლებლობაა %2$s-სგან და პირდაპირ ბრაუზერშივეა ჩაშენებული.</string>
     <!-- Paragraph presenting review quality check feature. First parameter is the Fakespot product name. Second parameter is for clickable text defined in review_quality_check_contextual_onboarding_learn_more_link. In the phrase "Fakespot by Mozilla", "by" can be localized. Does not need to stay by. -->
-    <string name="review_quality_check_contextual_onboarding_learn_more">Mozilla-ს %1$s-ის ძლევამოსილებით ჩვენ დაგეხმარებით მიკერძოებული და ყალბი მიმოხილვების თავიდან აცილებაში. ჩვენი AI-მოდელი მუდმივად იხვეწება თქვენს დასაცავად საყიდლების შეძენისას. %2$s</string>
+    <string name="review_quality_check_contextual_onboarding_learn_more" moz:removedIn="136" tools:ignore="UnusedResources">Mozilla-ს %1$s-ის ძლევამოსილებით ჩვენ დაგეხმარებით მიკერძოებული და ყალბი მიმოხილვების თავიდან აცილებაში. ჩვენი AI-მოდელი მუდმივად იხვეწება თქვენს დასაცავად საყიდლების შეძენისას. %2$s</string>
     <!-- Clickable text from the contextual onboarding card that links to review quality check support article. -->
-    <string name="review_quality_check_contextual_onboarding_learn_more_link">ვრცლად</string>
+    <string name="review_quality_check_contextual_onboarding_learn_more_link" moz:removedIn="136" tools:ignore="UnusedResources">ვრცლად</string>
 
     <!-- Caption text to be displayed in review quality check contextual onboarding card above the opt-in button. First parameter is Firefox app name, third parameter is the Fakespot product name. Second & fourth are for clickable texts defined in review_quality_check_contextual_onboarding_privacy_policy_3 and review_quality_check_contextual_onboarding_terms_use. -->
-    <string name="review_quality_check_contextual_onboarding_caption_4">თუ მიუთითებთ „დიახ, მოისინჯოს“, ესე იგი თქვენთვის მისაღებია %1$s-ს %2$s და %3$s-ს %4$s.</string>
+    <string name="review_quality_check_contextual_onboarding_caption_4" moz:removedIn="136" tools:ignore="UnusedResources">თუ მიუთითებთ „დიახ, მოისინჯოს“, ესე იგი თქვენთვის მისაღებია %1$s-ს %2$s და %3$s-ს %4$s.</string>
     <!-- Clickable text from the review quality check contextual onboarding card that links to Fakespot privacy notice. -->
-    <string name="review_quality_check_contextual_onboarding_privacy_policy_3">პირადულობის განაცხადი</string>
+    <string name="review_quality_check_contextual_onboarding_privacy_policy_3" moz:removedIn="136" tools:ignore="UnusedResources">პირადულობის განაცხადი</string>
     <!-- Clickable text from the review quality check contextual onboarding card that links to Fakespot terms of use. -->
-    <string name="review_quality_check_contextual_onboarding_terms_use">გამოყენების პირობები</string>
+    <string name="review_quality_check_contextual_onboarding_terms_use" moz:removedIn="136" tools:ignore="UnusedResources">გამოყენების პირობები</string>
     <!-- Text for opt-in button from the review quality check contextual onboarding card. -->
-    <string name="review_quality_check_contextual_onboarding_primary_button_text">დიახ, მოისინჯოს</string>
+    <string name="review_quality_check_contextual_onboarding_primary_button_text" moz:removedIn="136" tools:ignore="UnusedResources">დიახ, მოისინჯოს</string>
     <!-- Text for opt-out button from the review quality check contextual onboarding card. -->
-    <string name="review_quality_check_contextual_onboarding_secondary_button_text">ახლა არა</string>
+    <string name="review_quality_check_contextual_onboarding_secondary_button_text" moz:removedIn="136" tools:ignore="UnusedResources">ახლა არა</string>
     <!-- Content description (not visible, for screen readers etc.) for opening browser menu button to open review quality check bottom sheet. -->
-    <string name="review_quality_check_open_handle_content_description">მიმოხილვის შემმოწმებლის გახსნა</string>
+    <string name="review_quality_check_open_handle_content_description" moz:removedIn="136" tools:ignore="UnusedResources">მიმოხილვის შემმოწმებლის გახსნა</string>
     <!-- Content description (not visible, for screen readers etc.) for closing browser menu button to open review quality check bottom sheet. -->
-    <string name="review_quality_check_close_handle_content_description">მიმოხილვის შემმოწმებლის დახურვა</string>
+    <string name="review_quality_check_close_handle_content_description" moz:removedIn="136" tools:ignore="UnusedResources">მიმოხილვის შემმოწმებლის დახურვა</string>
     <!-- Content description (not visible, for screen readers etc.) for review quality check star rating. First parameter is the number of stars (1-5) representing the rating. -->
-    <string name="review_quality_check_star_rating_content_description">%1$s ვარსკვლავი 5-იდან</string>
+    <string name="review_quality_check_star_rating_content_description" moz:removedIn="136" tools:ignore="UnusedResources">%1$s ვარსკვლავი 5-იდან</string>
     <!-- Text for minimize button from highlights card. When clicked the highlights card should reduce its size. -->
-    <string name="review_quality_check_highlights_show_less">მოკლედ</string>
+    <string name="review_quality_check_highlights_show_less" moz:removedIn="136" tools:ignore="UnusedResources">მოკლედ</string>
     <!-- Text for maximize button from highlights card. When clicked the highlights card should expand to its full size. -->
-    <string name="review_quality_check_highlights_show_more">ვრცლად</string>
+    <string name="review_quality_check_highlights_show_more" moz:removedIn="136" tools:ignore="UnusedResources">ვრცლად</string>
     <!-- Text for highlights card quality category header. Reviews shown under this header should refer the product's quality. -->
-    <string name="review_quality_check_highlights_type_quality">ხარისხი</string>
+    <string name="review_quality_check_highlights_type_quality" moz:removedIn="136" tools:ignore="UnusedResources">ხარისხი</string>
     <!-- Text for highlights card price category header. Reviews shown under this header should refer the product's price. -->
-    <string name="review_quality_check_highlights_type_price">ფასი</string>
+    <string name="review_quality_check_highlights_type_price" moz:removedIn="136" tools:ignore="UnusedResources">ფასი</string>
     <!-- Text for highlights card shipping category header. Reviews shown under this header should refer the product's shipping. -->
-    <string name="review_quality_check_highlights_type_shipping">მიწოდება</string>
+    <string name="review_quality_check_highlights_type_shipping" moz:removedIn="136" tools:ignore="UnusedResources">მიწოდება</string>
     <!-- Text for highlights card packaging and appearance category header. Reviews shown under this header should refer the product's packaging and appearance. -->
-    <string name="review_quality_check_highlights_type_packaging_appearance">შეფუთვა და იერსახე</string>
+    <string name="review_quality_check_highlights_type_packaging_appearance" moz:removedIn="136" tools:ignore="UnusedResources">შეფუთვა და იერსახე</string>
     <!-- Text for highlights card competitiveness category header. Reviews shown under this header should refer the product's competitiveness. -->
-    <string name="review_quality_check_highlights_type_competitiveness">მეტოქეებთან შედარება</string>
+    <string name="review_quality_check_highlights_type_competitiveness" moz:removedIn="136" tools:ignore="UnusedResources">მეტოქეებთან შედარება</string>
 
     <!-- Text that is surrounded by quotes. The parameter is the actual text that is in quotes. An example of that text could be: Excellent craftsmanship, and that is displayed as “Excellent craftsmanship”. The text comes from a buyer's review that the feature is highlighting"   -->
-    <string name="surrounded_with_quotes">„%s“</string>
+    <string name="surrounded_with_quotes" moz:removedIn="136" tools:ignore="UnusedResources">„%s“</string>
 
     <!-- Accessibility services actions labels. These will be appended to accessibility actions like "Double tap to.." but not by or applications but by services like Talkback. -->
     <!-- Action label for elements that can be collapsed if interacting with them. Talkback will append this to say "Double tap to collapse". -->
@@ -2784,7 +2813,7 @@
     <!-- Button text for the button that will take the user to the translation settings dialog. -->
     <string name="translation_option_bottom_sheet_translation_settings">თარგმნის პარამეტრები</string>
     <!-- Button text for the button that will take the user to a website to learn more about how translations works in the given app. The first parameter is the name of the application, for example, "Fenix". -->
-    <string name="translation_option_bottom_sheet_about_translations">თარგმანის შესახებ, რომელსაც გთავაზობთ %1$s</string>
+    <string name="translation_option_bottom_sheet_about_translations">ვრცლად, როგორ თარგმნის %1$s</string>
     <!-- Content description (not visible, for screen readers etc.) for closing the translations bottom sheet. -->
     <string name="translation_option_bottom_sheet_close_content_description">თარგმნის ფურცლის დახურვა</string>
     <!-- The title of the warning card informs the user that an error has occurred at page settings. -->
@@ -2810,7 +2839,7 @@
     <!-- Title of the automatic translation preference screen that will appear on the toolbar.-->
     <string name="automatic_translation_toolbar_title_preference">ავტომატური თარგმანი</string>
     <!-- Screen header presenting the automatic translation preference feature. It will appear under the toolbar. -->
-    <string name="automatic_translation_header_preference">აირჩიეთ ენა „ყოველთვის ითარგმნოსა“ და „არასდროს ითარგმნოს“ პარამეტრების მისათითებლად.</string>
+    <string name="automatic_translation_header_preference">აირჩიეთ ენა, რომ მიუთითოთ, „ყოველთვის ითარგმნოს“, თუ „არასდროს ითარგმნოს“.</string>
     <!-- The title of the warning card informs the user that the system could not load languages for translation settings. -->
     <string name="automatic_translation_error_warning_text">ენები ვერ ჩაიტვირთა. გთხოვთ გადაამოწმოთ მოგვიანებით.</string>
 
@@ -2850,7 +2879,7 @@
     <!-- Title of the toolbar for the translation feature screen where users may download different languages for translation. -->
     <string name="download_languages_translations_toolbar_title_preference">ენების ჩამოტვირთვა</string>
     <!-- Screen header presenting the download language preference feature. It will appear under the toolbar.The first parameter is "Learn More," a clickable text with a link. Talkback will append this to say "Double tap to open link to learn more". -->
-    <string name="download_languages_header_preference">ჩამოტვირთეთ ენები სრულად უფრო სწრაფად და კავშირგარეშე თარგმნისთვის. %1$s</string>
+    <string name="download_languages_header_preference">ჩამოტვირთეთ ენები სრულად უფრო სწრაფი და კავშირგარეშე თარგმნისთვის. %1$s</string>
     <!-- Clickable text from the screen header that links to a website. -->
     <string name="download_languages_header_learn_more_preference">ვრცლად</string>
     <!-- The subhead of the download language preference screen will appear above the pivot language. -->
@@ -3062,6 +3091,13 @@
     <string name="debug_drawer_addresses_title">მისამართები</string>
     <!-- The title of the section header for the list of debug locales that can be enabled and disabled. -->
     <string name="debug_drawer_addresses_debug_locales_header">გამართვის ენების ჩართვა</string>
+
+    <!-- The title of the section header for the list of debug locales that can be enabled and disabled. -->
+    <string name="debug_drawer_addresses_management_header">მისამართების მართვა</string>
+    <!-- The title of the button in the debug drawer for adding a new address. -->
+    <string name="debug_drawer_add_new_address">ახალი მისამართის დამატება შერჩეული ენისთვის</string>
+    <!-- The title of the button for deleting in the debug drawer all addresses. -->
+    <string name="debug_drawer_delete_all_addresses">ყველა მისამართის წაშლა</string>
 
     <!-- Debug drawer "contextual feature recommendation" (CFR) tools -->
     <!-- The title of the CFR Tools feature in the Debug Drawer -->

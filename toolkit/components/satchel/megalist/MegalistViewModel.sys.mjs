@@ -42,6 +42,10 @@ export class MegalistViewModel {
     MegalistViewModel.#aggregator.attachViewModel(this);
   }
 
+  get authExpirationTime() {
+    return this.#authExpirationTime;
+  }
+
   willDestroy() {
     MegalistViewModel.#aggregator.detachViewModel(this);
   }
@@ -97,8 +101,20 @@ export class MegalistViewModel {
       snapshot.breached = snapshotData.breached;
     }
 
+    if ("breachedNotification" in snapshotData) {
+      snapshot.breachedNotification = snapshotData.breachedNotification;
+    }
+
     if ("vulnerable" in snapshotData) {
       snapshot.vulnerable = snapshotData.vulnerable;
+    }
+
+    if ("vulnerableNotification" in snapshotData) {
+      snapshot.vulnerableNotification = snapshotData.vulnerableNotification;
+    }
+
+    if ("noUsernameNotification" in snapshotData) {
+      snapshot.noUsernameNotification = snapshotData.noUsernameNotification;
     }
 
     if ("toggleTooltip" in snapshotData) {
@@ -154,6 +170,10 @@ export class MegalistViewModel {
 
   setNotification(notification) {
     this.#messageToView("SetNotification", notification);
+  }
+
+  discardChangesConfirmed() {
+    this.#messageToView("DiscardChangesConfirmed");
   }
 
   async receiveCommand({ commandId, snapshotId, value } = {}) {

@@ -29,6 +29,14 @@ ChromeUtils.defineESModuleGetters(
 
 const CONTENT_TYPE_REGEXP = /^content-type/i;
 
+function isDataChannel(channel) {
+  return channel instanceof Ci.nsIDataChannel;
+}
+
+function isFileChannel(channel) {
+  return channel instanceof Ci.nsIFileChannel;
+}
+
 /**
  * Creates an actor for a network event.
  *
@@ -88,7 +96,7 @@ class NetworkEventActor extends Actor {
       content: {},
     };
 
-    if (channel instanceof Ci.nsIFileChannel) {
+    if (isDataChannel(channel) || isFileChannel(channel)) {
       this._innerWindowId = null;
       this._isNavigationRequest = false;
 
@@ -137,8 +145,7 @@ class NetworkEventActor extends Actor {
   _createResource(networkEventOptions, channel) {
     let wsChannel;
     let method;
-    if (channel instanceof Ci.nsIFileChannel) {
-      channel = channel.QueryInterface(Ci.nsIFileChannel);
+    if (isDataChannel(channel) || isFileChannel(channel)) {
       channel.QueryInterface(Ci.nsIChannel);
       wsChannel = null;
       method = "GET";
@@ -201,18 +208,17 @@ class NetworkEventActor extends Actor {
     }
 
     const resource = {
-      resourceId: channel.channelId,
+      resourceId: this._channelId,
       resourceType: NETWORK_EVENT,
       blockedReason,
       blockingExtension: networkEventOptions.blockingExtension,
       browsingContextID,
       cause,
       // This is used specifically in the browser toolbox console to distinguish privileged
-      // resources from the parent process from those from the contet
+      // resources from the parent process from those from the content.
       chromeContext: lazy.NetworkUtils.isChannelFromSystemPrincipal(channel),
       innerWindowId: this._innerWindowId,
       isNavigationRequest: this._isNavigationRequest,
-      isFileRequest: channel instanceof Ci.nsIFileChannel,
       isThirdPartyTrackingResource:
         lazy.NetworkUtils.isThirdPartyTrackingResource(channel),
       isXHR,
@@ -490,11 +496,12 @@ class NetworkEventActor extends Actor {
     }
 
     fromCache = fromCache || lazy.NetworkUtils.isFromCache(channel);
+    const isDataOrFile = isDataChannel(channel) || isFileChannel(channel);
 
     // Read response headers and cookies.
     let responseHeaders = [];
     let responseCookies = [];
-    if (!this._blockedReason && !(channel instanceof Ci.nsIFileChannel)) {
+    if (!this._blockedReason && !isDataOrFile) {
       const { cookies, headers } =
         lazy.NetworkUtils.fetchResponseHeadersAndCookies(channel);
       responseCookies = cookies;
@@ -525,7 +532,7 @@ class NetworkEventActor extends Actor {
     }
 
     let waitingTime = null;
-    if (!(channel instanceof Ci.nsIFileChannel)) {
+    if (!isDataOrFile) {
       const timedChannel = channel.QueryInterface(Ci.nsITimedChannel);
       waitingTime = Math.round(
         (timedChannel.responseStartTime - timedChannel.requestStartTime) / 1000
@@ -539,16 +546,15 @@ class NetworkEventActor extends Actor {
       proxyInfo = proxyResponseRawHeaders.split("\r\n")[0].split(" ");
     }
 
-    const isFileChannel = channel instanceof Ci.nsIFileChannel;
     this._onEventUpdate("responseStart", {
-      httpVersion: isFileChannel
+      httpVersion: isDataOrFile
         ? null
         : lazy.NetworkUtils.getHttpVersion(channel),
       mimeType,
       remoteAddress: fromCache ? "" : channel.remoteAddress,
       remotePort: fromCache ? "" : channel.remotePort,
-      status: isFileChannel ? "200" : channel.responseStatus + "",
-      statusText: isFileChannel ? "0K" : channel.responseStatusText,
+      status: isDataOrFile ? "200" : channel.responseStatus + "",
+      statusText: isDataOrFile ? "0K" : channel.responseStatusText,
       earlyHintsStatus: earlyHintsResponseRawHeaders ? "103" : "",
       waitingTime,
       isResolvedByTRR: channel.isResolvedByTRR,

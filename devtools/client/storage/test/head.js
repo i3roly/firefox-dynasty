@@ -962,9 +962,8 @@ var focusSearchBoxUsingShortcut = async function (panelWin, callback) {
 
   panelWin.focus();
 
-  const shortcut = await panelWin.document.l10n.formatValue(
-    "storage-filter-key"
-  );
+  const shortcut =
+    await panelWin.document.l10n.formatValue("storage-filter-key");
   synthesizeKeyShortcut(shortcut);
 
   await focused;
@@ -974,8 +973,8 @@ var focusSearchBoxUsingShortcut = async function (panelWin, callback) {
   }
 };
 
-function getCookieId(name, domain, path) {
-  return `${name}${SEPARATOR_GUID}${domain}${SEPARATOR_GUID}${path}`;
+function getCookieId(name, domain, path, partitionKey = "") {
+  return `${name}${SEPARATOR_GUID}${domain}${SEPARATOR_GUID}${path}${SEPARATOR_GUID}${partitionKey}`;
 }
 
 function setPermission(url, permission) {

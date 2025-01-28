@@ -58,6 +58,7 @@
 #include "mozilla/Unused.h"
 
 #include "Fetch.h"
+#include "FetchLog.h"
 #include "FetchUtil.h"
 #include "InternalRequest.h"
 #include "InternalResponse.h"
@@ -261,6 +262,8 @@ AlternativeDataStreamListener::OnDataAvailable(nsIRequest* aRequest,
                                                nsIInputStream* aInputStream,
                                                uint64_t aOffset,
                                                uint32_t aCount) {
+  FETCH_LOG(
+      ("FetchDriver::OnDataAvailable this=%p, request=%p", this, aRequest));
   if (mStatus == AlternativeDataStreamListener::LOADING) {
     MOZ_ASSERT(mPipeAlternativeOutputStream);
     uint32_t read = 0;
@@ -886,6 +889,7 @@ nsresult FetchDriver::HttpFetch(
           case RequestDestination::Sharedworker:
           case RequestDestination::Worker:
           case RequestDestination::Xslt:
+          case RequestDestination::Json:
             return FETCH_PRIORITY_ADJUSTMENT_FOR(link_preload_script,
                                                  fetchPriority);
           case RequestDestination::Image:
@@ -1047,6 +1051,8 @@ void FetchDriver::FailWithNetworkError(nsresult rv) {
 
 NS_IMETHODIMP
 FetchDriver::OnStartRequest(nsIRequest* aRequest) {
+  FETCH_LOG(
+      ("FetchDriver::OnStartRequest this=%p, request=%p", this, aRequest));
   AssertIsOnMainThread();
 
   // Note, this can be called multiple times if we are doing an opaqueredirect.
@@ -1353,6 +1359,19 @@ FetchDriver::OnStartRequest(nsIRequest* aRequest) {
     return NS_OK;
   }
 
+  // Only retarget if not already retargeted
+  nsCOMPtr<nsISerialEventTarget> target;
+  nsCOMPtr<nsIThreadRetargetableRequest> req = do_QueryInterface(aRequest);
+  if (req) {
+    rv = req->GetDeliveryTarget(getter_AddRefs(target));
+    if (NS_SUCCEEDED(rv) && target && !target->IsOnCurrentThread()) {
+      FETCH_LOG(
+          ("FetchDriver::OnStartRequest this=%p, request=%p already retargeted",
+           this, aRequest));
+      return NS_OK;
+    }
+  }
+
   nsCOMPtr<nsIEventTarget> sts =
       do_GetService(NS_STREAMTRANSPORTSERVICE_CONTRACTID, &rv);
   if (NS_WARN_IF(NS_FAILED(rv))) {
@@ -1361,6 +1380,7 @@ FetchDriver::OnStartRequest(nsIRequest* aRequest) {
     return rv;
   }
 
+  FETCH_LOG(("FetchDriver retargeting: request %p", aRequest));
   // Try to retarget off main thread.
   if (nsCOMPtr<nsIThreadRetargetableRequest> rr = do_QueryInterface(aRequest)) {
     RefPtr<TaskQueue> queue =
@@ -1510,6 +1530,7 @@ FetchDriver::OnDataAvailable(nsIRequest* aRequest, nsIInputStream* aInputStream,
 
 NS_IMETHODIMP
 FetchDriver::OnStopRequest(nsIRequest* aRequest, nsresult aStatusCode) {
+  FETCH_LOG(("FetchDriver::OnStopRequest this=%p, request=%p", this, aRequest));
   AssertIsOnMainThread();
 
   MOZ_DIAGNOSTIC_ASSERT(!mOnStopRequestCalled);

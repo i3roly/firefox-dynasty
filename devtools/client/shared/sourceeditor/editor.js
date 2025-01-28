@@ -169,7 +169,8 @@ class Editor extends EventEmitter {
 
   #abortController;
   // The id for the current source in the editor (selected source). This
-  // is used to cache the scroll snapshot for tracking scroll positions.
+  // is used to cache the scroll snapshot for tracking scroll positions and the
+  // symbols.
   #currentDocumentId = null;
   #currentDocument = null;
   #CodeMirror6;
@@ -2136,6 +2137,85 @@ class Editor extends EventEmitter {
 
   getLineOrOffset(line) {
     return this.isWasm ? this.lineToWasmOffset(line) : line;
+  }
+
+  /**
+   * Traverse the syntaxTree and return expressions
+   * which best match the specified token location is on our
+   * list of accepted symbol types.
+   *
+   * @param {Object} tokenLocation
+   * @returns {Array} Member expression matches
+   */
+  async findBestMatchExpressions(tokenLocation) {
+    const cm = editors.get(this);
+    const {
+      codemirrorLanguage: { syntaxTree },
+    } = this.#CodeMirror6;
+
+    function matchPosition(node, position) {
+      return node.from <= position && node.to >= position;
+    }
+    const expressions = [];
+    const symbolTypes = new Set([
+      "MemberExpression",
+      "VariableDefinition",
+      "VariableName",
+      "this",
+      "PropertyName",
+    ]);
+
+    const line = cm.state.doc.line(tokenLocation.line);
+    const tokPos = line.from + tokenLocation.column;
+
+    await syntaxTree(cm.state).iterate({
+      enter: node => {
+        if (symbolTypes.has(node.name) && matchPosition(node, tokPos)) {
+          expressions.push({
+            type: node.name,
+            // Computed member expressions not currently supported
+            computed: false,
+            expression: cm.state.doc.sliceString(node.from, node.to),
+            location: {
+              start: this.#posToLineColumn(node.from),
+              end: this.#posToLineColumn(node.to),
+            },
+            from: node.from,
+            to: node.to,
+          });
+        }
+      },
+      from: line.from,
+      to: line.to,
+    });
+
+    // There might be multiple expressions which are within the locations.
+    // We want to match expressions based on dots before the desired token.
+    //
+    // ========================== EXAMPLE 1 ================================
+    // Full Expression: `this.myProperty.x`
+    // Hovered Token: `myProperty`
+    // Found Expressions:
+    // { name: "MemberExpression", expression: "this.myProperty.x", from: 1715, to: 1732 }
+    // { name: "MemberExpression", expression: "this.myProperty" from: 1715, to: 1730 } *
+    // { name: "PropertyName", expression: "myProperty" from: 1720, to: 1730 }
+    //
+    // ========================== EXAMPLE 2 ==================================
+    // Full Expression: `a(b).catch`
+    // Hovered Token: `b`
+    // Found Expressions:
+    // { name: "MemberExpression", expression: "a(b).catch", from: 1921  to: 1931 }
+    // { name: "VariableName", expression: "b", from: 1923  to: 1924 } *
+    //
+    // We sort based on the `to` make sure we return the correct property
+    return expressions.sort((a, b) => {
+      if (a.to < b.to) {
+        return -1;
+      } else if (a.to > b.to) {
+        return 1;
+      }
+      return 0;
+    });
   }
 
   /**

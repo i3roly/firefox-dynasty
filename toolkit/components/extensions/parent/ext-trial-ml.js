@@ -75,6 +75,7 @@ const modelHub = new ModelHub();
 class TrialML extends ExtensionAPI {
   #pipelineId = null;
   #engine = null;
+  #pipelineOptions = null;
 
   /**
    * Constructor for TrialML
@@ -113,11 +114,6 @@ class TrialML extends ExtensionAPI {
     const { extension } = this;
     if (!this.extension || this.extension.hasShutdown) {
       throw new ExtensionError("Extension has already shutdown");
-    }
-    if (options.taskName === "translation") {
-      throw new ExtensionError(
-        "Not implemented yet: calling the translation engine"
-      );
     }
     this.#engine = await createEngine(options, progressData => {
       extension.emit(ENGINE_EVENT, progressData);
@@ -169,8 +165,8 @@ class TrialML extends ExtensionAPI {
             // That constructor checks for any value issue and will error out.
             // We can catch it here to provide nice error messages
             try {
-              const pipelineOptions = new PipelineOptions(request);
-              await this.#createEngine(pipelineOptions);
+              this.#pipelineOptions = new PipelineOptions(request);
+              await this.#createEngine(this.#pipelineOptions);
             } catch (error) {
               throw new ExtensionError(error.message);
             }
@@ -183,6 +179,15 @@ class TrialML extends ExtensionAPI {
            * @returns {Promise} The result of the pipeline run.
            */
           runEngine: async request => {
+            if (this.#engine?.engineStatus === "closed") {
+              // Engine closed for inactivity, re-create it with saved options.
+              try {
+                this.#engine = null;
+                await this.#createEngine(this.#pipelineOptions);
+              } catch (error) {
+                throw new ExtensionError(error.message);
+              }
+            }
             const runOptions = {
               args: request.args,
               options: request.options || {},

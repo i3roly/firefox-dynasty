@@ -441,10 +441,8 @@ nsresult ContentEventHandler::InitCommon(EventMessage aEventMessage,
   if (mSelection->Type() == SelectionType::eNormal) {
     normalSelection = mSelection;
   } else {
-    normalSelection = frameSel->GetSelection(SelectionType::eNormal);
-    if (NS_WARN_IF(!normalSelection)) {
-      return NS_ERROR_NOT_AVAILABLE;
-    }
+    normalSelection = &frameSel->NormalSelection();
+    MOZ_ASSERT(normalSelection);
   }
 
   rv = InitRootContent(*normalSelection);
@@ -3153,17 +3151,9 @@ nsresult ContentEventHandler::GetFlatTextLengthInRange(
   // including it forcibly.
   RawNodePosition endPosition(aEndPosition);
 
-  // This may be called for retrieving the text of removed nodes.  Even in this
-  // case, the node thinks it's still in the tree because UnbindFromTree() will
-  // be called after here.  However, the node was already removed from the
-  // array of children of its parent.  So, be careful to handle this case.
+  // This may be called for retrieving the text of removed nodes. So, be careful
+  // to handle this case. FIXME: Do we need this special-case now?
   if (aIsRemovingNode) {
-    DebugOnly<nsIContent*> parent = aStartPosition.Container()->GetParent();
-    MOZ_ASSERT(
-        parent &&
-            parent->ComputeIndexOf(aStartPosition.Container()).isNothing(),
-        "At removing the node, the node shouldn't be in the array of children "
-        "of its parent");
     MOZ_ASSERT(aStartPosition.Container() == endPosition.Container(),
                "At removing the node, start and end node should be same");
     MOZ_ASSERT(*aStartPosition.Offset(

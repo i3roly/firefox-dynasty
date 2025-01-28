@@ -80,12 +80,14 @@ class ContentAnalysisRequest final : public nsIContentAnalysisRequest {
   NS_DECL_ISUPPORTS
   NS_DECL_NSICONTENTANALYSISREQUEST
 
-  ContentAnalysisRequest(AnalysisType aAnalysisType, nsString aString,
-                         bool aStringIsFilePath, nsCString aSha256Digest,
-                         nsCOMPtr<nsIURI> aUrl, OperationType aOperationType,
+  ContentAnalysisRequest(AnalysisType aAnalysisType, Reason aReason,
+                         nsString aString, bool aStringIsFilePath,
+                         nsCString aSha256Digest, nsCOMPtr<nsIURI> aUrl,
+                         OperationType aOperationType,
                          dom::WindowGlobalParent* aWindowGlobalParent);
   ContentAnalysisRequest(const nsTArray<uint8_t> aPrintData,
                          nsCOMPtr<nsIURI> aUrl, nsString aPrinterName,
+                         Reason aReason,
                          dom::WindowGlobalParent* aWindowGlobalParent);
   static nsresult GetFileDigest(const nsAString& aFilePath,
                                 nsCString& aDigestString);
@@ -99,6 +101,9 @@ class ContentAnalysisRequest final : public nsIContentAnalysisRequest {
 
   // See nsIContentAnalysisRequest for values
   AnalysisType mAnalysisType;
+
+  // See nsIContentAnalysisRequest for values
+  Reason mReason;
 
   // Text content to analyze.  Only one of textContent or filePath is defined.
   nsString mTextContent;
@@ -143,12 +148,8 @@ class ContentAnalysisRequest final : public nsIContentAnalysisRequest {
   friend class ::ContentAnalysisTest;
 };
 
-#define CONTENTANALYSIS_IID                          \
-  {                                                  \
-    0xa37bed74, 0x4b50, 0x443a, {                    \
-      0xbf, 0x58, 0xf4, 0xeb, 0xbd, 0x30, 0x67, 0xb4 \
-    }                                                \
-  }
+#define CONTENTANALYSIS_IID \
+  {0xa37bed74, 0x4b50, 0x443a, {0xbf, 0x58, 0xf4, 0xeb, 0xbd, 0x30, 0x67, 0xb4}}
 
 class ContentAnalysisResponse;
 class ContentAnalysis final : public nsIContentAnalysis {
@@ -158,7 +159,6 @@ class ContentAnalysis final : public nsIContentAnalysis {
   NS_DECL_NSICONTENTANALYSIS
 
   ContentAnalysis();
-  nsCString GetUserActionId();
   void SetLastResult(nsresult aLastResult) { mLastResult = aLastResult; }
 
 #if defined(XP_WIN)
@@ -261,7 +261,6 @@ class ContentAnalysis final : public nsIContentAnalysis {
   nsresult RunAcknowledgeTask(
       nsIContentAnalysisAcknowledgement* aAcknowledgement,
       const nsACString& aRequestToken);
-  void GenerateUserActionId();
   static void DoAnalyzeRequest(
       nsCString aRequestToken,
       content_analysis::sdk::ContentAnalysisRequest&& aRequest,
@@ -287,7 +286,6 @@ class ContentAnalysis final : public nsIContentAnalysis {
   using ClientPromise =
       MozPromise<std::shared_ptr<content_analysis::sdk::Client>, nsresult,
                  false>;
-  nsCString mUserActionId;
   int64_t mRequestCount = 0;
   RefPtr<ClientPromise::Private> mCaClientPromise;
   // Only accessed from the main thread
@@ -301,15 +299,14 @@ class ContentAnalysis final : public nsIContentAnalysis {
     CallbackData(
         nsMainThreadPtrHandle<nsIContentAnalysisCallback>&& aCallbackHolder,
         bool aAutoAcknowledge)
-        : mCallbackHolder(aCallbackHolder),
-          mAutoAcknowledge(aAutoAcknowledge) {}
+        : mCallbackHolder(aCallbackHolder), mAutoAcknowledge(aAutoAcknowledge) {
+      MOZ_ASSERT(mCallbackHolder);
+    }
 
     nsMainThreadPtrHandle<nsIContentAnalysisCallback> TakeCallbackHolder() {
       return std::move(mCallbackHolder);
     }
     bool AutoAcknowledge() const { return mAutoAcknowledge; }
-    void SetCanceled() { mCallbackHolder = nullptr; }
-    bool Canceled() const { return !mCallbackHolder; }
 
    private:
     nsMainThreadPtrHandle<nsIContentAnalysisCallback> mCallbackHolder;

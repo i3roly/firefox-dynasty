@@ -10,11 +10,6 @@ use super::{CommonMetricData, MetricId};
 
 use crate::ipc::need_ipc;
 
-#[cfg(feature = "with_gecko")]
-use super::profiler_utils::StringLikeMetricMarker;
-#[cfg(feature = "with_gecko")]
-use gecko_profiler::gecko_profiler_category;
-
 /// A UUID metric.
 ///
 /// Stores UUID values.
@@ -64,14 +59,11 @@ impl glean::traits::Uuid for UuidMetric {
             UuidMetric::Parent { id, inner } => {
                 let value = value.to_string();
                 #[cfg(feature = "with_gecko")]
-                if gecko_profiler::can_accept_markers() {
-                    gecko_profiler::add_marker(
-                        "Uuid::set",
-                        gecko_profiler_category!(Telemetry),
-                        Default::default(),
-                        StringLikeMetricMarker::new(*id, &value),
-                    );
-                }
+                gecko_profiler::lazy_add_marker!(
+                    "Uuid::set",
+                    super::profiler_utils::TelemetryProfilerCategory,
+                    super::profiler_utils::StringLikeMetricMarker::new(*id, &value)
+                );
                 inner.set(value)
             }
             UuidMetric::Child(_c) => {
@@ -96,14 +88,11 @@ impl glean::traits::Uuid for UuidMetric {
             UuidMetric::Parent { id, inner } => {
                 let uuid = inner.generate_and_set();
                 #[cfg(feature = "with_gecko")]
-                if gecko_profiler::can_accept_markers() {
-                    gecko_profiler::add_marker(
-                        "Uuid::generateAndSet",
-                        gecko_profiler_category!(Telemetry),
-                        Default::default(),
-                        StringLikeMetricMarker::new(*id, &uuid),
-                    );
-                }
+                gecko_profiler::lazy_add_marker!(
+                    "Uuid::generateAndSet",
+                    super::profiler_utils::TelemetryProfilerCategory,
+                    super::profiler_utils::StringLikeMetricMarker::new(*id, &uuid)
+                );
                 Uuid::parse_str(&uuid).unwrap()
             }
             UuidMetric::Child(_c) => {
@@ -175,7 +164,7 @@ mod test {
         let expected = Uuid::new_v4();
         metric.set(expected.clone());
 
-        assert_eq!(expected, metric.test_get_value("store1").unwrap());
+        assert_eq!(expected, metric.test_get_value("test-ping").unwrap());
     }
 
     #[test]
@@ -201,7 +190,7 @@ mod test {
 
         assert_eq!(
             expected,
-            parent_metric.test_get_value("store1").unwrap(),
+            parent_metric.test_get_value("test-ping").unwrap(),
             "UUID metrics should only work in the parent process"
         );
     }

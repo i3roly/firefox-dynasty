@@ -518,6 +518,7 @@ pref("accessibility.typeaheadfind.startlinksonly", false);
 //              set to a zero or negative value to keep dialog open until it's manually closed
 pref("accessibility.typeaheadfind.timeout", 4000);
 pref("accessibility.typeaheadfind.soundURL", "beep");
+pref("accessibility.typeaheadfind.wrappedSoundURL", "");
 pref("accessibility.typeaheadfind.enablesound", true);
 #ifdef XP_MACOSX
   pref("accessibility.typeaheadfind.prefillwithselection", false);
@@ -1344,50 +1345,6 @@ pref("network.websocket.delay-failed-reconnects", true);
 
 // </ws>
 
-// This preference specifies a list of domains for which DNS lookups will be
-// IPv4 only. Works around broken DNS servers which can't handle IPv6 lookups
-// and/or allows the user to disable IPv6 on a per-domain basis. See bug 68796.
-pref("network.dns.ipv4OnlyDomains", "");
-
-// This is the number of dns cache entries allowed
-pref("network.dnsCacheEntries", 400);
-
-// In the absence of OS TTLs, the DNS cache TTL value
-pref("network.dnsCacheExpiration", 60);
-
-// Get TTL; not supported on all platforms; nop on the unsupported ones.
-pref("network.dns.get-ttl", true);
-
-// For testing purposes! Makes the native resolver resolve IPv4 "localhost"
-// instead of the actual given name.
-pref("network.dns.native-is-localhost", false);
-
-// The grace period allows the DNS cache to use expired entries, while kicking off
-// a revalidation in the background.
-pref("network.dnsCacheExpirationGracePeriod", 60);
-
-// This preference can be used to turn off DNS prefetch.
-pref("network.dns.disablePrefetch", false);
-
-// This preference controls whether .onion hostnames are
-// rejected before being given to DNS. RFC 7686
-pref("network.dns.blockDotOnion", true);
-
-// These domains are treated as localhost equivalent
-pref("network.dns.localDomains", "");
-
-// When non empty all non-localhost DNS queries (including IP addresses)
-// resolve to this value. The value can be a name or an IP address.
-// domains mapped to localhost with localDomains stay localhost.
-pref("network.dns.forceResolve", "");
-
-// Contols whether or not "localhost" should resolve when offline
-pref("network.dns.offline-localhost", true);
-
-// Defines how much longer resolver threads should stay idle before are shut down.
-// A negative value will keep the thread alive forever.
-pref("network.dns.resolver-thread-extra-idle-time-seconds", 60);
-
 // enables the prefetch service (i.e., prefetching of <link rel="next"> and
 // <link rel="prefetch"> URLs).
 pref("network.prefetch-next", true);
@@ -1466,15 +1423,10 @@ pref("network.auth.private-browsing-sso", false);
 // This feature is occasionally causing visible regressions (download too slow for
 // too long time, jitter in video/audio in background tabs...)
 pref("network.http.throttle.enable", false);
-pref("network.http.throttle.version", 1);
 
 // V1 prefs
 pref("network.http.throttle.suspend-for", 900);
 pref("network.http.throttle.resume-for", 100);
-
-// V2 prefs
-pref("network.http.throttle.read-limit-bytes", 8000);
-pref("network.http.throttle.read-interval-ms", 500);
 
 // Common prefs
 // Delay we resume throttled background responses after the last unthrottled
@@ -2311,22 +2263,9 @@ pref("font.size.monospace.x-math", 13);
   pref("gfx.font_rendering.cleartype_params.pixel_structure", -1);
   pref("gfx.font_rendering.cleartype_params.rendering_mode", -1);
 
-#if defined(EARLY_BETA_OR_EARLIER)
   // We no longer force "GDI Classic" mode on any fonts by default.
   pref("gfx.font_rendering.cleartype_params.force_gdi_classic_for_families", "");
   pref("gfx.font_rendering.cleartype_params.force_gdi_classic_max_size", 0);
-#else
-  // A comma-separated list of font family names. Fonts in these families will
-  // be forced to use "GDI Classic" ClearType mode, provided the value
-  // of gfx.font_rendering.cleartype_params.rendering_mode is -1
-  // (i.e. a specific rendering_mode has not been explicitly set).
-  // Currently we apply this setting to the sans-serif Microsoft "core Web fonts".
-  pref("gfx.font_rendering.cleartype_params.force_gdi_classic_for_families",
-       "Arial,Consolas,Courier New,Microsoft Sans Serif,Segoe UI,Tahoma,Trebuchet MS,Verdana");
-  // The maximum size at which we will force GDI classic mode using
-  // force_gdi_classic_for_families.
-  pref("gfx.font_rendering.cleartype_params.force_gdi_classic_max_size", 15);
-#endif
 
   // Switch the keyboard layout per window
   pref("intl.keyboard.per_window_layout", false);
@@ -2358,9 +2297,6 @@ pref("font.size.monospace.x-math", 13);
   //   Google Japanese Input: "Google 日本語入力 IMM32 モジュール"
   //   ATOK 2011: "ATOK 2011" (similarly, e.g., ATOK 2013 is "ATOK 2013")
   pref("intl.imm.japanese.assume_active_tip_name_as", "");
-
-  // See bug 448927, on topmost panel, some IMEs are not usable on Windows.
-  pref("ui.panel.default_level_parent", false);
 
   // Enable system settings cache for mouse wheel message handling.
   // Note that even if this pref is set to true, Gecko may not cache the system
@@ -2602,9 +2538,6 @@ pref("font.size.monospace.x-math", 13);
   pref("font.weight-override.HelveticaNeue-Light", 300); // Ensure Light > Thin (200)
   pref("font.weight-override.HelveticaNeue-LightItalic", 300);
 
-  // See bug 404131, topmost <panel> element wins to Dashboard on MacOSX.
-  pref("ui.panel.default_level_parent", false);
-
   // Macbook touchpad two finger pixel scrolling
   pref("mousewheel.enable_pixel_scrolling", true);
 
@@ -2761,16 +2694,6 @@ pref("font.size.monospace.x-math", 13);
   pref("helpers.global_mailcap_file", "/etc/mailcap");
   pref("helpers.private_mime_types_file", "~/.mime.types");
   pref("helpers.private_mailcap_file", "~/.mailcap");
-
-  // Setting default_level_parent to true makes the default level for popup
-  // windows "top" instead of "parent".  On GTK2 platform, this is implemented
-  // with override-redirect windows which is the normal way to implement
-  // temporary popup windows.  Setting this to false would make the default
-  // level "parent" which is implemented with managed windows.
-  // A problem with using managed windows is that metacity sometimes deactivates
-  // the parent window when the managed popup is shown.
-  pref("ui.panel.default_level_parent", true);
-
 #endif // ANDROID
 
 #if !defined(ANDROID) && !defined(XP_MACOSX) && defined(XP_UNIX)
@@ -2945,17 +2868,6 @@ pref("font.size.monospace.x-math", 13);
   pref("font.name-list.monospace.zh-TW", "monospace");
   pref("font.name-list.cursive.zh-TW", "cursive");
 
-  // On GTK2 platform, we should use topmost window level for the default window
-  // level of <panel> element of XUL. GTK2 has only two window types. One is
-  // normal top level window, other is popup window. The popup window is always
-  // topmost window level, therefore, we are using normal top level window for
-  // non-topmost panel, but it is pretty hacky. On some Window Managers, we have
-  // 2 problems:
-  // 1. The non-topmost panel steals focus from its parent window at showing.
-  // 2. The parent of non-topmost panel is not activated when the panel is hidden.
-  // So, we have no reasons we should use non-toplevel window for popup.
-  pref("ui.panel.default_level_parent", true);
-
   pref("intl.ime.use_simple_context_on_password_field", false);
 
   // uim may use key snooper to listen to key events.  Unfortunately, we cannot
@@ -3074,15 +2986,15 @@ pref("font.size.monospace.x-math", 13);
 
   pref("font.name-list.serif.zh-CN", "Charis SIL Compact, Noto Serif CJK SC, Noto Serif, Droid Serif, Droid Sans Fallback");
   pref("font.name-list.sans-serif.zh-CN", "Roboto, Google Sans, Droid Sans, Noto Sans SC, Noto Sans CJK SC, SEC CJK SC, Droid Sans Fallback");
-  pref("font.name-list.monospace.zh-CN", "Droid Sans Mono, Noto Sans Mono CJK SC, SEC Mono CJK SC, Droid Sans Fallback");
+  pref("font.name-list.monospace.zh-CN", "Droid Sans Mono, Noto Sans Mono CJK SC, SEC Mono CJK SC, MiSans VF, Droid Sans Fallback");
 
   pref("font.name-list.serif.zh-HK", "Charis SIL Compact, Noto Serif CJK TC, Noto Serif, Droid Serif, Droid Sans Fallback");
   pref("font.name-list.sans-serif.zh-HK", "Roboto, Google Sans, Droid Sans, Noto Sans TC, Noto Sans SC, Noto Sans CJK TC, SEC CJK TC, Droid Sans Fallback");
-  pref("font.name-list.monospace.zh-HK", "Droid Sans Mono, Noto Sans Mono CJK TC, SEC Mono CJK TC, Droid Sans Fallback");
+  pref("font.name-list.monospace.zh-HK", "Droid Sans Mono, Noto Sans Mono CJK TC, SEC Mono CJK TC, MiSans TC VF, Droid Sans Fallback");
 
   pref("font.name-list.serif.zh-TW", "Charis SIL Compact, Noto Serif CJK TC, Noto Serif, Droid Serif, Droid Sans Fallback");
   pref("font.name-list.sans-serif.zh-TW", "Roboto, Google Sans, Droid Sans, Noto Sans TC, Noto Sans SC, Noto Sans CJK TC, SEC CJK TC, Droid Sans Fallback");
-  pref("font.name-list.monospace.zh-TW", "Droid Sans Mono, Noto Sans Mono CJK TC, SEC Mono CJK TC, Droid Sans Fallback");
+  pref("font.name-list.monospace.zh-TW", "Droid Sans Mono, Noto Sans Mono CJK TC, SEC Mono CJK TC, MiSans TC VF, Droid Sans Fallback");
 
   pref("font.name-list.serif.x-math", "Latin Modern Math, STIX Two Math, XITS Math, Cambria Math, Libertinus Math, DejaVu Math TeX Gyre, TeX Gyre Bonum Math, TeX Gyre Pagella Math, TeX Gyre Schola, TeX Gyre Termes Math, STIX Math, Asana Math, STIXGeneral, DejaVu Serif, DejaVu Sans, Charis SIL Compact");
   pref("font.name-list.sans-serif.x-math", "Roboto, Google Sans");
@@ -3637,9 +3549,6 @@ pref("reader.content_width", 3);
 // The default relative line height in reader mode (1-9)
 pref("reader.line_height", 4);
 
-// Determines if improved text and layout menu is enabled in reader mode.
-pref("reader.improved_text_menu.enabled", true);
-
 // The default character spacing in reader mode (1-9)
 pref("reader.character_spacing", 0);
 
@@ -3656,9 +3565,6 @@ pref("reader.color_scheme", "auto");
 
 // Color scheme values available in reader mode UI.
 pref("reader.color_scheme.values", "[\"auto\",\"light\",\"dark\",\"sepia\",\"contrast\",\"gray\"]");
-
-// Determines if updated color theme menu is enabled in reader mode.
-pref("reader.colors_menu.enabled", true);
 
 // The custom color scheme options in reader colors menu.
 pref("reader.custom_colors.foreground", "");
@@ -3701,7 +3607,6 @@ pref("webextensions.webRequest.requestBodyMaxRawBytes", 16777216);
   pref("webextensions.storage.session.enforceQuota", false);
 #endif
 
-pref("webextensions.storage.sync.enabled", true);
 // Should we use the old kinto-based implementation of storage.sync? To be removed in bug 1637465.
 pref("webextensions.storage.sync.kinto", false);
 // Server used by the old kinto-based implementation of storage.sync.
@@ -3756,6 +3661,9 @@ pref("browser.translations.useHTML", false);
 pref("browser.translations.automaticallyPopup", true);
 // Simulate the behavior of using a device that does not support the translations engine.
 // Requires restart.
+// Enables or disables the usage of lexical shortlisting for the translation models.
+// Using a lexical shortlist will increase translation speed, but may reduce quality.
+pref("browser.translations.useLexicalShortlist", false);
 pref("browser.translations.simulateUnsupportedEngine", false);
 // The translations code relies on asynchronous network request. Chaos mode simulates
 // flaky and slow network connections, so that the UI may be manually tested. The
@@ -3783,7 +3691,7 @@ pref("browser.ml.modelCacheTimeout", 120000);
 // Minimal Physical RAM required in GiB
 pref("browser.ml.minimumPhysicalMemory", 4);
 // Default memory usage for a model in GiB
-pref("browser.ml.defaultModelMemoryUsage", 2);
+pref("browser.ml.defaultModelMemoryUsage", 1);
 // Check for memory before running
 pref("browser.ml.checkForMemory", false);
 // Maximum memory pressure (%)
@@ -3854,6 +3762,7 @@ pref("toolkit.legacyUserProfileCustomizations.stylesheets", false);
     pref("datareporting.healthreport.infoURL", "https://www.mozilla.org/legal/privacy/firefox.html#health-report");
 
     // Health Report is enabled by default on all channels.
+    // Do note that the toggle on Fenix and Focus does NOT reflect to this pref.
     pref("datareporting.healthreport.uploadEnabled", true);
   #endif
 #endif
@@ -3981,8 +3890,9 @@ pref("services.common.log.logger.tokenserverclient", "Debug");
   // 3: WebDriver BiDi + CDP
   pref("remote.active-protocols", 1);
 
-  // Opt-in for async event processing (bug 1773393).
-  pref("remote.events.async.enabled", false);
+  // Enable processing and dispatching of actions from the
+  // parent process (bug 1773393).
+  pref("remote.events.async.enabled", true);
 
   // Enable WebDriver BiDi experimental commands and events.
   #if defined(NIGHTLY_BUILD)
@@ -4211,3 +4121,11 @@ pref("privacy.query_stripping.strip_on_share.enableTestMode", false);
 
 // To disable the Strip on Share context menu option if nothing can be stripped
 pref("privacy.query_stripping.strip_on_share.canDisable", true);
+
+// Captcha Detection
+pref("captchadetection.loglevel", "Warn");
+#if defined(NIGHTLY_BUILD)
+pref("captchadetection.actor.enabled", true);
+#else
+pref("captchadetection.actor.enabled", false);
+#endif

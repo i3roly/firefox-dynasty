@@ -312,6 +312,13 @@ export const PREFS_CONFIG = new Map([
     },
   ],
   [
+    "logowordmark.alwaysVisible",
+    {
+      title: "Show the logo and wordmark",
+      value: true,
+    },
+  ],
+  [
     "topSitesRows",
     {
       title: "Number of rows of Top Sites to display",
@@ -423,6 +430,36 @@ export const PREFS_CONFIG = new Map([
     },
   ],
   [
+    "newtabAdSize.leaderboard",
+    {
+      title: "Boolean flag to turn the leaderboard ad size on and off",
+      value: false,
+    },
+  ],
+  [
+    "newtabAdSize.leaderboard.position",
+    {
+      title:
+        "position for leaderboard spoc - should corralate to a row in DS grid",
+      value: "3",
+    },
+  ],
+  [
+    "newtabAdSize.billboard",
+    {
+      title: "Boolean flag to turn the billboard ad size on and off",
+      value: false,
+    },
+  ],
+  [
+    "newtabAdSize.billboard.position",
+    {
+      title:
+        "position for billboard spoc - should corralate to a row in DS grid",
+      value: "3",
+    },
+  ],
+  [
     "newtabLayouts.variant-a",
     {
       title: "Boolean flag to turn layout variant A on and off",
@@ -444,6 +481,14 @@ export const PREFS_CONFIG = new Map([
     },
   ],
   [
+    "discoverystream.sections.personalization.enabled",
+    {
+      title:
+        "Boolean flag to enable personalized sections layout. Allows users to follow/unfollow topic sections.",
+      value: false,
+    },
+  ],
+  [
     "discoverystream.sections.cards.enabled",
     {
       title:
@@ -457,6 +502,20 @@ export const PREFS_CONFIG = new Map([
       title:
         "Boolean flag to enable thumbs up/down buttons in the new card UI in recommended stories",
       value: true,
+    },
+  ],
+  [
+    "discoverystream.sections.following",
+    {
+      title: "A comma-separated list of strings of followed section topics",
+      value: "",
+    },
+  ],
+  [
+    "discoverystream.sections.blocked",
+    {
+      title: "A comma-separated list of strings of blocked section topics",
+      value: "",
     },
   ],
   [

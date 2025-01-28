@@ -20,6 +20,8 @@
 #include "mozilla/dom/MutationObservers.h"
 #include "mozilla/dom/Text.h"
 #include "mozilla/dom/TreeOrderedArrayInlines.h"
+#include "mozilla/dom/TrustedTypeUtils.h"
+#include "mozilla/dom/TrustedTypesConstants.h"
 #include "mozilla/dom/UnbindContext.h"
 #include "mozilla/EventDispatcher.h"
 #include "mozilla/IdentifierMapEntry.h"
@@ -882,9 +884,32 @@ nsresult ShadowRoot::Clone(dom::NodeInfo* aNodeInfo, nsINode** aResult) const {
   return NS_ERROR_DOM_NOT_SUPPORTED_ERR;
 }
 
-void ShadowRoot::SetHTMLUnsafe(const nsAString& aHTML) {
+void ShadowRoot::SetHTMLUnsafe(const TrustedHTMLOrString& aHTML,
+                               ErrorResult& aError) {
   RefPtr<Element> host = GetHost();
-  nsContentUtils::SetHTMLUnsafe(this, host, aHTML);
+  nsContentUtils::SetHTMLUnsafe(this, host, aHTML, true /*aIsShadowRoot*/,
+                                aError);
+}
+
+void ShadowRoot::GetInnerHTML(
+    OwningTrustedHTMLOrNullIsEmptyString& aInnerHTML) {
+  DocumentFragment::GetInnerHTML(aInnerHTML.SetAsNullIsEmptyString());
+}
+
+MOZ_CAN_RUN_SCRIPT void ShadowRoot::SetInnerHTML(
+    const TrustedHTMLOrNullIsEmptyString& aInnerHTML, ErrorResult& aError) {
+  constexpr nsLiteralString sink = u"ShadowRoot innerHTML"_ns;
+
+  Maybe<nsAutoString> compliantStringHolder;
+  const nsAString* compliantString =
+      TrustedTypeUtils::GetTrustedTypesCompliantString(
+          aInnerHTML, sink, kTrustedTypesOnlySinkGroup, *this,
+          compliantStringHolder, aError);
+  if (aError.Failed()) {
+    return;
+  }
+
+  SetInnerHTMLInternal(*compliantString, aError);
 }
 
 void ShadowRoot::GetHTML(const GetHTMLOptions& aOptions, nsAString& aResult) {

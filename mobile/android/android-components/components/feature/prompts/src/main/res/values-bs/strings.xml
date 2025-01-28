@@ -47,6 +47,8 @@
     <string name="mozac_feature_prompts_allow">Dozvoli</string>
     <!-- Text of a negative button in dialog requesting to open a new window. -->
     <string name="mozac_feature_prompts_deny">Odbij</string>
+    <!-- Text of the title of a dialog when a page is requesting to open a new window. -->
+    <string name="mozac_feature_prompts_popup_dialog_title">Dozvoliti otvaranje ove stranice?</string>
     <!-- Title of the dialog shown when a user is leaving a website and there is still data not saved yet. -->
     <string name="mozac_feature_prompt_before_unload_dialog_title">Da li ste sigurni?</string>
     <!-- Body text of the dialog shown when a user is leaving a website and there is still data not saved yet. -->
@@ -102,8 +104,6 @@
 
     <!-- Title for using the suggest strong password confirmation dialog -->
     <string name="mozac_feature_prompts_suggest_strong_password_title">Koristiti jaku lozinku?</string>
-    <!-- Content description for the suggest strong password confirmation dialog -->
-    <string name="mozac_feature_prompts_suggest_strong_password_description_2" moz:removedIn="133" tools:ignore="UnusedResources">Zaštitite svoje račune korištenjem jake, nasumično generisane lozinke. Bit će sačuvan na vašem računu za buduću upotrebu.</string>
 
     <!-- Content description for the suggest strong password confirmation dialog -->
     <string name="mozac_feature_prompts_suggest_strong_password_description_3">Zaštitite svoje račun korištenjem jake, nasumično generisane lozinke. Bit će sačuvana na vašem računu za buduću upotrebu.</string>

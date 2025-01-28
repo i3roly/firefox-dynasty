@@ -94,28 +94,27 @@ fn report_main() {
     let log_target = logging::init();
 
     let mut config = Config::new();
-    let config_result = config.read_from_environment();
+    config.read_from_environment();
     config.log_target = Some(log_target);
 
     let mut config = Arc::new(config);
 
-    let result = config_result.and_then(|()| {
-        let attempted_send = try_run(&mut config)?;
-        if !attempted_send {
-            // Exited without attempting to send the crash report; delete files.
-            config.delete_files();
+    match try_run(&mut config) {
+        Ok(attempted_send) => {
+            if !attempted_send {
+                // Exited without attempting to send the crash report; delete files.
+                config.delete_files();
+            }
         }
-        Ok(())
-    });
-
-    if let Err(message) = result {
-        // TODO maybe errors should also delete files?
-        log::error!("exiting with error: {message}");
-        if !config.auto_submit {
-            // Only show a dialog if auto_submit is disabled.
-            ui::error_dialog(&config, message);
+        Err(message) => {
+            // TODO maybe errors should also delete files?
+            log::error!("exiting with error: {message}");
+            if !config.auto_submit {
+                // Only show a dialog if auto_submit is disabled.
+                ui::error_dialog(&config, message);
+            }
+            std::process::exit(1);
         }
-        std::process::exit(1);
     }
 }
 
@@ -202,7 +201,7 @@ fn report_main() {
         cfg.ping_dir = Some("ping_dir".into());
         cfg.dump_file = Some("minidump.dmp".into());
         cfg.restart_command = Some("mockfox".into());
-        cfg.strings = Some(lang::load().unwrap());
+        cfg.strings = Some(lang::load());
 
         let mut cfg = Arc::new(cfg);
         try_run(&mut cfg)
@@ -242,6 +241,12 @@ fn try_run(config: &mut Arc<Config>) -> anyhow::Result<bool> {
             config.move_crash_data_to_pending()?;
             extra
         };
+
+        // Since Glean v63.0.0, custom pings are required to be instantiated prior to Glean init
+        // in order to ensure they are enabled and able to collect data. This is due to the data
+        // collection state being determined at the ping level now instead of just by the global
+        // Glean collection enabled flag. See Bug 1934931 for more information.
+        _ = &*glean::crash;
 
         // Initialize glean here since it relies on the data directory (which will not change after
         // this point). We could potentially initialize it even later (only just before we need

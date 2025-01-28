@@ -91,6 +91,8 @@ class SearchRobot {
         searchTerm: String,
         shouldEditKeyword: Boolean = false,
         numberOfDeletionSteps: Int = 0,
+        shouldUseSearchShort: Boolean = false,
+        searchEngineName: String = "",
     ) {
         rule.waitForIdle()
         for (i in 1..RETRY_COUNT) {
@@ -114,6 +116,10 @@ class SearchRobot {
                     mDevice.pressBack()
                     homeScreen {
                     }.openSearch {
+                        if (shouldUseSearchShort) {
+                            clickSearchSelectorButton()
+                            selectTemporarySearchMethod(searchEngineName)
+                        }
                         typeSearch(searchTerm)
                         if (shouldEditKeyword) {
                             deleteSearchKeywordCharacters(numberOfDeletionSteps = numberOfDeletionSteps)
@@ -360,20 +366,19 @@ class SearchRobot {
         private lateinit var sessionLoadedIdlingResource: SessionLoadedIdlingResource
 
         fun dismissSearchBar(interact: HomeScreenRobot.() -> Unit): HomeScreenRobot.Transition {
-            try {
-                Log.i(TAG, "dismissSearchBar: Waiting for $waitingTime ms for the search wrapper to exist")
-                searchWrapper().waitForExists(waitingTime)
-                Log.i(TAG, "dismissSearchBar: Waited for $waitingTime ms for the search wrapper to exist")
-                Log.i(TAG, "dismissSearchBar: Trying to click device back button")
-                mDevice.pressBack()
-                Log.i(TAG, "dismissSearchBar: Clicked device back button")
-                assertUIObjectIsGone(searchWrapper())
-            } catch (e: AssertionError) {
-                Log.i(TAG, "dismissSearchBar: AssertionError caught, executing fallback methods")
-                Log.i(TAG, "dismissSearchBar: Trying to click device back button")
-                mDevice.pressBack()
-                Log.i(TAG, "dismissSearchBar: Clicked device back button")
-                assertUIObjectIsGone(searchWrapper())
+            for (i in 0..1) {
+                try {
+                    Log.i(TAG, "dismissSearchBar: Trying to click device back button")
+                    mDevice.pressBack()
+                    Log.i(TAG, "dismissSearchBar: Clicked device back button")
+                    assertUIObjectIsGone(searchWrapper())
+
+                    break
+                } catch (e: AssertionError) {
+                    if (i == 1) {
+                        throw e
+                    }
+                }
             }
 
             HomeScreenRobot().interact()

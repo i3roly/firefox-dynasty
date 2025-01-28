@@ -41,6 +41,7 @@
 #include "vm/TypedArrayObject.h"
 #include "vm/TypeofEqOperand.h"  // TypeofEqOperand
 #include "vm/Watchtower.h"
+#include "vm/WrapperObject.h"
 #include "wasm/WasmGcObject.h"
 
 #include "debugger/DebugAPI-inl.h"
@@ -818,7 +819,7 @@ int32_t StringTrimEndIndex(const JSString* str, int32_t start) {
 }
 
 JSString* CharCodeToLowerCase(JSContext* cx, int32_t code) {
-  RootedString str(cx, StringFromCharCode(cx, code));
+  JSString* str = StringFromCharCode(cx, code);
   if (!str) {
     return nullptr;
   }
@@ -826,7 +827,7 @@ JSString* CharCodeToLowerCase(JSContext* cx, int32_t code) {
 }
 
 JSString* CharCodeToUpperCase(JSContext* cx, int32_t code) {
-  RootedString str(cx, StringFromCharCode(cx, code));
+  JSString* str = StringFromCharCode(cx, code);
   if (!str) {
     return nullptr;
   }
@@ -1823,16 +1824,10 @@ static MOZ_ALWAYS_INLINE bool ValueToAtomOrSymbolPure(JSContext* cx,
                                                       const Value& idVal,
                                                       jsid* id) {
   if (MOZ_LIKELY(idVal.isString())) {
-    JSString* s = idVal.toString();
-    JSAtom* atom;
-    if (s->isAtom()) {
-      atom = &s->asAtom();
-    } else {
-      atom = AtomizeString(cx, s);
-      if (!atom) {
-        cx->recoverFromOutOfMemory();
-        return false;
-      }
+    JSAtom* atom = AtomizeString(cx, idVal.toString());
+    if (!atom) {
+      cx->recoverFromOutOfMemory();
+      return false;
     }
 
     // Watch out for integer ids because they may be stored in dense elements.
@@ -2464,6 +2459,8 @@ bool DoConcatStringObject(JSContext* cx, HandleValue lhs, HandleValue rhs,
 }
 
 bool IsPossiblyWrappedTypedArray(JSContext* cx, JSObject* obj, bool* result) {
+  MOZ_ASSERT(obj->is<WrapperObject>(), "non-wrappers are handled in JIT code");
+
   JSObject* unwrapped = CheckedUnwrapDynamic(obj, cx);
   if (!unwrapped) {
     ReportAccessDenied(cx);
@@ -3166,12 +3163,13 @@ bool MapObjectSetFromIC(JSContext* cx, Handle<MapObject*> obj, HandleValue key,
 template <class T>
 static mozilla::HashNumber HashValue(JSContext* cx, T* obj,
                                      const Value* value) {
-  RootedValue rootedValue(cx, *value);
+  MOZ_ASSERT(obj->size() > 0);
+
   HashableValue hashable;
-  MOZ_ALWAYS_TRUE(hashable.setValue(cx, rootedValue));
+  MOZ_ALWAYS_TRUE(hashable.setValue(cx, *value));
 
   using Table = typename T::Table;
-  return Table(obj).hash(hashable);
+  return *Table(obj).hash(hashable);
 }
 #endif
 

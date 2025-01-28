@@ -302,14 +302,14 @@ void PrefChanged(const char* aPref, void* aClosure) {
     sCubebSandbox = Preferences::GetBool(aPref);
     MOZ_LOG(gCubebLog, LogLevel::Verbose,
             ("%s: %s", PREF_CUBEB_SANDBOX, sCubebSandbox ? "true" : "false"));
-#if defined(MOZ_SANDBOX)
+#  if defined(MOZ_SANDBOX)
     if (!sCubebSandbox && IsContentSandboxEnabled()) {
       sCubebSandbox = true;
       MOZ_LOG(gCubebLog, LogLevel::Error,
               ("%s: false, but content sandbox enabled - forcing true",
                PREF_CUBEB_SANDBOX));
     }
-#endif
+#  endif
   } else if (strcmp(aPref, PREF_AUDIOIPC_STACK_SIZE) == 0) {
     StaticMutexAutoLock lock(sMutex);
     sAudioIPCStackSize = Preferences::GetUint(PREF_AUDIOIPC_STACK_SIZE,

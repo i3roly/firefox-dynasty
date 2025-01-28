@@ -21,7 +21,7 @@ test_newtab({
     customizeButton.click();
 
     await ContentTaskUtils.waitForCondition(
-      () => content.document.querySelector(".customize-menu"),
+      () => content.document.querySelector(".customize-animate-enter-done"),
       "Customize Menu should be rendered now"
     );
   },

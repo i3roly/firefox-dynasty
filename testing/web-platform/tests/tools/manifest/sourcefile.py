@@ -85,7 +85,26 @@ _any_variants: Dict[Text, VariantData] = {
     "dedicatedworker-module": {"suffix": ".any.worker-module.html"},
     "worker": {"longhand": {"dedicatedworker", "sharedworker", "serviceworker"}},
     "worker-module": {},
-    "shadowrealm": {},
+    "shadowrealm-in-window": {},
+    "shadowrealm-in-shadowrealm": {},
+    "shadowrealm-in-dedicatedworker": {},
+    "shadowrealm-in-sharedworker": {},
+    "shadowrealm-in-serviceworker": {
+        "force_https": True,
+        "suffix": ".https.any.shadowrealm-in-serviceworker.html",
+    },
+    "shadowrealm-in-audioworklet": {
+        "force_https": True,
+        "suffix": ".https.any.shadowrealm-in-audioworklet.html",
+    },
+    "shadowrealm": {"longhand": {
+        "shadowrealm-in-window",
+        "shadowrealm-in-shadowrealm",
+        "shadowrealm-in-dedicatedworker",
+        "shadowrealm-in-sharedworker",
+        "shadowrealm-in-serviceworker",
+        "shadowrealm-in-audioworklet",
+    }},
     "jsshell": {"suffix": ".any.js"},
 }
 
@@ -927,7 +946,8 @@ class SourceFile:
                     self.tests_root,
                     self.rel_path,
                     self.url_base,
-                    self.rel_url
+                    self.rel_url,
+                    testdriver=self.has_testdriver,
                 )]
 
         elif self.name_is_print_reftest:
@@ -946,6 +966,7 @@ class SourceFile:
                     viewport_size=self.viewport_size,
                     fuzzy=self.fuzzy,
                     page_ranges=self.page_ranges,
+                    testdriver=self.has_testdriver,
                 )]
 
         elif self.name_is_multi_global:
@@ -1046,7 +1067,8 @@ class SourceFile:
                     timeout=self.timeout,
                     viewport_size=self.viewport_size,
                     dpi=self.dpi,
-                    fuzzy=self.fuzzy
+                    fuzzy=self.fuzzy,
+                    testdriver=self.has_testdriver,
                 ))
 
         elif self.content_is_css_visual and not self.name_is_reference:

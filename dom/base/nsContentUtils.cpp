@@ -199,6 +199,9 @@
 #include "mozilla/dom/Selection.h"
 #include "mozilla/dom/ShadowRoot.h"
 #include "mozilla/dom/Text.h"
+#include "mozilla/dom/TrustedHTML.h"
+#include "mozilla/dom/TrustedTypesConstants.h"
+#include "mozilla/dom/TrustedTypeUtils.h"
 #include "mozilla/dom/UserActivation.h"
 #include "mozilla/dom/ViewTransition.h"
 #include "mozilla/dom/WindowContext.h"
@@ -1817,50 +1820,6 @@ bool nsContentUtils::IsHTMLBlockLevelElement(nsIContent* aContent) {
       nsGkAtoms::listing, nsGkAtoms::menu, nsGkAtoms::nav, nsGkAtoms::ol,
       nsGkAtoms::p, nsGkAtoms::pre, nsGkAtoms::section, nsGkAtoms::table,
       nsGkAtoms::ul, nsGkAtoms::xmp);
-}
-
-/* static */
-bool nsContentUtils::ParseIntMarginValue(const nsAString& aString,
-                                         nsIntMargin& result) {
-  nsAutoString marginStr(aString);
-  marginStr.CompressWhitespace(true, true);
-  if (marginStr.IsEmpty()) {
-    return false;
-  }
-
-  int32_t start = 0, end = 0;
-  for (int count = 0; count < 4; count++) {
-    if ((uint32_t)end >= marginStr.Length()) return false;
-
-    // top, right, bottom, left
-    if (count < 3)
-      end = Substring(marginStr, start).FindChar(',');
-    else
-      end = Substring(marginStr, start).Length();
-
-    if (end <= 0) return false;
-
-    nsresult ec;
-    int32_t val = nsString(Substring(marginStr, start, end)).ToInteger(&ec);
-    if (NS_FAILED(ec)) return false;
-
-    switch (count) {
-      case 0:
-        result.top = val;
-        break;
-      case 1:
-        result.right = val;
-        break;
-      case 2:
-        result.bottom = val;
-        break;
-      case 3:
-        result.left = val;
-        break;
-    }
-    start += end + 1;
-  }
-  return true;
 }
 
 // static
@@ -5532,7 +5491,19 @@ uint32_t computeSanitizationFlags(nsIPrincipal* aPrincipal, int32_t aFlags) {
 /* static */
 void nsContentUtils::SetHTMLUnsafe(FragmentOrElement* aTarget,
                                    Element* aContext,
-                                   const nsAString& aSource) {
+                                   const TrustedHTMLOrString& aSource,
+                                   bool aIsShadowRoot, ErrorResult& aError) {
+  constexpr nsLiteralString elementSink = u"Element setHTMLUnsafe"_ns;
+  constexpr nsLiteralString shadowRootSink = u"ShadowRoot setHTMLUnsafe"_ns;
+  Maybe<nsAutoString> compliantStringHolder;
+  const nsAString* compliantString =
+      TrustedTypeUtils::GetTrustedTypesCompliantString(
+          aSource, aIsShadowRoot ? shadowRootSink : elementSink,
+          kTrustedTypesOnlySinkGroup, *aContext, compliantStringHolder, aError);
+  if (aError.Failed()) {
+    return;
+  }
+
   RefPtr<DocumentFragment> fragment;
   {
     MOZ_ASSERT(!sFragmentParsingActive,
@@ -5549,8 +5520,9 @@ void nsContentUtils::SetHTMLUnsafe(FragmentOrElement* aTarget,
 
     RefPtr<Document> doc = aTarget->OwnerDoc();
     fragment = doc->CreateDocumentFragment();
+
     nsresult rv = sHTMLFragmentParser->ParseFragment(
-        aSource, fragment, contextLocalName, contextNameSpaceID,
+        *compliantString, fragment, contextLocalName, contextNameSpaceID,
         fragment->OwnerDoc()->GetCompatibilityMode() ==
             eCompatibility_NavQuirks,
         true, true);
@@ -6976,13 +6948,6 @@ void* nsContentUtils::AllocClassMatchingInfo(nsINode* aRootNode,
   return info;
 }
 
-bool nsContentUtils::HasScrollgrab(nsIContent* aContent) {
-  // If we ever standardize this feature we'll want to hook this up properly
-  // again. For now we're removing all the DOM-side code related to it but
-  // leaving the layout and APZ handling for it in place.
-  return false;
-}
-
 void nsContentUtils::FlushLayoutForTree(nsPIDOMWindowOuter* aWindow) {
   if (!aWindow) {
     return;
@@ -7903,7 +7868,9 @@ bool nsContentUtils::IsCORSSafelistedRequestHeader(const nsACString& aName,
          (aName.LowerCaseEqualsLiteral("content-type") &&
           nsContentUtils::IsAllowedNonCorsContentType(aValue)) ||
          (aName.LowerCaseEqualsLiteral("range") &&
-          nsContentUtils::IsAllowedNonCorsRange(aValue));
+          nsContentUtils::IsAllowedNonCorsRange(aValue)) ||
+         (StaticPrefs::network_http_idempotencyKey_enabled() &&
+          aName.LowerCaseEqualsLiteral("idempotency-key"));
 }
 
 mozilla::LogModule* nsContentUtils::ResistFingerprintingLog() {
@@ -9000,6 +8967,7 @@ bool nsContentUtils::IsPreloadType(nsContentPolicyType aType) {
           aType == nsIContentPolicy::TYPE_INTERNAL_IMAGE_PRELOAD ||
           aType == nsIContentPolicy::TYPE_INTERNAL_STYLESHEET_PRELOAD ||
           aType == nsIContentPolicy::TYPE_INTERNAL_FONT_PRELOAD ||
+          aType == nsIContentPolicy::TYPE_INTERNAL_JSON_PRELOAD ||
           aType == nsIContentPolicy::TYPE_INTERNAL_FETCH_PRELOAD);
 }
 

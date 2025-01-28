@@ -71,6 +71,8 @@ export const INITIAL_STATE = {
     impressions: {
       feed: {},
     },
+    // Used to show blocks in newtab devtools.
+    blocks: {},
     spocs: {
       spocs_endpoint: "",
       lastUpdated: null,
@@ -338,7 +340,8 @@ function Dialog(prevState = INITIAL_STATE.Dialog, action) {
       return Object.assign({}, prevState, { visible: true, data: action.data });
     case at.DIALOG_CANCEL:
       return Object.assign({}, prevState, { visible: false });
-    case at.DELETE_HISTORY_URL:
+    case at.DIALOG_CLOSE:
+      // Reset and hide the confirmation dialog once the action is complete.
       return Object.assign({}, INITIAL_STATE.Dialog);
     default:
       return prevState;
@@ -747,7 +750,11 @@ function DiscoveryStream(prevState = INITIAL_STATE.DiscoveryStream, action) {
           feed: action.data,
         },
       };
-
+    case at.DISCOVERY_STREAM_DEV_BLOCKS:
+      return {
+        ...prevState,
+        blocks: action.data,
+      };
     case at.DISCOVERY_STREAM_SPOCS_CAPS:
       return {
         ...prevState,
@@ -879,6 +886,12 @@ function DiscoveryStream(prevState = INITIAL_STATE.DiscoveryStream, action) {
       return {
         ...prevState,
         showTopicSelection: false,
+      };
+    case at.SECTION_BLOCKED:
+      return {
+        ...prevState,
+        showBlockSectionConfirmation: true,
+        sectionData: action.data,
       };
     default:
       return prevState;

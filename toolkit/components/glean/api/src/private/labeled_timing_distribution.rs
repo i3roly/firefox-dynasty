@@ -16,6 +16,9 @@ use crate::private::{DistributionData, ErrorType, MetricId, TimerId, TimingDistr
 
 use crate::ipc::with_ipc_payload;
 
+#[cfg(feature = "with_gecko")]
+use super::timing_distribution::{TDMPayload, TimingDistributionMetricMarker};
+
 /// A timing distribution metric that knows it's a labeled timing distribution's submetric.
 ///
 /// Due to having to support GIFFT from Rust, this type ends up looking a little different from the rest.
@@ -58,6 +61,21 @@ impl TimingDistribution for LabeledTimingDistributionMetric {
                     self.id.0,
                     &nsCString::from(&self.label),
                     timer_id.id,
+                );
+            }
+            // See note on TimingDistribution::start
+            if gecko_profiler::can_accept_markers() {
+                gecko_profiler::add_marker(
+                    "TimingDistribution::start",
+                    super::profiler_utils::TelemetryProfilerCategory,
+                    gecko_profiler::MarkerOptions::default()
+                        .with_timing(gecko_profiler::MarkerTiming::instant_now()),
+                    TimingDistributionMetricMarker::new(
+                        self.id,
+                        Some(self.label.clone()),
+                        Some(timer_id.id),
+                        None,
+                    ),
                 );
             }
         }
@@ -106,6 +124,21 @@ impl TimingDistribution for LabeledTimingDistributionMetric {
                     timer_id.id,
                 );
             }
+            // See note on TimingDistribution::start
+            if gecko_profiler::can_accept_markers() {
+                gecko_profiler::add_marker(
+                    "TimingDistribution::stop",
+                    super::profiler_utils::TelemetryProfilerCategory,
+                    gecko_profiler::MarkerOptions::default()
+                        .with_timing(gecko_profiler::MarkerTiming::instant_now()),
+                    TimingDistributionMetricMarker::new(
+                        self.id,
+                        Some(self.label.clone()),
+                        Some(timer_id.id),
+                        None,
+                    ),
+                );
+            }
         }
     }
 
@@ -128,18 +161,75 @@ impl TimingDistribution for LabeledTimingDistributionMetric {
                     id.id,
                 );
             }
+            // See note on TimingDistribution::start
+            if gecko_profiler::can_accept_markers() {
+                gecko_profiler::add_marker(
+                    "TimingDistribution::cancel",
+                    super::profiler_utils::TelemetryProfilerCategory,
+                    gecko_profiler::MarkerOptions::default()
+                        .with_timing(gecko_profiler::MarkerTiming::instant_now()),
+                    TimingDistributionMetricMarker::new(
+                        self.id,
+                        Some(self.label.clone()),
+                        Some(id.id),
+                        None,
+                    ),
+                );
+            }
         }
     }
 
     pub fn accumulate_samples(&self, samples: Vec<i64>) {
+        #[cfg(feature = "with_gecko")]
+        if gecko_profiler::can_accept_markers() {
+            gecko_profiler::add_marker(
+                "TimingDistribution::accumulate",
+                super::profiler_utils::TelemetryProfilerCategory,
+                Default::default(),
+                TimingDistributionMetricMarker::new(
+                    self.id,
+                    Some(self.label.clone()),
+                    None,
+                    Some(TDMPayload::from_samples_signed(&samples)),
+                ),
+            );
+        }
         self.inner.accumulate_samples(samples);
     }
 
     pub fn accumulate_raw_samples_nanos(&self, samples: Vec<u64>) {
+        #[cfg(feature = "with_gecko")]
+        if gecko_profiler::can_accept_markers() {
+            gecko_profiler::add_marker(
+                "TimingDistribution::accumulate",
+                super::profiler_utils::TelemetryProfilerCategory,
+                Default::default(),
+                TimingDistributionMetricMarker::new(
+                    self.id,
+                    Some(self.label.clone()),
+                    None,
+                    Some(TDMPayload::from_samples_unsigned(&samples)),
+                ),
+            );
+        }
         self.inner.accumulate_raw_samples_nanos(samples);
     }
 
     pub fn accumulate_single_sample(&self, sample: i64) {
+        #[cfg(feature = "with_gecko")]
+        if gecko_profiler::can_accept_markers() {
+            gecko_profiler::add_marker(
+                "TimingDistribution::accumulate",
+                super::profiler_utils::TelemetryProfilerCategory,
+                Default::default(),
+                TimingDistributionMetricMarker::new(
+                    self.id,
+                    Some(self.label.clone()),
+                    None,
+                    Some(TDMPayload::Sample(sample.clone())),
+                ),
+            );
+        }
         self.inner.accumulate_single_sample(sample);
     }
 
@@ -193,6 +283,20 @@ impl TimingDistribution for LabeledTimingDistributionMetric {
                     self.id.0,
                     &nsCString::from(&self.label),
                     sample_ms,
+                );
+            }
+
+            if gecko_profiler::can_accept_markers() {
+                gecko_profiler::add_marker(
+                    "TimingDistribution::accumulate",
+                    super::profiler_utils::TelemetryProfilerCategory,
+                    Default::default(),
+                    TimingDistributionMetricMarker::new(
+                        self.id,
+                        Some(self.label.clone()),
+                        None,
+                        Some(TDMPayload::Duration(duration.clone())),
+                    ),
                 );
             }
         }

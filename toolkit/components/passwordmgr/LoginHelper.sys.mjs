@@ -16,6 +16,7 @@ import { XPCOMUtils } from "resource://gre/modules/XPCOMUtils.sys.mjs";
 const lazy = {};
 ChromeUtils.defineESModuleGetters(lazy, {
   OSKeyStore: "resource://gre/modules/OSKeyStore.sys.mjs",
+  BrowserWindowTracker: "resource:///modules/BrowserWindowTracker.sys.mjs",
 });
 
 XPCOMUtils.defineLazyServiceGetter(
@@ -1238,7 +1239,8 @@ export const LoginHelper = {
 
     const paramsPart = params.toString() ? `?${params}` : "";
 
-    const browser = window.gBrowser ?? window.opener?.gBrowser;
+    let browserWindow = lazy.BrowserWindowTracker.getTopWindow();
+    const browser = browserWindow.gBrowser ?? browserWindow.opener?.gBrowser;
 
     const tab = browser.addTrustedTab(`about:logins${paramsPart}`, {
       inBackground: false,
@@ -1337,7 +1339,7 @@ export const LoginHelper = {
    * @returns {boolean} True if any of the rules matches
    */
   isInferredNonUsernameField(element) {
-    const expr = /search|code|add/i;
+    const expr = /\b(search|code|add)\b/i;
 
     if (
       Logic.elementAttrsMatchRegex(element, expr) ||

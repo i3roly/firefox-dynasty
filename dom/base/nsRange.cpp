@@ -37,6 +37,8 @@
 #include "mozilla/dom/RangeBinding.h"
 #include "mozilla/dom/Selection.h"
 #include "mozilla/dom/Text.h"
+#include "mozilla/dom/TrustedTypeUtils.h"
+#include "mozilla/dom/TrustedTypesConstants.h"
 #include "mozilla/Logging.h"
 #include "mozilla/Maybe.h"
 #include "mozilla/PresShell.h"
@@ -506,7 +508,9 @@ void nsRange::CharacterDataChanged(nsIContent* aContent,
       bool isCommonAncestor =
           IsInAnySelection() && mStart.Container() == mEnd.Container();
       if (isCommonAncestor) {
-        UnregisterClosestCommonInclusiveAncestor(mStart.Container(), false);
+        MOZ_DIAGNOSTIC_ASSERT(mStart.Container() ==
+                              mRegisteredClosestCommonInclusiveAncestor);
+        UnregisterClosestCommonInclusiveAncestor();
         RegisterClosestCommonInclusiveAncestor(newStart.Container());
       }
       if (mStart.Container()
@@ -544,8 +548,10 @@ void nsRange::CharacterDataChanged(nsIContent* aContent,
       bool isCommonAncestor =
           IsInAnySelection() && mStart.Container() == mEnd.Container();
       if (isCommonAncestor && !newStart.Container()) {
+        MOZ_DIAGNOSTIC_ASSERT(mStart.Container() ==
+                              mRegisteredClosestCommonInclusiveAncestor);
         // The split occurs inside the range.
-        UnregisterClosestCommonInclusiveAncestor(mStart.Container(), false);
+        UnregisterClosestCommonInclusiveAncestor();
         RegisterClosestCommonInclusiveAncestor(
             mStart.Container()->GetParentNode());
         newEnd.Container()
@@ -681,7 +687,7 @@ void nsRange::ContentInserted(nsIContent* aChild) {
   }
 }
 
-void nsRange::ContentRemoved(nsIContent* aChild, nsIContent* aPreviousSibling) {
+void nsRange::ContentWillBeRemoved(nsIContent* aChild) {
   MOZ_ASSERT(mIsPositioned);
 
   nsINode* container = aChild->GetParentNode();
@@ -700,7 +706,7 @@ void nsRange::ContentRemoved(nsIContent* aChild, nsIContent* aPreviousSibling) {
     // We're only interested if our boundary reference was removed, otherwise
     // we can just invalidate the offset.
     if (aChild == mStart.Ref()) {
-      newStart = {container, aPreviousSibling};
+      newStart = {container, aChild->GetPreviousSibling()};
     } else {
       newStart.CopyFrom(mStart, RangeBoundaryIsMutationObserved::Yes);
       newStart.InvalidateOffset();
@@ -708,14 +714,14 @@ void nsRange::ContentRemoved(nsIContent* aChild, nsIContent* aPreviousSibling) {
   } else {
     gravitateStart = Some(startContainer->IsInclusiveDescendantOf(aChild));
     if (gravitateStart.value()) {
-      newStart = {container, aPreviousSibling};
+      newStart = {container, aChild->GetPreviousSibling()};
     }
   }
 
   // Do same thing for end boundry.
   if (container == endContainer) {
     if (aChild == mEnd.Ref()) {
-      newEnd = {container, aPreviousSibling};
+      newEnd = {container, aChild->GetPreviousSibling()};
     } else {
       newEnd.CopyFrom(mEnd, RangeBoundaryIsMutationObserved::Yes);
       newEnd.InvalidateOffset();
@@ -727,7 +733,7 @@ void nsRange::ContentRemoved(nsIContent* aChild, nsIContent* aPreviousSibling) {
       gravitateEnd = endContainer->IsInclusiveDescendantOf(aChild);
     }
     if (gravitateEnd) {
-      newEnd = {container, aPreviousSibling};
+      newEnd = {container, aChild->GetPreviousSibling()};
     }
   }
 
@@ -2731,6 +2737,29 @@ already_AddRefed<DocumentFragment> nsRange::CreateContextualFragment(
 
   return nsContentUtils::CreateContextualFragment(mStart.Container(), aFragment,
                                                   false, aRv);
+}
+
+already_AddRefed<DocumentFragment> nsRange::CreateContextualFragment(
+    const TrustedHTMLOrString& aFragment, ErrorResult& aRv) const {
+  if (!mIsPositioned) {
+    aRv.Throw(NS_ERROR_FAILURE);
+    return nullptr;
+  }
+  MOZ_ASSERT(mStart.Container());
+
+  constexpr nsLiteralString sink = u"Range createContextualFragment"_ns;
+  Maybe<nsAutoString> compliantStringHolder;
+  nsCOMPtr<nsINode> node = mStart.Container();
+  const nsAString* compliantString =
+      TrustedTypeUtils::GetTrustedTypesCompliantString(
+          aFragment, sink, kTrustedTypesOnlySinkGroup, *node,
+          compliantStringHolder, aRv);
+  if (aRv.Failed()) {
+    return nullptr;
+  }
+
+  return nsContentUtils::CreateContextualFragment(mStart.Container(),
+                                                  *compliantString, false, aRv);
 }
 
 static void ExtractRectFromOffset(nsIFrame* aFrame, const int32_t aOffset,

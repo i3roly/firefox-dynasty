@@ -59,8 +59,6 @@ skip-if = [
 
 ["browser_ext_activeScript.js"]
 
-["browser_ext_addon_debugging_netmonitor.js"]
-
 ["browser_ext_autocompletepopup.js"]
 disabled = "bug 1438663 # same focus issue as Bug 1438663"
 
@@ -496,6 +494,10 @@ https_first_disabled = true
 https_first_disabled = true
 
 ["browser_ext_tabs_events.js"]
+skip-if = [
+  "os == 'win' && os_version == '11.26100' && processor == 'x86' && debug", # Bug 1786601
+  "os == 'win' && os_version == '11.26100' && processor == 'x86_64' && debug", # Bug 1786601
+]
 
 ["browser_ext_tabs_events_order.js"]
 https_first_disabled = true
@@ -609,6 +611,9 @@ skip-if = [
   "os == 'linux' && os_version == '18.04'", # Bug 1651261
   "win11_2009 && asan", # Bug 1797751
   "win11_2009 && debug", # Bug 1797751
+  "os == 'win' && os_version == '11.26100' && processor == 'x86' && debug", # Bug 1797751
+  "os == 'win' && os_version == '11.26100' && processor == 'x86_64' && asan", # Bug 1797751
+  "os == 'win' && os_version == '11.26100' && processor == 'x86_64' && debug", # Bug 1797751
   "os == 'mac' && os_version == '14.70' && processor == 'x86_64'", # Bug 1869793
 ]
 
@@ -701,6 +706,8 @@ skip-if = [
 ["browser_unified_extensions_cui.js"]
 
 ["browser_unified_extensions_doorhangers.js"]
+
+["browser_unified_extensions_item_messagebar.js"]
 
 ["browser_unified_extensions_messages.js"]
 

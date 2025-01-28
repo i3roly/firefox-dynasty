@@ -163,16 +163,15 @@ function getByL10nId(l10nId, doc = document) {
  * @param {string} langTag - A BCP-47 language tag.
  */
 const getIntlDisplayName = (() => {
-  let displayNames = null;
+  let languageDisplayNames = null;
 
   return langTag => {
-    if (!displayNames) {
-      displayNames = new Services.intl.DisplayNames(undefined, {
-        type: "language",
+    if (!languageDisplayNames) {
+      languageDisplayNames = TranslationsParent.createLanguageDisplayNames({
         fallback: "none",
       });
     }
-    return displayNames.of(langTag);
+    return languageDisplayNames.of(langTag);
   };
 })();
 
@@ -682,7 +681,7 @@ class FullPageTranslationsTestUtils {
       );
     is(
       locale.innerText,
-      toLanguage,
+      toLanguage.split("-")[0],
       `The expected language tag "${toLanguage}" is shown.`
     );
     is(
@@ -1702,7 +1701,10 @@ class SelectTranslationsTestUtils {
 
         await waitForCondition(
           () =>
-            menuItem.getAttribute("target-language") === expectedTargetLanguage,
+            TranslationsUtils.langTagsMatch(
+              menuItem.getAttribute("target-language"),
+              expectedTargetLanguage
+            ),
           `Waiting for translate-selection context menu item to match the expected target language ${expectedTargetLanguage}`
         );
         await waitForCondition(
@@ -2951,6 +2953,8 @@ class TranslationsSettingsTestUtils {
   static async openAboutPreferencesTranslationsSettingsPane(settingsButton) {
     const document = gBrowser.selectedBrowser.contentDocument;
 
+    const translationsPane =
+      content.window.gCategoryModules.get("paneTranslations");
     const promise = BrowserTestUtils.waitForEvent(
       document,
       "paneshown",
@@ -2961,42 +2965,7 @@ class TranslationsSettingsTestUtils {
     click(settingsButton, "Click settings button");
     await promise;
 
-    const elements = {
-      backButton: document.getElementById("translations-settings-back-button"),
-      header: document.getElementById("translations-settings-header"),
-      translationsSettingsDescription: document.getElementById(
-        "translations-settings-description"
-      ),
-      translateAlwaysHeader: document.getElementById(
-        "translations-settings-always-translate"
-      ),
-      translateNeverHeader: document.getElementById(
-        "translations-settings-never-translate"
-      ),
-      translateAlwaysMenuList: document.getElementById(
-        "translations-settings-always-translate-list"
-      ),
-      translateNeverMenuList: document.getElementById(
-        "translations-settings-never-translate-list"
-      ),
-      translateNeverSiteHeader: document.getElementById(
-        "translations-settings-never-sites-header"
-      ),
-      translateNeverSiteDesc: document.getElementById(
-        "translations-settings-never-sites"
-      ),
-      translateDownloadLanguagesHeader: document
-        .getElementById("translations-settings-download-section")
-        .querySelector("h2"),
-      translateDownloadLanguagesLearnMore: document.getElementById(
-        "download-languages-learn-more"
-      ),
-      translateDownloadLanguagesList: document.getElementById(
-        "translations-settings-download-section"
-      ),
-    };
-
-    return elements;
+    return translationsPane.elements;
   }
 
   /**

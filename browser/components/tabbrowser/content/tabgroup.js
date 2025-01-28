@@ -15,10 +15,17 @@
       <html:slot/>
       `;
 
+    /** @type {string} */
+    #label;
+
     /** @type {MozTextLabel} */
     #labelElement;
 
+    /** @type {string} */
     #colorCode;
+
+    /** @type {MutationObserver} */
+    #tabChangeObserver;
 
     constructor() {
       super();
@@ -31,6 +38,13 @@
     }
 
     connectedCallback() {
+      // Always set the mutation observer to listen for tab change events, even
+      // if we are already initialized.
+      // This is needed to ensure events continue to fire even if the tab group is
+      // moved from the horizontal to vertical tab layout or vice-versa, which
+      // causes the component to be repositioned in the DOM.
+      this.#observeTabChanges();
+
       if (this._initialized) {
         return;
       }
@@ -44,42 +58,12 @@
       this.#labelElement = this.querySelector(".tab-group-label");
       this.#labelElement.addEventListener("click", this);
 
-      this.#updateLabelAriaAttributes(this.label);
-      this.#updateCollapsedAriaAttributes(this.collapsed);
+      this.#updateLabelAriaAttributes();
+      this.#updateCollapsedAriaAttributes();
 
       this.createdDate = Date.now();
 
       this.addEventListener("TabSelect", this);
-
-      this._tabsChangedObserver = new window.MutationObserver(mutationList => {
-        for (let mutation of mutationList) {
-          mutation.addedNodes.forEach(node => {
-            node.tagName === "tab" &&
-              node.dispatchEvent(
-                new CustomEvent("TabGrouped", {
-                  bubbles: true,
-                  detail: this,
-                })
-              );
-          });
-          mutation.removedNodes.forEach(node => {
-            node.tagName === "tab" &&
-              node.dispatchEvent(
-                new CustomEvent("TabUngrouped", {
-                  bubbles: true,
-                  detail: this,
-                })
-              );
-          });
-        }
-        if (!this.tabs.length) {
-          this.dispatchEvent(
-            new CustomEvent("TabGroupRemoved", { bubbles: true })
-          );
-          this.remove();
-        }
-      });
-      this._tabsChangedObserver.observe(this, { childList: true });
 
       this.#labelElement.addEventListener("contextmenu", e => {
         e.preventDefault();
@@ -89,7 +73,41 @@
     }
 
     disconnectedCallback() {
-      this._tabsChangedObserver.disconnect();
+      this.#tabChangeObserver?.disconnect();
+    }
+
+    #observeTabChanges() {
+      if (!this.#tabChangeObserver) {
+        this.#tabChangeObserver = new window.MutationObserver(mutationList => {
+          for (let mutation of mutationList) {
+            mutation.addedNodes.forEach(node => {
+              node.tagName === "tab" &&
+                node.dispatchEvent(
+                  new CustomEvent("TabGrouped", {
+                    bubbles: true,
+                    detail: this,
+                  })
+                );
+            });
+            mutation.removedNodes.forEach(node => {
+              node.tagName === "tab" &&
+                node.dispatchEvent(
+                  new CustomEvent("TabUngrouped", {
+                    bubbles: true,
+                    detail: this,
+                  })
+                );
+            });
+          }
+          if (!this.tabs.length) {
+            this.dispatchEvent(
+              new CustomEvent("TabGroupRemoved", { bubbles: true })
+            );
+            this.remove();
+          }
+        });
+      }
+      this.#tabChangeObserver.observe(this, { childList: true });
     }
 
     get color() {
@@ -121,12 +139,26 @@
     }
 
     get label() {
-      return this.getAttribute("label");
+      return this.#label;
     }
 
     set label(val) {
-      this.setAttribute("label", val);
-      this.#updateLabelAriaAttributes(val);
+      this.#label = val;
+
+      // Add a zero width space so we always create a text node and get
+      // consistent layout even if the group name is empty.
+      this.setAttribute("label", "\u200b" + val);
+
+      this.#updateLabelAriaAttributes();
+    }
+
+    // alias for label
+    get name() {
+      return this.label;
+    }
+
+    set name(newName) {
+      this.label = newName;
     }
 
     get collapsed() {
@@ -138,26 +170,20 @@
         return;
       }
       this.toggleAttribute("collapsed", val);
-      this.#updateCollapsedAriaAttributes(val);
+      this.#updateCollapsedAriaAttributes();
       const eventName = val ? "TabGroupCollapse" : "TabGroupExpand";
       this.dispatchEvent(new CustomEvent(eventName, { bubbles: true }));
     }
 
-    /**
-     * @param {string} label
-     */
-    #updateLabelAriaAttributes(label) {
-      const ariaLabel = label == "" ? "unnamed" : label;
+    #updateLabelAriaAttributes() {
+      const ariaLabel = this.#label || "unnamed";
       const ariaDescription = `${ariaLabel} tab group`;
       this.#labelElement?.setAttribute("aria-label", ariaLabel);
       this.#labelElement?.setAttribute("aria-description", ariaDescription);
     }
 
-    /**
-     * @param {boolean} collapsed
-     */
-    #updateCollapsedAriaAttributes(collapsed) {
-      const ariaExpanded = collapsed ? "false" : "true";
+    #updateCollapsedAriaAttributes() {
+      const ariaExpanded = this.collapsed ? "false" : "true";
       this.#labelElement?.setAttribute("aria-expanded", ariaExpanded);
     }
 
@@ -192,7 +218,7 @@
     }
 
     /**
-     * remove all tabs from the group and delete the group
+     * Remove all tabs from the group and delete the group.
      *
      */
     ungroupTabs() {
@@ -215,11 +241,25 @@
       if (event.target === this.#labelElement && event.button === 0) {
         event.preventDefault();
         this.collapsed = !this.collapsed;
+        gBrowser.tabGroupMenu.close();
       }
     }
 
     on_TabSelect() {
       this.collapsed = false;
+    }
+
+    /**
+     * If one of this group's tabs is the selected tab, this will do nothing.
+     * Otherwise, it will expand the group if collapsed, and select the first
+     * tab in its list.
+     */
+    select() {
+      this.collapsed = false;
+      if (gBrowser.selectedTab.group == this) {
+        return;
+      }
+      gBrowser.selectedTab = this.tabs[0];
     }
   }
 

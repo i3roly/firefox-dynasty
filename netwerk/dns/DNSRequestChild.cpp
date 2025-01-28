@@ -124,7 +124,7 @@ ChildDNSRecord::GetNextAddr(uint16_t port, NetAddr* addr) {
     return NS_ERROR_NOT_AVAILABLE;
   }
 
-  memcpy(addr, &mAddresses[mCurrent++], sizeof(NetAddr));
+  *addr = mAddresses[mCurrent++];
 
   // both Ipv4/6 use same bits for port, so safe to just use ipv4's field
   addr->inet.port = htons(port);
@@ -408,16 +408,16 @@ void DNSRequestSender::OnRecvCancelDNSRequest(
 
 NS_IMETHODIMP
 DNSRequestSender::Cancel(nsresult reason) {
-  if (!mIPCActor || !mIPCActor->CanSend()) {
-    // Really a failure, but we won't be able to tell anyone about it anyways
-    return NS_OK;
-  }
-
   // we can only do IPC on the MainThread
   if (!NS_IsMainThread()) {
     SchedulerGroup::Dispatch(
         NewRunnableMethod<nsresult>("net::DNSRequestSender::Cancel", this,
                                     &DNSRequestSender::Cancel, reason));
+    return NS_OK;
+  }
+
+  if (!mIPCActor || !mIPCActor->CanSend()) {
+    // Really a failure, but we won't be able to tell anyone about it anyways
     return NS_OK;
   }
 

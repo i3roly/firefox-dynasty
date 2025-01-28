@@ -66,6 +66,7 @@ included_inclnames_to_ignore = set(
         "jit/ABIFunctionTypeGenerated.h",  # generated in $OBJDIR"
         "jit/AtomicOperationsGenerated.h",  # generated in $OBJDIR
         "jit/CacheIROpsGenerated.h",  # generated in $OBJDIR
+        "jit/CacheIRAOTGenerated.h",  # generated in $OBJDIR
         "jit/LIROpsGenerated.h",  # generated in $OBJDIR
         "jit/MIROpsGenerated.h",  # generated in $OBJDIR
         "js/PrefsGenerated.h",  # generated in $OBJDIR
@@ -80,6 +81,7 @@ included_inclnames_to_ignore = set(
         "ICU4XAnyCalendarKind.h",  # ICU4X
         "ICU4XCalendar.h",  # ICU4X
         "ICU4XDate.h",  # ICU4X
+        "ICU4XError.h",  # ICU4X
         "ICU4XGraphemeClusterSegmenter.h",  # ICU4X
         "ICU4XIsoDate.h",  # ICU4X
         "ICU4XIsoWeekday.h",  # ICU4X

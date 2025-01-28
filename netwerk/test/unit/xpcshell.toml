@@ -592,6 +592,8 @@ skip-if = ["tsan && socketprocess_networking"] # Bug 1808236
 
 ["test_file_protocol.js"]
 
+["test_file_url_with_host.js"]
+
 ["test_filestreams.js"]
 
 ["test_freshconnection.js"]
@@ -604,6 +606,7 @@ run-if = ["os == 'linux'"]
 ["test_gre_resources.js"]
 
 ["test_ip_space_glean.js"]
+skip-if = ["os == 'android'"]
 
 ["test_h2proxy_connection_limit.js"]
 run-sequentially = "node server exceptions dont replay well"
@@ -808,6 +811,9 @@ skip-if = ["os == 'win' && socketprocess_networking"]
 ["test_httpauth.js"]
 
 ["test_httpcancel.js"]
+
+["test_bug1830022.js"]
+prefs = ["network.http.idempotencyKey.enabled=true"]
 
 ["test_https_rr_ech_prefs.js"]
 skip-if = ["os == 'android'"]

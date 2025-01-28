@@ -5,7 +5,7 @@
     <!-- Text for confirmation for a negative action in dialog.  -->
     <string name="mozac_feature_prompts_cancel">റദ്ദാക്കുക</string>
     <!-- When a page shows many dialogs, this checkbox will appear for letting the user choose to prevent showing more dialogs. -->
-    <string name="mozac_feature_prompts_no_more_dialogs">അധിക ഡയലോഗുകൾ സൃഷ്ടിക്കുന്നതിൽ നിന്ന് ഈ പേജിനെ തടയുക</string>
+    <string name="mozac_feature_prompts_no_more_dialogs">അധിക സന്ദേശപ്പെട്ടുകൾ സൃഷ്ടിക്കുന്നതിൽ നിന്ന് ഈ താളിനെ തടയുക</string>
     <!-- Text for a positive button, when an user selects a date in date/time picker. -->
     <string name="mozac_feature_prompts_set_date">ക്രമീകരിക്കുക</string>
     <!-- Text for a button that clears the selected input in the date/time picker. -->
@@ -40,13 +40,15 @@
     <string name="mozac_feature_prompt_login_add_username_headline_2">ഉപയോക്തൃപേരു് മാറ്റണോ?</string>
     <!-- Text for a label for the field when prompt requesting a text is shown. -->
     <!-- For more info take a look here https://developer.mozilla.org/en-US/docs/Web/API/Window/prompt -->
-    <string name="mozac_feature_prompts_content_description_input_label">ഒരു വാചക ഇൻപുട്ട് ഫീൽഡ് നൽകുന്നതിനുള്ള ലേബൽ</string>
+    <string name="mozac_feature_prompts_content_description_input_label">ഒരു വാചകഗമനതലം നൽകുന്നതിനുള്ള ലേബൽ</string>
     <!-- Title of a color picker dialog, this text is shown above a color picker. -->
     <string name="mozac_feature_prompts_choose_a_color">ഒരു നിറം തിരഞ്ഞെടുക്കുക</string>
     <!-- Text of a confirm button in dialog requesting to open a new window. -->
     <string name="mozac_feature_prompts_allow">അനുവദിക്കുക</string>
     <!-- Text of a negative button in dialog requesting to open a new window. -->
     <string name="mozac_feature_prompts_deny">നിരസിക്കുക</string>
+    <!-- Text of the title of a dialog when a page is requesting to open a new window. -->
+    <string name="mozac_feature_prompts_popup_dialog_title">ഈ വെബ്സ്ഥാനത്തിനെ തുറക്കാൻ അനുവദിക്കട്ടെ?</string>
     <!-- Title of the dialog shown when a user is leaving a website and there is still data not saved yet. -->
     <string name="mozac_feature_prompt_before_unload_dialog_title">താങ്കൾക്ക് ഉറപ്പാണോ?</string>
     <!-- Body text of the dialog shown when a user is leaving a website and there is still data not saved yet. -->
@@ -104,8 +106,6 @@
     <!-- Title for using the suggest strong password confirmation dialog -->
     <string name="mozac_feature_prompts_suggest_strong_password_title">ഒരു കഠിനമായ രഹസ്യവാക്കു് ഉപയോഗിക്കട്ടെ?</string>
 
-    <!-- Content description for the suggest strong password confirmation dialog -->
-    <string name="mozac_feature_prompts_suggest_strong_password_description_2" moz:removedIn="133" tools:ignore="UnusedResources">ഒരു ശക്തമായ ക്രമരഹിതമായ രഹസ്യവാക്കു് ഉപയോഗിച്ചു് താങ്ങളുടെ അക്കൗണ്ടുകൾ പരിരക്ഷിക്കുക. പില്കാല ഉപയോഗത്തിനു് ഇതു് താങ്ങളുടെ അക്കൗണ്ടിൽ കരുതിവച്ചിരിക്കും.</string>
     <!-- Content description for the suggest strong password confirmation dialog -->
     <string name="mozac_feature_prompts_suggest_strong_password_description_3">ഒരു ശക്തമായ ക്രമരഹിതമായ രഹസ്യവാക്കു് ഉപയോഗിച്ചു് താങ്ങളുടെ അക്കൗണ്ടു് പരിരക്ഷിക്കുക. പില്കാല ഉപയോഗത്തിനു് ഇതു് താങ്ങളുടെ അക്കൗണ്ടിൽ കരുതിവച്ചിരിക്കും.</string>
 

@@ -5,8 +5,12 @@
 import { SelectableProfile } from "./SelectableProfile.sys.mjs";
 import { AppConstants } from "resource://gre/modules/AppConstants.sys.mjs";
 import { DeferredTask } from "resource://gre/modules/DeferredTask.sys.mjs";
+import { XPCOMUtils } from "resource://gre/modules/XPCOMUtils.sys.mjs";
 
 const lazy = {};
+
+// This is used to keep the icon controllers alive for as long as their windows are alive.
+const TASKBAR_ICON_CONTROLLERS = new WeakMap();
 
 ChromeUtils.defineESModuleGetters(lazy, {
   CryptoUtils: "resource://services-crypto/utils.sys.mjs",
@@ -19,6 +23,13 @@ ChromeUtils.defineESModuleGetters(lazy, {
 ChromeUtils.defineLazyGetter(lazy, "profilesLocalization", () => {
   return new Localization(["browser/profiles.ftl"], true);
 });
+
+XPCOMUtils.defineLazyPreferenceGetter(
+  lazy,
+  "PROFILES_ENABLED",
+  "browser.profiles.enabled",
+  false
+);
 
 const PROFILES_CRYPTO_SALT_LENGTH_BYTES = 16;
 const NOTIFY_TIMEOUT = 200;
@@ -121,10 +132,7 @@ class SelectableProfileServiceClass {
       return true;
     }
 
-    return (
-      Services.prefs.getBoolPref("browser.profiles.enabled", false) &&
-      !!this.#groupToolkitProfile
-    );
+    return lazy.PROFILES_ENABLED && !!this.#groupToolkitProfile;
   }
 
   /**
@@ -146,7 +154,7 @@ class SelectableProfileServiceClass {
       );
     await this.init();
 
-    let enabled = Services.prefs.getBoolPref("browser.profiles.enabled", false);
+    let enabled = lazy.PROFILES_ENABLED;
     if (enabled) {
       // Various parts of the UI listen to the pref to trigger updating so toggle it here.
       Services.prefs.setBoolPref("browser.profiles.enabled", false);
@@ -165,7 +173,7 @@ class SelectableProfileServiceClass {
   static getDirectory(id) {
     if (this.#dirSvc) {
       if (id in this.#dirSvc) {
-        return this.#dirSvc[id];
+        return this.#dirSvc[id].clone();
       }
     }
 
@@ -177,7 +185,7 @@ class SelectableProfileServiceClass {
       await this.#profileService.asyncFlush();
     } catch (e) {
       try {
-        await this.#profileService.asyncFlushCurrentProfile();
+        await this.#profileService.asyncFlushGroupProfile();
       } catch (ex) {
         console.error(
           `Failed to flush changes to the profiles database: ${ex}`
@@ -371,8 +379,6 @@ class SelectableProfileServiceClass {
       this.#asyncShutdownBlocker
     );
 
-    lazy.EveryWindow.unregisterCallback(this.#everyWindowCallbackId);
-
     try {
       Services.obs.removeObserver(
         this.themeObserver,
@@ -400,6 +406,8 @@ class SelectableProfileServiceClass {
     this.#storeID = null;
     this.#badge = null;
 
+    lazy.EveryWindow.unregisterCallback(this.#everyWindowCallbackId);
+
     this.#initialized = false;
   }
 
@@ -411,12 +419,18 @@ class SelectableProfileServiceClass {
           let iconController = Cc["@mozilla.org/windows-taskbar;1"]
             .getService(Ci.nsIWinTaskbar)
             .getOverlayIconController(window.docShell);
+          TASKBAR_ICON_CONTROLLERS.set(window, iconController);
+
           iconController.setOverlayIcon(
             this.#badge.image,
             this.#badge.description,
             this.#badge.iconPaintContext
           );
         }
+
+        // Update the window title because the currentProfile, needed in the
+        // .*-with-profile titles, didn't exist when the title was initially set.
+        window.gBrowser.updateTitlebar();
 
         let isPBM = lazy.PrivateBrowsingUtils.isWindowPrivate(window);
         if (isPBM) {
@@ -426,6 +440,8 @@ class SelectableProfileServiceClass {
         window.addEventListener("activate", this);
       },
       window => {
+        window.gBrowser.updateTitlebar();
+
         let isPBM = lazy.PrivateBrowsingUtils.isWindowPrivate(window);
         if (isPBM) {
           return;
@@ -655,7 +671,8 @@ class SelectableProfileServiceClass {
 
   async #updateTaskbar() {
     try {
-      if (!gSupportsBadging) {
+      // We don't want the startup profile selector to badge the dock icon.
+      if (!gSupportsBadging || Services.startup.startingUp) {
         return;
       }
 
@@ -683,6 +700,8 @@ class SelectableProfileServiceClass {
             let iconController = Cc["@mozilla.org/windows-taskbar;1"]
               .getService(Ci.nsIWinTaskbar)
               .getOverlayIconController(win.docShell);
+            TASKBAR_ICON_CONTROLLERS.set(win, iconController);
+
             iconController.setOverlayIcon(
               this.#badge.image,
               this.#badge.description,
@@ -699,10 +718,8 @@ class SelectableProfileServiceClass {
             .setBadgeImage(null);
         } else if ("nsIWinTaskbar" in Ci) {
           for (let win of lazy.EveryWindow.readyWindows) {
-            let iconController = Cc["@mozilla.org/windows-taskbar;1"]
-              .getService(Ci.nsIWinTaskbar)
-              .getOverlayIconController(win.docShell);
-            iconController.setOverlayIcon(null, null);
+            let iconController = TASKBAR_ICON_CONTROLLERS.get(win);
+            iconController?.setOverlayIcon(null, null);
           }
         }
       }
@@ -835,6 +852,7 @@ class SelectableProfileServiceClass {
     }
     this.#groupToolkitProfile.rootDir = await aProfile.rootDir;
     await this.#attemptFlushProfileService();
+    Glean.profilesDefault.updated.record();
   }
 
   /**
@@ -1060,6 +1078,9 @@ class SelectableProfileServiceClass {
     if (!this.#currentProfile) {
       let path = this.#profileService.currentProfile.rootDir;
       this.#currentProfile = await this.#createProfile(path);
+
+      // And also set the profile selector window to show at startup (bug 1933911).
+      this.showProfileSelectorWindow(true);
     }
   }
 

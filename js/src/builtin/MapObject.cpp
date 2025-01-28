@@ -29,6 +29,7 @@
 #  include "vm/TupleType.h"
 #endif
 
+#include "builtin/MapObject-inl.h"
 #include "builtin/OrderedHashTableObject-inl.h"
 #include "gc/GCContext-inl.h"
 #include "gc/Marking-inl.h"
@@ -57,15 +58,11 @@ static PreBarriered<Value> NormalizeDoubleValue(double d) {
 bool HashableValue::setValue(JSContext* cx, const Value& v) {
   if (v.isString()) {
     // Atomize so that hash() and operator==() are fast and infallible.
-    if (v.toString()->isAtom()) {
-      value = v;
-    } else {
-      JSString* str = AtomizeString(cx, v.toString());
-      if (!str) {
-        return false;
-      }
-      value = StringValue(str);
+    JSString* str = AtomizeString(cx, v.toString());
+    if (!str) {
+      return false;
     }
+    value = StringValue(str);
   } else if (v.isDouble()) {
     value = NormalizeDoubleValue(v.toDouble());
 #ifdef ENABLE_RECORD_TUPLE
@@ -477,7 +474,7 @@ void MapObject::trace(JSTracer* trc, JSObject* obj) {
   Table(mapObj).trace(trc);
 }
 
-using NurseryKeysVector = GCVector<Value, 0, SystemAllocPolicy>;
+using NurseryKeysVector = GCVector<Value, 4, SystemAllocPolicy>;
 
 template <typename TableObject>
 static NurseryKeysVector* GetNurseryKeys(TableObject* t) {
@@ -752,6 +749,62 @@ MapObject* MapObject::sweepAfterMinorGC(JS::GCContext* gcx, MapObject* mapobj) {
   return hasNurseryIterators ? mapobj : nullptr;
 }
 
+// static
+MapObject* MapObject::createFromIterable(JSContext* cx, Handle<JSObject*> proto,
+                                         Handle<Value> iterable,
+                                         Handle<MapObject*> allocatedFromJit) {
+  // A null-or-undefined |iterable| is quite common and we check for this in JIT
+  // code.
+  MOZ_ASSERT_IF(allocatedFromJit, !iterable.isNullOrUndefined());
+
+  Rooted<MapObject*> obj(cx, allocatedFromJit);
+  if (!obj) {
+    obj = MapObject::create(cx, proto);
+    if (!obj) {
+      return nullptr;
+    }
+  }
+
+  if (!iterable.isNullOrUndefined()) {
+    bool optimized = false;
+    if (!IsOptimizableInitForMapOrSet<JSProto_Map>(cx, MapObject::set, obj,
+                                                   iterable, &optimized)) {
+      return nullptr;
+    }
+
+    if (optimized) {
+      ArrayObject* array = &iterable.toObject().as<ArrayObject>();
+      uint32_t len = array->getDenseInitializedLength();
+      for (uint32_t index = 0; index < len; index++) {
+        Value element = array->getDenseElement(index);
+        MOZ_ASSERT(IsPackedArray(&element.toObject()));
+
+        auto* elementArray = &element.toObject().as<ArrayObject>();
+        Value key = elementArray->getDenseElement(0);
+        Value value = elementArray->getDenseElement(1);
+
+        MOZ_ASSERT(!key.isMagic(JS_ELEMENTS_HOLE));
+        MOZ_ASSERT(!value.isMagic(JS_ELEMENTS_HOLE));
+
+        if (!obj->set(cx, key, value)) {
+          return nullptr;
+        }
+      }
+    } else {
+      FixedInvokeArgs<1> args(cx);
+      args[0].set(iterable);
+
+      RootedValue thisv(cx, ObjectValue(*obj));
+      if (!CallSelfHostedFunction(cx, cx->names().MapConstructorInit, thisv,
+                                  args, args.rval())) {
+        return nullptr;
+      }
+    }
+  }
+
+  return obj;
+}
+
 bool MapObject::construct(JSContext* cx, unsigned argc, Value* vp) {
   AutoJSConstructorProfilerEntry pseudoFrame(cx, "Map");
   CallArgs args = CallArgsFromVp(argc, vp);
@@ -765,20 +818,9 @@ bool MapObject::construct(JSContext* cx, unsigned argc, Value* vp) {
     return false;
   }
 
-  Rooted<MapObject*> obj(cx, MapObject::create(cx, proto));
+  MapObject* obj = MapObject::createFromIterable(cx, proto, args.get(0));
   if (!obj) {
     return false;
-  }
-
-  if (!args.get(0).isNullOrUndefined()) {
-    FixedInvokeArgs<1> args2(cx);
-    args2[0].set(args[0]);
-
-    RootedValue thisv(cx, ObjectValue(*obj));
-    if (!CallSelfHostedFunction(cx, cx->names().MapConstructorInit, thisv,
-                                args2, args2.rval())) {
-      return false;
-    }
   }
 
   args.rval().setObject(*obj);
@@ -1402,8 +1444,52 @@ SetObject* SetObject::sweepAfterMinorGC(JS::GCContext* gcx, SetObject* setobj) {
   return hasNurseryIterators ? setobj : nullptr;
 }
 
-bool SetObject::isBuiltinAdd(HandleValue add) {
-  return IsNativeFunction(add, SetObject::add);
+// static
+SetObject* SetObject::createFromIterable(JSContext* cx, Handle<JSObject*> proto,
+                                         Handle<Value> iterable,
+                                         Handle<SetObject*> allocatedFromJit) {
+  // A null-or-undefined |iterable| is quite common and we check for this in JIT
+  // code.
+  MOZ_ASSERT_IF(allocatedFromJit, !iterable.isNullOrUndefined());
+
+  Rooted<SetObject*> obj(cx, allocatedFromJit);
+  if (!obj) {
+    obj = SetObject::create(cx, proto);
+    if (!obj) {
+      return nullptr;
+    }
+  }
+
+  if (!iterable.isNullOrUndefined()) {
+    bool optimized = false;
+    if (!IsOptimizableInitForMapOrSet<JSProto_Set>(cx, SetObject::add, obj,
+                                                   iterable, &optimized)) {
+      return nullptr;
+    }
+
+    if (optimized) {
+      ArrayObject* array = &iterable.toObject().as<ArrayObject>();
+      uint32_t len = array->getDenseInitializedLength();
+      for (uint32_t index = 0; index < len; index++) {
+        Value keyVal = array->getDenseElement(index);
+        MOZ_ASSERT(!keyVal.isMagic(JS_ELEMENTS_HOLE));
+        if (!obj->add(cx, keyVal)) {
+          return nullptr;
+        }
+      }
+    } else {
+      FixedInvokeArgs<1> args(cx);
+      args[0].set(iterable);
+
+      RootedValue thisv(cx, ObjectValue(*obj));
+      if (!CallSelfHostedFunction(cx, cx->names().SetConstructorInit, thisv,
+                                  args, args.rval())) {
+        return nullptr;
+      }
+    }
+  }
+
+  return obj;
 }
 
 bool SetObject::construct(JSContext* cx, unsigned argc, Value* vp) {
@@ -1419,39 +1505,9 @@ bool SetObject::construct(JSContext* cx, unsigned argc, Value* vp) {
     return false;
   }
 
-  Rooted<SetObject*> obj(cx, SetObject::create(cx, proto));
+  SetObject* obj = SetObject::createFromIterable(cx, proto, args.get(0));
   if (!obj) {
     return false;
-  }
-
-  if (!args.get(0).isNullOrUndefined()) {
-    RootedValue iterable(cx, args[0]);
-    bool optimized = false;
-    if (!IsOptimizableInitForSet<GlobalObject::getOrCreateSetPrototype,
-                                 isBuiltinAdd>(cx, obj, iterable, &optimized)) {
-      return false;
-    }
-
-    if (optimized) {
-      ArrayObject* array = &iterable.toObject().as<ArrayObject>();
-      for (uint32_t index = 0; index < array->getDenseInitializedLength();
-           ++index) {
-        Value keyVal = array->getDenseElement(index);
-        MOZ_ASSERT(!keyVal.isMagic(JS_ELEMENTS_HOLE));
-        if (!obj->add(cx, keyVal)) {
-          return false;
-        }
-      }
-    } else {
-      FixedInvokeArgs<1> args2(cx);
-      args2[0].set(args[0]);
-
-      RootedValue thisv(cx, ObjectValue(*obj));
-      if (!CallSelfHostedFunction(cx, cx->names().SetConstructorInit, thisv,
-                                  args2, args2.rval())) {
-        return false;
-      }
-    }
   }
 
   args.rval().setObject(*obj);

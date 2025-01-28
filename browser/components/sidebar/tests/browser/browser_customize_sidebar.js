@@ -52,12 +52,15 @@ add_task(async function test_customize_sidebar_actions() {
   for (const toolInput of customizeComponent.toolInputs) {
     let toolDisabledInitialState = !toolInput.checked;
     toolInput.click();
-    await BrowserTestUtils.waitForCondition(() => {
-      let toggledTool = win.SidebarController.toolsAndExtensions.get(
-        toolInput.name
-      );
-      return toggledTool.disabled === !toolDisabledInitialState;
-    }, `The entrypoint for ${toolInput.name} has been ${toolDisabledInitialState ? "enabled" : "disabled"} in the sidebar.`);
+    await BrowserTestUtils.waitForCondition(
+      () => {
+        let toggledTool = win.SidebarController.toolsAndExtensions.get(
+          toolInput.name
+        );
+        return toggledTool.disabled === !toolDisabledInitialState;
+      },
+      `The entrypoint for ${toolInput.name} has been ${toolDisabledInitialState ? "enabled" : "disabled"} in the sidebar.`
+    );
     toolEntrypointsCount = sidebar.toolButtons.length;
     checkedInputs = Array.from(customizeComponent.toolInputs).filter(
       input => input.checked
@@ -70,12 +73,15 @@ add_task(async function test_customize_sidebar_actions() {
       }.`
     );
     toolInput.click();
-    await BrowserTestUtils.waitForCondition(() => {
-      let toggledTool = win.SidebarController.toolsAndExtensions.get(
-        toolInput.name
-      );
-      return toggledTool.disabled === toolDisabledInitialState;
-    }, `The entrypoint for ${toolInput.name} has been ${toolDisabledInitialState ? "disabled" : "enabled"} in the sidebar.`);
+    await BrowserTestUtils.waitForCondition(
+      () => {
+        let toggledTool = win.SidebarController.toolsAndExtensions.get(
+          toolInput.name
+        );
+        return toggledTool.disabled === toolDisabledInitialState;
+      },
+      `The entrypoint for ${toolInput.name} has been ${toolDisabledInitialState ? "disabled" : "enabled"} in the sidebar.`
+    );
     toolEntrypointsCount = sidebar.toolButtons.length;
     checkedInputs = Array.from(customizeComponent.toolInputs).filter(
       input => input.checked
@@ -168,8 +174,8 @@ add_task(async function test_customize_position_setting() {
   ok(positionLeft.checked, "The sidebar positioned on the left by default.");
   is(
     sidebarBox.style.order,
-    "2",
-    "Sidebar box should have an order of 2 when on the left"
+    "3",
+    "Sidebar box should have an order of 3 when on the left"
   );
   EventUtils.synthesizeMouseAtCenter(
     positionRight,
@@ -189,8 +195,8 @@ add_task(async function test_customize_position_setting() {
   ok(newPositionRight.checked, "Position setting persists.");
   is(
     newSidebarBox.style.order,
-    "4",
-    "Sidebar box should have an order of 4 when on the right"
+    "5",
+    "Sidebar box should have an order of 5 when on the right"
   );
 
   await BrowserTestUtils.closeWindow(win);

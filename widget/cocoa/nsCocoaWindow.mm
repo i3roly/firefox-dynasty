@@ -524,7 +524,7 @@ nsresult nsCocoaWindow::CreateNativeWindow(const NSRect& aRect,
   if(!nsCocoaFeatures::OnMavericksOrLater()) {
   // This is necessary for sub-Mavericks systems to ensure
   // we don't expose the superview of any non-tooltip/popup window
-    if(windowClass == [ToolbarWindow class]) {
+    if(windowClass == [ToolbarWindow class]) { 
       // - maskstobounds (doDrawrect) to ensure the titlebar and menu
       //   items' GLcontext rounding are honoured, AND;
       // - superview setWantsLayer here  to ensure our
@@ -534,8 +534,9 @@ nsresult nsCocoaWindow::CreateNativeWindow(const NSRect& aRect,
       [[[mWindow contentView] superview] setWantsLayer:YES];
     }
   }
-
+ 
   [mWindow createTrackingArea];
+
   // Make sure the window starts out not draggable by the background.
   // We will turn it on as necessary.
   [mWindow setMovableByWindowBackground:NO]; 
@@ -1568,11 +1569,6 @@ void nsCocoaWindow::ProcessTransitions() {
 
   mInProcessTransitions = true;
 
-  if (mProcessTransitionsPending) {
-        mProcessTransitionsPending->Cancel();
-        mProcessTransitionsPending = nullptr;
-  }
-
   // Start a loop that will continue as long as we have transitions to process
   // and we aren't waiting on an asynchronous transition to complete. Any
   // transition that starts something async will `continue` this loop to exit.
@@ -1752,10 +1748,6 @@ void nsCocoaWindow::CancelAllTransitions() {
   // ProcessTransitions().
   mTransitionCurrent.reset();
   mIsTransitionCurrentAdded = false;
-  if (mProcessTransitionsPending) {
-      mProcessTransitionsPending->Cancel();
-      mProcessTransitionsPending = nullptr;
-  }
   std::queue<TransitionType>().swap(mTransitionsPending);
 }
 
@@ -1781,12 +1773,10 @@ void nsCocoaWindow::FinishCurrentTransitionIfMatching(
     // ProcessTransitions on the next event loop. Doing this will ensure that
     // any async native transition methods we call (like toggleFullScreen) will
     // succeed.
-      if (!mTransitionsPending.empty() && !mProcessTransitionsPending) {
-        mProcessTransitionsPending = NS_NewCancelableRunnableFunction(
-            "ProcessTransitionsPending",
-            [self = RefPtr{this}] { self->ProcessTransitions(); });
-        NS_DispatchToCurrentThread(mProcessTransitionsPending);
-      }
+    if (!mTransitionsPending.empty()) {
+      NS_DispatchToCurrentThread(NewRunnableMethod(
+          "FinishCurrentTransition", this, &nsCocoaWindow::ProcessTransitions));
+    }
   }
 }
 
@@ -2076,6 +2066,7 @@ bool nsCocoaWindow::DragEvent(unsigned int aMessage,
                               UInt16 aKeyModifiers) {
   return false;
 }
+
 
 // Invokes callback and ProcessEvent methods on Event Listener object
 nsresult nsCocoaWindow::DispatchEvent(WidgetGUIEvent* event,
@@ -2510,29 +2501,14 @@ void nsCocoaWindow::SetWindowAnimationType(
 void nsCocoaWindow::SetDrawsTitle(bool aDrawTitle) {
   NS_OBJC_BEGIN_TRY_IGNORE_BLOCK;
 
-  if (![mWindow drawsContentsIntoWindowFrame]) {
-    // If we don't draw into the window frame, we always want to display window
-    // titles.
-    [mWindow setWantsTitleDrawn:YES];
-  } else {
+  // If we don't draw into the window frame, we always want to display window
+  // titles.
+  mWindow.wantsTitleDrawn = aDrawTitle || !mWindow.drawsContentsIntoWindowFrame;
 
-    [mWindow setWantsTitleDrawn:aDrawTitle];
-    }
   NS_OBJC_END_TRY_IGNORE_BLOCK;
 }
 
-nsresult nsCocoaWindow::SetNonClientMargins(
-    const LayoutDeviceIntMargin& margins) {
-  NS_OBJC_BEGIN_TRY_BLOCK_RETURN;
-
-  SetDrawsInTitlebar(margins.top == 0);
-
-  return NS_OK;
-
-  NS_OBJC_END_TRY_BLOCK_RETURN(NS_ERROR_FAILURE);
-}
-
-void nsCocoaWindow::SetDrawsInTitlebar(bool aState) {
+void nsCocoaWindow::SetCustomTitlebar(bool aState) {
   NS_OBJC_BEGIN_TRY_IGNORE_BLOCK;
 
   if (mWindow) {
@@ -2794,6 +2770,7 @@ void nsCocoaWindow::CocoaWindowDidResize() {
 }
 
 - (void)windowDidResize:(NSNotification*)aNotification {
+
   if (!mGeckoWindow) return;
 
   mGeckoWindow->CocoaWindowDidResize();
@@ -3532,13 +3509,11 @@ static const NSString* kStateWantsTitleDrawn = @"wantsTitleDrawn";
 }
 
 - (void)removeTrackingArea {
-  [mViewWithTrackingArea removeTrackingArea:mTrackingArea];
-
-  [mTrackingArea release];
-  mTrackingArea = nil;
-
-  [mViewWithTrackingArea release];
-  mViewWithTrackingArea = nil;
+  if (mTrackingArea) {
+    [self.trackingAreaView removeTrackingArea:mTrackingArea];
+    [mTrackingArea release];
+    mTrackingArea = nil;
+  }
 }
 
 - (void)createTrackingArea {
@@ -3546,13 +3521,11 @@ static const NSString* kStateWantsTitleDrawn = @"wantsTitleDrawn";
   const NSTrackingAreaOptions options =
       NSTrackingMouseEnteredAndExited | NSTrackingMouseMoved |
       NSTrackingActiveAlways | NSTrackingInVisibleRect;
-  mTrackingArea =
-      [[NSTrackingArea alloc] initWithRect:[mViewWithTrackingArea bounds]
-                                   options:options
-                                     owner:self
-                                  userInfo:nil];
+  mTrackingArea = [[NSTrackingArea alloc] initWithRect:[mViewWithTrackingArea bounds]
+                                               options:options
+                                                 owner:self
+                                              userInfo:nil];
   [mViewWithTrackingArea addTrackingArea:mTrackingArea];
-
 }
 
 - (void)mouseEntered:(NSEvent*)aEvent {

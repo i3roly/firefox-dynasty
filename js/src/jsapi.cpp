@@ -2433,6 +2433,17 @@ extern JS_PUBLIC_API bool JS_IsConstructor(JSFunction* fun) {
   return fun->isConstructor();
 }
 
+void JS::CompileOptions::warnAboutConflictingDelazification() const {
+  Fprinter out(stderr);
+  out.printf(
+      "WARNING: Parsing Everything Eagerly is already set "
+      "and it cannot be disabled by other parsing strategy.\n"
+      "The provided strategy is going to be ignored.\n\n"
+      "Parse Everything Eagerly might be used by Code Coverage "
+      "to ensure that all functions are known when the report is "
+      "generated.\n");
+}
+
 void JS::TransitiveCompileOptions::copyPODTransitiveOptions(
     const TransitiveCompileOptions& rhs) {
   // filename_, introducerFilename_, sourceMapURL_ should be handled in caller.
@@ -2588,6 +2599,12 @@ JS::CompileOptions::CompileOptions(JSContext* cx) {
   if (Realm* realm = cx->realm()) {
     alwaysUseFdlibm_ = realm->creationOptions().alwaysUseFdlibm();
     discardSource = realm->behaviors().discardSource();
+  }
+}
+
+JS::InstantiateOptions::InstantiateOptions() {
+  if (coverage::IsLCovEnabled()) {
+    eagerDelazificationStrategy_ = DelazificationOption::ParseEverythingEagerly;
   }
 }
 
@@ -4864,53 +4881,6 @@ JS_PUBLIC_API void JS::detail::AssertArgumentsAreSane(JSContext* cx,
   cx->check(value);
 }
 #endif /* JS_DEBUG */
-
-JS_PUBLIC_API bool JS::FinishIncrementalEncoding(JSContext* cx,
-                                                 JS::HandleScript script,
-                                                 TranscodeBuffer& buffer) {
-  if (!script) {
-    return false;
-  }
-  if (!script->scriptSource()->xdrFinalizeEncoder(cx, buffer)) {
-    return false;
-  }
-  return true;
-}
-
-JS_PUBLIC_API bool JS::FinishIncrementalEncoding(JSContext* cx,
-                                                 JS::HandleScript script,
-                                                 JS::Stencil** stencilOut) {
-  if (!script) {
-    return false;
-  }
-  if (!script->scriptSource()->xdrFinalizeEncoder(cx, stencilOut)) {
-    return false;
-  }
-  return true;
-}
-
-JS_PUBLIC_API bool JS::FinishIncrementalEncoding(JSContext* cx,
-                                                 JS::Handle<JSObject*> module,
-                                                 TranscodeBuffer& buffer) {
-  if (!module->as<ModuleObject>()
-           .scriptSourceObject()
-           ->source()
-           ->xdrFinalizeEncoder(cx, buffer)) {
-    return false;
-  }
-  return true;
-}
-
-JS_PUBLIC_API void JS::AbortIncrementalEncoding(JS::HandleScript script) {
-  if (!script) {
-    return;
-  }
-  script->scriptSource()->xdrAbortEncoder();
-}
-
-JS_PUBLIC_API void JS::AbortIncrementalEncoding(JS::Handle<JSObject*> module) {
-  module->as<ModuleObject>().scriptSourceObject()->source()->xdrAbortEncoder();
-}
 
 bool JS::IsWasmModuleObject(HandleObject obj) {
   return obj->canUnwrapAs<WasmModuleObject>();

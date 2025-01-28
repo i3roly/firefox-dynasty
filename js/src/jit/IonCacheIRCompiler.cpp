@@ -570,6 +570,7 @@ bool IonCacheIRCompiler::init() {
     case CacheKind::LazyConstant:
     case CacheKind::NewArray:
     case CacheKind::NewObject:
+    case CacheKind::Lambda:
       MOZ_CRASH("Unsupported IC");
   }
 
@@ -684,6 +685,7 @@ void IonCacheIRCompiler::assertFloatRegisterAvailable(FloatRegister reg) {
     case CacheKind::LazyConstant:
     case CacheKind::NewArray:
     case CacheKind::NewObject:
+    case CacheKind::Lambda:
       MOZ_CRASH("Unsupported IC");
   }
 }
@@ -2297,6 +2299,11 @@ bool IonCacheIRCompiler::emitNewPlainObjectResult(uint32_t numFixedSlots,
                                                   uint32_t shapeOffset,
                                                   uint32_t siteOffset) {
   MOZ_CRASH("NewObject ICs not used in ion");
+}
+
+bool IonCacheIRCompiler::emitNewFunctionCloneResult(uint32_t canonicalOffset,
+                                                    gc::AllocKind allocKind) {
+  MOZ_CRASH("Lambda ICs not used in ion");
 }
 
 bool IonCacheIRCompiler::emitCallRegExpMatcherResult(ObjOperandId regexpId,

@@ -61,6 +61,14 @@ passwords-reveal-password-os-auth-dialog-message-win = To view your password, en
 # Only provide the reason that account verification is needed. Do not put a complete sentence here.
 passwords-reveal-password-os-auth-dialog-message-macosx = reveal the saved password
 
+
+# This message can be seen when attempting to edit a login in contextual password manager on Windows.
+passwords-edit-password-os-auth-dialog-message-win = To edit your password, enter your Windows login credentials. This helps protect the security of your accounts.
+# The MacOS string is preceded by the operating system with "Firefox is trying to ".
+# On MacOS, only provide the reason that account verification is needed. Do not put a complete sentence here.
+passwords-edit-password-os-auth-dialog-message-macosx = edit the saved password
+
+
 # This message can be seen when attempting to copy a password in contextual password manager on Windows.
 passwords-copy-password-os-auth-dialog-message-win = To copy your password, enter your Windows login credentials. This helps protect the security of your accounts.
 # The MacOS string is preceded by the operating system with "Firefox is trying to ".
@@ -103,6 +111,10 @@ passwords-import-error-heading-and-message =
 passwords-import-error-button-try-again = Try Again
 passwords-import-error-button-cancel = Cancel
 passwords-import-learn-more = Learn about importing passwords
+
+passwords-export-success-heading =
+  .heading = Passwords exported
+passwords-export-success-button = Done
 
 # Export passwords to file dialog
 export-passwords-dialog-title = Export passwords to file?
@@ -204,6 +216,20 @@ passwords-password-already-exists-error-heading =
   .heading = A password and username for { $url } already exists
 passwords-password-already-exists-error-button = Go to Password
 
+passwords-update-password-success-heading =
+  .heading = Password saved
+passwords-update-password-success-button = Done
+
+# Message to confirm successful removal of a password/passwords.
+#   $total (number) - Total number of passwords
+passwords-delete-password-success-heading =
+  .heading =
+    { $total ->
+      [1] Password removed
+      *[other] Passwords removed
+    }
+passwords-delete-password-success-button = Done
+#
 # Radiobutton label to display total number of passwords
 #   $total (number) - Total number of passwords
 passwords-radiobutton-all = All ({ $total })
@@ -212,12 +238,48 @@ passwords-radiobutton-all = All ({ $total })
 #   $total (number) - Total number of alerts
 passwords-radiobutton-alerts = Alerts ({ $total })
 
+# This message is displayed to make sure that a user wants to delete an existing login.
+passwords-remove-login-card-title = Remove password?
+# This message warns the user that deleting a login is permanent.
+passwords-remove-login-card-message = You can’t undo this.
+# This message gives the user an option to go back to the edit login form.
+passwords-remove-login-card-back-message = Back
+# This message confirms that the user wants to remove an existing login.
+passwords-remove-login-card-remove-button = Remove
+# This message gives the user the option to cancel their attempt to remove a login.
+passwords-remove-login-card-cancel-button = Cancel
+
+passwords-alert-card =
+  .aria-label = Password alerts
+passwords-alert-back-button =
+  .label = Back
+passwords-alert-list =
+  .aria-label = Alert list
+
+passwords-breached-origin-heading-and-message =
+  .heading = Password change recommended
+  .message = Passwords from this website were reported stolen or leaked. Change your password to protect your account.
+passwords-breached-origin-link-message = How does { -brand-product-name } know about breaches?
+passwords-change-password-button = Change password
+
+passwords-vulnerable-password-heading-and-message =
+  .heading = Password change recommended
+  .message = This password is easily guessable. Change your password to protect your account.
+passwords-vulnerabe-password-link-message = How does { -brand-product-name } know about weak passwords?
+
+passwords-no-username-heading-and-message =
+  .heading = Add a username
+  .message = Add one to sign in faster.
+passwords-add-username-button = Add username
+
 ## Login Form
 
 passwords-create-label =
   .label = Add password
 passwords-edit-label =
   .label = Edit password
+passwords-remove-label =
+  .title = Remove password
 passwords-origin-tooltip = Enter the exact address where you’ll sign in to this site.
 passwords-username-tooltip = Enter the username, email address, or account number you use to sign in.
 passwords-password-tooltip = Enter the password used to sign in to this account.
@@ -251,6 +313,10 @@ password-login-line =
   .title = Copy Password
 edit-login-button = Edit
   .tooltiptext = Edit Password
+view-alert-heading =
+  .heading = View alert
+view-alert-button =
+  .tooltiptext = Review alert
 
 show-password-button =
   .aria-label = Show Password
@@ -276,6 +342,15 @@ passwords-no-passwords-message = All passwords are encrypted and we’ll watch o
 passwords-no-passwords-get-started-message = Add them here to get started.
 # This string is displayed in a button. If the user clicks it, they will be taken to a form to create a new password.
 passwords-add-manually = Add manually
+
+## When the user cancels a login that's currently being edited, we display a message to confirm whether
+## or not the user wants to discard their current edits to the login.
+
+passwords-discard-changes-heading-and-message =
+  .heading = Close without saving?
+  .message = Your changes won’t be saved.
+passwords-discard-changes-confirm-button = Confirm
+passwords-discard-changes-go-back-button = Go back
 
 ## Payments
 

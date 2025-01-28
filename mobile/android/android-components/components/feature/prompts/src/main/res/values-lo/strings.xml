@@ -47,6 +47,8 @@
     <string name="mozac_feature_prompts_allow">ອະນຸຍາດ</string>
     <!-- Text of a negative button in dialog requesting to open a new window. -->
     <string name="mozac_feature_prompts_deny">ປະຕິເສດ</string>
+    <!-- Text of the title of a dialog when a page is requesting to open a new window. -->
+    <string name="mozac_feature_prompts_popup_dialog_title">ອະນຸຍາດໃຫ້ເວັບໄຊທ໌ນີ້ເປີດບໍ?</string>
     <!-- Title of the dialog shown when a user is leaving a website and there is still data not saved yet. -->
     <string name="mozac_feature_prompt_before_unload_dialog_title">ທ່ານແນ່ໃຈແລ້ວບໍ່?</string>
     <!-- Body text of the dialog shown when a user is leaving a website and there is still data not saved yet. -->
@@ -104,6 +106,9 @@
 
     <!-- Title for using the suggest strong password confirmation dialog -->
     <string name="mozac_feature_prompts_suggest_strong_password_title">ໃຊ້ລະຫັດຜ່ານທີ່ຄາດເດົາຍາກບໍ່?</string>
+
+    <!-- Content description for the suggest strong password confirmation dialog -->
+    <string name="mozac_feature_prompts_suggest_strong_password_description_3">ປົກປ້ອງບັນຊີຂອງທ່ານໂດຍໃຊ້ລະຫັດຜ່ານທີ່ເຂັ້ມແຂງ, ສ້າງຂຶ້ນແບບສຸ່ມ. ມັນຈະຖືກບັນທຶກໄວ້ໃນບັນຊີຂອງທ່ານເພື່ອໃຊ້ໃນອະນາຄົດ.</string>
 
     <!-- Pressing this will use the suggested strong password -->
     <string name="mozac_feature_prompts_suggest_strong_password_use_password">ໃຊ້ລະຫັດຜ່ານ</string>

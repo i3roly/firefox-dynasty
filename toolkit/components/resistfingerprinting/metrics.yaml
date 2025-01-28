@@ -10,13 +10,14 @@ $tags:
   - 'Core :: Privacy: Anti-Tracking'
 
 fingerprinting.protection:
-  canvas_noise_calculate_time:
+  canvas_noise_calculate_time_2:
     type: timing_distribution
-    time_unit: millisecond
+    time_unit: nanosecond
     description: >
       Counts how long to generate canvas random noises.
     bugs:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1838856
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1933797
     data_reviews:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1838856#c1
     notification_emails:
@@ -24,7 +25,6 @@ fingerprinting.protection:
       - tom@mozilla.com
       - tschuster@mozilla.com
     expires: never
-    telemetry_mirror: FINGERPRINTING_PROTECTION_CANVAS_NOISE_CALCULATE_TIME_MS
 
 
 characteristics:
@@ -3930,6 +3930,23 @@ characteristics:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1931573
     data_reviews:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1931573#c0
+    expires: never
+    data_sensitivity:
+      - technical
+
+  canvas_feature_status:
+    type: string
+    description: >
+      Status of and failure id (if failed) of ACCELERATED_CANVAS2D feature
+    lifetime: application
+    send_in_pings:
+      - user-characteristics
+    notification_emails:
+      - tom@mozilla.com
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1935712
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1935712#c0
     expires: never
     data_sensitivity:
       - technical

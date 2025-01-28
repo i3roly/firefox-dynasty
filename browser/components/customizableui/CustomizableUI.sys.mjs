@@ -34,6 +34,8 @@ const kPrefCustomizationHorizontalTabstrip =
   "browser.uiCustomization.horizontalTabstrip";
 const kPrefCustomizationHorizontalTabsBackup =
   "browser.uiCustomization.horizontalTabsBackup";
+const kPrefCustomizationNavBarWhenVerticalTabs =
+  "browser.uiCustomization.navBarWhenVerticalTabs";
 const kPrefCustomizationAutoAdd = "browser.uiCustomization.autoAdd";
 const kPrefCustomizationDebug = "browser.uiCustomization.debug";
 const kPrefDrawInTitlebar = "browser.tabs.inTitlebar";
@@ -63,7 +65,7 @@ const kSubviewEvents = ["ViewShowing", "ViewHiding"];
  * The current version. We can use this to auto-add new default widgets as necessary.
  * (would be const but isn't because of testing purposes)
  */
-var kVersion = 20;
+var kVersion = 21;
 
 /**
  * Buttons removed from built-ins by version they were removed. kVersion must be
@@ -246,6 +248,13 @@ XPCOMUtils.defineLazyPreferenceGetter(
   ""
 );
 
+XPCOMUtils.defineLazyPreferenceGetter(
+  lazy,
+  "verticalPlacementsPref",
+  kPrefCustomizationNavBarWhenVerticalTabs,
+  ""
+);
+
 ChromeUtils.defineLazyGetter(lazy, "log", () => {
   let { ConsoleAPI } = ChromeUtils.importESModule(
     "resource://gre/modules/Console.sys.mjs"
@@ -305,6 +314,7 @@ var CustomizableUIInternal = {
         ? null
         : "home-button",
       "spring",
+      "vertical-spacer",
       "urlbar-container",
       "spring",
       "save-to-pocket-button",
@@ -766,6 +776,20 @@ var CustomizableUIInternal = {
         !navbarPlacements.includes("reset-pbm-toolbar-button")
       ) {
         navbarPlacements.push("reset-pbm-toolbar-button");
+      }
+    }
+
+    if (currentVersion < 21) {
+      // If the vertical-spacer has not yet been added, ensure its to the left of the urlbar initially
+      let navbarPlacements = gSavedState.placements[CustomizableUI.AREA_NAVBAR];
+      if (!navbarPlacements.includes("vertical-spacer")) {
+        let urlbarContainerPosition =
+          navbarPlacements.indexOf("urlbar-container");
+        gSavedState.placements[CustomizableUI.AREA_NAVBAR].splice(
+          urlbarContainerPosition - 1,
+          0,
+          "vertical-spacer"
+        );
       }
     }
   },
@@ -2673,12 +2697,16 @@ var CustomizableUIInternal = {
 
     // If we're in vertical tabs, ensure we don't restore the widget when we toggle back
     // to horizontal tabs.
-    if (
-      !gInBatchStack &&
-      CustomizableUI.verticalTabsEnabled &&
-      oldPlacement.area == CustomizableUI.AREA_TABSTRIP
-    ) {
-      this.deleteWidgetInSavedHorizontalTabStripState(aWidgetId);
+    if (!gInBatchStack && CustomizableUI.verticalTabsEnabled) {
+      if (oldPlacement.area == CustomizableUI.AREA_TABSTRIP) {
+        this.deleteWidgetInSavedHorizontalTabStripState(aWidgetId);
+      } else if (
+        oldPlacement.area == CustomizableUI.AREA_NAVBAR &&
+        this.getSavedHorizontalSnapshotState().includes(aWidgetId)
+      ) {
+        this.deleteWidgetInSavedHorizontalTabStripState(aWidgetId);
+        this.deleteWidgetInSavedNavBarWhenVerticalTabsState(aWidgetId);
+      }
     }
 
     this.notifyListeners("onWidgetRemoved", aWidgetId, oldPlacement.area);
@@ -2732,7 +2760,7 @@ var CustomizableUIInternal = {
   },
 
   getSavedHorizontalSnapshotState() {
-    let state = null;
+    let state = [];
     let prefValue = lazy.horizontalPlacementsPref;
     if (prefValue) {
       try {
@@ -2740,6 +2768,22 @@ var CustomizableUIInternal = {
       } catch (e) {
         lazy.log.warn(
           `Failed to parse value of ${kPrefCustomizationHorizontalTabstrip}`,
+          e
+        );
+      }
+    }
+    return state;
+  },
+
+  getSavedVerticalSnapshotState() {
+    let state = [];
+    let prefValue = lazy.verticalPlacementsPref;
+    if (prefValue) {
+      try {
+        state = JSON.parse(prefValue);
+      } catch (e) {
+        lazy.log.warn(
+          `Failed to parse value of ${kPrefCustomizationNavBarWhenVerticalTabs}`,
           e
         );
       }
@@ -2870,12 +2914,7 @@ var CustomizableUIInternal = {
     );
     // If there's no saved state, or it doesn't pass the sniff test, use
     // default placements instead
-    if (
-      !(
-        Array.isArray(savedPlacements) &&
-        savedPlacements.includes("tabbrowser-tabs")
-      )
-    ) {
+    if (!savedPlacements.includes("tabbrowser-tabs")) {
       savedPlacements = gAreas.get(tabstripAreaId).get("defaultPlacements");
       lazy.log.debug(`Using defaultPlacements for ${tabstripAreaId}`);
     }
@@ -2915,6 +2954,15 @@ var CustomizableUIInternal = {
     }
   },
 
+  deleteWidgetInSavedNavBarWhenVerticalTabsState(aWidgetId) {
+    const savedPlacements = this.getSavedVerticalSnapshotState();
+    let position = savedPlacements.indexOf(aWidgetId);
+    if (position != -1) {
+      savedPlacements.splice(position, 1);
+      this.saveNavBarWhenVerticalTabsState(savedPlacements);
+    }
+  },
+
   saveHorizontalTabStripState(placements = []) {
     if (!placements.length) {
       placements = this.getAreaPlacementsForSaving(
@@ -2925,6 +2973,18 @@ var CustomizableUIInternal = {
     lazy.log.debug("Saving horizontal tabstrip state.", serialized);
     Services.prefs.setCharPref(
       kPrefCustomizationHorizontalTabstrip,
+      serialized
+    );
+  },
+
+  saveNavBarWhenVerticalTabsState(placements = []) {
+    if (!placements.length) {
+      placements = this.getAreaPlacementsForSaving(CustomizableUI.AREA_NAVBAR);
+    }
+    let serialized = JSON.stringify(placements, this.serializerHelper);
+    lazy.log.debug("Saving vertical navbar state.", serialized);
+    Services.prefs.setCharPref(
+      kPrefCustomizationNavBarWhenVerticalTabs,
       serialized
     );
   },
@@ -4063,7 +4123,7 @@ var CustomizableUIInternal = {
         "initializeForTabsOrientation, savedPlacements",
         savedPlacements
       );
-      if (savedPlacements) {
+      if (savedPlacements.length) {
         // We're startup up with horizontal tabs, but there are saved placements for the
         // horizontal tab strip, so its possible the verticalTabs pref was updated outside
         // of normal use. Make sure to restore those tabstrip widget placements
@@ -4256,6 +4316,8 @@ var CustomizableUIInternal = {
       }
 
       CustomizableUI.beginBatchUpdate();
+      let customVerticalNavbarPlacements = this.getSavedVerticalSnapshotState();
+      let tabstripPlacements = this.getSavedHorizontalSnapshotState();
       // Remove non-default widgets to the nav-bar
       for (let id of CustomizableUI.getWidgetIdsInArea("TabsToolbar")) {
         if (id == "tabbrowser-tabs") {
@@ -4263,6 +4325,13 @@ var CustomizableUIInternal = {
             id,
             CustomizableUI.AREA_VERTICAL_TABSTRIP
           );
+          continue;
+        }
+        // We add the tab strip placements later in the case they have a custom position
+        if (
+          tabstripPlacements.includes(id) &&
+          customVerticalNavbarPlacements.includes(id)
+        ) {
           continue;
         }
         if (!CustomizableUI.isWidgetRemovable(id)) {
@@ -4275,10 +4344,16 @@ var CustomizableUIInternal = {
         // Everything else gets moved to the nav-bar area while tabs are vertical
         CustomizableUI.addWidgetToArea(id, CustomizableUI.AREA_NAVBAR);
       }
-      // Remove new tab from AREA_NAVBAR when vertical tabs enabled.
+      // Remove new tab from nav-bar when vertical tabs enabled
       this.removeWidgetFromArea("new-tab-button");
+      customVerticalNavbarPlacements.forEach((id, index) => {
+        if (tabstripPlacements.includes(id)) {
+          CustomizableUI.addWidgetToArea(id, CustomizableUI.AREA_NAVBAR, index);
+        }
+      });
       CustomizableUI.endBatchUpdate();
     } else {
+      this.saveNavBarWhenVerticalTabsState();
       // We're switching to vertical in this session; pull saved state from pref and update placements
       this.restoreSavedHorizontalTabStripState();
     }

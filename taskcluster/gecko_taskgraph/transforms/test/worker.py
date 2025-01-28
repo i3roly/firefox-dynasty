@@ -67,12 +67,12 @@ WINDOWS_WORKER_TYPES = {
         "hardware": "win11-64-2009-hw",
     },
     "windows11-64-2009-ccov": {
-        "virtual": "win11-64-2009-ssd",
-        "virtual-with-gpu": "win11-64-2009-ssd-gpu",
+        "virtual": "win11-64-2009",
+        "virtual-with-gpu": "win11-64-2009-gpu",
     },
     "windows11-64-2009-ccov-qr": {
-        "virtual": "win11-64-2009-ssd",
-        "virtual-with-gpu": "win11-64-2009-ssd-gpu",
+        "virtual": "win11-64-2009",
+        "virtual-with-gpu": "win11-64-2009-gpu",
     },
     "windows11-64-2009-devedition": {
         "virtual": "win11-64-2009",
@@ -110,6 +110,7 @@ WINDOWS_WORKER_TYPES = {
 # os x worker types keyed by test-platform
 MACOSX_WORKER_TYPES = {
     "macosx1015-64": "t-osx-1015-r8",
+    "macosx1470-64": "t-osx-1400-r8",
     "macosx1100-64": "t-osx-1100-m1",
     "macosx1400-64": "t-osx-1400-m2",
     "macosx1100-aarch64": "t-osx-1100-m1",
@@ -132,6 +133,8 @@ def set_worker_type(config, tasks):
             pass
         elif test_platform.startswith("macosx1015-64"):
             task["worker-type"] = MACOSX_WORKER_TYPES["macosx1015-64"]
+        elif test_platform.startswith("macosx1470-64"):
+            task["worker-type"] = MACOSX_WORKER_TYPES["macosx1470-64"]
         elif test_platform.startswith("macosx1100-64"):
             task["worker-type"] = MACOSX_WORKER_TYPES["macosx1100-64"]
         elif test_platform.startswith("macosx1100-aarch64"):

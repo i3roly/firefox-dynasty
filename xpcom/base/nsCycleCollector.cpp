@@ -180,6 +180,7 @@
 #include "mozilla/Telemetry.h"
 #include "mozilla/ThreadLocal.h"
 #include "mozilla/UniquePtr.h"
+#include "mozilla/Unused.h"
 #include "nsCycleCollectionNoteRootCallback.h"
 #include "nsCycleCollectionParticipant.h"
 #include "nsCycleCollector.h"
@@ -1621,7 +1622,8 @@ class nsCycleCollectorLogSinkToFile final : public nsICycleCollectorLogSink {
     // wouldn't work.
     nsIFile* logFile = nullptr;
     if (char* env = PR_GetEnv("MOZ_CC_LOG_DIRECTORY")) {
-      NS_NewNativeLocalFile(nsCString(env), &logFile);
+      Unused << NS_WARN_IF(
+          NS_FAILED(NS_NewNativeLocalFile(nsCString(env), &logFile)));
     }
 
     // On Android or B2G, this function will open a file named
@@ -1682,14 +1684,15 @@ class nsCycleCollectorLogSinkToFile final : public nsICycleCollectorLogSink {
       return NS_ERROR_UNEXPECTED;
     }
 
-    aLog->mFile->MoveTo(/* directory */ nullptr, logFileFinalDestinationName);
-
-    // Save the file path.
-    aLog->mFile = logFileFinalDestination;
+    if (NS_SUCCEEDED(aLog->mFile->MoveTo(/* directory */ nullptr,
+                                         logFileFinalDestinationName))) {
+      // Save the file path.
+      aLog->mFile = logFileFinalDestination;
+    }
 
     // Log to the error console.
     nsAutoString logPath;
-    logFileFinalDestination->GetPath(logPath);
+    aLog->mFile->GetPath(logPath);
     nsAutoString msg =
         aCollectorKind + u" Collector log dumped to "_ns + logPath;
 
@@ -2928,10 +2931,7 @@ void nsCycleCollector::ScanWeakMaps() {
     }
   } while (anyChanged);
 
-  if (failed) {
-    MOZ_ASSERT(false, "Ran out of memory in ScanWeakMaps");
-    CC_TELEMETRY(_OOM, true);
-  }
+  MOZ_ASSERT(!failed, "Ran out of memory in ScanWeakMaps");
 }
 
 // Flood black from any objects in the purple buffer that are in the CC graph.
@@ -3066,11 +3066,7 @@ void nsCycleCollector::ScanIncrementalRoots() {
   }
 
   timeLog.Checkpoint("ScanIncrementalRoots::fix nodes");
-
-  if (failed) {
-    NS_ASSERTION(false, "Ran out of memory in ScanIncrementalRoots");
-    CC_TELEMETRY(_OOM, true);
-  }
+  NS_ASSERTION(!failed, "Ran out of memory in ScanIncrementalRoots");
 }
 
 // Mark nodes white and make sure their refcounts are ok.
@@ -3125,11 +3121,7 @@ void nsCycleCollector::ScanBlackNodes() {
       FloodBlackNode(mWhiteNodeCount, failed, pi);
     }
   }
-
-  if (failed) {
-    NS_ASSERTION(false, "Ran out of memory in ScanBlackNodes");
-    CC_TELEMETRY(_OOM, true);
-  }
+  NS_ASSERTION(!failed, "Ran out of memory in ScanBlackNodes");
 }
 
 void nsCycleCollector::ScanRoots(bool aFullySynchGraphBuild) {

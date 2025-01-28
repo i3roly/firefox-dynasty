@@ -9,7 +9,7 @@
     <!-- Text for a positive button, when an user selects a date in date/time picker. -->
     <string name="mozac_feature_prompts_set_date">Mposta</string>
     <!-- Text for a button that clears the selected input in the date/time picker. -->
-    <string name="mozac_feature_prompts_clear">Cancella</string>
+    <string name="mozac_feature_prompts_clear">Scancella</string>
     <!-- Text for the title of an authentication dialog. -->
     <string name="mozac_feature_prompt_sign_in">Trasi</string>
     <!-- Text for username field in an authentication dialog. -->
@@ -103,8 +103,6 @@
 
     <!-- Title for using the suggest strong password confirmation dialog -->
     <string name="mozac_feature_prompts_suggest_strong_password_title">Vo\' usari na chiavi forti?</string>
-    <!-- Content description for the suggest strong password confirmation dialog -->
-    <string name="mozac_feature_prompts_suggest_strong_password_description_2" moz:removedIn="133" tools:ignore="UnusedResources">Pruteggi i to cunti usannu na chiavi forti, ginirata a muzzu. Veni sarbata nnô to cuntu p\'usalla \'n futuru.</string>
 
     <!-- Content description for the suggest strong password confirmation dialog -->
     <string name="mozac_feature_prompts_suggest_strong_password_description_3">Pruteggi u to cuntu usannu na chiavi forti, ginirata a muzzu. Veni sarbata nnô to cuntu p\'usalla \'n futuru.</string>

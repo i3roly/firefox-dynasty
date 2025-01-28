@@ -2,49 +2,6 @@
 <issues format="6" by="lint 8.7.1" type="baseline" client="gradle" dependencies="false" name="AGP (8.7.1)" variant="all" version="8.7.1">
 
     <issue
-        id="ObsoleteLintCustomCheck"
-        message="Library lint checks out of date;&#xA;these checks **will be skipped**!&#xA;&#xA;Lint found an issue registry (`androidx.navigation.common.lint.NavigationCommonIssueRegistry`)&#xA;which was compiled against an older version of lint&#xA;than this one. This is usually fine, but not in this&#xA;case; some basic verification shows that the lint&#xA;check jar references (for example) the following API&#xA;which is no longer valid in this version of lint:&#xA;com.android.tools.lint.checks.infrastructure.LintDetectorTest#kotlin(java.lang.String): com.android.tools.lint.checks.infrastructure.TestFile&#xA;(Referenced from androidx/navigation/lint/common/LintUtilKt.class)&#xA;&#xA;Therefore, this lint check library is **not** included&#xA;in analysis. This affects the following lint checks:&#xA;`EmptyNavDeepLink`,`WrongStartDestinationType`&#xA;&#xA;Recompile the checks against the latest version, or if&#xA;this is a check bundled with a third-party library, see&#xA;if there is a more recent version available.&#xA;&#xA;Version of Lint API this lint check is using is 14.&#xA;The Lint API version currently running is 16 (8.7+).">
-        <location
-            file="build/intermediates/lint-cache/lintReportFenixDebug/migrated-jars/androidx.navigation.common.lint.NavigationCommonIssueRegistry-3d526261eadfd16f..jar"/>
-    </issue>
-
-    <issue
-        id="ObsoleteLintCustomCheck"
-        message="Library lint checks out of date;&#xA;these checks **will be skipped**!&#xA;&#xA;Lint found an issue registry (`androidx.navigation.compose.lint.NavigationComposeIssueRegistry`)&#xA;which was compiled against an older version of lint&#xA;than this one. This is usually fine, but not in this&#xA;case; some basic verification shows that the lint&#xA;check jar references (for example) the following API&#xA;which is no longer valid in this version of lint:&#xA;com.android.tools.lint.checks.infrastructure.LintDetectorTest#kotlin(java.lang.String): com.android.tools.lint.checks.infrastructure.TestFile&#xA;(Referenced from androidx/navigation/lint/common/LintUtilKt.class)&#xA;&#xA;Therefore, this lint check library is **not** included&#xA;in analysis. This affects the following lint checks:&#xA;`ComposableDestinationInComposeScope`,`ComposableNavGraphInComposeScope`,`UnrememberedGetBackStackEntry`,`WrongStartDestinationType`&#xA;&#xA;Recompile the checks against the latest version, or if&#xA;this is a check bundled with a third-party library, see&#xA;if there is a more recent version available.&#xA;&#xA;Version of Lint API this lint check is using is 14.&#xA;The Lint API version currently running is 16 (8.7+).">
-        <location
-            file="build/intermediates/lint-cache/lintReportFenixDebug/migrated-jars/androidx.navigation.compose.lint.NavigationComposeIssueRegistry-0eba33012d8b022c..jar"/>
-    </issue>
-
-    <issue
-        id="ObsoleteLintCustomCheck"
-        message="Library lint checks out of date;&#xA;these checks **will be skipped**!&#xA;&#xA;Lint found an issue registry (`androidx.navigation.runtime.lint.NavigationRuntimeIssueRegistry`)&#xA;which was compiled against an older version of lint&#xA;than this one. This is usually fine, but not in this&#xA;case; some basic verification shows that the lint&#xA;check jar references (for example) the following API&#xA;which is no longer valid in this version of lint:&#xA;com.android.tools.lint.checks.infrastructure.LintDetectorTest#kotlin(java.lang.String): com.android.tools.lint.checks.infrastructure.TestFile&#xA;(Referenced from androidx/navigation/lint/common/LintUtilKt.class)&#xA;&#xA;Therefore, this lint check library is **not** included&#xA;in analysis. This affects the following lint checks:&#xA;`DeepLinkInActivityDestination`,`WrongStartDestinationType`,`WrongNavigateRouteType`&#xA;&#xA;Recompile the checks against the latest version, or if&#xA;this is a check bundled with a third-party library, see&#xA;if there is a more recent version available.&#xA;&#xA;Version of Lint API this lint check is using is 14.&#xA;The Lint API version currently running is 16 (8.7+).">
-        <location
-            file="build/intermediates/lint-cache/lintReportFenixDebug/migrated-jars/androidx.navigation.runtime.lint.NavigationRuntimeIssueRegistry-b42dcf0e5b11d978..jar"/>
-    </issue>
-
-    <issue
-        id="ScopedStorage"
-        message="READ_EXTERNAL_STORAGE is deprecated (and is not granted) when targeting Android 13+. If you need to query or interact with MediaStore or media files on the shared storage, you should instead use one or more new storage permissions: `READ_MEDIA_IMAGES`, `READ_MEDIA_VIDEO` or `READ_MEDIA_AUDIO`."
-        errorLine1="    &lt;uses-permission android:name=&quot;android.permission.READ_EXTERNAL_STORAGE&quot; />"
-        errorLine2="                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
-        <location
-            file="src/main/AndroidManifest.xml"
-            line="11"
-            column="36"/>
-    </issue>
-
-    <issue
-        id="ScopedStorage"
-        message="READ_EXTERNAL_STORAGE is deprecated (and is not granted) when targeting Android 13+. If you need to query or interact with MediaStore or media files on the shared storage, you should instead use one or more new storage permissions: `READ_MEDIA_IMAGES`, `READ_MEDIA_VIDEO` or `READ_MEDIA_AUDIO`."
-        errorLine1="    &lt;uses-permission android:name=&quot;android.permission.READ_EXTERNAL_STORAGE&quot; />"
-        errorLine2="                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
-        <location
-            file="src/debug/AndroidManifest.xml"
-            line="20"
-            column="36"/>
-    </issue>
-
-    <issue
         id="ScrollViewSize"
         message="This LinearLayout should use `android:layout_height=&quot;wrap_content&quot;`"
         errorLine1="        android:layout_height=&quot;match_parent&quot;"
@@ -52,39 +9,6 @@
         <location
             file="src/main/res/layout/fragment_save_search_engine.xml"
             line="17"
-            column="9"/>
-    </issue>
-
-    <issue
-        id="KotlinNullnessAnnotation"
-        message="Do not use `@NonNull` in Kotlin; the nullability is already implied by the Kotlin type `RecyclerView.ViewHolder` **not** ending with `?`"
-        errorLine1="        @NonNull viewHolder: RecyclerView.ViewHolder,"
-        errorLine2="        ~~~~~~~~">
-        <location
-            file="src/main/java/org/mozilla/fenix/tabstray/browser/DraggableItemAnimator.kt"
-            line="13"
-            column="9"/>
-    </issue>
-
-    <issue
-        id="KotlinNullnessAnnotation"
-        message="Do not use `@NonNull` in Kotlin; the nullability is already implied by the Kotlin type `RecyclerView.ItemAnimator.ItemHolderInfo` **not** ending with `?`"
-        errorLine1="        @NonNull preLayoutInfo: RecyclerView.ItemAnimator.ItemHolderInfo,"
-        errorLine2="        ~~~~~~~~">
-        <location
-            file="src/main/java/org/mozilla/fenix/tabstray/browser/DraggableItemAnimator.kt"
-            line="14"
-            column="9"/>
-    </issue>
-
-    <issue
-        id="KotlinNullnessAnnotation"
-        message="Do not use `@NonNull` in Kotlin; the nullability is already implied by the Kotlin type `RecyclerView.ItemAnimator.ItemHolderInfo` **not** ending with `?`"
-        errorLine1="        @NonNull postLayoutInfo: RecyclerView.ItemAnimator.ItemHolderInfo,"
-        errorLine2="        ~~~~~~~~">
-        <location
-            file="src/main/java/org/mozilla/fenix/tabstray/browser/DraggableItemAnimator.kt"
-            line="15"
             column="9"/>
     </issue>
 
@@ -1954,21 +1878,6 @@
             column="1"/>
     </issue>
 
-    <issue id="UnusedResources"
-        message="The resource R.drawable.ic_onboarding_customize_toolbar appears to be unused">
-        <location file="src/main/res/drawable/ic_onboarding_customize_toolbar.xml" />
-    </issue>
-
-    <issue id="UnusedResources"
-        message="The resource R.drawable.ic_onboarding_bottom_toolbar appears to be unused">
-        <location file="src/main/res/drawable/ic_onboarding_bottom_toolbar.xml" />
-    </issue>
-
-    <issue id="UnusedResources"
-        message="The resource R.drawable.ic_onboarding_top_toolbar appears to be unused">
-        <location file="src/main/res/drawable/ic_onboarding_top_toolbar.xml" />
-    </issue>
-
     <issue
         id="UseOfNonLambdaOffsetOverload"
         message="State backed values should use the lambda overload of Modifier.offset"
@@ -2270,26 +2179,6 @@
             file="src/main/res/layout/activity_privacy_content_display.xml"
             line="25"
             column="21"/>
-    </issue>
-
-    <issue id="UnusedResources"
-        message="The resource R.drawable.ic_pick_a_theme appears to be unused">
-        <location file="src/main/res/drawable/ic_pick_a_theme.xml" />
-    </issue>
-
-    <issue id="UnusedResources"
-        message="The resource R.drawable.ic_pick_a_theme_dark appears to be unused">
-        <location file="src/main/res/drawable/ic_pick_a_theme_dark.xml" />
-    </issue>
-
-    <issue id="UnusedResources"
-        message="The resource R.drawable.ic_pick_a_theme_light appears to be unused">
-        <location file="src/main/res/drawable/ic_pick_a_theme_light.xml" />
-    </issue>
-
-    <issue id="UnusedResources"
-        message="The resource R.drawable.ic_pick_a_theme_system_auto appears to be unused">
-        <location file="src/main/res/drawable/ic_pick_a_theme_system_auto.xml" />
     </issue>
 
 </issues>

@@ -208,15 +208,15 @@ void MediaHardwareKeysEventSourceMacMediaCenter::SetMediaMetadata(
                      forKey:MPMediaItemPropertyAlbumTitle];
   if (mCurrentImageUrl.IsEmpty() ||
       !IsImageIn(aMetadata.mArtwork, mCurrentImageUrl)) {
-    if(@available(macOS 10.13.2, *)) {
+    if(@available(macos 10.13.2, *)) {
       [nowPlayingInfo removeObjectForKey:MPMediaItemPropertyArtwork];
     }
-  }
     if (mFetchingUrl.IsEmpty() ||
         !IsImageIn(aMetadata.mArtwork, mFetchingUrl)) {
         mNextImageIndex = 0;
         LoadImageAtIndex(mNextImageIndex++);
     }
+  }
 
   // The procedure of updating `nowPlayingInfo` is actually an async operation
   // from our testing, Apple's documentation doesn't mention that though. So be

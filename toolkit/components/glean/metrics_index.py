@@ -57,6 +57,7 @@ gecko_metrics = [
     "toolkit/components/antitracking/bouncetrackingprotection/metrics.yaml",
     "toolkit/components/antitracking/imageinputmetadatastripper/metrics.yaml",
     "toolkit/components/antitracking/metrics.yaml",
+    "toolkit/components/captchadetection/metrics.yaml",
     "toolkit/components/cookiebanners/metrics.yaml",
     "toolkit/components/downloads/metrics.yaml",
     "toolkit/components/enterprisepolicies/metrics.yaml",
@@ -100,6 +101,7 @@ firefox_desktop_metrics = [
     "browser/components/pocket/metrics.yaml",
     "browser/components/preferences/metrics.yaml",
     "browser/components/privatebrowsing/metrics.yaml",
+    "browser/components/profiles/metrics.yaml",
     "browser/components/protections/metrics.yaml",
     "browser/components/protocolhandler/metrics.yaml",
     "browser/components/screenshots/metrics.yaml",
@@ -169,6 +171,7 @@ metrics_yamls = sorted(
 gecko_pings = [
     "dom/pings.yaml",
     "toolkit/components/antitracking/bouncetrackingprotection/pings.yaml",
+    "toolkit/components/captchadetection/pings.yaml",
     "toolkit/components/glean/pings.yaml",
     "toolkit/components/reportbrokensite/pings.yaml",
     "toolkit/components/resistfingerprinting/pings.yaml",
@@ -184,6 +187,7 @@ firefox_desktop_pings = [
     "browser/modules/pings.yaml",
     "services/fxaccounts/pings.yaml",
     "toolkit/components/crashes/pings.yaml",
+    "toolkit/components/nimbus/pings.yaml",
     "toolkit/components/telemetry/pings.yaml",
     "toolkit/modules/pings.yaml",
 ]
@@ -200,6 +204,7 @@ background_update_pings = [
 background_tasks_pings = [
     "toolkit/components/backgroundtasks/pings.yaml",
     "toolkit/components/crashes/pings.yaml",
+    "toolkit/components/nimbus/pings.yaml",
     "toolkit/mozapps/defaultagent/pings.yaml",
 ]
 

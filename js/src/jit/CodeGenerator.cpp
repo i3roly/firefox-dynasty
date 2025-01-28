@@ -976,6 +976,7 @@ void CodeGenerator::visitOutOfLineICFallback(OutOfLineICFallback* ool) {
     case CacheKind::LazyConstant:
     case CacheKind::NewArray:
     case CacheKind::NewObject:
+    case CacheKind::Lambda:
       MOZ_CRASH("Unsupported IC");
   }
   MOZ_CRASH();
@@ -990,8 +991,7 @@ CodeGenerator::CodeGenerator(MIRGenerator* gen, LIRGraph* graph,
     : CodeGeneratorSpecific(gen, graph, masm),
       ionScriptLabels_(gen->alloc()),
       ionNurseryObjectLabels_(gen->alloc()),
-      scriptCounts_(nullptr),
-      zoneStubsToReadBarrier_(0) {}
+      scriptCounts_(nullptr) {}
 
 CodeGenerator::~CodeGenerator() { js_delete(scriptCounts_); }
 
@@ -2579,7 +2579,9 @@ void CreateDependentString::generate(MacroAssembler& masm,
       masm.jump(&stringAllocated);
     }
     masm.bind(&fatInline);
-    { newGCString(FallbackKind::FatInlineString); }
+    {
+      newGCString(FallbackKind::FatInlineString);
+    }
     masm.bind(&stringAllocated);
 
     masm.store32(temp1_, Address(string_, JSString::offsetOfLength()));
@@ -2933,7 +2935,9 @@ static JitCode* GenerateRegExpMatchStubShared(JSContext* cx,
         masm.jump(&storeDone);
       }
       masm.bind(&isUndefined);
-      { masm.storeValue(UndefinedValue(), objectMatchElement); }
+      {
+        masm.storeValue(UndefinedValue(), objectMatchElement);
+      }
       masm.bind(&storeDone);
 
       masm.add32(Imm32(1), matchIndex);
@@ -3118,9 +3122,8 @@ void CodeGenerator::visitRegExpMatcher(LRegExpMatcher* lir) {
   OutOfLineRegExpMatcher* ool = new (alloc()) OutOfLineRegExpMatcher(lir);
   addOutOfLineCode(ool, lir->mir());
 
-  const JitZone* jitZone = gen->realm->zone()->jitZone();
   JitCode* regExpMatcherStub =
-      jitZone->regExpMatcherStubNoBarrier(&zoneStubsToReadBarrier_);
+      snapshot_->getZoneStub(JitZone::StubKind::RegExpMatcher);
   masm.call(regExpMatcherStub);
   masm.branchTestUndefined(Assembler::Equal, JSReturnOperand, ool->entry());
   masm.bind(ool->rejoin());
@@ -3188,9 +3191,8 @@ void CodeGenerator::visitRegExpExecMatch(LRegExpExecMatch* lir) {
   auto* ool = new (alloc()) OutOfLineRegExpExecMatch(lir);
   addOutOfLineCode(ool, lir->mir());
 
-  const JitZone* jitZone = gen->realm->zone()->jitZone();
   JitCode* regExpExecMatchStub =
-      jitZone->regExpExecMatchStubNoBarrier(&zoneStubsToReadBarrier_);
+      snapshot_->getZoneStub(JitZone::StubKind::RegExpExecMatch);
   masm.call(regExpExecMatchStub);
   masm.branchTestUndefined(Assembler::Equal, JSReturnOperand, ool->entry());
 
@@ -3378,9 +3380,8 @@ void CodeGenerator::visitRegExpSearcher(LRegExpSearcher* lir) {
   OutOfLineRegExpSearcher* ool = new (alloc()) OutOfLineRegExpSearcher(lir);
   addOutOfLineCode(ool, lir->mir());
 
-  const JitZone* jitZone = gen->realm->zone()->jitZone();
   JitCode* regExpSearcherStub =
-      jitZone->regExpSearcherStubNoBarrier(&zoneStubsToReadBarrier_);
+      snapshot_->getZoneStub(JitZone::StubKind::RegExpSearcher);
   masm.call(regExpSearcherStub);
   masm.branch32(Assembler::Equal, ReturnReg, Imm32(RegExpSearcherResultFailed),
                 ool->entry());
@@ -3551,9 +3552,8 @@ void CodeGenerator::visitRegExpExecTest(LRegExpExecTest* lir) {
   auto* ool = new (alloc()) OutOfLineRegExpExecTest(lir);
   addOutOfLineCode(ool, lir->mir());
 
-  const JitZone* jitZone = gen->realm->zone()->jitZone();
   JitCode* regExpExecTestStub =
-      jitZone->regExpExecTestStubNoBarrier(&zoneStubsToReadBarrier_);
+      snapshot_->getZoneStub(JitZone::StubKind::RegExpExecTest);
   masm.call(regExpExecTestStub);
 
   masm.branch32(Assembler::Equal, ReturnReg, Imm32(RegExpExecTestResultFailed),
@@ -8752,6 +8752,78 @@ void CodeGenerator::visitNewSetObject(LNewSetObject* lir) {
   masm.bind(ool->rejoin());
 }
 
+void CodeGenerator::visitNewMapObjectFromIterable(
+    LNewMapObjectFromIterable* lir) {
+  ValueOperand iterable =
+      ToValue(lir, LNewMapObjectFromIterable::IterableIndex);
+  Register output = ToRegister(lir->output());
+  Register temp1 = ToRegister(lir->temp0());
+  Register temp2 = ToRegister(lir->temp1());
+
+  // Allocate a new MapObject. If this fails we pass nullptr for
+  // allocatedFromJit.
+  Label failedAlloc, vmCall, done;
+  TemplateObject templateObject(lir->mir()->templateObject());
+  masm.createGCObject(temp1, temp2, templateObject, gc::Heap::Default,
+                      &failedAlloc);
+
+  // We're done if |iterable| is null or undefined.
+  masm.branchIfNotNullOrUndefined(iterable, &vmCall);
+  masm.movePtr(temp1, output);
+  masm.jump(&done);
+
+  masm.bind(&failedAlloc);
+  masm.movePtr(ImmPtr(nullptr), temp1);
+
+  masm.bind(&vmCall);
+
+  pushArg(temp1);  // allocatedFromJit
+  pushArg(iterable);
+  pushArg(ImmPtr(nullptr));  // proto
+
+  using Fn = MapObject* (*)(JSContext*, Handle<JSObject*>, Handle<Value>,
+                            Handle<MapObject*>);
+  callVM<Fn, MapObject::createFromIterable>(lir);
+
+  masm.bind(&done);
+}
+
+void CodeGenerator::visitNewSetObjectFromIterable(
+    LNewSetObjectFromIterable* lir) {
+  ValueOperand iterable =
+      ToValue(lir, LNewSetObjectFromIterable::IterableIndex);
+  Register output = ToRegister(lir->output());
+  Register temp1 = ToRegister(lir->temp0());
+  Register temp2 = ToRegister(lir->temp1());
+
+  // Allocate a new SetObject. If this fails we pass nullptr for
+  // allocatedFromJit.
+  Label failedAlloc, vmCall, done;
+  TemplateObject templateObject(lir->mir()->templateObject());
+  masm.createGCObject(temp1, temp2, templateObject, gc::Heap::Default,
+                      &failedAlloc);
+
+  // We're done if |iterable| is null or undefined.
+  masm.branchIfNotNullOrUndefined(iterable, &vmCall);
+  masm.movePtr(temp1, output);
+  masm.jump(&done);
+
+  masm.bind(&failedAlloc);
+  masm.movePtr(ImmPtr(nullptr), temp1);
+
+  masm.bind(&vmCall);
+
+  pushArg(temp1);  // allocatedFromJit
+  pushArg(iterable);
+  pushArg(ImmPtr(nullptr));  // proto
+
+  using Fn = SetObject* (*)(JSContext*, Handle<JSObject*>, Handle<Value>,
+                            Handle<SetObject*>);
+  callVM<Fn, SetObject::createFromIterable>(lir);
+
+  masm.bind(&done);
+}
+
 void CodeGenerator::visitNewStringObject(LNewStringObject* lir) {
   Register input = ToRegister(lir->input());
   Register output = ToRegister(lir->output());
@@ -9646,9 +9718,8 @@ void CodeGenerator::visitWasmCall(LWasmCall* lir) {
       Label* boundsCheckFailed = nullptr;
       if (lir->needsBoundsCheck()) {
         OutOfLineAbortingWasmTrap* ool =
-            new (alloc()) OutOfLineAbortingWasmTrap(
-                wasm::BytecodeOffset(desc.lineOrBytecode()),
-                wasm::Trap::OutOfBounds);
+            new (alloc()) OutOfLineAbortingWasmTrap(desc.toTrapSiteDesc(),
+                                                    wasm::Trap::OutOfBounds);
         if (lir->isCatchable()) {
           addOutOfLineCode(ool, lir->mirCatchable());
         } else if (isReturnCall) {
@@ -9663,8 +9734,7 @@ void CodeGenerator::visitWasmCall(LWasmCall* lir) {
       {
         OutOfLineAbortingWasmTrap* ool =
             new (alloc()) OutOfLineAbortingWasmTrap(
-                wasm::BytecodeOffset(desc.lineOrBytecode()),
-                wasm::Trap::IndirectCallToNull);
+                desc.toTrapSiteDesc(), wasm::Trap::IndirectCallToNull);
         if (lir->isCatchable()) {
           addOutOfLineCode(ool, lir->mirCatchable());
         } else if (isReturnCall) {
@@ -9748,7 +9818,7 @@ void CodeGenerator::visitWasmCall(LWasmCall* lir) {
     masm.loadPtr(
         Address(masm.getStackPointer(), WasmCallerInstanceOffsetBeforeCall),
         InstanceReg);
-    masm.loadWasmPinnedRegsFromInstance();
+    masm.loadWasmPinnedRegsFromInstance(mozilla::Nothing());
     if (switchRealm) {
       masm.switchToWasmInstanceRealm(ABINonArgReturnReg0, ABINonArgReturnReg1);
     }
@@ -9893,7 +9963,7 @@ void CodeGenerator::visitWasmStackSwitchToSuspendable(
   int32_t framePushedAtSuspender = masm.framePushed();
   masm.Push(InstanceReg);
 
-  wasm::CallSiteDesc desc(wasm::CallSiteDesc::Kind::StackSwitch);
+  wasm::CallSiteDesc desc(wasm::CallSiteKind::StackSwitch);
   CodeLabel returnCallsite;
 
   // Aligning stack before trampoline call.
@@ -9933,7 +10003,7 @@ void CodeGenerator::visitWasmStackSwitchToSuspendable(
 
   masm.storePtr(InstanceReg, Address(masm.getStackPointer(),
                                      WasmCalleeInstanceOffsetBeforeCall));
-  masm.loadWasmPinnedRegsFromInstance();
+  masm.loadWasmPinnedRegsFromInstance(mozilla::Nothing());
 
   masm.assertStackAlignment(WasmStackAlignment);
 
@@ -10043,7 +10113,7 @@ void CodeGenerator::visitWasmStackSwitchToMain(LWasmStackSwitchToMain* lir) {
   int32_t framePushedAtSuspender = masm.framePushed();
   masm.Push(InstanceReg);
 
-  wasm::CallSiteDesc desc(wasm::CallSiteDesc::Kind::StackSwitch);
+  wasm::CallSiteDesc desc(wasm::CallSiteKind::StackSwitch);
   CodeLabel returnCallsite;
 
   // Aligning stack before trampoline call.
@@ -10106,7 +10176,7 @@ void CodeGenerator::visitWasmStackSwitchToMain(LWasmStackSwitchToMain* lir) {
 
   masm.storePtr(InstanceReg, Address(masm.getStackPointer(),
                                      WasmCalleeInstanceOffsetBeforeCall));
-  masm.loadWasmPinnedRegsFromInstance();
+  masm.loadWasmPinnedRegsFromInstance(mozilla::Nothing());
 
   masm.assertStackAlignment(WasmStackAlignment);
 
@@ -10229,7 +10299,7 @@ void CodeGenerator::visitWasmStackContinueOnSuspendable(
   int32_t framePushedAtSuspender = masm.framePushed();
   masm.Push(InstanceReg);
 
-  wasm::CallSiteDesc desc(wasm::CallSiteDesc::Kind::StackSwitch);
+  wasm::CallSiteDesc desc(wasm::CallSiteKind::StackSwitch);
   CodeLabel returnCallsite;
 
   // Aligning stack before trampoline call.
@@ -10381,9 +10451,8 @@ void EmitSignalNullCheckTrapSite(MacroAssembler& masm,
   if (!ins->maybeTrap()) {
     return;
   }
-  wasm::BytecodeOffset trapOffset(ins->maybeTrap()->offset);
   masm.append(wasm::Trap::NullPointerDereference,
-              wasm::TrapSite(tmi, fco, trapOffset));
+              wasm::TrapSite(tmi, fco, *ins->maybeTrap()));
 }
 
 template <typename InstructionWithMaybeTrapSite, class AddressOrBaseIndex>
@@ -10616,9 +10685,9 @@ void CodeGenerator::visitWasmStoreRef(LWasmStoreRef* ins) {
 
   if (ins->preBarrierKind() == WasmPreBarrierKind::Normal) {
     Label skipPreBarrier;
-    wasm::EmitWasmPreBarrierGuard(
-        masm, instance, temp, Address(valueBase, offset), &skipPreBarrier,
-        ins->maybeTrap() ? &ins->maybeTrap()->offset : nullptr);
+    wasm::EmitWasmPreBarrierGuard(masm, instance, temp,
+                                  Address(valueBase, offset), &skipPreBarrier,
+                                  ins->maybeTrap());
     wasm::EmitWasmPreBarrierCallImmediate(masm, instance, temp, valueBase,
                                           offset);
     masm.bind(&skipPreBarrier);
@@ -10642,9 +10711,8 @@ void CodeGenerator::visitWasmStoreElementRef(LWasmStoreElementRef* ins) {
 
   if (ins->preBarrierKind() == WasmPreBarrierKind::Normal) {
     Label skipPreBarrier;
-    wasm::EmitWasmPreBarrierGuard(
-        masm, instance, temp0, addr, &skipPreBarrier,
-        ins->maybeTrap() ? &ins->maybeTrap()->offset : nullptr);
+    wasm::EmitWasmPreBarrierGuard(masm, instance, temp0, addr, &skipPreBarrier,
+                                  ins->maybeTrap());
     wasm::EmitWasmPreBarrierCallIndex(masm, instance, temp0, temp1, addr);
     masm.bind(&skipPreBarrier);
   }
@@ -11982,9 +12050,9 @@ void CodeGenerator::visitInt32ToStringWithBase(LInt32ToStringWithBase* lir) {
 
   bool lowerCase = lir->mir()->lowerCase();
 
-  using Fn = JSString* (*)(JSContext*, int32_t, int32_t, bool);
+  using Fn = JSLinearString* (*)(JSContext*, int32_t, int32_t, bool);
   if (base.is<Register>()) {
-    auto* ool = oolCallVM<Fn, js::Int32ToStringWithBase>(
+    auto* ool = oolCallVM<Fn, js::Int32ToStringWithBase<CanGC>>(
         lir, ArgList(input, base.as<Register>(), Imm32(lowerCase)),
         StoreRegisterTo(output));
 
@@ -11994,7 +12062,7 @@ void CodeGenerator::visitInt32ToStringWithBase(LInt32ToStringWithBase* lir) {
                                    liveRegs, lowerCase, ool->entry());
     masm.bind(ool->rejoin());
   } else {
-    auto* ool = oolCallVM<Fn, js::Int32ToStringWithBase>(
+    auto* ool = oolCallVM<Fn, js::Int32ToStringWithBase<CanGC>>(
         lir, ArgList(input, Imm32(base.as<int32_t>()), Imm32(lowerCase)),
         StoreRegisterTo(output));
 
@@ -12958,9 +13026,8 @@ void CodeGenerator::emitConcat(LInstruction* lir, Register lhs, Register rhs,
       lir, ArgList(lhs, rhs, static_cast<Imm32>(int32_t(gc::Heap::Default))),
       StoreRegisterTo(output));
 
-  const JitZone* jitZone = gen->realm->zone()->jitZone();
   JitCode* stringConcatStub =
-      jitZone->stringConcatStubNoBarrier(&zoneStubsToReadBarrier_);
+      snapshot_->getZoneStub(JitZone::StubKind::StringConcat);
   masm.call(stringConcatStub);
   masm.branchTestPtr(Assembler::Zero, output, output, ool->entry());
 
@@ -14453,7 +14520,7 @@ void CodeGenerator::visitStringToLowerCase(LStringToLowerCase* lir) {
       lir->temp3()->isBogusTemp() ? string : ToRegister(lir->temp3());
   Register temp4 = ToRegister(lir->temp4());
 
-  using Fn = JSString* (*)(JSContext*, HandleString);
+  using Fn = JSLinearString* (*)(JSContext*, JSString*);
   OutOfLineCode* ool = oolCallVM<Fn, js::StringToLowerCase>(
       lir, ArgList(string), StoreRegisterTo(output));
 
@@ -14581,7 +14648,7 @@ void CodeGenerator::visitStringToLowerCase(LStringToLowerCase* lir) {
 void CodeGenerator::visitStringToUpperCase(LStringToUpperCase* lir) {
   pushArg(ToRegister(lir->string()));
 
-  using Fn = JSString* (*)(JSContext*, HandleString);
+  using Fn = JSLinearString* (*)(JSContext*, JSString*);
   callVM<Fn, js::StringToUpperCase>(lir);
 }
 
@@ -16414,11 +16481,14 @@ static bool CreateStackMapFromLSafepoint(LSafepoint& safepoint,
   return true;
 }
 
-bool CodeGenerator::generateWasm(
-    wasm::CallIndirectId callIndirectId, wasm::BytecodeOffset trapOffset,
-    const wasm::ArgTypeVector& argTypes, const RegisterOffsets& trapExitLayout,
-    size_t trapExitLayoutNumWords, wasm::FuncOffsets* offsets,
-    wasm::StackMaps* stackMaps, wasm::Decoder* decoder) {
+bool CodeGenerator::generateWasm(wasm::CallIndirectId callIndirectId,
+                                 const wasm::TrapSiteDesc& entryTrapSiteDesc,
+                                 const wasm::ArgTypeVector& argTypes,
+                                 const RegisterOffsets& trapExitLayout,
+                                 size_t trapExitLayoutNumWords,
+                                 wasm::FuncOffsets* offsets,
+                                 wasm::StackMaps* stackMaps,
+                                 wasm::Decoder* decoder) {
   AutoCreatedBy acb(masm, "CodeGenerator::generateWasm");
 
   JitSpew(JitSpew_Codegen, "# Emitting wasm code");
@@ -16440,7 +16510,7 @@ bool CodeGenerator::generateWasm(
     masm.reserveStack(frameSize());
   } else {
     std::pair<CodeOffset, uint32_t> pair =
-        masm.wasmReserveStackChecked(frameSize(), trapOffset);
+        masm.wasmReserveStackChecked(frameSize(), entryTrapSiteDesc);
     CodeOffset trapInsnOffset = pair.first;
     size_t nBytesReservedBeforeTrap = pair.second;
 
@@ -16519,8 +16589,11 @@ bool CodeGenerator::generateWasm(
   return true;
 }
 
-bool CodeGenerator::generate() {
+bool CodeGenerator::generate(const WarpSnapshot* snapshot) {
   AutoCreatedBy acb(masm, "CodeGenerator::generate");
+
+  MOZ_ASSERT(snapshot);
+  snapshot_ = snapshot;
 
   JitSpew(JitSpew_Codegen, "# Emitting code for script %s:%u:%u",
           gen->outerInfo().script()->filename(),
@@ -16698,7 +16771,7 @@ bool CodeGenerator::addHasSeenObjectEmulateUndefinedFuseDependency() {
   return mirGen().tracker.addDependency(dep);
 }
 
-bool CodeGenerator::link(JSContext* cx, const WarpSnapshot* snapshot) {
+bool CodeGenerator::link(JSContext* cx) {
   AutoCreatedBy acb(masm, "CodeGenerator::link");
 
   // We cancel off-thread Ion compilations in a few places during GC, but if
@@ -16709,15 +16782,12 @@ bool CodeGenerator::link(JSContext* cx, const WarpSnapshot* snapshot) {
   RootedScript script(cx, gen->outerInfo().script());
   MOZ_ASSERT(!script->hasIonScript());
 
-  // Perform any read barriers which were skipped while compiling the
-  // script, which may have happened off-thread.
-  JitZone* jitZone = cx->zone()->jitZone();
-  jitZone->performStubReadBarriers(zoneStubsToReadBarrier_);
-
   if (scriptCounts_ && !script->hasScriptCounts() &&
       !script->initScriptCounts(cx)) {
     return false;
   }
+
+  JitZone* jitZone = cx->zone()->jitZone();
 
   IonCompilationId compilationId =
       cx->runtime()->jitRuntime()->nextCompilationId();
@@ -16732,7 +16802,7 @@ bool CodeGenerator::link(JSContext* cx, const WarpSnapshot* snapshot) {
 
   // If an inlined script is invalidated (for example, by attaching
   // a debugger), we must also invalidate the parent IonScript.
-  if (!AddInlinedCompilations(cx, script, compilationId, snapshot, &isValid)) {
+  if (!AddInlinedCompilations(cx, script, compilationId, snapshot_, &isValid)) {
     return false;
   }
 
@@ -16758,7 +16828,7 @@ bool CodeGenerator::link(JSContext* cx, const WarpSnapshot* snapshot) {
 
   uint32_t argumentSlots = (gen->outerInfo().nargs() + 1) * sizeof(Value);
 
-  size_t numNurseryObjects = snapshot->nurseryObjects().length();
+  size_t numNurseryObjects = snapshot_->nurseryObjects().length();
 
   IonScript* ionScript = IonScript::New(
       cx, compilationId, graph.localSlotsSize(), argumentSlots, frameDepth_,
@@ -16770,7 +16840,7 @@ bool CodeGenerator::link(JSContext* cx, const WarpSnapshot* snapshot) {
     return false;
   }
 #ifdef DEBUG
-  ionScript->setICHash(snapshot->icHash());
+  ionScript->setICHash(snapshot_->icHash());
 #endif
 
   auto freeIonScript = mozilla::MakeScopeExit([&ionScript] {
@@ -16939,7 +17009,7 @@ bool CodeGenerator::link(JSContext* cx, const WarpSnapshot* snapshot) {
   // Copy the list of nursery objects. Note that the store buffer can add
   // HeapPtr edges that must be cleared in IonScript::Destroy. See the
   // infallibility warning above.
-  const auto& nurseryObjects = snapshot->nurseryObjects();
+  const auto& nurseryObjects = snapshot_->nurseryObjects();
   for (size_t i = 0; i < nurseryObjects.length(); i++) {
     ionScript->nurseryObjects()[i].init(nurseryObjects[i]);
   }
@@ -19814,7 +19884,11 @@ void CodeGenerator::visitIsTypedArray(LIsTypedArray* lir) {
   masm.jump(&done);
   masm.bind(&notTypedArray);
   if (ool) {
-    masm.branchTestClassIsProxy(true, output, ool->entry());
+    Label notProxy;
+    masm.branchTestClassIsProxy(false, output, &notProxy);
+    masm.branchTestProxyHandlerFamily(Assembler::Equal, object, output,
+                                      &Wrapper::family, ool->entry());
+    masm.bind(&notProxy);
   }
   masm.move32(Imm32(0), output);
   masm.bind(&done);
@@ -20236,7 +20310,7 @@ void CodeGenerator::visitInterruptCheck(LInterruptCheck* lir) {
 void CodeGenerator::visitOutOfLineResumableWasmTrap(
     OutOfLineResumableWasmTrap* ool) {
   LInstruction* lir = ool->lir();
-  masm.wasmTrap(ool->trap(), ool->bytecodeOffset());
+  masm.wasmTrap(ool->trap(), ool->trapSiteDesc());
 
   markSafepointAt(masm.currentOffset(), lir);
 
@@ -20251,14 +20325,14 @@ void CodeGenerator::visitOutOfLineResumableWasmTrap(
 
 void CodeGenerator::visitOutOfLineAbortingWasmTrap(
     OutOfLineAbortingWasmTrap* ool) {
-  masm.wasmTrap(ool->trap(), ool->bytecodeOffset());
+  masm.wasmTrap(ool->trap(), ool->trapSiteDesc());
 }
 
 void CodeGenerator::visitWasmInterruptCheck(LWasmInterruptCheck* lir) {
   MOZ_ASSERT(gen->compilingWasm());
 
   OutOfLineResumableWasmTrap* ool = new (alloc()) OutOfLineResumableWasmTrap(
-      lir, masm.framePushed(), lir->mir()->bytecodeOffset(),
+      lir, masm.framePushed(), lir->mir()->trapSiteDesc(),
       wasm::Trap::CheckInterrupt);
   addOutOfLineCode(ool, lir->mir());
   masm.branch32(
@@ -20272,7 +20346,7 @@ void CodeGenerator::visitWasmTrap(LWasmTrap* lir) {
   MOZ_ASSERT(gen->compilingWasm());
   const MWasmTrap* mir = lir->mir();
 
-  masm.wasmTrap(mir->trap(), mir->bytecodeOffset());
+  masm.wasmTrap(mir->trap(), mir->trapSiteDesc());
 }
 
 void CodeGenerator::visitWasmTrapIfNull(LWasmTrapIfNull* lir) {
@@ -20282,7 +20356,7 @@ void CodeGenerator::visitWasmTrapIfNull(LWasmTrapIfNull* lir) {
   Register ref = ToRegister(lir->ref());
 
   masm.branchWasmAnyRefIsNull(false, ref, &nonNull);
-  masm.wasmTrap(mir->trap(), mir->bytecodeOffset());
+  masm.wasmTrap(mir->trap(), mir->trapSiteDesc());
   masm.bind(&nonNull);
 }
 
@@ -20366,7 +20440,7 @@ void CodeGenerator::visitWasmRefIsSubtypeOfConcreteAndBranch(
 
 void CodeGenerator::callWasmStructAllocFun(
     LInstruction* lir, wasm::SymbolicAddress fun, Register typeDefData,
-    Register output, wasm::BytecodeOffset bytecodeOffset) {
+    Register output, const wasm::TrapSiteDesc& trapSiteDesc) {
   MOZ_ASSERT(fun == wasm::SymbolicAddress::StructNewIL_true ||
              fun == wasm::SymbolicAddress::StructNewIL_false ||
              fun == wasm::SymbolicAddress::StructNewOOL_true ||
@@ -20388,8 +20462,9 @@ void CodeGenerator::callWasmStructAllocFun(
   masm.passABIArg(InstanceReg);
   masm.passABIArg(typeDefData);
   int32_t instanceOffset = masm.framePushed() - framePushedAfterInstance;
-  CodeOffset offset = masm.callWithABI(
-      bytecodeOffset, fun, mozilla::Some(instanceOffset), ABIType::General);
+  CodeOffset offset =
+      masm.callWithABI(trapSiteDesc.bytecodeOffset, fun,
+                       mozilla::Some(instanceOffset), ABIType::General);
   masm.storeCallPointerResult(output);
 
   markSafepointAt(offset.offset(), lir);
@@ -20403,7 +20478,7 @@ void CodeGenerator::callWasmStructAllocFun(
 #endif
 
   masm.wasmTrapOnFailedInstanceCall(output, wasm::FailureMode::FailOnNullPtr,
-                                    bytecodeOffset);
+                                    trapSiteDesc);
 }
 
 // Out-of-line path to allocate wasm GC structs
@@ -20412,17 +20487,17 @@ class OutOfLineWasmNewStruct : public OutOfLineCodeBase<CodeGenerator> {
   wasm::SymbolicAddress fun_;
   Register typeDefData_;
   Register output_;
-  wasm::BytecodeOffset bytecodeOffset_;
+  wasm::TrapSiteDesc trapSiteDesc_;
 
  public:
   OutOfLineWasmNewStruct(LInstruction* lir, wasm::SymbolicAddress fun,
                          Register typeDefData, Register output,
-                         wasm::BytecodeOffset bytecodeOffset)
+                         const wasm::TrapSiteDesc& trapSiteDesc)
       : lir_(lir),
         fun_(fun),
         typeDefData_(typeDefData),
         output_(output),
-        bytecodeOffset_(bytecodeOffset) {}
+        trapSiteDesc_(trapSiteDesc) {}
 
   void accept(CodeGenerator* codegen) override {
     codegen->visitOutOfLineWasmNewStruct(this);
@@ -20432,12 +20507,12 @@ class OutOfLineWasmNewStruct : public OutOfLineCodeBase<CodeGenerator> {
   wasm::SymbolicAddress fun() const { return fun_; }
   Register typeDefData() const { return typeDefData_; }
   Register output() const { return output_; }
-  wasm::BytecodeOffset bytecodeOffset() const { return bytecodeOffset_; }
+  const wasm::TrapSiteDesc& trapSiteDesc() const { return trapSiteDesc_; }
 };
 
 void CodeGenerator::visitOutOfLineWasmNewStruct(OutOfLineWasmNewStruct* ool) {
   callWasmStructAllocFun(ool->lir(), ool->fun(), ool->typeDefData(),
-                         ool->output(), ool->bytecodeOffset());
+                         ool->output(), ool->trapSiteDesc());
   masm.jump(ool->rejoin());
 }
 
@@ -20453,8 +20528,7 @@ void CodeGenerator::visitWasmNewStructObject(LWasmNewStructObject* lir) {
     wasm::SymbolicAddress fun = mir->zeroFields()
                                     ? wasm::SymbolicAddress::StructNewOOL_true
                                     : wasm::SymbolicAddress::StructNewOOL_false;
-    callWasmStructAllocFun(lir, fun, typeDefData, output,
-                           mir->bytecodeOffset());
+    callWasmStructAllocFun(lir, fun, typeDefData, output, mir->trapSiteDesc());
   } else {
     wasm::SymbolicAddress fun = mir->zeroFields()
                                     ? wasm::SymbolicAddress::StructNewIL_true
@@ -20464,7 +20538,7 @@ void CodeGenerator::visitWasmNewStructObject(LWasmNewStructObject* lir) {
     MOZ_ASSERT(instance == InstanceReg);
 
     auto* ool = new (alloc()) OutOfLineWasmNewStruct(
-        lir, fun, typeDefData, output, mir->bytecodeOffset());
+        lir, fun, typeDefData, output, mir->trapSiteDesc());
     addOutOfLineCode(ool, lir->mir());
 
     Register temp1 = ToRegister(lir->temp0());
@@ -20476,11 +20550,10 @@ void CodeGenerator::visitWasmNewStructObject(LWasmNewStructObject* lir) {
   }
 }
 
-void CodeGenerator::callWasmArrayAllocFun(LInstruction* lir,
-                                          wasm::SymbolicAddress fun,
-                                          Register numElements,
-                                          Register typeDefData, Register output,
-                                          wasm::BytecodeOffset bytecodeOffset) {
+void CodeGenerator::callWasmArrayAllocFun(
+    LInstruction* lir, wasm::SymbolicAddress fun, Register numElements,
+    Register typeDefData, Register output,
+    const wasm::TrapSiteDesc& trapSiteDesc) {
   MOZ_ASSERT(fun == wasm::SymbolicAddress::ArrayNew_true ||
              fun == wasm::SymbolicAddress::ArrayNew_false);
   MOZ_ASSERT(wasm::SASigArrayNew_true.failureMode ==
@@ -20497,8 +20570,9 @@ void CodeGenerator::callWasmArrayAllocFun(LInstruction* lir,
   masm.passABIArg(numElements);
   masm.passABIArg(typeDefData);
   int32_t instanceOffset = masm.framePushed() - framePushedAfterInstance;
-  CodeOffset offset = masm.callWithABI(
-      bytecodeOffset, fun, mozilla::Some(instanceOffset), ABIType::General);
+  CodeOffset offset =
+      masm.callWithABI(trapSiteDesc.bytecodeOffset, fun,
+                       mozilla::Some(instanceOffset), ABIType::General);
   masm.storeCallPointerResult(output);
 
   markSafepointAt(offset.offset(), lir);
@@ -20512,7 +20586,7 @@ void CodeGenerator::callWasmArrayAllocFun(LInstruction* lir,
 #endif
 
   masm.wasmTrapOnFailedInstanceCall(output, wasm::FailureMode::FailOnNullPtr,
-                                    bytecodeOffset);
+                                    trapSiteDesc);
 }
 
 // Out-of-line path to allocate wasm GC arrays
@@ -20523,21 +20597,21 @@ class OutOfLineWasmNewArray : public OutOfLineCodeBase<CodeGenerator> {
   mozilla::Maybe<uint32_t> numElements_;
   Register typeDefData_;
   Register output_;
-  wasm::BytecodeOffset bytecodeOffset_;
+  wasm::TrapSiteDesc trapSiteDesc_;
 
  public:
   OutOfLineWasmNewArray(LInstruction* lir, wasm::SymbolicAddress fun,
                         Register numElementsReg,
                         mozilla::Maybe<uint32_t> numElements,
                         Register typeDefData, Register output,
-                        wasm::BytecodeOffset bytecodeOffset)
+                        const wasm::TrapSiteDesc& trapSiteDesc)
       : lir_(lir),
         fun_(fun),
         numElementsReg_(numElementsReg),
         numElements_(numElements),
         typeDefData_(typeDefData),
         output_(output),
-        bytecodeOffset_(bytecodeOffset) {}
+        trapSiteDesc_(trapSiteDesc) {}
 
   void accept(CodeGenerator* codegen) override {
     codegen->visitOutOfLineWasmNewArray(this);
@@ -20549,7 +20623,7 @@ class OutOfLineWasmNewArray : public OutOfLineCodeBase<CodeGenerator> {
   mozilla::Maybe<uint32_t> numElements() const { return numElements_; }
   Register typeDefData() const { return typeDefData_; }
   Register output() const { return output_; }
-  wasm::BytecodeOffset bytecodeOffset() const { return bytecodeOffset_; }
+  const wasm::TrapSiteDesc& trapSiteDesc() const { return trapSiteDesc_; }
 };
 
 void CodeGenerator::visitOutOfLineWasmNewArray(OutOfLineWasmNewArray* ool) {
@@ -20557,8 +20631,7 @@ void CodeGenerator::visitOutOfLineWasmNewArray(OutOfLineWasmNewArray* ool) {
     masm.move32(Imm32(ool->numElements().value()), ool->numElementsReg());
   }
   callWasmArrayAllocFun(ool->lir(), ool->fun(), ool->numElementsReg(),
-                        ool->typeDefData(), ool->output(),
-                        ool->bytecodeOffset());
+                        ool->typeDefData(), ool->output(), ool->trapSiteDesc());
   masm.jump(ool->rejoin());
 }
 
@@ -20587,7 +20660,7 @@ void CodeGenerator::visitWasmNewArrayObject(LWasmNewArrayObject* lir) {
       // call to handle the out-of-line storage (or the trap).
       masm.move32(Imm32(numElements), temp1);
       callWasmArrayAllocFun(lir, fun, temp1, typeDefData, output,
-                            mir->bytecodeOffset());
+                            mir->trapSiteDesc());
     } else {
       // storageBytes is small enough to be stored inline in WasmArrayObject.
       // Attempt a nursery allocation and fall back to an instance call if it
@@ -20597,7 +20670,7 @@ void CodeGenerator::visitWasmNewArrayObject(LWasmNewArrayObject* lir) {
 
       auto ool = new (alloc())
           OutOfLineWasmNewArray(lir, fun, temp1, mozilla::Some(numElements),
-                                typeDefData, output, mir->bytecodeOffset());
+                                typeDefData, output, mir->trapSiteDesc());
       addOutOfLineCode(ool, lir->mir());
 
       masm.wasmNewArrayObjectFixed(instance, output, typeDefData, temp1, temp2,
@@ -20615,7 +20688,7 @@ void CodeGenerator::visitWasmNewArrayObject(LWasmNewArrayObject* lir) {
 
     auto ool = new (alloc())
         OutOfLineWasmNewArray(lir, fun, numElements, mozilla::Nothing(),
-                              typeDefData, output, mir->bytecodeOffset());
+                              typeDefData, output, mir->trapSiteDesc());
     addOutOfLineCode(ool, lir->mir());
 
     masm.wasmNewArrayObject(instance, output, numElements, typeDefData, temp1,
@@ -20643,11 +20716,11 @@ void CodeGenerator::visitWasmBoundsCheck(LWasmBoundsCheck* ins) {
   if (JitOptions.spectreIndexMasking) {
     Label ok;
     masm.wasmBoundsCheck32(Assembler::Below, ptr, boundsCheckLimit, &ok);
-    masm.wasmTrap(wasm::Trap::OutOfBounds, mir->bytecodeOffset());
+    masm.wasmTrap(wasm::Trap::OutOfBounds, mir->trapSiteDesc());
     masm.bind(&ok);
   } else {
-    OutOfLineAbortingWasmTrap* ool = new (alloc()) OutOfLineAbortingWasmTrap(
-        mir->bytecodeOffset(), wasm::Trap::OutOfBounds);
+    OutOfLineAbortingWasmTrap* ool = new (alloc())
+        OutOfLineAbortingWasmTrap(mir->trapSiteDesc(), wasm::Trap::OutOfBounds);
     addOutOfLineCode(ool, mir);
     masm.wasmBoundsCheck32(Assembler::AboveOrEqual, ptr, boundsCheckLimit,
                            ool->entry());
@@ -20662,11 +20735,11 @@ void CodeGenerator::visitWasmBoundsCheck64(LWasmBoundsCheck64* ins) {
   if (JitOptions.spectreIndexMasking) {
     Label ok;
     masm.wasmBoundsCheck64(Assembler::Below, ptr, boundsCheckLimit, &ok);
-    masm.wasmTrap(wasm::Trap::OutOfBounds, mir->bytecodeOffset());
+    masm.wasmTrap(wasm::Trap::OutOfBounds, mir->trapSiteDesc());
     masm.bind(&ok);
   } else {
-    OutOfLineAbortingWasmTrap* ool = new (alloc()) OutOfLineAbortingWasmTrap(
-        mir->bytecodeOffset(), wasm::Trap::OutOfBounds);
+    OutOfLineAbortingWasmTrap* ool = new (alloc())
+        OutOfLineAbortingWasmTrap(mir->trapSiteDesc(), wasm::Trap::OutOfBounds);
     addOutOfLineCode(ool, mir);
     masm.wasmBoundsCheck64(Assembler::AboveOrEqual, ptr, boundsCheckLimit,
                            ool->entry());
@@ -20680,14 +20753,14 @@ void CodeGenerator::visitWasmBoundsCheckRange32(LWasmBoundsCheckRange32* ins) {
   Register limit = ToRegister(ins->limit());
   Register tmp = ToRegister(ins->temp0());
 
-  masm.wasmBoundsCheckRange32(index, length, limit, tmp, mir->bytecodeOffset());
+  masm.wasmBoundsCheckRange32(index, length, limit, tmp, mir->trapSiteDesc());
 }
 
 void CodeGenerator::visitWasmAlignmentCheck(LWasmAlignmentCheck* ins) {
   const MWasmAlignmentCheck* mir = ins->mir();
   Register ptr = ToRegister(ins->ptr());
   OutOfLineAbortingWasmTrap* ool = new (alloc()) OutOfLineAbortingWasmTrap(
-      mir->bytecodeOffset(), wasm::Trap::UnalignedAccess);
+      mir->trapSiteDesc(), wasm::Trap::UnalignedAccess);
   addOutOfLineCode(ool, mir);
   masm.branchTest32(Assembler::NonZero, ptr, Imm32(mir->byteSize() - 1),
                     ool->entry());
@@ -20702,7 +20775,7 @@ void CodeGenerator::visitWasmAlignmentCheck64(LWasmAlignmentCheck64* ins) {
   Register r = ptr.low;
 #endif
   OutOfLineAbortingWasmTrap* ool = new (alloc()) OutOfLineAbortingWasmTrap(
-      mir->bytecodeOffset(), wasm::Trap::UnalignedAccess);
+      mir->trapSiteDesc(), wasm::Trap::UnalignedAccess);
   addOutOfLineCode(ool, mir);
   masm.branchTestPtr(Assembler::NonZero, r, Imm32(mir->byteSize() - 1),
                      ool->entry());
@@ -22034,7 +22107,7 @@ void CodeGenerator::visitWasmTrapIfAnyRefIsNotJSString(
   Register temp = ToRegister(lir->temp0());
   Label isJSString;
   masm.branchWasmAnyRefIsJSString(true, input, temp, &isJSString);
-  masm.wasmTrap(lir->mir()->trap(), lir->mir()->bytecodeOffset());
+  masm.wasmTrap(lir->mir()->trap(), lir->mir()->trapSiteDesc());
   masm.bind(&isJSString);
 }
 
@@ -22045,7 +22118,7 @@ void CodeGenerator::visitWasmAnyRefJSStringLength(
   Register temp = ToRegister(lir->temp0());
   Label isJSString;
   masm.branchWasmAnyRefIsJSString(true, input, temp, &isJSString);
-  masm.wasmTrap(lir->mir()->trap(), lir->mir()->bytecodeOffset());
+  masm.wasmTrap(lir->mir()->trap(), lir->mir()->trapSiteDesc());
   masm.bind(&isJSString);
   masm.untagWasmAnyRef(input, temp, wasm::AnyRefTag::String);
   masm.loadStringLength(temp, output);
@@ -22103,6 +22176,7 @@ void CodeGenerator::visitTakeDisposeCapability(LTakeDisposeCapability* lir) {
 
   Address capabilityAddr(
       environment, DisposableEnvironmentObject::offsetOfDisposeCapability());
+  emitPreBarrier(capabilityAddr);
   masm.loadValue(capabilityAddr, output);
   masm.storeValue(JS::UndefinedValue(), capabilityAddr);
 }

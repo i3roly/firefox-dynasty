@@ -942,11 +942,11 @@ nsresult EventStateManager::PreHandleEvent(nsPresContext* aPresContext,
     // XXX Probably doesn't matter much, but storing these in CSS pixels instead
     // of device pixels means behavior can be a bit odd if you zoom while
     // pointer-locked.
-    sLastScreenPoint =
+    sLastScreenPoint = RoundedToInt(
         Event::GetScreenCoords(aPresContext, aEvent, aEvent->mRefPoint)
-            .extract();
-    sLastClientPoint = Event::GetClientCoords(
-        aPresContext, aEvent, aEvent->mRefPoint, CSSIntPoint(0, 0));
+            .extract());
+    sLastClientPoint = RoundedToInt(Event::GetClientCoords(
+        aPresContext, aEvent, aEvent->mRefPoint, CSSDoublePoint{0, 0}));
   }
 
   *aStatus = nsEventStatus_eIgnore;
@@ -1923,7 +1923,20 @@ static void DispatchCrossProcessMouseExitEvents(WidgetMouseEvent* aMouseEvent,
     mouseExitEvent->mExitFrom =
         Some(aIsReallyExit ? WidgetMouseEvent::ePuppet
                            : WidgetMouseEvent::ePuppetParentToPuppetChild);
-    aRemoteTarget->SendRealMouseEvent(*mouseExitEvent);
+
+    auto ContentReactsToPointerEvents = [](BrowserParent* aRemoteTarget) {
+      if (Element* owner = aRemoteTarget->GetOwnerElement()) {
+        if (nsSubDocumentFrame* subDocFrame =
+                do_QueryFrame(owner->GetPrimaryFrame())) {
+          return subDocFrame->ContentReactsToPointerEvents();
+        }
+      }
+      return true;
+    };
+
+    if (ContentReactsToPointerEvents(aRemoteTarget)) {
+      aRemoteTarget->SendRealMouseEvent(*mouseExitEvent);
+    }
 
     aRemoteTarget = GetBrowserParentAncestor(aRemoteTarget);
   }
@@ -4420,9 +4433,9 @@ nsresult EventStateManager::PostHandleEvent(nsPresContext* aPresContext,
           // to set drag end point in such case (you hit assersion if you do
           // it).
           if (sourceWC) {
-            CSSIntPoint dropPointInScreen =
+            const CSSIntPoint dropPointInScreen = RoundedToInt(
                 Event::GetScreenCoords(aPresContext, aEvent, aEvent->mRefPoint)
-                    .extract();
+                    .extract());
             dragSession->SetDragEndPointForTests(dropPointInScreen.x,
                                                  dropPointInScreen.y);
           }
@@ -6191,11 +6204,25 @@ nsresult EventStateManager::HandleMiddleClickPaste(
     clipboardType = nsIClipboard::kSelectionClipboard;
   }
 
+  RefPtr<DataTransfer> dataTransfer;
+  if (aEditorBase) {
+    // Create the same DataTransfer object here so we can share it between
+    // the clipboard event and the call to HandlePaste below. This prevents
+    // race conditions with Content Analysis on like we see in bug 1918027.
+    dataTransfer =
+        aEditorBase->CreateDataTransferForPaste(ePaste, clipboardType);
+  }
+  const auto clearDataTransfer = MakeScopeExit([&] {
+    if (dataTransfer) {
+      dataTransfer->ClearForPaste();
+    }
+  });
+
   // Fire ePaste event by ourselves since we need to dispatch "paste" event
   // even if the middle click event was consumed for compatibility with
   // Chromium.
   if (!nsCopySupport::FireClipboardEvent(ePaste, Some(clipboardType),
-                                         aPresShell, selection)) {
+                                         aPresShell, selection, dataTransfer)) {
     *aStatus = nsEventStatus_eConsumeNoDefault;
     return NS_OK;
   }
@@ -6230,11 +6257,11 @@ nsresult EventStateManager::HandleMiddleClickPaste(
   // quotation.  Otherwise, paste it as is.
   if (aMouseEvent->IsControl()) {
     DebugOnly<nsresult> rv = aEditorBase->PasteAsQuotationAsAction(
-        clipboardType, EditorBase::DispatchPasteEvent::No);
+        clipboardType, EditorBase::DispatchPasteEvent::No, dataTransfer);
     NS_WARNING_ASSERTION(NS_SUCCEEDED(rv), "Failed to paste as quotation");
   } else {
     DebugOnly<nsresult> rv = aEditorBase->PasteAsAction(
-        clipboardType, EditorBase::DispatchPasteEvent::No);
+        clipboardType, EditorBase::DispatchPasteEvent::No, dataTransfer);
     NS_WARNING_ASSERTION(NS_SUCCEEDED(rv), "Failed to paste");
   }
   *aStatus = nsEventStatus_eConsumeNoDefault;

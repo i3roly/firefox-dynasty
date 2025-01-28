@@ -937,15 +937,10 @@ export class UrlbarInput {
     // Don't add further handling here, the catch above is our last resort.
   }
 
-  handleRevert({ escapeSearchMode = false } = {}) {
+  handleRevert() {
     this.window.gBrowser.userTypedValue = null;
     // Nullify search mode before setURI so it won't try to restore it.
-    if (
-      !lazy.UrlbarPrefs.getScotchBonnetPref("scotchBonnet.persistSearchMode") ||
-      escapeSearchMode
-    ) {
-      this.searchMode = null;
-    }
+    this.searchMode = null;
     this.setURI(null, true, false, true);
     if (this.value && this.focused) {
       this.select();
@@ -1783,7 +1778,6 @@ export class UrlbarInput {
         // remove it.
         value = value.slice(1);
       }
-      this._revertOnBlurValue = value;
     } else if (
       Object.values(lazy.UrlbarTokenizer.RESTRICT).includes(firstToken)
     ) {
@@ -1792,7 +1786,6 @@ export class UrlbarInput {
       if (Object.values(lazy.UrlbarTokenizer.RESTRICT).includes(value)) {
         value += " ";
       }
-      this._revertOnBlurValue = value;
     }
     this.inputField.value = value;
     // Avoid selecting the text if this method is called twice in a row.
@@ -1835,7 +1828,6 @@ export class UrlbarInput {
     }
 
     this._lastSearchString = "";
-    this._revertOnBlurValue = url;
     this.inputField.value = url;
     this.selectionStart = -1;
 
@@ -2197,6 +2189,7 @@ export class UrlbarInput {
     this.setAttribute("pageproxystate", state);
     this._inputContainer.setAttribute("pageproxystate", state);
     this._identityBox?.setAttribute("pageproxystate", state);
+    this.toggleAttribute("unifiedsearchbutton-available", state == "invalid");
 
     if (state == "valid") {
       this._lastValidURLStr = this.value;
@@ -3523,7 +3516,7 @@ export class UrlbarInput {
     let stripOnShare = this.document.createXULElement("menuitem");
     this.document.l10n.setAttributes(
       stripOnShare,
-      "text-action-strip-on-share"
+      "text-action-copy-clean-link"
     );
     stripOnShare.setAttribute("anonid", "strip-on-share");
     stripOnShare.id = "strip-on-share";
@@ -3811,15 +3804,7 @@ export class UrlbarInput {
     this._isHandoffSession = false;
     this.removeAttribute("focused");
 
-    if (
-      this._revertOnBlurValue == this.value &&
-      !this.window.gBrowser.userTypedValue
-    ) {
-      this.handleRevert();
-    } else if (
-      this._autofillPlaceholder &&
-      this.window.gBrowser.userTypedValue
-    ) {
+    if (this._autofillPlaceholder && this.window.gBrowser.userTypedValue) {
       // If we were autofilling, remove the autofilled portion, by restoring
       // the value to the last typed one.
       this.value = this.window.gBrowser.userTypedValue;
@@ -3834,7 +3819,6 @@ export class UrlbarInput {
       // We're not updating the value, so just format it.
       this.formatValue();
     }
-    this._revertOnBlurValue = null;
 
     this._resetSearchState();
 

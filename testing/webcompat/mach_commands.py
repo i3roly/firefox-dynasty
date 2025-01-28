@@ -38,6 +38,15 @@ def unzip(fileobj, dest):
         zip_data.extractall(path=dest)
 
 
+def writable_dir(path):
+    if not os.path.isdir(path):
+        raise argparse.ArgumentTypeError("{0} is not a valid dir".format(path))
+    if os.access(path, os.W_OK):
+        return path
+    else:
+        raise argparse.ArgumentTypeError("{0} is not a writable dir".format(path))
+
+
 def create_parser_interventions():
     from mozlog import commandline
 
@@ -55,7 +64,7 @@ def create_parser_interventions():
         default="9222",
         help="Port on which to run WebDriver BiDi websocket",
     )
-    parser.add_argument("-B", "--bug", help="Bug to run tests for")
+    parser.add_argument("-b", "--bugs", nargs="*", help="Bugs to run tests for")
     parser.add_argument(
         "--do2fa",
         action="store_true",
@@ -96,7 +105,13 @@ def create_parser_interventions():
         help="Platform to target",
     )
     parser.add_argument(
-        "-S",
+        "--failure-screenshots-dir",
+        action="store",
+        type=writable_dir,
+        help="Path to save failure screenshots",
+    )
+    parser.add_argument(
+        "-s",
         "--no-failure-screenshots",
         action="store_true",
         default=False,
@@ -289,13 +304,14 @@ class InterventionTest(MozbuildObject):
                     device_serial=kwargs.get("device_serial"),
                     package_name=kwargs.get("package_name"),
                     addon=kwargs.get("addon"),
-                    bug=kwargs["bug"],
+                    bugs=kwargs["bugs"],
                     debug=kwargs["debug"],
                     interventions=interventions_setting,
                     config=kwargs["config"],
                     headless=kwargs["headless"],
                     do2fa=kwargs["do2fa"],
                     log_level=log_level,
+                    failure_screenshots_dir=kwargs.get("failure_screenshots_dir"),
                     no_failure_screenshots=kwargs.get("no_failure_screenshots"),
                 )
 
@@ -317,12 +333,13 @@ class InterventionTest(MozbuildObject):
                     device_serial=kwargs.get("device_serial"),
                     package_name=kwargs.get("package_name"),
                     addon=kwargs.get("addon"),
-                    bug=kwargs["bug"],
+                    bugs=kwargs["bugs"],
                     debug=kwargs["debug"],
                     shims=shims_setting,
                     config=kwargs["config"],
                     headless=kwargs["headless"],
                     do2fa=kwargs["do2fa"],
+                    failure_screenshots_dir=kwargs.get("failure_screenshots_dir"),
                     no_failure_screenshots=kwargs.get("no_failure_screenshots"),
                 )
 

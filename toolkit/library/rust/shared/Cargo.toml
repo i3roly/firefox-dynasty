@@ -79,6 +79,7 @@ dap_ffi = { path = "../../../components/telemetry/dap/ffi" }
 data-encoding-ffi = { path = "../../../../dom/fs/parent/rust/data-encoding-ffi" }
 binary_http = { path = "../../../../netwerk/protocol/http/binary_http" }
 oblivious_http = { path = "../../../../netwerk/protocol/http/oblivious_http" }
+mls_gk = { path = "../../../../security/mls/mls_gk" }
 mime-guess-ffi = { path = "../../../../dom/fs/parent/rust/mime-guess-ffi" }
 
 # Note: `modern_sqlite` means rusqlite's bindings file be for a sqlite with
@@ -98,7 +99,7 @@ processtools = { path = "../../../components/processtools" }
 qcms = { path = "../../../../gfx/qcms", features = ["c_bindings", "neon"], default-features = false }
 
 wpf-gpu-raster = { git = "https://github.com/FirefoxGraphics/wpf-gpu-raster", rev = "99979da091fd58fba8477e7fcdf5ec0727102916" }
-aa-stroke = { git = "https://github.com/FirefoxGraphics/aa-stroke", rev = "35a650261605662795a04cc249c465436cbfab45" }
+aa-stroke = { git = "https://github.com/FirefoxGraphics/aa-stroke", rev = "a821fa621c2def48e90c82774b4c6563b5a8ea4a" }
 etagere = { version = "0.2.13", features = ["ffi"] }
 
 url = "2.5.0"
@@ -109,10 +110,10 @@ fallible_collections = { version = "0.4", features = ["rust_1_57"] }
 libz-rs-sys = { git = "https://github.com/memorysafety/zlib-rs", rev = "4aa430ccb77537d0d60dab8db993ca51bb1194c5", features = ["custom-prefix"], optional = true }
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
-gkrust-uniffi-components = { path = "../../../components/uniffi-bindgen-gecko-js/components/" }
-gkrust-uniffi-fixtures = { path = "../../../components/uniffi-bindgen-gecko-js/fixtures/", optional = true }
+gkrust-uniffi-components = { path = "../../../components/uniffi-bindgen-gecko-js/components/", features = ["xpcom"] }
+gkrust-uniffi-fixtures = { path = "../../../components/uniffi-bindgen-gecko-js/fixtures/", features = ["xpcom"], optional = true }
 viaduct = "0.1"
-webext_storage_bridge = { path = "../../../components/extensions/storage/webext_storage_bridge" }
+webext-storage = "0.1"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 detect_win32k_conflicts = { path = "../../../xre/detect_win32k_conflicts" }

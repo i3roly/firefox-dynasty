@@ -189,7 +189,7 @@ export function gzipCompressString(string) {
   let stringStream = Cc["@mozilla.org/io/string-input-stream;1"].createInstance(
     Ci.nsIStringInputStream
   );
-  stringStream.data = string;
+  stringStream.setByteStringData(string);
   converter.onStartRequest(null, null);
   converter.onDataAvailable(null, stringStream, 0, string.length);
   converter.onStopRequest(null, null, null);
@@ -230,7 +230,9 @@ export function sendStandalonePing(endpoint, payload, extraHeaders = {}) {
 
     const utf8Payload = new TextEncoder().encode(payload);
 
-    payloadStream.data = gzipCompressString(arrayToString(utf8Payload));
+    payloadStream.setByteStringData(
+      gzipCompressString(arrayToString(utf8Payload))
+    );
     request.sendInputStream(payloadStream);
   });
 }
@@ -660,9 +662,8 @@ export var SendScheduler = {
           nextSendDelay
       );
       this._sendTaskState = "wait on next send opportunity";
-      const cancelled = await CancellableTimeout.promiseWaitOnTimeout(
-        nextSendDelay
-      );
+      const cancelled =
+        await CancellableTimeout.promiseWaitOnTimeout(nextSendDelay);
       if (cancelled) {
         this._log.trace(
           "_doSendTask - batch send wait was cancelled, resetting backoff timer"
@@ -1364,10 +1365,13 @@ export var TelemetrySendImpl = {
       "@mozilla.org/io/string-input-stream;1"
     ].createInstance(Ci.nsIStringInputStream);
     startTime = Utils.monotonicNow();
-    payloadStream.data = Policy.gzipCompressString(arrayToString(utf8Payload));
+    const compressedPing = Policy.gzipCompressString(
+      arrayToString(utf8Payload)
+    );
+    payloadStream.setByteStringData(compressedPing);
 
     // Check the size and drop pings which are too big.
-    const compressedPingSizeBytes = payloadStream.data.length;
+    const compressedPingSizeBytes = compressedPing.length;
     if (compressedPingSizeBytes > lazy.TelemetryStorage.MAXIMUM_PING_SIZE) {
       this._log.error(
         "_doPing - submitted ping exceeds the size limit, size: " +

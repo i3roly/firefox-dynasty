@@ -263,9 +263,8 @@ void nsINode::AssertInvariantsOnNodeInfoChange() {
 
 #ifdef DEBUG
 void nsINode::AssertIsRootElementSlow(bool aIsRoot) const {
-  // TODO(bug 1931301): Re-enable this assert.
-  // const bool isRootSlow = this == OwnerDoc()->GetRootElement();
-  // MOZ_ASSERT(aIsRoot == isRootSlow);
+  const bool isRootSlow = this == OwnerDoc()->GetRootElement();
+  MOZ_ASSERT(aIsRoot == isRootSlow);
 }
 #endif
 
@@ -2327,7 +2326,9 @@ void nsINode::RemoveChildNode(nsIContent* aKid, bool aNotify) {
   nsMutationGuard::DidMutate();
   mozAutoDocUpdate updateBatch(GetComposedDoc(), aNotify);
 
-  nsIContent* previousSibling = aKid->GetPreviousSibling();
+  if (aNotify) {
+    MutationObservers::NotifyContentWillBeRemoved(this, aKid);
+  }
 
   // Since aKid is use also after DisconnectChild, ensure it stays alive.
   nsCOMPtr<nsIContent> kungfuDeathGrip = aKid;
@@ -2335,11 +2336,6 @@ void nsINode::RemoveChildNode(nsIContent* aKid, bool aNotify) {
 
   // Invalidate cached array of child nodes
   InvalidateChildNodes();
-
-  if (aNotify) {
-    MutationObservers::NotifyContentRemoved(this, aKid, previousSibling);
-  }
-
   aKid->UnbindFromTree();
 }
 

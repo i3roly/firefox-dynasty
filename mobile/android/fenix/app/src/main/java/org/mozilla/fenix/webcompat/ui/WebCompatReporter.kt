@@ -33,13 +33,13 @@ import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.tooling.preview.PreviewParameterProvider
 import androidx.compose.ui.unit.dp
+import mozilla.components.compose.base.button.TextButton
 import mozilla.components.lib.state.ext.observeAsState
 import org.mozilla.fenix.R
 import org.mozilla.fenix.compose.Dropdown
 import org.mozilla.fenix.compose.TextField
 import org.mozilla.fenix.compose.TextFieldColors
 import org.mozilla.fenix.compose.button.PrimaryButton
-import org.mozilla.fenix.compose.button.TextButton
 import org.mozilla.fenix.theme.FirefoxTheme
 import org.mozilla.fenix.webcompat.store.WebCompatReporterAction
 import org.mozilla.fenix.webcompat.store.WebCompatReporterState
@@ -81,7 +81,7 @@ fun WebCompatReporter(
             Text(
                 text = stringResource(
                     id = R.string.webcompat_reporter_description,
-                    R.string.app_name,
+                    stringResource(R.string.app_name),
                 ),
                 color = FirefoxTheme.colors.textPrimary,
                 style = FirefoxTheme.typography.body2,
@@ -90,7 +90,7 @@ fun WebCompatReporter(
             Spacer(modifier = Modifier.height(32.dp))
 
             TextField(
-                value = state.url,
+                value = state.enteredUrl,
                 onValueChange = {
                     store.dispatch(WebCompatReporterAction.BrokenSiteChanged(newUrl = it))
                 },
@@ -197,15 +197,15 @@ private class WebCompatPreviewParameterProvider : PreviewParameterProvider<WebCo
         get() = sequenceOf(
             // Initial feature opening
             WebCompatReporterState(
-                url = "www.example.com/url_parameters_that_break_the_page",
+                enteredUrl = "www.example.com/url_parameters_that_break_the_page",
             ),
             // Error in URL field
             WebCompatReporterState(
-                url = "",
+                enteredUrl = "",
             ),
             // Multi-line description
             WebCompatReporterState(
-                url = "www.example.com/url_parameters_that_break_the_page",
+                enteredUrl = "www.example.com/url_parameters_that_break_the_page",
                 reason = WebCompatReporterState.BrokenSiteReason.Slow,
                 problemDescription = "The site wouldn’t load and after I tried xyz it still wouldn’t " +
                     "load and then again site wouldn’t load and after I tried xyz it still wouldn’t " +

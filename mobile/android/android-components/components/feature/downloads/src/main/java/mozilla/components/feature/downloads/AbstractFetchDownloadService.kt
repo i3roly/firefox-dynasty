@@ -5,7 +5,6 @@
 package mozilla.components.feature.downloads
 
 import android.annotation.SuppressLint
-import android.annotation.TargetApi
 import android.app.DownloadManager.ACTION_DOWNLOAD_COMPLETE
 import android.app.DownloadManager.EXTRA_DOWNLOAD_ID
 import android.app.Notification
@@ -19,7 +18,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.Intent.ACTION_VIEW
 import android.content.IntentFilter
-import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Build.VERSION.SDK_INT
@@ -33,6 +31,7 @@ import android.webkit.MimeTypeMap
 import android.widget.Toast
 import androidx.annotation.ColorRes
 import androidx.annotation.GuardedBy
+import androidx.annotation.RequiresApi
 import androidx.annotation.VisibleForTesting
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -960,7 +959,7 @@ abstract class AbstractFetchDownloadService : Service() {
                 )
         }
 
-    @TargetApi(Build.VERSION_CODES.Q)
+    @RequiresApi(Build.VERSION_CODES.Q)
     @VisibleForTesting
     internal fun useFileStreamScopedStorage(download: DownloadState, append: Boolean, block: (OutputStream) -> Unit) {
         val values = ContentValues().apply {
@@ -992,7 +991,7 @@ abstract class AbstractFetchDownloadService : Service() {
         } ?: throw IOException("Failed to register download with content resolver")
     }
 
-    @TargetApi(Build.VERSION_CODES.P)
+    @RequiresApi(Build.VERSION_CODES.P)
     @Suppress("Deprecation")
     @VisibleForTesting
     internal fun useFileStreamLegacy(download: DownloadState, append: Boolean, block: (OutputStream) -> Unit) {
@@ -1011,8 +1010,6 @@ abstract class AbstractFetchDownloadService : Service() {
     companion object {
         /**
          * Launches an intent to open the given file, returns whether or not the file could be opened.
-         * If the file is a PDF and the caller application can open PDFs, the file will be opened
-         * from the caller application.
          */
         fun openFile(
             applicationContext: Context,
@@ -1029,13 +1026,11 @@ abstract class AbstractFetchDownloadService : Service() {
         }
 
         /**
-         * Creates an Intent which can then be used to open the file specified. If the file is a
-         * PDF and the caller application can open PDFs, the file will be opened from the caller
-         * application.
+         * Creates an Intent which can then be used to open the file specified.
+         *
          * @param context the current Android *Context*
          * @param download contains the details of the downloaded file to be opened.
          */
-        @SuppressLint("QueryPermissionsNeeded") // We expect our browsers to have the QUERY_ALL_PACKAGES permission
         fun createOpenFileIntent(
             context: Context,
             download: DownloadState,
@@ -1061,20 +1056,10 @@ abstract class AbstractFetchDownloadService : Service() {
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
                 }
 
-            if (download.isPdf) {
-                val canCallerOpenPdfs = context.packageManager
-                    .queryIntentActivities(newIntent, PackageManager.MATCH_DEFAULT_ONLY)
-                    .any { it.activityInfo.packageName == context.packageName }
-
-                if (canCallerOpenPdfs) {
-                    newIntent.setPackage(context.packageName)
-                }
-            }
-
             return newIntent
         }
 
-        @TargetApi(Build.VERSION_CODES.Q)
+        @RequiresApi(Build.VERSION_CODES.Q)
         @VisibleForTesting
         internal fun queryDownloadMediaStore(applicationContext: Context, download: DownloadState): Uri? {
             val resolver = applicationContext.contentResolver

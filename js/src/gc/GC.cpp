@@ -192,6 +192,7 @@
 
 #include "gc/GC-inl.h"
 
+#include "mozilla/glue/Debug.h"
 #include "mozilla/Range.h"
 #include "mozilla/ScopeExit.h"
 #include "mozilla/TextUtils.h"
@@ -860,20 +861,6 @@ void GCRuntime::clearZealMode(ZealMode mode) {
   MOZ_ASSERT(!hasZealMode(mode));
 }
 
-const char* js::gc::AllocKindName(AllocKind kind) {
-  static const char* const names[] = {
-#  define EXPAND_THING_NAME(allocKind, _1, _2, _3, _4, _5, _6) #allocKind,
-      FOR_EACH_ALLOCKIND(EXPAND_THING_NAME)
-#  undef EXPAND_THING_NAME
-  };
-  static_assert(std::size(names) == AllocKindCount,
-                "names array should have an entry for every AllocKind");
-
-  size_t i = size_t(kind);
-  MOZ_ASSERT(i < std::size(names));
-  return names[i];
-}
-
 void js::gc::DumpArenaInfo() {
   fprintf(stderr, "Arena header size: %zu\n\n", ArenaHeaderSize);
 
@@ -888,6 +875,20 @@ void js::gc::DumpArenaInfo() {
 }
 
 #endif  // JS_GC_ZEAL
+        //
+const char* js::gc::AllocKindName(AllocKind kind) {
+  static const char* const names[] = {
+#define EXPAND_THING_NAME(allocKind, _1, _2, _3, _4, _5, _6) #allocKind,
+      FOR_EACH_ALLOCKIND(EXPAND_THING_NAME)
+#undef EXPAND_THING_NAME
+  };
+  static_assert(std::size(names) == AllocKindCount,
+                "names array should have an entry for every AllocKind");
+
+  size_t i = size_t(kind);
+  MOZ_ASSERT(i < std::size(names));
+  return names[i];
+}
 
 bool GCRuntime::init(uint32_t maxbytes) {
   MOZ_ASSERT(!wasInitialized());
@@ -1646,11 +1647,11 @@ void GCRuntime::setHostCleanupFinalizationRegistryCallback(
 }
 
 void GCRuntime::callHostCleanupFinalizationRegistryCallback(
-    JSFunction* doCleanup, GlobalObject* incumbentGlobal) {
+    JSFunction* doCleanup, JSObject* hostDefinedData) {
   JS::AutoSuppressGCAnalysis nogc;
   const auto& callback = hostCleanupFinalizationRegistryCallback.ref();
   if (callback.op) {
-    callback.op(doCleanup, incumbentGlobal, callback.data);
+    callback.op(doCleanup, hostDefinedData, callback.data);
   }
 }
 
@@ -3042,7 +3043,7 @@ void GCRuntime::beginMarkPhase(AutoGCSession& session) {
   }
 
   updateSchedulingStateOnGCStart();
-  stats().measureInitialHeapSize();
+  stats().measureInitialHeapSizes();
 
   useParallelMarking = SingleThreadedMarking;
   if (canMarkInParallel() && initParallelMarking()) {
@@ -3335,12 +3336,13 @@ GCRuntime::MarkQueueProgress GCRuntime::processTestMarkQueue() {
       }
 
       // Mark the object.
-      AutoEnterOOMUnsafeRegion oomUnsafe;
       if (!marker().markOneObjectForTest(obj)) {
         // If we overflowed the stack here and delayed marking, then we won't be
         // testing what we think we're testing.
         MOZ_ASSERT(obj->asTenured().arena()->onDelayedMarkingList());
-        oomUnsafe.crash("Overflowed stack while marking test queue");
+        printf_stderr(
+            "Hit mark stack limit while marking test queue; test results may "
+            "be invalid");
       }
     } else if (val.isString()) {
       JSLinearString* str = &val.toString()->asLinear();

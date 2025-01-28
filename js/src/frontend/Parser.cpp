@@ -1042,7 +1042,7 @@ static MOZ_ALWAYS_INLINE ParserBindingName* InitializeIndexedBindings(
 template <class SlotInfo, typename UnsignedInteger, typename... Step>
 static MOZ_ALWAYS_INLINE ParserBindingName* InitializeIndexedBindings(
     SlotInfo& slotInfo, ParserBindingName* start, ParserBindingName* cursor,
-    UnsignedInteger SlotInfo::*field, const ParserBindingNameVector& bindings,
+    UnsignedInteger SlotInfo::* field, const ParserBindingNameVector& bindings,
     Step&&... step) {
   slotInfo.*field =
       AssertedCast<UnsignedInteger>(PointerRangeSize(start, cursor));
@@ -1433,9 +1433,13 @@ static Maybe<VarScope::ParserData*> NewVarScopeData(FrontendContext* fc,
         return Nothing();
       }
     } else {
-      MOZ_ASSERT(
-          bi.kind() == BindingKind::Let || bi.kind() == BindingKind::Const,
-          "bad var scope BindingKind");
+      MOZ_ASSERT(bi.kind() == BindingKind::Let ||
+                     bi.kind() == BindingKind::Const
+#ifdef ENABLE_EXPLICIT_RESOURCE_MANAGEMENT
+                     || bi.kind() == BindingKind::Using
+#endif
+                 ,
+                 "bad var scope BindingKind");
     }
   }
 
@@ -4326,7 +4330,7 @@ GeneralParser<ParseHandler, Unit>::bindingIdentifierOrPattern(
   }
 
   if (!TokenKindIsPossibleIdentifierName(tt)) {
-    error(JSMSG_NO_VARIABLE_NAME);
+    error(JSMSG_NO_VARIABLE_NAME, TokenKindToDesc(tt));
     return errorResult();
   }
 
@@ -4369,7 +4373,7 @@ GeneralParser<ParseHandler, Unit>::objectBindingPattern(
       }
 
       if (!TokenKindIsPossibleIdentifierName(tt)) {
-        error(JSMSG_NO_VARIABLE_NAME);
+        error(JSMSG_NO_VARIABLE_NAME, TokenKindToDesc(tt));
         return errorResult();
       }
 
@@ -4446,7 +4450,7 @@ GeneralParser<ParseHandler, Unit>::objectBindingPattern(
           return errorResult();
         }
       } else {
-        errorAt(namePos.begin, JSMSG_NO_VARIABLE_NAME);
+        errorAt(namePos.begin, JSMSG_NO_VARIABLE_NAME, TokenKindToDesc(tt));
         return errorResult();
       }
     }
@@ -4762,7 +4766,7 @@ GeneralParser<ParseHandler, Unit>::declarationName(DeclarationKind declKind,
                                                    Node* forInOrOfExpression) {
   // Anything other than possible identifier is an error.
   if (!TokenKindIsPossibleIdentifier(tt)) {
-    error(JSMSG_NO_VARIABLE_NAME);
+    error(JSMSG_NO_VARIABLE_NAME, TokenKindToDesc(tt));
     return errorResult();
   }
 
@@ -4830,6 +4834,13 @@ GeneralParser<ParseHandler, Unit>::declarationName(DeclarationKind declKind,
         errorAt(namePos.begin, JSMSG_BAD_CONST_DECL);
         return errorResult();
       }
+#ifdef ENABLE_EXPLICIT_RESOURCE_MANAGEMENT
+      if (declKind == DeclarationKind::Using ||
+          declKind == DeclarationKind::AwaitUsing) {
+        errorAt(namePos.begin, JSMSG_BAD_USING_DECL);
+        return errorResult();
+      }
+#endif
     }
   }
 

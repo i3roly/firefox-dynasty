@@ -50,7 +50,7 @@ const Template = ({ hasFooterLinks }) => html`
     }
   </style>
   <div id="page">
-    <moz-page-nav data-l10n-id="moz-page-nav-heading" data-l10n-attrs="heading">
+    <moz-page-nav data-l10n-id="moz-page-nav-heading">
       <moz-page-nav-button
         view="view-one"
         data-l10n-id="moz-page-nav-button-one"
@@ -71,20 +71,21 @@ const Template = ({ hasFooterLinks }) => html`
       </moz-page-nav-button>
       ${when(
         hasFooterLinks,
-        () => html` <moz-page-nav-button
-            support-page="test"
-            data-l10n-id="moz-page-nav-button-four"
-            iconSrc="chrome://browser/skin/preferences/category-general.svg"
-            slot="secondary-nav"
-          >
-          </moz-page-nav-button>
-          <moz-page-nav-button
-            href="https://www.example.com"
-            data-l10n-id="moz-page-nav-button-five"
-            iconSrc="chrome://browser/skin/preferences/category-general.svg"
-            slot="secondary-nav"
-          >
-          </moz-page-nav-button>`
+        () =>
+          html` <moz-page-nav-button
+              support-page="test"
+              data-l10n-id="moz-page-nav-button-four"
+              iconSrc="chrome://browser/skin/preferences/category-general.svg"
+              slot="secondary-nav"
+            >
+            </moz-page-nav-button>
+            <moz-page-nav-button
+              href="https://www.example.com"
+              data-l10n-id="moz-page-nav-button-five"
+              iconSrc="chrome://browser/skin/preferences/category-general.svg"
+              slot="secondary-nav"
+            >
+            </moz-page-nav-button>`
       )}
     </moz-page-nav>
     <main></main>

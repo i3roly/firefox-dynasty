@@ -3075,9 +3075,28 @@ nsDocShell::GetCanGoBack(bool* aCanGoBack) {
   }
   RefPtr<ChildSHistory> rootSH = GetRootSessionHistory();
   if (rootSH) {
-    *aCanGoBack = rootSH->CanGo(-1);
+    *aCanGoBack = rootSH->CanGo(
+        -1, StaticPrefs::browser_navigation_requireUserInteraction());
     MOZ_LOG(gSHLog, LogLevel::Verbose,
             ("nsDocShell %p CanGoBack()->%d", this, *aCanGoBack));
+
+    return NS_OK;
+  }
+  return NS_ERROR_FAILURE;
+}
+
+NS_IMETHODIMP
+nsDocShell::GetCanGoBackIgnoringUserInteraction(bool* aCanGoBack) {
+  *aCanGoBack = false;
+  if (!IsNavigationAllowed(false)) {
+    return NS_OK;  // JS may not handle returning of an error code
+  }
+  RefPtr<ChildSHistory> rootSH = GetRootSessionHistory();
+  if (rootSH) {
+    *aCanGoBack = rootSH->CanGo(-1, false);
+    MOZ_LOG(gSHLog, LogLevel::Verbose,
+            ("nsDocShell %p CanGoBackIgnoringUserInteraction()->%d", this,
+             *aCanGoBack));
 
     return NS_OK;
   }
@@ -3092,7 +3111,8 @@ nsDocShell::GetCanGoForward(bool* aCanGoForward) {
   }
   RefPtr<ChildSHistory> rootSH = GetRootSessionHistory();
   if (rootSH) {
-    *aCanGoForward = rootSH->CanGo(1);
+    *aCanGoForward = rootSH->CanGo(
+        1, StaticPrefs::browser_navigation_requireUserInteraction());
     MOZ_LOG(gSHLog, LogLevel::Verbose,
             ("nsDocShell %p CanGoForward()->%d", this, *aCanGoForward));
     return NS_OK;
@@ -8030,6 +8050,7 @@ nsresult nsDocShell::CheckLoadingPermissions() {
 
   // Check if the caller is from the same origin as this docshell,
   // or any of its ancestors.
+  nsIPrincipal* subjectPrincipal = nsContentUtils::SubjectPrincipal();
   for (RefPtr<BrowsingContext> bc = mBrowsingContext; bc;
        bc = bc->GetParent()) {
     // If the BrowsingContext is not in process, then it
@@ -8048,7 +8069,11 @@ nsresult nsDocShell::CheckLoadingPermissions() {
       return NS_ERROR_UNEXPECTED;
     }
 
-    if (nsContentUtils::SubjectPrincipal()->Subsumes(p)) {
+    // file: URIs are considered the same domain for the purpose of frame
+    // navigation by clicking a targeted link, regardless of script
+    // accessibility (bug 1934807).
+    if (subjectPrincipal->Subsumes(p) ||
+        (subjectPrincipal->SchemeIs("file") && p->SchemeIs("file"))) {
       // Same origin, permit load
       return NS_OK;
     }

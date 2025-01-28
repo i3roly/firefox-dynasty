@@ -955,10 +955,10 @@ void MacroAssemblerLOONG64::ma_push(Register r) {
   if (r == StackPointer) {
     ScratchRegisterScope scratch(asMasm());
     as_or(scratch, r, zero);
-    as_addi_d(StackPointer, StackPointer, (int32_t) - sizeof(intptr_t));
+    as_addi_d(StackPointer, StackPointer, (int32_t)-sizeof(intptr_t));
     as_st_d(scratch, StackPointer, 0);
   } else {
-    as_addi_d(StackPointer, StackPointer, (int32_t) - sizeof(intptr_t));
+    as_addi_d(StackPointer, StackPointer, (int32_t)-sizeof(intptr_t));
     as_st_d(r, StackPointer, 0);
   }
 }
@@ -1287,7 +1287,7 @@ void MacroAssemblerLOONG64::ma_pop(FloatRegister f) {
 }
 
 void MacroAssemblerLOONG64::ma_push(FloatRegister f) {
-  as_addi_d(StackPointer, StackPointer, (int32_t) - sizeof(double));
+  as_addi_d(StackPointer, StackPointer, (int32_t)-sizeof(double));
   as_fst_d(f, StackPointer, 0);
 }
 
@@ -2318,7 +2318,7 @@ void MacroAssemblerLOONG64Compat::wasmStoreI64Impl(
 
 void MacroAssemblerLOONG64::outOfLineWasmTruncateToInt32Check(
     FloatRegister input, Register output, MIRType fromType, TruncFlags flags,
-    Label* rejoin, wasm::BytecodeOffset trapOffset) {
+    Label* rejoin, const wasm::TrapSiteDesc& trapSiteDesc) {
   bool isUnsigned = flags & TRUNC_UNSIGNED;
   bool isSaturating = flags & TRUNC_SATURATING;
 
@@ -2378,14 +2378,14 @@ void MacroAssemblerLOONG64::outOfLineWasmTruncateToInt32Check(
     asMasm().branchFloat(Assembler::DoubleUnordered, input, input, &inputIsNaN);
   }
 
-  asMasm().wasmTrap(wasm::Trap::IntegerOverflow, trapOffset);
+  asMasm().wasmTrap(wasm::Trap::IntegerOverflow, trapSiteDesc);
   asMasm().bind(&inputIsNaN);
-  asMasm().wasmTrap(wasm::Trap::InvalidConversionToInteger, trapOffset);
+  asMasm().wasmTrap(wasm::Trap::InvalidConversionToInteger, trapSiteDesc);
 }
 
 void MacroAssemblerLOONG64::outOfLineWasmTruncateToInt64Check(
     FloatRegister input, Register64 output_, MIRType fromType, TruncFlags flags,
-    Label* rejoin, wasm::BytecodeOffset trapOffset) {
+    Label* rejoin, const wasm::TrapSiteDesc& trapSiteDesc) {
   bool isUnsigned = flags & TRUNC_UNSIGNED;
   bool isSaturating = flags & TRUNC_SATURATING;
 
@@ -2447,9 +2447,9 @@ void MacroAssemblerLOONG64::outOfLineWasmTruncateToInt64Check(
     asMasm().branchFloat(Assembler::DoubleUnordered, input, input, &inputIsNaN);
   }
 
-  asMasm().wasmTrap(wasm::Trap::IntegerOverflow, trapOffset);
+  asMasm().wasmTrap(wasm::Trap::IntegerOverflow, trapSiteDesc);
   asMasm().bind(&inputIsNaN);
-  asMasm().wasmTrap(wasm::Trap::InvalidConversionToInteger, trapOffset);
+  asMasm().wasmTrap(wasm::Trap::InvalidConversionToInteger, trapSiteDesc);
 }
 
 void MacroAssemblerLOONG64Compat::profilerEnterFrame(Register framePtr,
@@ -3244,40 +3244,32 @@ void MacroAssembler::wasmTruncateFloat32ToInt64(
   }
 }
 
-void MacroAssembler::oolWasmTruncateCheckF32ToI32(FloatRegister input,
-                                                  Register output,
-                                                  TruncFlags flags,
-                                                  wasm::BytecodeOffset off,
-                                                  Label* rejoin) {
+void MacroAssembler::oolWasmTruncateCheckF32ToI32(
+    FloatRegister input, Register output, TruncFlags flags,
+    const wasm::TrapSiteDesc& trapSiteDesc, Label* rejoin) {
   outOfLineWasmTruncateToInt32Check(input, output, MIRType::Float32, flags,
-                                    rejoin, off);
+                                    rejoin, trapSiteDesc);
 }
 
-void MacroAssembler::oolWasmTruncateCheckF64ToI32(FloatRegister input,
-                                                  Register output,
-                                                  TruncFlags flags,
-                                                  wasm::BytecodeOffset off,
-                                                  Label* rejoin) {
+void MacroAssembler::oolWasmTruncateCheckF64ToI32(
+    FloatRegister input, Register output, TruncFlags flags,
+    const wasm::TrapSiteDesc& trapSiteDesc, Label* rejoin) {
   outOfLineWasmTruncateToInt32Check(input, output, MIRType::Double, flags,
-                                    rejoin, off);
+                                    rejoin, trapSiteDesc);
 }
 
-void MacroAssembler::oolWasmTruncateCheckF32ToI64(FloatRegister input,
-                                                  Register64 output,
-                                                  TruncFlags flags,
-                                                  wasm::BytecodeOffset off,
-                                                  Label* rejoin) {
+void MacroAssembler::oolWasmTruncateCheckF32ToI64(
+    FloatRegister input, Register64 output, TruncFlags flags,
+    const wasm::TrapSiteDesc& trapSiteDesc, Label* rejoin) {
   outOfLineWasmTruncateToInt64Check(input, output, MIRType::Float32, flags,
-                                    rejoin, off);
+                                    rejoin, trapSiteDesc);
 }
 
-void MacroAssembler::oolWasmTruncateCheckF64ToI64(FloatRegister input,
-                                                  Register64 output,
-                                                  TruncFlags flags,
-                                                  wasm::BytecodeOffset off,
-                                                  Label* rejoin) {
+void MacroAssembler::oolWasmTruncateCheckF64ToI64(
+    FloatRegister input, Register64 output, TruncFlags flags,
+    const wasm::TrapSiteDesc& trapSiteDesc, Label* rejoin) {
   outOfLineWasmTruncateToInt64Check(input, output, MIRType::Double, flags,
-                                    rejoin, off);
+                                    rejoin, trapSiteDesc);
 }
 
 void MacroAssembler::wasmLoad(const wasm::MemoryAccessDesc& access,
@@ -3556,7 +3548,6 @@ static void AtomicExchange(MacroAssembler& masm,
                            const T& mem, Register value, Register valueTemp,
                            Register offsetTemp, Register maskTemp,
                            Register output) {
-  ScratchRegisterScope scratch(masm);
   SecondScratchRegisterScope scratch2(masm);
   bool signExtend = Scalar::isSignedIntType(type);
   unsigned nbytes = Scalar::byteSize(type);
@@ -3576,8 +3567,10 @@ static void AtomicExchange(MacroAssembler& masm,
 
   Label again;
 
-  masm.computeEffectiveAddress(mem, scratch);
+  Register memTemp = scratch2;
+  masm.computeEffectiveAddress(mem, memTemp);
 
+  ScratchRegisterScope scratch(masm);
   if (nbytes == 4) {
     masm.memoryBarrierBefore(sync);
     masm.bind(&again);
@@ -3587,18 +3580,18 @@ static void AtomicExchange(MacroAssembler& masm,
                   FaultingCodeOffset(masm.currentOffset()));
     }
 
-    masm.as_ll_w(output, scratch, 0);
-    masm.as_or(scratch2, value, zero);
-    masm.as_sc_w(scratch2, scratch, 0);
-    masm.ma_b(scratch2, Register(scratch2), &again, Assembler::Zero, ShortJump);
+    masm.as_ll_w(output, memTemp, 0);
+    masm.as_or(scratch, value, zero);
+    masm.as_sc_w(scratch, memTemp, 0);
+    masm.ma_b(scratch, Register(scratch), &again, Assembler::Zero, ShortJump);
 
     masm.memoryBarrierAfter(sync);
 
     return;
   }
 
-  masm.as_andi(offsetTemp, scratch, 3);
-  masm.subPtr(offsetTemp, scratch);
+  masm.as_andi(offsetTemp, memTemp, 3);
+  masm.subPtr(offsetTemp, memTemp);
   masm.as_slli_w(offsetTemp, offsetTemp, 3);
   masm.ma_li(maskTemp, Imm32(UINT32_MAX >> ((4 - nbytes) * 8)));
   masm.as_sll_w(maskTemp, maskTemp, offsetTemp);
@@ -3622,13 +3615,13 @@ static void AtomicExchange(MacroAssembler& masm,
                 FaultingCodeOffset(masm.currentOffset()));
   }
 
-  masm.as_ll_w(output, scratch, 0);
-  masm.as_and(scratch2, output, maskTemp);
-  masm.as_or(scratch2, scratch2, valueTemp);
+  masm.as_ll_w(output, memTemp, 0);
+  masm.as_and(scratch, output, maskTemp);
+  masm.as_or(scratch, scratch, valueTemp);
 
-  masm.as_sc_w(scratch2, scratch, 0);
+  masm.as_sc_w(scratch, memTemp, 0);
 
-  masm.ma_b(scratch2, Register(scratch2), &again, Assembler::Zero, ShortJump);
+  masm.ma_b(scratch, Register(scratch), &again, Assembler::Zero, ShortJump);
 
   masm.as_srl_w(output, output, offsetTemp);
 
@@ -3690,7 +3683,6 @@ static void AtomicFetchOp(MacroAssembler& masm,
                           const T& mem, Register value, Register valueTemp,
                           Register offsetTemp, Register maskTemp,
                           Register output) {
-  ScratchRegisterScope scratch(masm);
   SecondScratchRegisterScope scratch2(masm);
   bool signExtend = Scalar::isSignedIntType(type);
   unsigned nbytes = Scalar::byteSize(type);
@@ -3710,8 +3702,10 @@ static void AtomicFetchOp(MacroAssembler& masm,
 
   Label again;
 
-  masm.computeEffectiveAddress(mem, scratch);
+  Register memTemp = scratch2;
+  masm.computeEffectiveAddress(mem, memTemp);
 
+  ScratchRegisterScope scratch(masm);
   if (nbytes == 4) {
     masm.memoryBarrierBefore(sync);
     masm.bind(&again);
@@ -3721,38 +3715,38 @@ static void AtomicFetchOp(MacroAssembler& masm,
                   FaultingCodeOffset(masm.currentOffset()));
     }
 
-    masm.as_ll_w(output, scratch, 0);
+    masm.as_ll_w(output, memTemp, 0);
 
     switch (op) {
       case AtomicOp::Add:
-        masm.as_add_w(scratch2, output, value);
+        masm.as_add_w(scratch, output, value);
         break;
       case AtomicOp::Sub:
-        masm.as_sub_w(scratch2, output, value);
+        masm.as_sub_w(scratch, output, value);
         break;
       case AtomicOp::And:
-        masm.as_and(scratch2, output, value);
+        masm.as_and(scratch, output, value);
         break;
       case AtomicOp::Or:
-        masm.as_or(scratch2, output, value);
+        masm.as_or(scratch, output, value);
         break;
       case AtomicOp::Xor:
-        masm.as_xor(scratch2, output, value);
+        masm.as_xor(scratch, output, value);
         break;
       default:
         MOZ_CRASH();
     }
 
-    masm.as_sc_w(scratch2, scratch, 0);
-    masm.ma_b(scratch2, Register(scratch2), &again, Assembler::Zero, ShortJump);
+    masm.as_sc_w(scratch, memTemp, 0);
+    masm.ma_b(scratch, Register(scratch), &again, Assembler::Zero, ShortJump);
 
     masm.memoryBarrierAfter(sync);
 
     return;
   }
 
-  masm.as_andi(offsetTemp, scratch, 3);
-  masm.subPtr(offsetTemp, scratch);
+  masm.as_andi(offsetTemp, memTemp, 3);
+  masm.subPtr(offsetTemp, memTemp);
   masm.as_slli_w(offsetTemp, offsetTemp, 3);
   masm.ma_li(maskTemp, Imm32(UINT32_MAX >> ((4 - nbytes) * 8)));
   masm.as_sll_w(maskTemp, maskTemp, offsetTemp);
@@ -3767,8 +3761,8 @@ static void AtomicFetchOp(MacroAssembler& masm,
                 FaultingCodeOffset(masm.currentOffset()));
   }
 
-  masm.as_ll_w(scratch2, scratch, 0);
-  masm.as_srl_w(output, scratch2, offsetTemp);
+  masm.as_ll_w(scratch, memTemp, 0);
+  masm.as_srl_w(output, scratch, offsetTemp);
 
   switch (op) {
     case AtomicOp::Add:
@@ -3801,12 +3795,12 @@ static void AtomicFetchOp(MacroAssembler& masm,
 
   masm.as_sll_w(valueTemp, valueTemp, offsetTemp);
 
-  masm.as_and(scratch2, scratch2, maskTemp);
-  masm.as_or(scratch2, scratch2, valueTemp);
+  masm.as_and(scratch, scratch, maskTemp);
+  masm.as_or(scratch, scratch, valueTemp);
 
-  masm.as_sc_w(scratch2, scratch, 0);
+  masm.as_sc_w(scratch, memTemp, 0);
 
-  masm.ma_b(scratch2, Register(scratch2), &again, Assembler::Zero, ShortJump);
+  masm.ma_b(scratch, Register(scratch), &again, Assembler::Zero, ShortJump);
 
   switch (nbytes) {
     case 1:

@@ -17,6 +17,8 @@ ChromeUtils.defineESModuleGetters(lazy, {
   NimbusFeatures: "resource://nimbus/ExperimentAPI.sys.mjs",
   RemoteSettings: "resource://services-settings/remote-settings.sys.mjs",
   TargetingContext: "resource://messaging-system/targeting/Targeting.sys.mjs",
+  recordTargetingContext:
+    "resource://nimbus/lib/TargetingContextRecorder.sys.mjs",
 });
 
 ChromeUtils.defineLazyGetter(lazy, "log", () => {
@@ -36,6 +38,8 @@ XPCOMUtils.defineLazyServiceGetter(
 const COLLECTION_ID_PREF = "messaging-system.rsexperimentloader.collection_id";
 const COLLECTION_ID_FALLBACK = "nimbus-desktop-experiments";
 const ENABLED_PREF = "messaging-system.rsexperimentloader.enabled";
+const TARGETING_CONTEXT_TELEMETRY_ENABLED_PREF =
+  "nimbus.telemetry.targetingContextEnabled";
 
 const TIMER_NAME = "rs-experiment-loader-timer";
 const TIMER_LAST_UPDATE_PREF = `app.update.lastUpdateTime.${TIMER_NAME}`;
@@ -80,6 +84,11 @@ XPCOMUtils.defineLazyPreferenceGetter(
   NIMBUS_APPID_PREF,
   "firefox-desktop"
 );
+XPCOMUtils.defineLazyPreferenceGetter(
+  lazy,
+  "TARGETING_CONTEXT_TELEMETRY_ENABLED",
+  TARGETING_CONTEXT_TELEMETRY_ENABLED_PREF
+);
 
 const SCHEMAS = {
   get NimbusExperiment() {
@@ -89,12 +98,29 @@ const SCHEMAS = {
   },
 };
 
+export const RecipeStatus = Object.freeze({
+  TARGETING_MATCH: "TARGETING_MATCH",
+  TARGETING_MISMATCH: "TARGETING_MISMATCH",
+  INVALID: "INVALID",
+
+  isValid(status) {
+    return (
+      status === RecipeStatus.TARGETING_MATCH ||
+      status === RecipeStatus.TARGETING_MISMATCH
+    );
+  },
+});
+
 export class _RemoteSettingsExperimentLoader {
   constructor() {
     // Has the timer been set?
     this._initialized = false;
     // Are we in the middle of updating recipes already?
     this._updating = false;
+    // Have we updated recipes at least once?
+    this._hasUpdatedOnce = false;
+    // deferred promise object that resolves after recipes are updated
+    this._updatingDeferred = Promise.withResolvers();
 
     // Make it possible to override for testing
     this.manager = lazy.ExperimentManager;
@@ -175,6 +201,7 @@ export class _RemoteSettingsExperimentLoader {
     lazy.timerManager.unregisterTimer(TIMER_NAME);
     this._initialized = false;
     this._updating = false;
+    this._hasUpdatedOnce = false;
   }
 
   /**
@@ -191,6 +218,20 @@ export class _RemoteSettingsExperimentLoader {
     }
 
     this._updating = true;
+    this.manager.optInRecipes = [];
+
+    // If recipes have been updated once, replace the promise with a new one
+    // such that we reset the resolved state of it from the previous .updateRecipes call.
+    if (this._hasUpdatedOnce) {
+      this._updatingDeferred = Promise.withResolvers();
+    }
+
+    // The targeting context metrics do not work in artifact builds.
+    // See-also: https://bugzilla.mozilla.org/show_bug.cgi?id=1936317
+    // See-also: https://bugzilla.mozilla.org/show_bug.cgi?id=1936319
+    if (lazy.TARGETING_CONTEXT_TELEMETRY_ENABLED) {
+      lazy.recordTargetingContext();
+    }
 
     // Since this method is async, the enabled pref could change between await
     // points. We don't want to half validate experiments, so we cache this to
@@ -246,8 +287,13 @@ export class _RemoteSettingsExperimentLoader {
 
     if (recipes && !loadingError) {
       for (const recipe of recipes) {
-        if (await enrollmentsCtx.checkRecipe(recipe)) {
-          await this.manager.onRecipe(recipe, "rs-loader");
+        const status = await enrollmentsCtx.checkRecipe(recipe);
+        if (RecipeStatus.isValid(status)) {
+          await this.manager.onRecipe(
+            recipe,
+            "rs-loader",
+            status === RecipeStatus.TARGETING_MATCH
+          );
         }
       }
 
@@ -265,6 +311,8 @@ export class _RemoteSettingsExperimentLoader {
     Services.obs.notifyObservers(null, "nimbus:enrollments-updated");
 
     this._updating = false;
+    this._hasUpdatedOnce = true;
+    this._updatingDeferred.resolve();
 
     this.recordIsReady();
   }
@@ -393,7 +441,10 @@ export class _RemoteSettingsExperimentLoader {
       }
     );
 
-    if (!(await enrollmentsCtx.checkRecipe(recipe))) {
+    // If a recipe is either targeting mismatch or invalid, ouput or throw the
+    // specific error message.
+    const result = await enrollmentsCtx.checkRecipe(recipe);
+    if (result !== RecipeStatus.TARGETING_MATCH) {
       const results = enrollmentsCtx.getResults();
 
       if (results.recipeMismatches.length) {
@@ -478,6 +529,14 @@ export class _RemoteSettingsExperimentLoader {
       Glean.nimbusEvents.isReady.record();
     }
   }
+
+  /**
+   * Returns a promise to the caller waiting for the recipes to be updated,
+   * which is resolved in the .updateRecipe function.
+   */
+  updatingRecipes() {
+    return this._updatingDeferred.promise;
+  }
 }
 
 export class EnrollmentsContext {
@@ -527,7 +586,7 @@ export class EnrollmentsContext {
       // This is *not* the same as `lazy.APP_ID` which is used to
       // distinguish between desktop Firefox and the desktop background
       // updater.
-      return false;
+      return RecipeStatus.INVALID;
     }
 
     const validateFeatureSchemas =
@@ -546,7 +605,7 @@ export class EnrollmentsContext {
         if (recipe.slug) {
           this.invalidRecipes.push(recipe.slug);
         }
-        return false;
+        return RecipeStatus.INVALID;
       }
     }
 
@@ -577,7 +636,7 @@ export class EnrollmentsContext {
     }
 
     if (!haveAllFeatures) {
-      return false;
+      return RecipeStatus.INVALID;
     }
 
     if (this.shouldCheckTargeting) {
@@ -589,7 +648,7 @@ export class EnrollmentsContext {
       } else {
         lazy.log.debug(`${recipe.id} did not match due to targeting`);
         this.recipeMismatches.push(recipe.slug);
-        return false;
+        return RecipeStatus.TARGETING_MISMATCH;
       }
     }
 
@@ -607,7 +666,7 @@ export class EnrollmentsContext {
         lazy.log.debug(
           `${recipe.id} is localized but missing locale ${this.locale}`
         );
-        return false;
+        return RecipeStatus.INVALID;
       }
     }
 
@@ -623,10 +682,10 @@ export class EnrollmentsContext {
         this.missingL10nIds.set(recipe.slug, result.missingL10nIds);
       }
       lazy.log.debug(`${recipe.id} did not validate`);
-      return false;
+      return RecipeStatus.INVALID;
     }
 
-    return true;
+    return RecipeStatus.TARGETING_MATCH;
   }
 
   async evaluateJexl(jexlString, customContext) {

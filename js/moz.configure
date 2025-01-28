@@ -224,6 +224,54 @@ set_config(
     depends_if("--enable-portable-baseline-interp-force")(lambda _: True),
 )
 
+# Enable ahead-of-time-known preloaded IC bodies.
+option(
+    "--enable-aot-ics",
+    default=False,
+    help="{Enable|Disable} including ahead-of-time corpus of CacheIR IC bodies",
+)
+
+set_define(
+    "ENABLE_JS_AOT_ICS",
+    depends_if("--enable-aot-ics")(lambda _: True),
+)
+set_config(
+    "ENABLE_JS_AOT_ICS",
+    depends_if("--enable-aot-ics")(lambda _: True),
+)
+
+# Force-on the option for AOT ICs.
+option(
+    "--enable-aot-ics-force",
+    default=False,
+    help="{Enable|Disable} forcing the AOT ICs option on without additional configuration",
+)
+
+set_define(
+    "ENABLE_JS_AOT_ICS_FORCE",
+    depends_if("--enable-aot-ics-force")(lambda _: True),
+)
+set_config(
+    "ENABLE_JS_AOT_ICS_FORCE",
+    depends_if("--enable-aot-ics-force")(lambda _: True),
+)
+
+# Enforce AOT ICs (testing only): abort if a new IC (not in AOT corpus) is encountered.
+option(
+    "--enable-aot-ics-enforce",
+    default=False,
+    help="{Enable|Disable} enforcing that only AOT IC corpus is used, crashing otherwise (TEST ONLY)",
+)
+
+set_define(
+    "ENABLE_JS_AOT_ICS_ENFORCE",
+    depends_if("--enable-aot-ics-enforce")(lambda _: True),
+)
+set_config(
+    "ENABLE_JS_AOT_ICS_ENFORCE",
+    depends_if("--enable-aot-ics-enforce")(lambda _: True),
+)
+
 
 # JIT support
 # =======================================================
@@ -1325,7 +1373,11 @@ set_define("U_STATIC_IMPLEMENTATION", True, when=depends(system_icu)(lambda x: n
 # ECMAScript Temporal API Support (uses ICU and ICU4X)
 # ======================================================
 
-option("--with-temporal-api", default=False, help="Enable ECMAScript Temporal API")
+option(
+    "--with-temporal-api",
+    default=milestone.is_nightly,
+    help="{Enable|Disable} ECMAScript Temporal API",
+)
 
 set_config("JS_HAS_TEMPORAL_API", True, when="--with-temporal-api")
 set_define("JS_HAS_TEMPORAL_API", True, when="--with-temporal-api")

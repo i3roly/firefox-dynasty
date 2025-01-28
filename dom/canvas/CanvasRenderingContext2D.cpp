@@ -4115,6 +4115,9 @@ bool CanvasRenderingContext2D::SetFontInternal(const nsACString& aFont,
   params.explicitLanguage = fontStyle->mExplicitLanguage;
   params.userFontSet = c->GetUserFontSet();
   params.textPerf = c->GetTextPerfMetrics();
+#ifdef XP_WIN
+  params.allowForceGDIClassic = false;
+#endif
   RefPtr<nsFontMetrics> metrics = c->GetMetricsFor(resizedFont, params);
 
   gfxFontGroup* newFontGroup = metrics->GetThebesFontGroup();
@@ -4214,6 +4217,9 @@ bool CanvasRenderingContext2D::SetFontInternalDisconnected(
   }
 
   fontStyle.size = QuantizeFontSize(size);
+#ifdef XP_WIN
+  fontStyle.allowForceGDIClassic = false;
+#endif
 
   switch (CurrentState().fontStretch) {
     case CanvasFontStretch::Normal:

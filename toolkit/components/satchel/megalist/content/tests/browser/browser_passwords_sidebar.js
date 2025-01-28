@@ -7,14 +7,6 @@ const { SUPPORT_URL, PREFERENCES_URL } = ChromeUtils.importESModule(
   "resource://gre/modules/megalist/aggregator/datasources/LoginDataSource.sys.mjs"
 );
 
-const { OSKeyStoreTestUtils } = ChromeUtils.importESModule(
-  "resource://testing-common/OSKeyStoreTestUtils.sys.mjs"
-);
-
-const { OSKeyStore } = ChromeUtils.importESModule(
-  "resource://gre/modules/OSKeyStore.sys.mjs"
-);
-
 const EXPECTED_PASSWORD_CARD_VALUES = [
   {
     originLine: { value: "example1.com" },
@@ -125,19 +117,15 @@ add_task(async function test_login_line_commands() {
     ) {
       const loginLine = card[selector].loginLine;
       loginLineInput = loginLine.shadowRoot.querySelector("input");
-      let reauthObserved = Promise.resolve();
-      if (OSKeyStore.canReauth()) {
-        reauthObserved = OSKeyStoreTestUtils.waitForOSKeyStoreLogin(true);
-      }
-
-      await SimpleTest.promiseClipboardChange(
-        expectedPasswordCard[selector].value,
-        () => {
-          info(`click on ${selector}`);
-          loginLineInput.click();
-        }
-      );
-      await reauthObserved;
+      await waitForReauth(() => {
+        return SimpleTest.promiseClipboardChange(
+          expectedPasswordCard[selector].value,
+          () => {
+            info(`click on ${selector}`);
+            loginLineInput.click();
+          }
+        );
+      });
 
       const revealBtn = card[selector].revealBtn;
       const revealBtnPromise = BrowserTestUtils.waitForMutationCondition(

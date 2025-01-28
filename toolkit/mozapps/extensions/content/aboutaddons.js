@@ -1999,6 +1999,14 @@ class AddonPermissionsList extends HTMLElement {
 
         toggle.setAttribute("permission-key", perm);
         toggle.setAttribute("action", "toggle-permission");
+
+        if (perm === "userScripts") {
+          let mb = document.createElement("moz-message-bar");
+          mb.setAttribute("type", "warning");
+          mb.messageL10nId = "webext-perms-extra-warning-userScripts-long";
+          mb.slot = "nested";
+          toggle.append(mb);
+        }
         item.appendChild(toggle);
         list.appendChild(item);
       }
@@ -2565,9 +2573,8 @@ class AddonCard extends HTMLElement {
               return;
             }
             let { BrowserAddonUI } = windowRoot.ownerGlobal;
-            let { remove, report } = await BrowserAddonUI.promptRemoveExtension(
-              addon
-            );
+            let { remove, report } =
+              await BrowserAddonUI.promptRemoveExtension(addon);
             if (remove) {
               await addon.uninstall(true);
               this.sendEvent("remove");
@@ -3015,6 +3022,10 @@ class AddonCard extends HTMLElement {
 
     if (this.details && changed.includes("quarantineIgnoredByUser")) {
       this.details.updateQuarantinedDomainsUserAllowed();
+    }
+
+    if (changed.includes("blocklistState")) {
+      this.update();
     }
   }
 

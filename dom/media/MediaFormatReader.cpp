@@ -2134,6 +2134,7 @@ void MediaFormatReader::HandleDemuxedSamples(
         // We're going to be using a new decoder following the change of content
         // We can attempt to use hardware decoding again.
         decoder.mHardwareDecodingDisabled = false;
+        decoder.mFirstFrameTime = Some(sample->mTime);
       } else if (decoder.HasWaitingPromise()) {
         decoder.Flush();
       }
@@ -2430,6 +2431,8 @@ void MediaFormatReader::Update(TrackType aTrack) {
           extraData.keySystem =
               Some(NS_ConvertUTF16toUTF8(mCDMProxy->KeySystem()));
         }
+        extraData.decoderName = Some(decoder.mDescription);
+        extraData.isHardwareAccelerated = Some(decoder.mIsHardwareAccelerated);
         glean::media_playback::decode_error.Record(Some(extraData));
       }
       LOG("Rejecting %s promise for %s : DECODE_ERROR", TrackTypeToStr(aTrack),

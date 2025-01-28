@@ -242,6 +242,7 @@ static const char* gCallbackPrefsForSocketProcess[] = {
     "network.connectivity-service.",
     "network.captive-portal-service.testMode",
     "network.socket.ip_addr_any.disabled",
+    "network.socket.attach_mock_network_layer",
     nullptr,
 };
 
@@ -983,6 +984,29 @@ nsIOService::HostnameIsLocalIPAddress(nsIURI* aURI, bool* aResult) {
 
   NetAddr addr;
   if (NS_SUCCEEDED(addr.InitFromString(host)) && addr.IsIPAddrLocal()) {
+    *aResult = true;
+  }
+
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+nsIOService::HostnameIsIPAddressAny(nsIURI* aURI, bool* aResult) {
+  NS_ENSURE_ARG_POINTER(aURI);
+
+  nsCOMPtr<nsIURI> innerURI = NS_GetInnermostURI(aURI);
+  NS_ENSURE_ARG_POINTER(innerURI);
+
+  nsAutoCString host;
+  nsresult rv = innerURI->GetAsciiHost(host);
+  if (NS_FAILED(rv)) {
+    return rv;
+  }
+
+  *aResult = false;
+
+  NetAddr addr;
+  if (NS_SUCCEEDED(addr.InitFromString(host)) && addr.IsIPAddrAny()) {
     *aResult = true;
   }
 

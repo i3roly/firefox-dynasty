@@ -80,7 +80,6 @@
 #include "builtin/TestingFunctions.h"
 #include "builtin/TestingUtility.h"  // js::ParseCompileOptions, js::ParseDebugMetadata, js::CreateScriptPrivate
 #include "debugger/DebugAPI.h"
-#include "frontend/BytecodeCompiler.h"  // frontend::{CompileGlobalScriptToExtensibleStencil, CompileModule, ParseModuleToExtensibleStencil}
 #include "frontend/CompilationStencil.h"
 #ifdef JS_ENABLE_SMOOSH
 #  include "frontend/Frontend2.h"
@@ -135,7 +134,7 @@
 #include "js/experimental/CTypes.h"         // JS::InitCTypesClass
 #include "js/experimental/Intl.h"  // JS::AddMoz{DateTimeFormat,DisplayNames}Constructor
 #include "js/experimental/JitInfo.h"  // JSJit{Getter,Setter,Method}CallArgs, JSJitGetterInfo, JSJit{Getter,Setter}Op, JSJitInfo
-#include "js/experimental/JSStencil.h"   // JS::Stencil, JS::DecodeStencil
+#include "js/experimental/JSStencil.h"  // JS::Stencil, JS::DecodeStencil, JS::InstantiateModuleStencil
 #include "js/experimental/SourceHook.h"  // js::{Set,Forget,}SourceHook
 #include "js/experimental/TypedData.h"   // JS_NewUint8Array
 #include "js/friend/DumpFunctions.h"     // JS::FormatStackDump
@@ -150,7 +149,7 @@
 #include "js/JSON.h"
 #include "js/MemoryCallbacks.h"
 #include "js/MemoryFunctions.h"
-#include "js/Modules.h"  // JS::GetModulePrivate, JS::SetModule{DynamicImport,Metadata,Resolve}Hook, JS::SetModulePrivate
+#include "js/Modules.h"  // JS::GetModulePrivate, JS::SetModule{DynamicImport,Metadata,Resolve}Hook, JS::SetModulePrivate, JS::CompileModule
 #include "js/Object.h"  // JS::GetClass, JS::GetCompartment, JS::GetReservedSlot, JS::SetReservedSlot
 #include "js/Prefs.h"
 #include "js/Principals.h"
@@ -956,6 +955,7 @@ class ShellPrincipals final : public JSPrincipals {
 
 JSSecurityCallbacks ShellPrincipals::securityCallbacks = {
     nullptr,  // contentSecurityPolicyAllows
+    nullptr,  // codeForEvalGets
     subsumes};
 
 // The fully-trusted principal subsumes all other principals.
@@ -1246,6 +1246,8 @@ enum class CompileUtf8 {
 
   int64_t t1 = PRMJ_Now();
   RootedScript script(cx);
+
+  if (!filename) filename = "-";
 
   {
     CompileOptions options(cx);
@@ -2691,7 +2693,7 @@ static bool Evaluate(JSContext* cx, unsigned argc, Value* vp) {
   RootedString sourceMapURL(cx);
   bool catchTermination = false;
   bool loadBytecode = false;
-  bool saveIncrementalBytecode = false;
+  bool saveBytecodeWithDelazifications = false;
   bool execute = true;
   bool assertEqBytecode = false;
   JS::EnvironmentChain envChain(cx, JS::SupportUnscopables::No);
@@ -2730,11 +2732,11 @@ static bool Evaluate(JSContext* cx, unsigned argc, Value* vp) {
       loadBytecode = ToBoolean(v);
     }
 
-    if (!JS_GetProperty(cx, opts, "saveIncrementalBytecode", &v)) {
+    if (!JS_GetProperty(cx, opts, "saveBytecodeWithDelazifications", &v)) {
       return false;
     }
     if (!v.isUndefined()) {
-      saveIncrementalBytecode = ToBoolean(v);
+      saveBytecodeWithDelazifications = ToBoolean(v);
     }
 
     if (!JS_GetProperty(cx, opts, "execute", &v)) {
@@ -2791,7 +2793,7 @@ static bool Evaluate(JSContext* cx, unsigned argc, Value* vp) {
 
     // We cannot load or save the bytecode if we have no object where the
     // bytecode cache is stored.
-    if (loadBytecode || saveIncrementalBytecode) {
+    if (loadBytecode || saveBytecodeWithDelazifications) {
       if (!cacheEntry) {
         JS_ReportErrorNumberASCII(cx, my_GetErrorMessage, nullptr,
                                   JSSMSG_INVALID_ARGS, "evaluate");
@@ -2877,7 +2879,7 @@ static bool Evaluate(JSContext* cx, unsigned argc, Value* vp) {
       }
     }
 
-    if (!js::ValidateLazinessOfStencilAndGlobal(cx, *stencil)) {
+    if (!js::ValidateLazinessOfStencilAndGlobal(cx, stencil.get())) {
       return false;
     }
 
@@ -2899,10 +2901,10 @@ static bool Evaluate(JSContext* cx, unsigned argc, Value* vp) {
       return false;
     }
 
-    if (saveIncrementalBytecode) {
+    if (saveBytecodeWithDelazifications) {
       bool alreadyStarted;
-      if (!JS::StartIncrementalEncoding(cx, std::move(stencil),
-                                        alreadyStarted)) {
+      if (!JS::StartCollectingDelazifications(cx, script, stencil,
+                                              alreadyStarted)) {
         return false;
       }
       MOZ_ASSERT(!alreadyStarted);
@@ -2932,14 +2934,14 @@ static bool Evaluate(JSContext* cx, unsigned argc, Value* vp) {
 
     // Serialize the encoded bytecode, recorded before the execution, into a
     // buffer which can be deserialized linearly.
-    if (saveIncrementalBytecode) {
-      if (!FinishIncrementalEncoding(cx, script, saveBuffer)) {
+    if (saveBytecodeWithDelazifications) {
+      if (!FinishCollectingDelazifications(cx, script, saveBuffer)) {
         return false;
       }
     }
   }
 
-  if (saveIncrementalBytecode) {
+  if (saveBytecodeWithDelazifications) {
     // If we are both loading and saving, we assert that we are going to
     // replace the current bytecode by the same stream of bytes.
     if (loadBytecode && assertEqBytecode) {
@@ -3646,15 +3648,17 @@ static bool DisassembleToSprinter(JSContext* cx, unsigned argc, Value* vp,
       RootedScript script(cx);
       RootedValue value(cx, p.argv[i]);
       if (value.isObject() && value.toObject().is<ShellModuleObjectWrapper>()) {
-        script = value.toObject()
-                     .as<ShellModuleObjectWrapper>()
-                     .get()
-                     ->maybeScript();
+        auto* module = value.toObject().as<ShellModuleObjectWrapper>().get();
+        script = module->maybeScript();
+        if (!script) {
+          JS_ReportErrorASCII(cx, "module does not have an associated script");
+          return false;
+        }
       } else {
         script = TestingFunctionArgumentToScript(cx, value, fun.address());
-      }
-      if (!script) {
-        return false;
+        if (!script) {
+          return false;
+        }
       }
 
       if (!JSScript::dump(cx, script, p.options, sp)) {
@@ -3898,12 +3902,15 @@ static bool CacheIRHealthReport(JSContext* cx, unsigned argc, Value* vp) {
     if (value.isObject() && value.toObject().is<ShellModuleObjectWrapper>()) {
       script =
           value.toObject().as<ShellModuleObjectWrapper>().get()->maybeScript();
+      if (!script) {
+        JS_ReportErrorASCII(cx, "module does not have an associated script");
+        return false;
+      }
     } else {
       script = TestingFunctionArgumentToScript(cx, args.get(0));
-    }
-
-    if (!script) {
-      return false;
+      if (!script) {
+        return false;
+      }
     }
 
     cih.healthReportForScript(cx, script, js::jit::SpewContext::Shell);
@@ -5540,9 +5547,8 @@ static bool ParseModule(JSContext* cx, unsigned argc, Value* vp) {
   if (jsonModule) {
     module = JS::CompileJsonModule(cx, options, srcBuf);
   } else {
-    AutoReportFrontendContext fc(cx);
     options.setModule();
-    module = frontend::CompileModule(cx, &fc, options, srcBuf);
+    module = JS::CompileModule(cx, options, srcBuf);
   }
   if (!module) {
     return false;
@@ -5653,7 +5659,7 @@ static bool InstantiateModuleStencil(JSContext* cx, uint32_t argc, Value* vp) {
     return false;
   }
 
-  if (!stencilObj->stencil()->isModule()) {
+  if (!stencilObj->stencil()->getInitial()->isModule()) {
     JS_ReportErrorASCII(cx,
                         "instantiateModuleStencil: Module stencil expected");
     return false;
@@ -5674,28 +5680,21 @@ static bool InstantiateModuleStencil(JSContext* cx, uint32_t argc, Value* vp) {
     }
   }
 
-  /* Prepare the CompilationStencil for decoding. */
-  AutoReportFrontendContext fc(cx);
-  Rooted<frontend::CompilationInput> input(cx,
-                                           frontend::CompilationInput(options));
-  if (!input.get().initForModule(&fc)) {
+  if (!js::ValidateLazinessOfStencilAndGlobal(cx, stencilObj->stencil())) {
     return false;
   }
 
-  if (!js::ValidateLazinessOfStencilAndGlobal(cx, *stencilObj->stencil())) {
+  JS::InstantiateOptions instantiateOptions(options);
+  Rooted<JSObject*> modObject(
+      cx, JS::InstantiateModuleStencil(cx, instantiateOptions,
+                                       stencilObj->stencil(), nullptr));
+  if (!modObject) {
     return false;
   }
 
-  /* Instantiate the stencil. */
-  Rooted<frontend::CompilationGCOutput> output(cx);
-  if (!frontend::CompilationStencil::instantiateStencils(
-          cx, input.get(), *stencilObj->stencil(), output.get())) {
-    return false;
-  }
-
-  Rooted<ModuleObject*> modObject(cx, output.get().module);
+  Rooted<ModuleObject*> module(cx, &modObject->as<ModuleObject>());
   Rooted<ShellModuleObjectWrapper*> wrapper(
-      cx, ShellModuleObjectWrapper::create(cx, modObject));
+      cx, ShellModuleObjectWrapper::create(cx, module));
   if (!wrapper) {
     return false;
   }
@@ -5742,48 +5741,40 @@ static bool InstantiateModuleStencilXDR(JSContext* cx, uint32_t argc,
     }
   }
 
-  /* Prepare the CompilationStencil for decoding. */
-  AutoReportFrontendContext fc(cx);
-  Rooted<frontend::CompilationInput> input(cx,
-                                           frontend::CompilationInput(options));
-  if (!input.get().initForModule(&fc)) {
-    return false;
-  }
-  frontend::CompilationStencil stencil(nullptr);
-
-  /* Deserialize the stencil from XDR. */
   JS::TranscodeRange xdrRange(xdrObj->buffer(), xdrObj->bufferLength());
-  bool succeeded = false;
-  if (!stencil.deserializeStencils(&fc, options, xdrRange, &succeeded)) {
+  JS::DecodeOptions decodeOptions(options);
+  RefPtr<JS::Stencil> stencil;
+  auto result =
+      JS::DecodeStencil(cx, decodeOptions, xdrRange, getter_AddRefs(stencil));
+  if (result == JS::TranscodeResult::Throw) {
     return false;
   }
-  if (!succeeded) {
-    fc.clearAutoReport();
+  if (JS::IsTranscodeFailureResult(result)) {
     JS_ReportErrorASCII(cx, "Decoding failure");
     return false;
   }
 
-  if (!stencil.isModule()) {
-    fc.clearAutoReport();
+  if (!stencil->getInitial()->isModule()) {
     JS_ReportErrorASCII(cx,
                         "instantiateModuleStencilXDR: Module stencil expected");
     return false;
   }
 
-  if (!js::ValidateLazinessOfStencilAndGlobal(cx, stencil)) {
+  if (!js::ValidateLazinessOfStencilAndGlobal(cx, stencil.get())) {
     return false;
   }
 
-  /* Instantiate the stencil. */
-  Rooted<frontend::CompilationGCOutput> output(cx);
-  if (!frontend::CompilationStencil::instantiateStencils(
-          cx, input.get(), stencil, output.get())) {
+  JS::InstantiateOptions instantiateOptions(options);
+  Rooted<JSObject*> modObject(
+      cx,
+      JS::InstantiateModuleStencil(cx, instantiateOptions, stencil, nullptr));
+  if (!modObject) {
     return false;
   }
 
-  Rooted<ModuleObject*> modObject(cx, output.get().module);
+  Rooted<ModuleObject*> module(cx, &modObject->as<ModuleObject>());
   Rooted<ShellModuleObjectWrapper*> wrapper(
-      cx, ShellModuleObjectWrapper::create(cx, modObject));
+      cx, ShellModuleObjectWrapper::create(cx, module));
   if (!wrapper) {
     return false;
   }
@@ -5937,6 +5928,12 @@ static bool GetModuleEnvironmentNames(JSContext* cx, unsigned argc, Value* vp) {
 
   Rooted<ModuleObject*> module(
       cx, args[0].toObject().as<ShellModuleObjectWrapper>().get());
+  if (module->hasSyntheticModuleFields()) {
+    JS_ReportErrorASCII(cx,
+                        "Operation is not supported on JSON module objects.");
+    return false;
+  }
+
   if (module->hadEvaluationError()) {
     JS_ReportErrorASCII(cx, "Module environment unavailable");
     return false;
@@ -5989,6 +5986,12 @@ static bool GetModuleEnvironmentValue(JSContext* cx, unsigned argc, Value* vp) {
 
   Rooted<ModuleObject*> module(
       cx, args[0].toObject().as<ShellModuleObjectWrapper>().get());
+  if (module->hasSyntheticModuleFields()) {
+    JS_ReportErrorASCII(cx,
+                        "Operation is not supported on JSON module objects.");
+    return false;
+  }
+
   if (module->hadEvaluationError()) {
     JS_ReportErrorASCII(cx, "Module environment unavailable");
     return false;
@@ -6069,23 +6072,16 @@ template <typename Unit>
                                       const JS::ReadOnlyCompileOptions& options,
                                       const Unit* units, size_t length,
                                       js::frontend::ParseGoal goal) {
-  Rooted<frontend::CompilationInput> input(cx,
-                                           frontend::CompilationInput(options));
-
   JS::SourceText<Unit> srcBuf;
   if (!srcBuf.init(cx, units, length, JS::SourceOwnership::Borrowed)) {
     return false;
   }
 
-  AutoReportFrontendContext fc(cx);
-  js::frontend::NoScopeBindingCache scopeCache;
-  UniquePtr<frontend::ExtensibleCompilationStencil> stencil;
+  RefPtr<JS::Stencil> stencil;
   if (goal == frontend::ParseGoal::Script) {
-    stencil = frontend::CompileGlobalScriptToExtensibleStencil(
-        cx, &fc, input.get(), &scopeCache, srcBuf, ScopeKind::Global);
+    stencil = JS::CompileGlobalScriptToStencil(cx, options, srcBuf);
   } else {
-    stencil = frontend::ParseModuleToExtensibleStencil(
-        cx, &fc, cx->tempLifoAlloc(), input.get(), &scopeCache, srcBuf);
+    stencil = JS::CompileModuleScriptToStencil(cx, options, srcBuf);
   }
 
   if (!stencil) {
@@ -7049,7 +7045,7 @@ static bool WasmCompileAndSerialize(JSContext* cx) {
 #  endif
 
   wasm::MutableBytes bytecode = js_new<wasm::ShareableBytes>();
-  if (!ReadAll(stdIn, &bytecode->bytes)) {
+  if (!ReadAll(stdIn, &bytecode->vector)) {
     return false;
   }
 
@@ -9738,13 +9734,13 @@ static const JSFunctionSpecWithHelp shell_functions[] = {
 "      loadBytecode: if true, and if the source is a CacheEntryObject,\n"
 "         the bytecode would be loaded and decoded from the cache entry instead\n"
 "         of being parsed, then it would be executed as usual.\n"
-"      saveIncrementalBytecode: if true, and if the source is a\n"
-"         CacheEntryObject, the bytecode would be incrementally encoded and\n"
-"         saved into the cache entry.\n"
+"      saveBytecodeWithDelazifications: if true, and if the source is a\n"
+"         CacheEntryObject, the delazifications are collected during the\n"
+"         execution, and encoded after that, and saved into the cache entry.\n"
 "      execute: if false, do not execute the script, but do parse and/or\n"
 "               transcode.\n"
 "      assertEqBytecode: if true, and if both loadBytecode and either\n"
-"         saveIncrementalBytecode is true, then the loaded\n"
+"         saveBytecodeWithDelazifications is true, then the loaded\n"
 "         bytecode and the encoded bytecode are compared.\n"
 "         and an assertion is raised if they differ.\n"
 "      envChainObject: object to put on the scope chain, with its fields added\n"
@@ -10169,7 +10165,7 @@ JS_FN_HELP("createUserArrayBuffer", CreateUserArrayBuffer, 1, 0,
 "  Return a new opaque object which emulates a cache entry of a script.  This\n"
 "  object encapsulates the code and its cached content. The cache entry is filled\n"
 "  and read by the \"evaluate\" function by using it in place of the source, and\n"
-"  by setting \"saveIncrementalBytecode\" and \"loadBytecode\" options."),
+"  by setting \"saveBytecodeWithDelazifications\" and \"loadBytecode\" options."),
 
     JS_FN_HELP("streamCacheEntry", StreamCacheEntryObject::construct, 1, 0,
 "streamCacheEntry(buffer)",
@@ -12676,6 +12672,12 @@ bool InitOptionParser(OptionParser& op) {
       !op.addBoolOption('\0', "no-portable-baseline",
                         "Disable Portable Baseline Interpreter") ||
 #endif
+#ifdef ENABLE_JS_AOT_ICS
+      !op.addBoolOption('\0', "aot-ics", "Enable ahead-of-time-known ICs") ||
+      !op.addBoolOption(
+          '\0', "enforce-aot-ics",
+          "Enable enforcing only use of ahead-of-time-known ICs") ||
+#endif
       !op.addIntOption(
           '\0', "baseline-warmup-threshold", "COUNT",
           "Wait for COUNT calls or iterations before baseline-compiling "
@@ -12903,7 +12905,8 @@ bool InitOptionParser(OptionParser& op) {
       !op.addBoolOption('\0', "enable-explicit-resource-management",
                         "Enable Explicit Resource Management") ||
       !op.addBoolOption('\0', "disable-explicit-resource-management",
-                        "Disable Explicit Resource Management")) {
+                        "Disable Explicit Resource Management") ||
+      !op.addBoolOption('\0', "enable-temporal", "Enable Temporal")) {
     return false;
   }
 
@@ -13004,6 +13007,11 @@ bool SetGlobalOptionsPreJSInit(const OptionParser& op) {
   }
   if (op.getBoolOption("disable-explicit-resource-management")) {
     JS::Prefs::set_experimental_explicit_resource_management(false);
+  }
+#endif
+#ifdef JS_HAS_TEMPORAL_API
+  if (op.getBoolOption("enable-temporal")) {
+    JS::Prefs::setAtStartup_experimental_temporal(true);
   }
 #endif
   if (op.getBoolOption("enable-json-parse-with-source")) {
@@ -13619,6 +13627,15 @@ bool SetContextJITOptions(JSContext* cx, const OptionParser& op) {
   }
   if (op.getBoolOption("no-portable-baseline")) {
     jit::JitOptions.portableBaselineInterpreter = false;
+  }
+#endif
+
+#ifdef ENABLE_JS_AOT_ICS
+  if (op.getBoolOption("aot-ics")) {
+    jit::JitOptions.enableAOTICs = true;
+  }
+  if (op.getBoolOption("enforce-aot-ics")) {
+    jit::JitOptions.enableAOTICEnforce = true;
   }
 #endif
 

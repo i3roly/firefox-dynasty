@@ -140,7 +140,7 @@ mochitest-harness:
             ./mach python-test --subsuite mochitest
     fetches:
         build:
-            - target.tar.bz2
+            - target.tar.xz
             - artifact: target.common.tests.tar.gz
               dest: tests
             - artifact: target.mochitest.tests.tar.gz
@@ -321,7 +321,7 @@ reftest-harness:
             ./mach python-test --subsuite reftest
     fetches:
         build:
-            - target.tar.bz2
+            - target.tar.xz
             - artifact: target.common.tests.tar.gz
               dest: tests
             - artifact: target.reftest.tests.tar.gz
@@ -435,6 +435,46 @@ mozperftest:
             - 'testing/performance/**'
             - 'python/mozperftest/**'
 
+nimbus:
+    description: >
+        Ensure the targeting context metric is up-to-date with the targeting context definition.
+    platform:
+        - linux1804-64/opt
+    treeherder:
+        symbol: py3(nimbus)
+    require-build:
+        by-project:
+            try:
+                linux1804-64/opt: build-linux64/opt
+            default:
+                linux1804-64/opt: build-linux64/opt
+    fetches:
+        build:
+            - artifact: target.tar.xz
+            - artifact: target.common.tests.tar.gz
+    worker:
+        by-platform:
+            linux1804-64.*:
+                docker-image: {in-tree: "ubuntu1804-test"}
+                max-run-time: 3600
+    run:
+        using: run-task
+        cwd: '{checkout}'
+        command: >
+            export DUMP_TARGETING_CONTEXT_PATH=$(mktemp) &&
+            env LD_LIBRARY_PATH=${MOZ_FETCHES_DIR}/firefox \
+                ${MOZ_FETCHES_DIR}/bin/xpcshell \
+                    -g ${MOZ_FETCHES_DIR}/firefox \
+                    -a ${MOZ_FETCHES_DIR}/firefox/browser \
+                    toolkit/components/nimbus/test/python/dump-targeting-context.js &&
+            export GECKO_BINARY_PATH=${MOZ_FETCHES_DIR}/firefox/firefox &&
+            ./mach python-test --subsuite nimbus
+    when:
+        files-changed:
+            - 'toolkit/components/nimbus/metrics.yaml'
+            - 'toolkit/components/nimbus/lib/TargetingContextRecorder.sys.mjs'
+            - 'toolkit/components/nimbus/test/python/**/*'
+
 fxms-schemas:
     description: >
         Ensure messaging-system schemas are up-to-date and run Experimenter
@@ -451,7 +491,7 @@ fxms-schemas:
                 linux1804-64/opt: build-linux64/opt
     fetches:
         build:
-            - artifact: target.tar.bz2
+            - artifact: target.tar.xz
             - artifact: target.common.tests.tar.gz
     worker:
         by-platform:
@@ -520,7 +560,7 @@ featuregates:
 skip-fails:
     description: testing/skip-fails unit tests
     always-target: false
-    python-version: [3]
+    use-python: "3.11"
     treeherder:
         symbol: sf
     run:

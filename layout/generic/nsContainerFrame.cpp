@@ -384,7 +384,7 @@ void nsContainerFrame::BuildDisplayListForNonBlockChildren(
   }
 }
 
-class nsDisplaySelectionOverlay : public nsPaintedDisplayItem {
+class nsDisplaySelectionOverlay final : public nsPaintedDisplayItem {
  public:
   /**
    * @param aSelectionValue nsISelectionController::getDisplaySelection.
@@ -395,7 +395,8 @@ class nsDisplaySelectionOverlay : public nsPaintedDisplayItem {
         mSelectionValue(aSelectionValue) {
     MOZ_COUNT_CTOR(nsDisplaySelectionOverlay);
   }
-  MOZ_COUNTED_DTOR_OVERRIDE(nsDisplaySelectionOverlay)
+
+  MOZ_COUNTED_DTOR_FINAL(nsDisplaySelectionOverlay)
 
   virtual void Paint(nsDisplayListBuilder* aBuilder, gfxContext* aCtx) override;
   bool CreateWebRenderCommands(
@@ -2203,6 +2204,9 @@ LogicalSize nsContainerFrame::ComputeSizeWithIntrinsicDimensions(
   const auto& styleISize = aSizeOverrides.mStyleISize
                                ? *aSizeOverrides.mStyleISize
                                : stylePos->ISize(aWM);
+
+  // TODO(dholbert): if styleBSize is 'stretch' here, we should probably
+  // resolve it like we do in nsIFrame::ComputeSize. See bug 1937275.
   const auto& styleBSize = aSizeOverrides.mStyleBSize
                                ? *aSizeOverrides.mStyleBSize
                                : stylePos->BSize(aWM);
@@ -2336,9 +2340,9 @@ LogicalSize nsContainerFrame::ComputeSizeWithIntrinsicDimensions(
   }
 
   if (!isAutoBSize) {
-    bSize = nsLayoutUtils::ComputeBSizeValue(aCBSize.BSize(aWM),
-                                             boxSizingAdjust.BSize(aWM),
-                                             styleBSize.AsLengthPercentage());
+    bSize = nsLayoutUtils::ComputeBSizeValueHandlingStretch(
+        aCBSize.BSize(aWM), aMargin.BSize(aWM), aBorderPadding.BSize(aWM),
+        boxSizingAdjust.BSize(aWM), styleBSize);
   } else if (MOZ_UNLIKELY(isGridItem) &&
              !parentFrame->IsMasonry(isOrthogonal ? LogicalAxis::Inline
                                                   : LogicalAxis::Block)) {
@@ -2373,9 +2377,9 @@ LogicalSize nsContainerFrame::ComputeSizeWithIntrinsicDimensions(
   const auto& maxBSizeCoord = stylePos->MaxBSize(aWM);
   if (!nsLayoutUtils::IsAutoBSize(maxBSizeCoord, aCBSize.BSize(aWM)) &&
       !isFlexItemBlockAxisMainAxis) {
-    maxBSize = nsLayoutUtils::ComputeBSizeValue(
-        aCBSize.BSize(aWM), boxSizingAdjust.BSize(aWM),
-        maxBSizeCoord.AsLengthPercentage());
+    maxBSize = nsLayoutUtils::ComputeBSizeValueHandlingStretch(
+        aCBSize.BSize(aWM), aMargin.BSize(aWM), aBorderPadding.BSize(aWM),
+        boxSizingAdjust.BSize(aWM), maxBSizeCoord);
   } else {
     maxBSize = nscoord_MAX;
   }
@@ -2383,9 +2387,9 @@ LogicalSize nsContainerFrame::ComputeSizeWithIntrinsicDimensions(
   const auto& minBSizeCoord = stylePos->MinBSize(aWM);
   if (!nsLayoutUtils::IsAutoBSize(minBSizeCoord, aCBSize.BSize(aWM)) &&
       !isFlexItemBlockAxisMainAxis) {
-    minBSize = nsLayoutUtils::ComputeBSizeValue(
-        aCBSize.BSize(aWM), boxSizingAdjust.BSize(aWM),
-        minBSizeCoord.AsLengthPercentage());
+    minBSize = nsLayoutUtils::ComputeBSizeValueHandlingStretch(
+        aCBSize.BSize(aWM), aMargin.BSize(aWM), aBorderPadding.BSize(aWM),
+        boxSizingAdjust.BSize(aWM), minBSizeCoord);
   } else {
     minBSize = 0;
   }

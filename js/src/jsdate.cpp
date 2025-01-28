@@ -2134,7 +2134,7 @@ static ClippedTime NowAsMillis(JSContext* cx) {
 
 JS::ClippedTime js::DateNow(JSContext* cx) { return NowAsMillis(cx); }
 
-bool js::date_now(JSContext* cx, unsigned argc, Value* vp) {
+static bool date_now(JSContext* cx, unsigned argc, Value* vp) {
   AutoJSMethodProfilerEntry pseudoFrame(cx, "Date", "now");
   CallArgs args = CallArgsFromVp(argc, vp);
   args.rval().set(TimeValue(NowAsMillis(cx)));
@@ -4414,27 +4414,30 @@ bool js::date_toPrimitive(JSContext* cx, unsigned argc, Value* vp) {
 static bool date_toTemporalInstant(JSContext* cx, unsigned argc, Value* vp) {
   CallArgs args = CallArgsFromVp(argc, vp);
 
-  // Step 1.
+  // Steps 1-2.
   auto* unwrapped =
       UnwrapAndTypeCheckThis<DateObject>(cx, args, "toTemporalInstant");
   if (!unwrapped) {
     return false;
   }
 
-  // Step 2.
-  double utctime = unwrapped->UTCTime().toDouble();
-  if (!std::isfinite(utctime)) {
+  // Step 3.
+  double t = unwrapped->UTCTime().toDouble();
+  MOZ_ASSERT(IsTimeValue(t));
+
+  // Step 4.
+  if (std::isnan(t)) {
     JS_ReportErrorNumberASCII(cx, js::GetErrorMessage, nullptr,
                               JSMSG_INVALID_DATE);
     return false;
   }
-  MOZ_ASSERT(IsInteger(utctime));
+  int64_t tv = static_cast<int64_t>(t);
 
-  auto instant = temporal::Instant::fromMilliseconds(int64_t(utctime));
-  MOZ_ASSERT(temporal::IsValidEpochInstant(instant));
+  auto epochNs = temporal::EpochNanoseconds::fromMilliseconds(tv);
+  MOZ_ASSERT(temporal::IsValidEpochNanoseconds(epochNs));
 
-  // Step 3.
-  auto* result = temporal::CreateTemporalInstant(cx, instant);
+  // Step 5.
+  auto* result = temporal::CreateTemporalInstant(cx, epochNs);
   if (!result) {
     return false;
   }

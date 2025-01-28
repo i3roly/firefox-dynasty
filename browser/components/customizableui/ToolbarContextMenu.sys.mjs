@@ -76,6 +76,7 @@ export var ToolbarContextMenu = {
 
   onViewToolbarsPopupShowing(aEvent, aInsertPoint) {
     var popup = aEvent.target;
+    let window = popup.ownerGlobal;
     let {
       document,
       BookmarkingUI,
@@ -85,7 +86,7 @@ export var ToolbarContextMenu = {
       gBrowser,
       CustomizationHandler,
       gNavToolbox,
-    } = popup.ownerGlobal;
+    } = window;
 
     // triggerNode can be a nested child element of a toolbaritem.
     let toolbarItem = popup.triggerNode;
@@ -216,7 +217,10 @@ export var ToolbarContextMenu = {
 
     if (
       !CustomizationHandler.isCustomizing() &&
-      lazy.CustomizableUI.isSpecialWidget(toolbarItem?.id || "")
+      (toolbarItem?.localName.includes("separator") ||
+        toolbarItem?.localName.includes("spring") ||
+        toolbarItem?.localName.includes("spacer") ||
+        toolbarItem?.id.startsWith("customizableui-special"))
     ) {
       moveToPanel.hidden = true;
       removeFromToolbar.hidden = true;
@@ -235,18 +239,19 @@ export var ToolbarContextMenu = {
         multipleTabsSelected;
       document.getElementById("toolbar-context-selectAllTabs").disabled =
         gBrowser.allTabsSelected();
-      document.getElementById("toolbar-context-undoCloseTab").disabled =
-        lazy.SessionStore.getClosedTabCount() == 0;
+      let closedCount = lazy.SessionStore.getLastClosedTabCount(window);
+      document
+        .getElementById("History:UndoCloseTab")
+        .setAttribute("disabled", closedCount == 0);
+      document.l10n.setArgs(
+        document.getElementById("toolbar-context-undoCloseTab"),
+        { tabCount: closedCount }
+      );
       return;
     }
 
-    // fxms-bmb-button is a Firefox Messaging System Bookmarks bar button.
-    let removable = !toolbarItem?.classList?.contains("fxms-bmb-button");
     let movable =
-      toolbarItem?.id &&
-      removable &&
-      !toolbarItem?.classList?.contains("fxms-bmb-button") &&
-      lazy.CustomizableUI.isWidgetRemovable(toolbarItem);
+      toolbarItem?.id && lazy.CustomizableUI.isWidgetRemovable(toolbarItem);
     if (movable) {
       if (lazy.CustomizableUI.isSpecialWidget(toolbarItem.id)) {
         moveToPanel.setAttribute("disabled", true);
@@ -255,9 +260,7 @@ export var ToolbarContextMenu = {
       }
       removeFromToolbar.removeAttribute("disabled");
     } else {
-      if (removable) {
-        removeFromToolbar.setAttribute("disabled", true);
-      }
+      removeFromToolbar.setAttribute("disabled", true);
       moveToPanel.setAttribute("disabled", true);
     }
   },

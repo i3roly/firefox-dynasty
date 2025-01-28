@@ -127,11 +127,12 @@ if on_rtd:
 else:
     # We only need to set the RTD theme when not on RTD because the RTD
     # environment handles this otherwise.
-    import sphinx_rtd_theme
 
     html_theme = "sphinx_rtd_theme"
-    html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
 
+# As we parse the error messages and they can be translated, force
+# the english locale
+os.environ["LANG"] = "C"
 
 html_static_path = ["_static"]
 htmlhelp_basename = "FirefoxTreeDocs"

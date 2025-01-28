@@ -47,7 +47,7 @@
     <string name="tab_tray_collection_button_multiselect_content_description">Zachowaj zaznaczone karty w kolekcji</string>
 
     <!-- Content description on checkmark while tab is selected in multiselect mode in tab tray -->
-    <string name="tab_tray_multiselect_selected_content_description">Zaznaczone</string>
+    <string name="tab_tray_multiselect_selected_content_description" moz:removedIn="136" tools:ignore="UnusedResources">Zaznaczone</string>
 
     <!-- Home - Bookmarks -->
     <!-- Title for the home screen section with bookmarks. -->
@@ -366,6 +366,8 @@
     <string name="browser_menu_turn_on_reader_view">Popraw czytelność</string>
     <!-- Browser menu label for turning OFF reader view of the current visited page -->
     <string name="browser_menu_turn_off_reader_view">Wygląd oryginalny</string>
+    <!-- Browser menu button that reopens a private tab as a regular tab -->
+    <string name="browser_menu_open_in_normal_tab">Przenieś do karty nieprywatnej</string>
     <!-- Browser menu label for navigating to the translation feature, which provides language translation options the current visited page -->
     <string name="browser_menu_translate_page">Przetłumacz stronę…</string>
     <!-- Browser menu label for navigating to the Web Compat Reporter feature, which provides users the ability to send bug reports for broken sites. -->
@@ -416,8 +418,6 @@
 
     <!-- Search Fragment -->
     <!-- Button in the search view that lets a user search by scanning a QR code -->
-    <string name="search_scan_button" moz:removedIn="133" tools:ignore="UnusedResources">Skanuj</string>
-    <!-- Button in the search view that lets a user search by scanning a QR code -->
     <string name="search_scan_button_2">Skanuj kod QR</string>
     <!-- Button in the search view when shortcuts are displayed that takes a user to the search engine settings -->
     <string name="search_shortcuts_engine_settings">Ustawienia wyszukiwarki</string>
@@ -443,9 +443,6 @@
 
     <!-- Header text for the search selector menu -->
     <string name="search_header_menu_item_2">Tym razem szukaj w:</string>
-
-    <!-- Content description (not visible, for screen readers etc.): Search engine icon. The first parameter is the search engine name (for example: DuckDuckGo). -->
-    <string name="search_engine_icon_content_description" tools:ignore="UnusedResources" moz:removedIn="133">Wyszukiwarka %s</string>
 
     <!-- Content description (not visible, for screen readers etc.): Search engine icon.
     The parameter is the search engine name (for example: DuckDuckGo). -->
@@ -532,10 +529,6 @@
     <!-- Onboarding sub header for the add-ons card, used by Nimbus experiments. -->
     <string name="onboarding_add_on_sub_header" tools:ignore="UnusedResources">Dodaj rozszerzenia innych autorów, aby zwiększyć bezpieczeństwo, produktywność i nie tylko.</string>
     <!-- Onboarding add-ons card, for checking more add-ons on, used by Nimbus experiments. -->
-    <string name="onboarding_add_on_explore_more_extensions" tools:ignore="UnusedResources" moz:removedIn="133">Poznaj więcej rozszerzeń.</string>
-    <!-- Onboarding add-ons card, button for start browsing, used by Nimbus experiments. -->
-    <string name="onboarding_add_on_start_browsing_button" tools:ignore="UnusedResources" moz:removedIn="133">Zacznij przeglądać Internet</string>
-    <!-- Onboarding add-ons card, for checking more add-ons on, used by Nimbus experiments. -->
     <string name="onboarding_add_on_explore_more_extensions_2">Poznaj więcej rozszerzeń</string>
     <!-- Onboarding add-ons card, button for start browsing, used by Nimbus experiments. -->
     <string name="onboarding_add_on_start_browsing_button_2">Zacznij przeglądać Internet</string>
@@ -570,52 +563,79 @@
     <string name="onboarding_add_on_star_rating_content_description">Ocena: %1$s z 5</string>
 
     <!-- Title for the privacy preferences dialog shown during onboarding. Note: The word "Firefox" should NOT be translated. -->
-    <string name="onboarding_preferences_dialog_title" tools:ignore="BrandUsage,UnusedResources">Pomóż nam ulepszać Firefoksa</string>
+    <string name="onboarding_preferences_dialog_title" tools:ignore="BrandUsage">Pomóż nam ulepszać Firefoksa</string>
     <!-- Title for the crash reporting option in the privacy preferences dialog shown during onboarding. -->
-    <string name="onboarding_preferences_dialog_crash_reporting_title" tools:ignore="UnusedResources">Automatycznie wysyłaj zgłoszenia awarii</string>
+    <string name="onboarding_preferences_dialog_crash_reporting_title">Automatycznie wysyłaj zgłoszenia awarii</string>
     <!-- Description for the crash reporting option in the privacy preferences dialog shown during onboarding. -->
-    <string name="onboarding_preferences_dialog_crash_reporting_description" tools:ignore="UnusedResources">Zgłoszenia awarii umożliwiają nam diagnozowanie i naprawianie problemów z przeglądarką. Mogą one zawierać dane osobowe lub prywatne informacje.</string>
+    <string name="onboarding_preferences_dialog_crash_reporting_description">Zgłoszenia awarii umożliwiają nam diagnozowanie i naprawianie problemów z przeglądarką. Mogą one zawierać dane osobowe lub prywatne informacje.</string>
     <!-- Learn more link for the crash reporting option in the privacy preferences dialog shown during onboarding. -->
-    <string name="onboarding_preferences_dialog_crash_reporting_learn_more" tools:ignore="UnusedResources">Więcej informacji o zgłoszeniach awarii</string>
+    <string name="onboarding_preferences_dialog_crash_reporting_learn_more" moz:removedIn="136" tools:ignore="UnusedResources">Więcej informacji o zgłoszeniach awarii</string>
     <!-- Title for the usage data option in the privacy preferences dialog shown during onboarding. Note: The word "Mozilla" should NOT be translated. -->
-    <string name="onboarding_preferences_dialog_usage_data_title" tools:ignore="UnusedResources">Wysyłaj dane techniczne i o interakcjach do Mozilli</string>
+    <string name="onboarding_preferences_dialog_usage_data_title">Wysyłaj dane techniczne i o interakcjach do Mozilli</string>
     <!-- Description for the usage data option in the privacy preferences dialog shown during onboarding. Note: The word "Firefox" should NOT be translated. -->
-    <string name="onboarding_preferences_dialog_usage_data_description" tools:ignore="BrandUsage,UnusedResources">Informacje o Twoim urządzeniu, konfiguracji sprzętowej i sposobu korzystania z Firefoksa pomagają ulepszać jego funkcje oraz zwiększać wydajność i stabilność dla wszystkich użytkowników.</string>
+    <string name="onboarding_preferences_dialog_usage_data_description" moz:removedIn="136" tools:ignore="BrandUsage,UnusedResources">Informacje o Twoim urządzeniu, konfiguracji sprzętowej i sposobu korzystania z Firefoksa pomagają ulepszać jego funkcje oraz zwiększać wydajność i stabilność dla wszystkich użytkowników.</string>
     <!-- Learn more link for the usage data option in the privacy preferences dialog shown during onboarding. -->
-    <string name="onboarding_preferences_dialog_usage_data_learn_more" tools:ignore="UnusedResources">Więcej informacji o danych o użytkowaniu</string>
+    <string name="onboarding_preferences_dialog_usage_data_learn_more" moz:removedIn="136" tools:ignore="UnusedResources">Więcej informacji o danych o użytkowaniu</string>
     <!-- Positive button label for the privacy preferences dialog shown during onboarding. -->
-    <string name="onboarding_preferences_dialog_positive_button" tools:ignore="UnusedResources">Gotowe</string>
+    <string name="onboarding_preferences_dialog_positive_button">Gotowe</string>
     <!-- Negative button label for the privacy preferences dialog shown during onboarding. -->
-    <string name="onboarding_preferences_dialog_negative_button" tools:ignore="UnusedResources">Anuluj</string>
+    <string name="onboarding_preferences_dialog_negative_button">Anuluj</string>
     <!-- Terms of service onboarding title card label. 'Firefox' intentionally hardcoded here-->
-    <string name="onboarding_welcome_to_firefox" tools:ignore="UnusedResources,BrandUsage">Witamy w Firefoksie</string>
+    <string name="onboarding_welcome_to_firefox" tools:ignore="BrandUsage">Witamy w Firefoksie</string>
     <!-- Terms of service onboarding page continue button label. -->
-    <string name="onboarding_term_of_service_agree_and_continue_button_label" tools:ignore="UnusedResources">Zgadzam się, kontynuuj</string>
+    <string name="onboarding_term_of_service_agree_and_continue_button_label">Zgadzam się, kontynuuj</string>
 
-    <!-- Line one of the terms of service onboarding page. 'Firefox' is intentionally hardcoded. %1$s is replaced by an active link, using onboarding_term_of_service_line_one_link_text as text (“Terms of Service”). -->
-    <string name="onboarding_term_of_service_line_one" tools:ignore="UnusedResources,BrandUsage">Kontynuując, zgadzasz się na %1$s Firefoksa.</string>
+    <!-- Line one of the terms of service onboarding page. %1$s is replaced by an active link, using onboarding_term_of_service_line_one_link_text as text (“Firefox Terms of Use”). -->
+    <string name="onboarding_term_of_service_line_one" moz:removedIn="136" tools:ignore="BrandUsage, UnusedResources">Kontynuując, zgadzasz się na %1$s Firefoksa.</string>
     <!-- Used as text for the link in onboarding_term_of_service_line_one. -->
-    <string name="onboarding_term_of_service_line_one_link_text" tools:ignore="UnusedResources,BrandUsage">regulamin usługi</string>
-    <!-- Line two of the terms of service onboarding page. 'Firefox' is intentionally hardcoded. %1$s is replaced by an active link, using onboarding_term_of_service_line_two_link_text as text (Privacy Notice”). -->
-    <string name="onboarding_term_of_service_line_two" tools:ignore="UnusedResources,BrandUsage">Firefox dba o Twoją prywatność. Dowiedz się więcej w naszych %1$s.</string>
+    <string name="onboarding_term_of_service_line_one_link_text" moz:removedIn="136" tools:ignore="UnusedResources">regulamin usługi</string>
+    <!-- Line two of the terms of service onboarding page. 'Firefox' is intentionally hardcoded. %1$s is replaced by an active link, using onboarding_term_of_service_line_two_link_text as text (“Privacy Notice”). -->
+    <string name="onboarding_term_of_service_line_two" moz:removedIn="136" tools:ignore="UnusedResources,BrandUsage">Firefox dba o Twoją prywatność. Dowiedz się więcej w naszych %1$s.</string>
     <!-- Used as text for the link in onboarding_term_of_service_line_two. -->
-    <string name="onboarding_term_of_service_line_two_link_text" tools:ignore="UnusedResources,BrandUsage">zasadach ochrony prywatności</string>
-    <!-- Line three of the terms of service onboarding page. 'Firefox' and 'Mozilla' are intentionally hardcoded. %1$S is replaced by an active link, using onboarding_term_of_service_line_three_link_text as text (Manage”). -->
-    <string name="onboarding_term_of_service_line_three" tools:ignore="UnusedResources,BrandUsage">Aby pomóc w ulepszaniu przeglądarki, Firefox wysyła dane diagnostyczne i o interakcjach do Mozilli. %1$s</string>
+    <string name="onboarding_term_of_service_line_two_link_text">zasadach ochrony prywatności</string>
+    <!-- Line three of the terms of service onboarding page. 'Firefox' and 'Mozilla' are intentionally hardcoded. %1$S is replaced by an active link, using onboarding_term_of_service_line_three_link_text as text (“Manage”). -->
+    <string name="onboarding_term_of_service_line_three" tools:ignore="BrandUsage">Aby pomóc w ulepszaniu przeglądarki, Firefox wysyła dane diagnostyczne i o interakcjach do Mozilli. %1$s</string>
     <!-- Used as text for the link in onboarding_term_of_service_line_three. -->
-    <string name="onboarding_term_of_service_line_three_link_text" tools:ignore="UnusedResources,BrandUsage">Zarządzaj</string>
+    <string name="onboarding_term_of_service_line_three_link_text">Zarządzaj</string>
     <!-- Onboarding header for the toolbar selection card, used by Nimbus experiments. -->
     <string name="onboarding_customize_toolbar_title" tools:ignore="UnusedResources">Wybierz położenie paska narzędzi</string>
     <!-- Onboarding sub header for toolbar selection card, used by Nimbus experiments. -->
     <string name="onboarding_customize_toolbar_description" tools:ignore="UnusedResources">Trzymaj wyszukiwania zawsze pod ręką.</string>
-    <!-- Onboarding toolbar selection card label for 'save and continue' button, used by Nimbus experiments. -->
-    <string name="onboarding_customize_toolbar_save_and_continue_button">Zachowaj i kontynuuj</string>
+    <!-- Onboarding label for 'Save and continue' button, used by Nimbus experiments. -->
+    <string name="onboarding_save_and_continue_button">Zachowaj i kontynuuj</string>
     <!-- Onboarding toolbar selection card label for 'skip' button, used by Nimbus experiments. -->
-    <string name="onboarding_customize_toolbar_skip_button">Pomiń</string>
+    <string name="onboarding_customize_toolbar_skip_button" moz:removedIn="135" tools:ignore="UnusedResources">Pomiń</string>
     <!-- Onboarding toolbar selection card label for 'top' option, used by Nimbus experiments. -->
     <string name="onboarding_customize_toolbar_top_option">Na górze</string>
     <!-- Onboarding toolbar selection card label for 'bottom' option, used by Nimbus experiments. -->
     <string name="onboarding_customize_toolbar_bottom_option">Na dole</string>
+
+    <!-- Onboarding toolbar selection card content description for the main image. -->
+    <string name="onboarding_customize_toolbar_main_image_content_description">Duży obraz wyboru paska narzędzi przedstawiający ilustrowany pasek narzędzi.</string>
+    <!-- Onboarding toolbar selection card content description for the toolbar placement image. %1$s is placeholder for either 'top' or 'bottom'. -->
+    <string name="onboarding_customize_toolbar_placement_content_description" moz:removedIn="135" tools:ignore="UnusedResources">Obraz paska narzędzi (%1$s)</string>
+    <!-- Onboarding toolbar selection card content description for the toolbar placement image. -->
+    <string name="onboarding_customize_toolbar_placement_bottom_content_description">Obraz paska narzędzi na dole</string>
+    <string name="onboarding_customize_toolbar_placement_top_content_description">Obraz paska narzędzi na górze</string>
+
+    <!-- Onboarding header for the theme selection card, used by Nimbus experiments. -->
+    <string name="onboarding_customize_theme_title" tools:ignore="UnusedResources">Wybierz motyw</string>
+    <!-- Onboarding sub header for theme selection card, used by Nimbus experiments. -->
+    <string name="onboarding_customize_theme_description" tools:ignore="UnusedResources">Oglądaj sieć w najlepszym świetle.</string>
+    <!-- Onboarding label for 'Save and start browsing' button, used by Nimbus experiments. -->
+    <string name="onboarding_save_and_start_button">Zachowaj i zacznij przeglądać Internet</string>
+    <!-- Onboarding theme selection card label for 'skip' button, used by Nimbus experiments. -->
+    <string name="onboarding_customize_theme_skip_button" moz:removedIn="135" tools:ignore="UnusedResources">Pomiń</string>
+    <!-- Onboarding theme selection card label for 'dark' option, used by Nimbus experiments. -->
+    <string name="onboarding_customize_theme_dark_option">Ciemny</string>
+    <!-- Onboarding theme selection card label for 'light' option, used by Nimbus experiments. -->
+    <string name="onboarding_customize_theme_light_option">Jasny</string>
+    <!-- Onboarding theme selection card label for 'System auto' option, used by Nimbus experiments. -->
+    <string name="onboarding_customize_theme_system_option">Systemowy</string>
+    <!-- Onboarding theme selection card content description for the main image. -->
+    <string name="onboarding_customize_theme_main_image_content_description">Duży obraz wyboru motywu przedstawiający ilustrowane narzędzia artystyczne i budowlane.</string>
+    <!-- Onboarding theme selection card content description for the theme selection image. %1$s is placeholder for either 'system', 'light' or 'dark'. -->
+    <string name="onboarding_customize_theme_content_description">Obraz motywu (%1$s)</string>
 
     <!-- Search Widget -->
     <!-- Content description for searching with a widget. The first parameter is the name of the application.-->
@@ -668,8 +688,6 @@
     <string name="preferences_category_advanced">Zaawansowane</string>
     <!-- Preference category for privacy and security settings -->
     <string name="preferences_category_privacy_security">Prywatność i bezpieczeństwo</string>
-    <!-- Preference for advanced site permissions -->
-    <string name="preferences_site_permissions" moz:removedIn="133" tools:ignore="UnusedResources">Uprawnienia witryn</string>
     <!-- Preference for advanced site settings -->
     <string name="preferences_site_settings">Ustawienia witryn</string>
     <!-- Preference for private browsing options -->
@@ -1029,14 +1047,19 @@
     <string name="preferences_marketing_data_description_3" tools:ignore="BrandUsage">Udostępnia informacje o tym, jak użytkownik odkrył Firefoksa partnerom marketingowym Mozilli. Pomaga nam to rozwijać Firefoksa i budować lepszy Internet.</string>
     <!-- Learn more link for marketing data preference -->
     <string name="preferences_marketing_data_learn_more">Więcej informacji o danych marketingowych</string>
+
     <!-- Preference switch title for automatically submitting crash reports -->
-    <string name="preferences_automatically_submit_crashes_title">Automatyczne przesyłanie zgłoszeń awarii</string>
+    <string name="preferences_automatically_send_crashes_title">Automatyczne wysyłanie zgłoszeń awarii</string>
+    <string name="preferences_automatically_submit_crashes_title" moz:removedIn="136" tools:ignore="UnusedResources">Automatyczne przesyłanie zgłoszeń awarii</string>
+
     <!-- Preference switch description for automatically submitting crash reports -->
-    <string name="preferences_automatically_submit_crashes_description">Po wystąpieniu awarii automatycznie udostępnia Mozilli dane o awarii podczas uruchamiania aplikacji</string>
+    <string name="preferences_automatically_send_crashes_description">Umożliwia nam to diagnozowanie i naprawianie problemów z przeglądarką. Zgłoszenia mogą zawierać dane osobowe lub prywatne informacje.</string>
+    <string name="preferences_automatically_submit_crashes_description" moz:removedIn="136" tools:ignore="UnusedResources">Po wystąpieniu awarii automatycznie udostępnia Mozilli dane o awarii podczas uruchamiania aplikacji</string>
+
     <!-- Title for studies preferences -->
     <string name="preference_experiments_2">Badania</string>
     <!-- Summary for studies preferences -->
-    <string name="preference_experiments_summary_2">Pozwala Mozilli instalować i wykonywać badania.</string>
+    <string name="preference_experiments_summary_2">Pozwala Mozilli instalować i przeprowadzać badania.</string>
 
     <!-- Turn On Sync Preferences -->
     <!-- Header of the Sync and save your data preference view -->
@@ -1198,22 +1221,22 @@
     <!-- Learn more link for studies, links to an article for more information about studies. -->
     <string name="studies_learn_more">Więcej informacji</string>
     <!-- Dialog message shown after removing a study -->
-    <string name="studies_restart_app">Aplikacja zakończy działanie, aby zastosować zmiany</string>
+    <string name="studies_restart_app" moz:removedIn="135">Aplikacja zakończy działanie, aby zastosować zmiany</string>
     <!-- Dialog button to confirm the removing a study. -->
-    <string name="studies_restart_dialog_ok">OK</string>
+    <string name="studies_restart_dialog_ok" moz:removedIn="135">OK</string>
     <!-- Dialog button text for canceling removing a study. -->
-    <string name="studies_restart_dialog_cancel">Anuluj</string>
+    <string name="studies_restart_dialog_cancel" moz:removedIn="135">Anuluj</string>
 
     <!-- Toast shown after turning on/off studies preferences -->
-    <string name="studies_toast_quit_application" tools:ignore="UnusedResources">Wyłączanie aplikacji, aby zastosować zmiany…</string>
+    <string name="studies_toast_quit_application" moz:removedIn="135" tools:ignore="UnusedResources">Wyłączanie aplikacji, aby zastosować zmiany…</string>
 
     <!-- Sessions -->
     <!-- Title for the list of tabs -->
-    <string name="tab_header_label">Otwarte karty</string>
+    <string name="tab_header_label" moz:removedIn="135" tools:ignore="UnusedResources">Otwarte karty</string>
     <!-- Title for the list of tabs in the current private session -->
-    <string name="tabs_header_private_tabs_title">Prywatne karty</string>
+    <string name="tabs_header_private_tabs_title" moz:removedIn="136" tools:ignore="UnusedResources">Prywatne karty</string>
     <!-- Title for the list of tabs in the synced tabs -->
-    <string name="tabs_header_synced_tabs_title">Karty z innych urządzeń</string>
+    <string name="tabs_header_synced_tabs_title" moz:removedIn="136" tools:ignore="UnusedResources">Karty z innych urządzeń</string>
     <!-- Content description (not visible, for screen readers etc.): Add tab button. Adds a news tab when pressed -->
     <string name="add_tab">Otwórz nową kartę</string>
     <!-- Content description (not visible, for screen readers etc.): Add tab button. Adds a news tab when pressed -->
@@ -1331,8 +1354,8 @@
     <!-- The error message of the URL text field when an invalid URL has been entered. -->
     <string name="webcompat_reporter_url_error_invalid">Proszę wprowadzić prawidłowy adres</string>
     <!-- The label/title of an optional field in the Web Compat Reporter feature for explaining a high-level reason why the site is broken. -->
-    <string name="webcompat_reporter_label_whats_broken">Co działa niepoprawnie? (opcjonalnie)</string>
-    <!-- The placeholder text for the dropdown where a user can select a high-level reason why the site is broken. -->
+    <string name="webcompat_reporter_label_whats_broken" moz:removedIn="136" tools:ignore="UnusedResources">Co działa niepoprawnie? (opcjonalnie)</string>
+    <!-- The placeholder text for the dropdown where a user selects a high-level reason why the site is broken. -->
     <string name="webcompat_reporter_choose_reason">Wybierz powód</string>
     <!-- The label/title of an optional field in the Web Compat Reporter feature for adding additional information. -->
     <string name="webcompat_reporter_label_description">Opisz problem (opcjonalne)</string>
@@ -1371,7 +1394,7 @@
     <!-- Unsubmitted crash dialog title, The first parameter is the name of the app (e.g. Firefox)  -->
     <string name="unsubmitted_crash_dialog_title">%s musiał zostać ponownie uruchomiony</string>
     <!-- Unsubmitted crash dialog checkbox label for automatically sending reports in the future -->
-    <string name="unsubmitted_crash_dialog_checkbox_label">Automatyczne wysyłanie zgłoszeń awarii</string>
+    <string name="unsubmitted_crash_dialog_checkbox_label">Automatycznie wysyłaj zgłoszenia awarii</string>
     <!-- Unsubmitted crash dialog negative button to dismiss the dialog -->
     <string name="unsubmitted_crash_dialog_negative_button">Zamknij</string>
     <!-- Unsubmitted crash dialog positive button to submit crash report -->
@@ -2024,10 +2047,10 @@
     <string name="browser_toolbar_long_press_popup_paste_and_go">Wklej i przejdź</string>
     <!-- Paste the text in the clipboard -->
     <string name="browser_toolbar_long_press_popup_paste">Wklej</string>
-  
+
     <!-- Snackbar message shown after an URL has been copied to clipboard. -->
     <string name="browser_toolbar_url_copied_to_clipboard_snackbar">Skopiowano adres do schowka</string>
-  
+
     <!-- Title text for the Add To Homescreen dialog -->
     <string name="add_to_homescreen_title">Dodaj do ekranu głównego</string>
     <!-- Cancel button text for the Add to Homescreen dialog -->
@@ -2517,7 +2540,7 @@
     <string name="experiments_snackbar_button">Przejdź do ustawień</string>
 
     <!-- Text that is surrounded by quotes. The parameter is the actual text that is in quotes. An example of that text could be: Excellent craftsmanship, and that is displayed as “Excellent craftsmanship”. The text comes from a buyer's review that the feature is highlighting"   -->
-    <string name="surrounded_with_quotes">„%s”</string>
+    <string name="surrounded_with_quotes" moz:removedIn="136" tools:ignore="UnusedResources">„%s”</string>
 
     <!-- Accessibility services actions labels. These will be appended to accessibility actions like "Double tap to.." but not by or applications but by services like Talkback. -->
     <!-- Action label for elements that can be collapsed if interacting with them. Talkback will append this to say "Double tap to collapse". -->

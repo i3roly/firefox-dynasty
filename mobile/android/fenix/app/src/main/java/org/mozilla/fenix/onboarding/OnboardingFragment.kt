@@ -17,19 +17,19 @@ import android.view.ViewGroup
 import androidx.annotation.RequiresApi
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.ComposeView
-import androidx.core.app.NotificationManagerCompat
 import androidx.fragment.app.Fragment
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.navigation.fragment.findNavController
 import mozilla.components.concept.engine.webextension.InstallationMethod
 import mozilla.components.service.nimbus.evalJexlSafe
 import mozilla.components.service.nimbus.messaging.use
-import mozilla.components.support.base.ext.areNotificationsEnabledSafe
 import mozilla.components.support.base.log.logger.Logger
 import mozilla.components.support.utils.BrowsersCache
 import org.mozilla.fenix.R
 import org.mozilla.fenix.components.accounts.FenixFxAEntryPoint
+import org.mozilla.fenix.components.initializeGlean
 import org.mozilla.fenix.components.lazyStore
+import org.mozilla.fenix.components.startMetricsIfEnabled
 import org.mozilla.fenix.compose.LinkTextState
 import org.mozilla.fenix.ext.components
 import org.mozilla.fenix.ext.hideToolbar
@@ -40,10 +40,13 @@ import org.mozilla.fenix.ext.openSetDefaultBrowserOption
 import org.mozilla.fenix.ext.requireComponents
 import org.mozilla.fenix.ext.settings
 import org.mozilla.fenix.nimbus.FxNimbus
-import org.mozilla.fenix.onboarding.store.OnboardingAddOnsAction
-import org.mozilla.fenix.onboarding.store.OnboardingAddOnsStore
+import org.mozilla.fenix.onboarding.store.DefaultOnboardingPreferencesRepository
+import org.mozilla.fenix.onboarding.store.OnboardingAction.OnboardingAddOnsAction
 import org.mozilla.fenix.onboarding.store.OnboardingAddonStatus
+import org.mozilla.fenix.onboarding.store.OnboardingPreferencesMiddleware
+import org.mozilla.fenix.onboarding.store.OnboardingStore
 import org.mozilla.fenix.onboarding.view.Caption
+import org.mozilla.fenix.onboarding.view.ManagePrivacyPreferencesDialogFragment
 import org.mozilla.fenix.onboarding.view.OnboardingAddOn
 import org.mozilla.fenix.onboarding.view.OnboardingPageUiData
 import org.mozilla.fenix.onboarding.view.OnboardingScreen
@@ -61,16 +64,37 @@ import org.mozilla.fenix.utils.showAddSearchWidgetPrompt
 class OnboardingFragment : Fragment() {
     private val logger = Logger("OnboardingFragment")
 
+    private val termsOfServiceEventHandler by lazy {
+        DefaultOnboardingTermsOfServiceEventHandler(
+            telemetryRecorder = telemetryRecorder,
+            this::launchSandboxCustomTab,
+            this::showPrivacyPreferencesDialog,
+        )
+    }
+
     private val pagesToDisplay by lazy {
         pagesToDisplay(
             isNotDefaultBrowser(requireContext()) &&
                 activity?.isDefaultBrowserPromptSupported() == false,
-            canShowNotificationPage(requireContext()),
+            canShowNotificationPage(),
             canShowAddSearchWidgetPrompt(),
         )
     }
     private val telemetryRecorder by lazy { OnboardingTelemetryRecorder() }
-    private val onboardingAddOnsStore by lazyStore { OnboardingAddOnsStore() }
+
+    private val onboardingStore by lazyStore {
+        OnboardingStore(
+            middleware = listOf(
+                OnboardingPreferencesMiddleware(
+                    repository = DefaultOnboardingPreferencesRepository(
+                        context = requireContext(),
+                        lifecycleOwner = viewLifecycleOwner,
+                    ),
+                ),
+            ),
+        )
+    }
+
     private val pinAppWidgetReceiver = WidgetPinnedReceiver()
 
     @SuppressLint("SourceLockedOrientationActivity")
@@ -90,7 +114,8 @@ class OnboardingFragment : Fragment() {
             .registerReceiver(pinAppWidgetReceiver, filter)
 
         if (isNotDefaultBrowser(context) &&
-            activity?.isDefaultBrowserPromptSupported() == true
+            activity?.isDefaultBrowserPromptSupported() == true &&
+            !requireContext().settings().promptToSetAsDefaultBrowserDisplayedInOnboarding
         ) {
             requireComponents.strictMode.resetAfter(StrictMode.allowThreadDiskReads()) {
                 promptToSetAsDefaultBrowser()
@@ -111,6 +136,8 @@ class OnboardingFragment : Fragment() {
                 ScreenContent()
             }
         }
+
+        requireContext().settings().promptToSetAsDefaultBrowserDisplayedInOnboarding = false
     }
 
     override fun onResume() {
@@ -128,7 +155,7 @@ class OnboardingFragment : Fragment() {
 
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     @Composable
-    @Suppress("LongMethod")
+    @Suppress("LongMethod", "ThrowsCount")
     private fun ScreenContent() {
         OnboardingScreen(
             pagesToDisplay = pagesToDisplay,
@@ -204,13 +231,28 @@ class OnboardingFragment : Fragment() {
                     sequencePosition = pagesToDisplay.sequencePosition(it.type),
                 )
             },
-            onboardingAddOnsStore = onboardingAddOnsStore,
+            onboardingStore = onboardingStore,
             onInstallAddOnButtonClick = { installUrl -> installAddon(installUrl) },
+            termsOfServiceEventHandler = termsOfServiceEventHandler,
+            onCustomizeToolbarClick = {
+                telemetryRecorder.onSelectToolbarPlacementClick(
+                    pagesToDisplay.telemetrySequenceId(),
+                    pagesToDisplay.sequencePosition(OnboardingPageUiData.Type.TOOLBAR_PLACEMENT),
+                    onboardingStore.state.toolbarOptionSelected.id,
+                )
+            },
+            onCustomizeThemeClick = {
+                telemetryRecorder.onSelectThemeClick(
+                    onboardingStore.state.themeOptionSelected.id,
+                    pagesToDisplay.telemetrySequenceId(),
+                    pagesToDisplay.sequencePosition(OnboardingPageUiData.Type.THEME_SELECTION),
+                )
+            },
         )
     }
 
     private fun installAddon(addOn: OnboardingAddOn) {
-        onboardingAddOnsStore.dispatch(
+        onboardingStore.dispatch(
             OnboardingAddOnsAction.UpdateStatus(
                 addOnId = addOn.id,
                 status = OnboardingAddonStatus.INSTALLING,
@@ -222,7 +264,7 @@ class OnboardingFragment : Fragment() {
             onSuccess = { addon ->
                 logger.info("Extension installed successfully")
                 telemetryRecorder.onAddOnInstalled(addon.id)
-                onboardingAddOnsStore.dispatch(
+                onboardingStore.dispatch(
                     OnboardingAddOnsAction.UpdateStatus(
                         addOnId = addOn.id,
                         status = OnboardingAddonStatus.INSTALLED,
@@ -231,7 +273,7 @@ class OnboardingFragment : Fragment() {
             },
             onError = { e ->
                 logger.error("Unable to install extension", e)
-                onboardingAddOnsStore.dispatch(
+                onboardingStore.dispatch(
                     OnboardingAddOnsAction.UpdateStatus(
                         addOn.id,
                         status = OnboardingAddonStatus.NOT_INSTALLED,
@@ -254,6 +296,22 @@ class OnboardingFragment : Fragment() {
         }
 
         requireComponents.fenixOnboarding.finish()
+
+        val settings = requireContext().settings()
+        initializeGlean(
+            requireContext().applicationContext,
+            logger,
+            settings.isTelemetryEnabled,
+            requireComponents.core.client,
+        )
+
+        startMetricsIfEnabled(
+            logger = logger,
+            analytics = requireComponents.analytics,
+            isTelemetryEnabled = settings.isTelemetryEnabled,
+            isMarketingTelemetryEnabled = settings.isMarketingTelemetryEnabled,
+        )
+
         findNavController().nav(
             id = R.id.onboardingFragment,
             directions = OnboardingFragmentDirections.actionHome(),
@@ -268,9 +326,7 @@ class OnboardingFragment : Fragment() {
     internal fun isNotDefaultBrowser(context: Context) =
         !BrowsersCache.all(context.applicationContext).isDefaultBrowser
 
-    private fun canShowNotificationPage(context: Context) =
-        !NotificationManagerCompat.from(context.applicationContext)
-            .areNotificationsEnabledSafe() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+    private fun canShowNotificationPage() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
 
     private fun pagesToDisplay(
         showDefaultBrowserPage: Boolean,
@@ -318,5 +374,20 @@ class OnboardingFragment : Fragment() {
             sequenceId = pagesToDisplay.telemetrySequenceId(),
             sequencePosition = pagesToDisplay.sequencePosition(OnboardingPageUiData.Type.DEFAULT_BROWSER),
         )
+    }
+
+    private fun launchSandboxCustomTab(url: String) {
+        val intent = SupportUtils.createSandboxCustomTabIntent(
+            context = requireContext(),
+            url = url,
+        )
+        requireContext().startActivity(intent)
+    }
+
+    private fun showPrivacyPreferencesDialog() {
+        ManagePrivacyPreferencesDialogFragment(
+            onCrashReportingLinkClick = {},
+            onUsageDataLinkClick = {},
+        ).show(parentFragmentManager, ManagePrivacyPreferencesDialogFragment.TAG)
     }
 }

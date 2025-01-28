@@ -12,6 +12,9 @@ const { EngineProcess } = ChromeUtils.importESModule(
 const { TranslationsPanelShared } = ChromeUtils.importESModule(
   "chrome://browser/content/translations/TranslationsPanelShared.sys.mjs"
 );
+const { TranslationsUtils } = ChromeUtils.importESModule(
+  "chrome://global/content/translations/TranslationsUtils.sys.mjs"
+);
 
 // Avoid about:blank's non-standard behavior.
 const BLANK_PAGE =
@@ -55,6 +58,26 @@ const ALWAYS_TRANSLATE_LANGS_PREF =
   "browser.translations.alwaysTranslateLanguages";
 const NEVER_TRANSLATE_LANGS_PREF =
   "browser.translations.neverTranslateLanguages";
+const USE_LEXICAL_SHORTLIST_PREF = "browser.translations.useLexicalShortlist";
+
+/**
+ * Generates a sorted list of Translation model file names for the given language pairs.
+ *
+ * @param {Array<{ fromLang: string, toLang: string }>} languagePairs - An array of language pair objects.
+ *
+ * @returns {string[]} A sorted array of translation model file names.
+ */
+function languageModelNames(languagePairs) {
+  return languagePairs
+    .flatMap(({ fromLang, toLang }) => [
+      `model.${fromLang}${toLang}.intgemm.alphas.bin`,
+      `vocab.${fromLang}${toLang}.spm`,
+      ...(Services.prefs.getBoolPref(USE_LEXICAL_SHORTLIST_PREF)
+        ? [`lex.50.50.${fromLang}${toLang}.s2t.bin`]
+        : []),
+    ])
+    .sort();
+}
 
 /**
  * The mochitest runs in the parent process. This function opens up a new tab,
@@ -107,6 +130,7 @@ async function openAboutTranslations({
       ["browser.translations.enable", !disabled],
       ["browser.translations.logLevel", "All"],
       ["browser.translations.mostRecentTargetLanguages", ""],
+      [USE_LEXICAL_SHORTLIST_PREF, false],
       ...(prefs ?? []),
     ],
   });
@@ -152,7 +176,7 @@ async function openAboutTranslations({
   const resolveDownloads = async count => {
     await remoteClients.translationsWasm.resolvePendingDownloads(1);
     await remoteClients.translationModels.resolvePendingDownloads(
-      FILES_PER_LANGUAGE_PAIR * count
+      downloadedFilesPerLanguagePair() * count
     );
   };
 
@@ -162,7 +186,7 @@ async function openAboutTranslations({
   const rejectDownloads = async count => {
     await remoteClients.translationsWasm.rejectPendingDownloads(1);
     await remoteClients.translationModels.rejectPendingDownloads(
-      FILES_PER_LANGUAGE_PAIR * count
+      downloadedFilesPerLanguagePair() * count
     );
   };
 
@@ -453,6 +477,7 @@ async function createTranslationsDoc(html, options) {
     set: [
       ["browser.translations.enable", true],
       ["browser.translations.logLevel", "All"],
+      [USE_LEXICAL_SHORTLIST_PREF, false],
     ],
   });
 
@@ -707,6 +732,7 @@ async function setupActorTest({
       // Enabled by default.
       ["browser.translations.enable", true],
       ["browser.translations.logLevel", "All"],
+      [USE_LEXICAL_SHORTLIST_PREF, false],
       ...(prefs ?? []),
     ],
   });
@@ -758,9 +784,7 @@ async function createAndMockRemoteSettings({
   autoDownloadFromRemoteSettings = false,
 }) {
   if (TranslationsParent.isTranslationsEngineMocked()) {
-    throw new Error(
-      "Attempt to mock the Translations Engine when it is already mocked."
-    );
+    info("Attempt to mock the Translations Engine when it is already mocked.");
   }
 
   const remoteClients = {
@@ -1005,6 +1029,7 @@ async function loadTestPage({
         ["browser.translations.alwaysTranslateLanguages", ""],
         ["browser.translations.neverTranslateLanguages", ""],
         ["browser.translations.mostRecentTargetLanguages", ""],
+        [USE_LEXICAL_SHORTLIST_PREF, false],
         // Bug 1893100 - This is needed to ensure that switching focus
         // with tab works in tests independent of macOS settings that
         // would otherwise disable keyboard navigation at the OS level.
@@ -1075,7 +1100,7 @@ async function loadTestPage({
     async resolveDownloads(count) {
       await remoteClients.translationsWasm.resolvePendingDownloads(1);
       await remoteClients.translationModels.resolvePendingDownloads(
-        FILES_PER_LANGUAGE_PAIR * count
+        downloadedFilesPerLanguagePair() * count
       );
     },
 
@@ -1090,7 +1115,7 @@ async function loadTestPage({
     async rejectDownloads(count) {
       await remoteClients.translationsWasm.rejectPendingDownloads(1);
       await remoteClients.translationModels.rejectPendingDownloads(
-        FILES_PER_LANGUAGE_PAIR * count
+        downloadedFilesPerLanguagePair() * count
       );
     },
 
@@ -1113,7 +1138,7 @@ async function loadTestPage({
         expectedWasmDownloads
       );
       await remoteClients.translationModels.resolvePendingDownloads(
-        FILES_PER_LANGUAGE_PAIR * expectedLanguagePairDownloads
+        downloadedFilesPerLanguagePair() * expectedLanguagePairDownloads
       );
     },
 
@@ -1136,7 +1161,7 @@ async function loadTestPage({
         expectedWasmDownloads
       );
       await remoteClients.translationModels.rejectPendingDownloads(
-        FILES_PER_LANGUAGE_PAIR * expectedLanguagePairDownloads
+        downloadedFilesPerLanguagePair() * expectedLanguagePairDownloads
       );
     },
 
@@ -1339,17 +1364,26 @@ function createAttachmentMock(
 }
 
 /**
- * The amount of files that are generated per mocked language pair.
+ * The count of records per mocked language pair in Remote Settings.
  */
-const FILES_PER_LANGUAGE_PAIR = 3;
+const RECORDS_PER_LANGUAGE_PAIR = 3;
+
+/**
+ * The count of files that are downloaded for a mocked language pair in Remote Settings.
+ */
+function downloadedFilesPerLanguagePair() {
+  return Services.prefs.getBoolPref(USE_LEXICAL_SHORTLIST_PREF)
+    ? RECORDS_PER_LANGUAGE_PAIR
+    : RECORDS_PER_LANGUAGE_PAIR - 1;
+}
 
 function createRecordsForLanguagePair(fromLang, toLang) {
   const records = [];
   const lang = fromLang + toLang;
   const models = [
     { fileType: "model", name: `model.${lang}.intgemm.alphas.bin` },
-    { fileType: "lex", name: `lex.50.50.${lang}.s2t.bin` },
     { fileType: "vocab", name: `vocab.${lang}.spm` },
+    { fileType: "lex", name: `lex.50.50.${lang}.s2t.bin` },
   ];
 
   const attachment = {
@@ -1361,7 +1395,7 @@ function createRecordsForLanguagePair(fromLang, toLang) {
     isDownloaded: false,
   };
 
-  if (models.length !== FILES_PER_LANGUAGE_PAIR) {
+  if (models.length !== RECORDS_PER_LANGUAGE_PAIR) {
     throw new Error("Files per language pair was wrong.");
   }
 
@@ -1372,7 +1406,7 @@ function createRecordsForLanguagePair(fromLang, toLang) {
       fromLang,
       toLang,
       fileType,
-      version: TranslationsParent.LANGUAGE_MODEL_MAJOR_VERSION + ".0",
+      version: TranslationsParent.LANGUAGE_MODEL_MAJOR_VERSION_MAX + ".0",
       last_modified: Date.now(),
       schema: Date.now(),
       attachment: JSON.parse(JSON.stringify(attachment)), // Making a deep copy.
@@ -1721,6 +1755,7 @@ async function setupAboutPreferences(
       // Enabled by default.
       ["browser.translations.enable", true],
       ["browser.translations.logLevel", "All"],
+      [USE_LEXICAL_SHORTLIST_PREF, false],
       ...prefs,
     ],
   });
@@ -1762,6 +1797,9 @@ async function setupAboutPreferences(
   }
 
   async function cleanup() {
+    Services.prefs.setCharPref(NEVER_TRANSLATE_LANGS_PREF, "");
+    Services.prefs.setCharPref(ALWAYS_TRANSLATE_LANGS_PREF, "");
+    Services.perms.removeAll();
     await closeAllOpenPanelsAndMenus();
     await loadBlankPage();
     await EngineProcess.destroyTranslationsEngine();
@@ -1776,6 +1814,44 @@ async function setupAboutPreferences(
     remoteClients,
     elements,
   };
+}
+
+/**
+ * Tests a callback function with the lexical shortlist preference enabled and disabled.
+ *
+ * @param {Function} callback - An async function to execute, receiving the preference settings as an argument.
+ */
+async function testWithAndWithoutLexicalShortlist(callback) {
+  for (const prefs of [
+    [[USE_LEXICAL_SHORTLIST_PREF, true]],
+    [[USE_LEXICAL_SHORTLIST_PREF, false]],
+  ]) {
+    await callback(prefs);
+  }
+}
+
+/**
+ * Waits for the "translations:pref-changed" observer event to occur.
+ *
+ * @param {Function} [callback]
+ *   - An optional function to execute before waiting for the "translations:pref-changed" observer event.
+ * @returns {Promise<void>}
+ *   - A promise that resolves when the "translations:pref-changed" event is observed.
+ */
+async function waitForTranslationsPrefChanged(callback) {
+  const { promise, resolve } = Promise.withResolvers();
+
+  function onChange() {
+    Services.obs.removeObserver(onChange, "translations:pref-changed");
+    resolve();
+  }
+  Services.obs.addObserver(onChange, "translations:pref-changed");
+
+  if (callback) {
+    await callback();
+  }
+
+  await promise;
 }
 
 function waitForAppLocaleChanged() {

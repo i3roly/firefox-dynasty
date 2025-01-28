@@ -111,17 +111,6 @@ class GlobalObjectData {
 
   ~GlobalObjectData();
 
-#ifndef NIGHTLY_BUILD
-  // The global environment record's [[VarNames]] list that contains all
-  // names declared using FunctionDeclaration, GeneratorDeclaration, and
-  // VariableDeclaration declarations in global code in this global's realm.
-  // Names are only removed from this list by a |delete IdentifierReference|
-  // that successfully removes that global property.
-  using VarNamesSet =
-      GCHashSet<HeapPtr<JSAtom*>, DefaultHasher<JSAtom*>, CellAllocPolicy>;
-  VarNamesSet varNames;
-#endif
-
   // The original values for built-in constructors (with their prototype
   // objects) based on JSProtoKey.
   //
@@ -290,8 +279,17 @@ class GlobalObject : public NativeObject {
 
   void initBuiltinProto(ProtoKind kind, JSObject* proto) {
     MOZ_ASSERT(proto);
+    // Catch double-initialization; however if this is too much of a burden due
+    // to OOM handling it could be removed.
+    MOZ_ASSERT(!hasBuiltinProto(kind));
     data().builtinProtos[kind].init(proto);
   }
+
+  void setBuiltinProto(ProtoKind kind, JSObject* proto) {
+    MOZ_ASSERT(proto);
+    data().builtinProtos[kind].set(proto);
+  }
+
   bool hasBuiltinProto(ProtoKind kind) const {
     return bool(data().builtinProtos[kind]);
   }
@@ -694,22 +692,6 @@ class GlobalObject : public NativeObject {
     return getOrCreateCustomErrorPrototype(cx, global, JSEXN_ERR);
   }
 
-  static NativeObject* getOrCreateSetPrototype(JSContext* cx,
-                                               Handle<GlobalObject*> global) {
-    if (!ensureConstructor(cx, global, JSProto_Set)) {
-      return nullptr;
-    }
-    return &global->getPrototype(JSProto_Set).as<NativeObject>();
-  }
-
-  static NativeObject* getOrCreateWeakSetPrototype(
-      JSContext* cx, Handle<GlobalObject*> global) {
-    if (!ensureConstructor(cx, global, JSProto_WeakSet)) {
-      return nullptr;
-    }
-    return &global->getPrototype(JSProto_WeakSet).as<NativeObject>();
-  }
-
   static JSFunction* getOrCreateTypedArrayConstructor(
       JSContext* cx, Handle<GlobalObject*> global) {
     if (!ensureConstructor(cx, global, JSProto_TypedArray)) {
@@ -796,7 +778,7 @@ class GlobalObject : public NativeObject {
       JSContext* cx, Handle<GlobalObject*> global);
 
   void setGeneratorObjectPrototype(JSObject* obj) {
-    initBuiltinProto(ProtoKind::GeneratorObjectProto, obj);
+    setBuiltinProto(ProtoKind::GeneratorObjectProto, obj);
   }
 
   static JSObject* getOrCreateGeneratorObjectPrototype(
@@ -1005,16 +987,6 @@ class GlobalObject : public NativeObject {
   // Infallibly test whether the given value is the eval function for this
   // global.
   bool valueIsEval(const Value& val);
-
-#ifndef NIGHTLY_BUILD
-  void removeFromVarNames(JSAtom* name) { data().varNames.remove(name); }
-
-  // Whether the given name is in [[VarNames]].
-  bool isInVarNames(JSAtom* name) { return data().varNames.has(name); }
-
-  // Add a name to [[VarNames]].  Reports OOM on failure.
-  [[nodiscard]] bool addToVarNames(JSContext* cx, JS::Handle<JSAtom*> name);
-#endif
 
   static ArgumentsObject* getOrCreateArgumentsTemplateObject(JSContext* cx,
                                                              bool mapped);

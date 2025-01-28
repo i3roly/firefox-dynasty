@@ -46,12 +46,15 @@ add_task(async function test_tools_prefs() {
   for (const toolInput of customizeComponent.toolInputs) {
     let toolDisabledInitialState = !toolInput.checked;
     toolInput.click();
-    await BrowserTestUtils.waitForCondition(() => {
-      let toggledTool = win.SidebarController.toolsAndExtensions.get(
-        toolInput.name
-      );
-      return toggledTool.disabled === !toolDisabledInitialState;
-    }, `The entrypoint for ${toolInput.name} has been ${toolDisabledInitialState ? "enabled" : "disabled"} in the sidebar.`);
+    await BrowserTestUtils.waitForCondition(
+      () => {
+        let toggledTool = win.SidebarController.toolsAndExtensions.get(
+          toolInput.name
+        );
+        return toggledTool.disabled === !toolDisabledInitialState;
+      },
+      `The entrypoint for ${toolInput.name} has been ${toolDisabledInitialState ? "enabled" : "disabled"} in the sidebar.`
+    );
     toolEntrypointsCount = sidebar.toolButtons.length;
     checkedInputs = Array.from(customizeComponent.toolInputs).filter(
       input => input.checked
@@ -192,7 +195,8 @@ add_task(async function test_flip_revamp_pref() {
   await SpecialPowers.pushPrefEnv({ set: [["sidebar.revamp", false]] });
 
   await TestUtils.waitForCondition(() => {
-    let isSidebarMainShown = !win.document.querySelector("sidebar-main").hidden;
+    let isSidebarMainShown =
+      !win.document.getElementById("sidebar-main").hidden;
     let isSwitcherPanelShown =
       !win.document.getElementById("sidebar-header").hidden;
     // Vertical tabs pref should be turned off when revamp pref is turned off
@@ -207,7 +211,7 @@ add_task(async function test_flip_revamp_pref() {
   });
   await sidebar.updateComplete;
   await TestUtils.waitForCondition(() => {
-    let isSidebarMainShown = !document.querySelector("sidebar-main").hidden;
+    let isSidebarMainShown = !document.getElementById("sidebar-main").hidden;
     let isSwitcherPanelShown =
       !win.document.getElementById("sidebar-header").hidden;
     return isSidebarMainShown && !isSwitcherPanelShown;
