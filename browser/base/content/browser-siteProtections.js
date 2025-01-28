@@ -1377,11 +1377,16 @@ var gProtectionsHandler = {
 
   /**
    * Contains an array of smartblock compatible sites and information on the corresponding shim
-   * site is the compatible site
+   * sites is a list of compatible sites
    * shimId is the id of the shim blocking content from the origin
-   * toggleDisplayName is the name shown for the toggle used for blocking/unblocking the origin
+   * displayName is the name shown for the toggle used for blocking/unblocking the origin
    */
   smartblockEmbedInfo: [
+    {
+      sites: ["https://itisatracker.org"],
+      shimId: "EmbedTestShim",
+      displayName: "Test",
+    },
     {
       sites: ["https://www.instagram.com", "https://platform.instagram.com"],
       shimId: "InstagramEmbed",
@@ -1393,6 +1398,18 @@ var gProtectionsHandler = {
       displayName: "Tiktok",
     },
   ],
+
+  /**
+   * Keeps track of if a smartblock toggle has been clicked since the panel was opened. Resets
+   * everytime the panel is closed. Used for telemetry purposes.
+   */
+  _hasClickedSmartBlockEmbedToggle: false,
+
+  /**
+   * Keeps track of what was responsible for opening the protections panel popup. Used for
+   * telemetry purposes.
+   */
+  _protectionsPopupOpeningReason: null,
 
   _protectionsPopup: null,
   _initializePopup() {
@@ -1771,21 +1788,17 @@ var gProtectionsHandler = {
     if (PrivateBrowsingUtils.isWindowPrivate(window)) {
       return;
     }
-    Services.telemetry
-      .getHistogramById("TRACKING_PROTECTION_SHIELD")
-      .add(value);
+    Glean.contentblocking.trackingProtectionShield.accumulateSingleSample(
+      value
+    );
   },
 
   cryptominersHistogramAdd(value) {
-    Services.telemetry
-      .getHistogramById("CRYPTOMINERS_BLOCKED_COUNT")
-      .add(value);
+    Glean.contentblocking.cryptominersBlockedCount[value].add(1);
   },
 
   fingerprintersHistogramAdd(value) {
-    Services.telemetry
-      .getHistogramById("FINGERPRINTERS_BLOCKED_COUNT")
-      .add(value);
+    Glean.contentblocking.fingerprintersBlockedCount[value].add(1);
   },
 
   handleProtectionsButtonEvent(event) {
@@ -1799,7 +1812,7 @@ var gProtectionsHandler = {
       return; // Left click, space or enter only
     }
 
-    this.showProtectionsPopup({ event });
+    this.showProtectionsPopup({ event, openingReason: "shieldButtonClicked" });
   },
 
   onPopupShown(event) {
@@ -1813,8 +1826,13 @@ var gProtectionsHandler = {
       // remain collapsed.
       this._insertProtectionsPanelInfoMessage(event);
 
+      // Record telemetry for open, don't record if the panel open is only a toast
       if (!event.target.hasAttribute("toast")) {
-        Glean.securityUiProtectionspopup.openProtectionsPopup.record();
+        Glean.securityUiProtectionspopup.openProtectionsPopup.record({
+          openingReason: this._protectionsPopupOpeningReason,
+          smartblockEmbedTogglesShown:
+            !this._protectionsPopupSmartblockContainer.hidden,
+        });
       }
 
       ReportBrokenSite.updateParentMenu(event);
@@ -1826,6 +1844,17 @@ var gProtectionsHandler = {
       window.removeEventListener("focus", this, true);
       this._protectionsPopupTPSwitch.removeEventListener("toggle", this);
     }
+
+    // Record close telemetry, don't record for toasts
+    if (!event.target.hasAttribute("toast")) {
+      Glean.securityUiProtectionspopup.closeProtectionsPopup.record({
+        openingReason: this._protectionsPopupOpeningReason,
+        smartblockToggleClicked: this._hasClickedSmartBlockEmbedToggle,
+      });
+    }
+
+    this._hasClickedSmartBlockEmbedToggle = false;
+    this._protectionsPopupOpeningReason = null;
   },
 
   async onTrackingProtectionIconHoveredOrFocused() {
@@ -2162,7 +2191,10 @@ var gProtectionsHandler = {
         PanelMultiView.hidePopup(this._protectionsPopup);
 
         // Open the full protections panel.
-        this.showProtectionsPopup({ event });
+        this.showProtectionsPopup({
+          event,
+          openingReason: "toastButtonClicked",
+        });
         break;
     }
   },
@@ -2229,7 +2261,10 @@ var gProtectionsHandler = {
         if (gBrowser.selectedBrowser.browserId !== subject.browserId) {
           break;
         }
-        this.showProtectionsPopup();
+
+        this.showProtectionsPopup({
+          openingReason: "embedPlaceholderButton",
+        });
         break;
     }
   },
@@ -2467,11 +2502,19 @@ var gProtectionsHandler = {
       // add functionality to toggle
       toggle.addEventListener("toggle", event => {
         let newToggleState = event.target.pressed;
+
         if (newToggleState) {
           this._sendUnblockMessageToSmartblock(shimId);
         } else {
           this._sendReblockMessageToSmartblock(shimId);
         }
+
+        Glean.securityUiProtectionspopup.clickSmartblockembedsToggle.record({
+          isBlock: !newToggleState,
+          openingReason: this._protectionsPopupOpeningReason,
+        });
+
+        this._hasClickedSmartBlockEmbedToggle = true;
       });
 
       this._protectionsPopupSmartblockToggleContainer.insertAdjacentElement(
@@ -2663,11 +2706,17 @@ var gProtectionsHandler = {
    *                   A boolean to indicate if we need to open the protections
    *                   popup as a toast. A toast only has a header section and
    *                   will be hidden after a certain amount of time.
+   *                 openingReason:
+   *                   A string indicating why the panel was opened. Used for
+   *                   telemetry purposes.
    */
   showProtectionsPopup(options = {}) {
-    const { event, toast } = options;
+    const { event, toast, openingReason } = options;
 
     this._initializePopup();
+
+    // Set opening reason variable for telemetry
+    this._protectionsPopupOpeningReason = openingReason;
 
     // Ensure we've updated category state based on the last blocking event:
     if (this.hasOwnProperty("_lastEvent")) {

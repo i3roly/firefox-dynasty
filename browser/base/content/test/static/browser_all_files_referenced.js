@@ -26,8 +26,8 @@ var gExceptionPaths = [
   "chrome://global/content/certviewer/components/",
 
   // https://github.com/mozilla/activity-stream/issues/3053
-  "chrome://activity-stream/content/data/content/tippytop/images/",
-  "chrome://activity-stream/content/data/content/tippytop/favicons/",
+  "chrome://browser/content/topsites/tippytop/images/",
+  "chrome://browser/content/topsites/tippytop/favicons/",
   // These resources are referenced by messages delivered through Remote Settings
   "chrome://activity-stream/content/data/content/assets/mobile-download-qr-new-user-cn.svg",
   "chrome://activity-stream/content/data/content/assets/mobile-download-qr-existing-user-cn.svg",
@@ -129,6 +129,7 @@ var allowlist = [
 
   // Intentionally unreferenced, see bug 1941134
   { file: "resource://gre/res/designmode.css" },
+  { file: "resource://gre/res/EditorOverride.css" },
 
   // The l10n build system can't package string files only for some platforms.
   // See bug 1339424 for why this is hard to fix.

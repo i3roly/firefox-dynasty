@@ -709,6 +709,11 @@
   value: false
   mirror: always
 
+- name: apz.mousemove_hittest_optimization.enabled
+  type: RelaxedAtomicBool
+  value: true
+  mirror: always
+
 - name: apz.one_touch_pinch.enabled
   type: RelaxedAtomicBool
   value: @IS_ANDROID@
@@ -1577,6 +1582,15 @@
 - name: browser.history.collectWireframes
   type: bool
   value: false
+  mirror: always
+
+# If false, show internal error page for HTTP responses with error
+# codes (4xx, 5xx) and "Content-Length": 0 instead of blank page
+# See https://bugzilla.mozilla.org/show_bug.cgi?id=1325876#c32 for why this
+# is disabled on Android.
+- name: browser.http.blank_page_with_error_response.enabled
+  type: bool
+  value: true
   mirror: always
 
 # The minimum area for a rect to be included in a wireframe, in CSS pixels.
@@ -3684,10 +3698,15 @@
 # If there are other origins in the group, they are initialized all together.
 # This feature is currently still in development and experimental, not
 # recommended for normal use yet.
+#
+# Note: If dom.quotaManager.temporaryStorage.incrementalOriginInitialization
+# is set to true, this preference will be overridden, and the individual
+# setting will no longer take effect, regardless of its value.
 - name: dom.quotaManager.temporaryStorage.lazyOriginInitialization
   type: RelaxedAtomicBool
   value: false
   mirror: always
+  do_not_use_directly: true
 
 # Should we trigger initialization of all temporary origins in the background?
 # When enabled, temporary origins collected during temporary storage
@@ -3696,10 +3715,41 @@
 # origins to preserve consistency of quota checks related to the group limit.
 # This feature is currently still in development and experimental, not
 # recommended for normal use yet.
+#
+# Note: If dom.quotaManager.temporaryStorage.incrementalOriginInitialization
+# is set to true, this preference will be overridden, and the individual
+# setting will no longer take effect, regardless of its value.
 - name: dom.quotaManager.temporaryStorage.triggerOriginInitializationInBackground
   type: RelaxedAtomicBool
   value: false
   mirror: always
+  do_not_use_directly: true
+
+# Should we enable incremental initialization of origins? (also known as
+# asynchronous temporary storage initialization)
+# When enabled, this preference acts as an override for the following
+# preferences:
+# - dom.quotaManager.temporaryStorage.lazyOriginInitialization
+# - dom.quotaManager.temporaryStorage.triggerOriginInitializationInBackground
+#
+# Enabling this preference ensures that:
+# 1. Origins for temporary storage are not initialized during temporary storage
+#    initialization but are instead initialized incrementally, either lazily or
+#    in the background, depending on which occurs first.
+# 2. Background initialization of temporary origins is triggered after the
+#    temporary storage initialization. The process is carried out in steps,
+#    with each step being responsible for initializing a group of origins.
+#
+# See also the documentation for those two preferences for more details on
+# their individual behaviors.
+#
+# This feature is currently in development and experimental, not recommended
+# for normal use yet.
+- name: dom.quotaManager.temporaryStorage.incrementalOriginInitialization
+  type: RelaxedAtomicBool
+  value: false
+  mirror: always
+  do_not_use_directly: true
 
 # A pref that is used to slow down origin operations for testing purposes.
 - name: dom.quotaManager.originOperations.pauseOnIOThreadMs
@@ -4366,6 +4416,11 @@
   mirror: always
 
 - name: dom.workers.throttling.enabled
+  type: RelaxedAtomicBool
+  value: false
+  mirror: always
+
+- name: dom.workers.timeoutmanager
   type: RelaxedAtomicBool
   value: false
   mirror: always
@@ -5123,7 +5178,7 @@
 
 - name: dom.webgpu.allow-present-without-readback
   type: RelaxedAtomicBool
-#if defined(XP_WIN) || defined(XP_MACOSX)
+#if defined(XP_WIN) || defined(XP_MACOSX) || defined(XP_LINUX) && !defined(ANDROID)
   value: true
 #else
   value: false
@@ -9527,6 +9582,13 @@
   mirror: always
   rust: true
 
+# Perform intrinsic sizing of flexible grid tracks based on grid items that
+# span more than one track.
+- name: layout.css.grid-flex-spanning-items-intrinsic-sizing.enabled
+  type: bool
+  value: false
+  mirror: always
+
 # Is support for :has() enabled?
 - name: layout.css.has-selector.enabled
   type: RelaxedAtomicBool
@@ -10090,6 +10152,16 @@
 - name: layout.show_previous_page
   type: bool
   value: true
+  mirror: always
+
+# This will automatically enable inline spellchecking (if it is available) for
+# editable elements in HTML.
+# 0 = spellcheck nothing
+# 1 = check multi-line controls [default]
+# 2 = check multi/single line controls
+- name: layout.spellcheckDefault
+  type: int32_t
+  value: 1
   mirror: always
 
 # Treat top level pages as always-active for the purpose of refresh driver
@@ -14580,7 +14652,7 @@
 # If not, the record will not be used.
 - name: network.dns.https_rr.check_record_with_cname
   type: RelaxedAtomicBool
-  value: @IS_EARLY_BETA_OR_EARLIER@
+  value: true
   mirror: always
 
 # This preference can be used to turn off IPv6 name lookups. See bug 68796.
@@ -14723,6 +14795,11 @@
 - name: network.http.retry_with_another_half_open
   type: RelaxedAtomicBool
   value: @IS_EARLY_BETA_OR_EARLIER@
+  mirror: always
+
+- name: network.http.basic_http_auth.enabled
+  type: RelaxedAtomicBool
+  value: true
   mirror: always
 
   # If true, HTTP response content-type headers will be parsed using the standards-compliant MimeType parser

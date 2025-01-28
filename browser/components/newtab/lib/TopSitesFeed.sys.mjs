@@ -6,11 +6,9 @@ import {
   actionCreators as ac,
   actionTypes as at,
 } from "resource://activity-stream/common/Actions.mjs";
-import { TippyTopProvider } from "resource://activity-stream/lib/TippyTopProvider.sys.mjs";
-import {
-  insertPinned,
-  TOP_SITES_MAX_SITES_PER_ROW,
-} from "resource://activity-stream/common/Reducers.sys.mjs";
+import { TippyTopProvider } from "resource:///modules/topsites/TippyTopProvider.sys.mjs";
+import { insertPinned } from "resource:///modules/topsites/TopSites.sys.mjs";
+import { TOP_SITES_MAX_SITES_PER_ROW } from "resource:///modules/topsites/constants.mjs";
 import { Dedupe } from "resource://activity-stream/common/Dedupe.sys.mjs";
 import {
   shortURL,

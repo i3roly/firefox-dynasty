@@ -740,10 +740,9 @@ class WorkerPrivate final
     return const_cast<WorkerPrivate*>(wp);
   }
 
-  bool IsFrozen() const {
-    AssertIsOnParentThread();
-    return mParentFrozen;
-  }
+  bool IsFrozen() const;
+
+  bool IsFrozenForWorkerThread() const;
 
   bool IsParentWindowPaused() const {
     AssertIsOnParentThread();
@@ -851,6 +850,8 @@ class WorkerPrivate final
     MOZ_DIAGNOSTIC_ASSERT(mLoadInfo.mServiceWorkerDescriptor.isSome());
     return mLoadInfo.mServiceWorkerDescriptor.ref().SetState(aState);
   }
+
+  void UpdateIsOnContentBlockingAllowList(bool aOnContentBlockingAllowList);
 
   const Maybe<ServiceWorkerDescriptor>& GetParentController() const {
     return mLoadInfo.mParentController;
@@ -1178,10 +1179,7 @@ class WorkerPrivate final
   void SetCCCollectedAnything(bool collectedAnything);
   bool isLastCCCollectedAnything();
 
-  uint32_t GetCurrentTimerNestingLevel() const {
-    auto data = mWorkerThreadAccessible.Access();
-    return data->mCurrentTimerNestingLevel;
-  }
+  uint32_t GetCurrentTimerNestingLevel() const;
 
   void IncreaseTopLevelWorkerFinishedRunnableCount() {
     ++mTopLevelWorkerFinishedRunnableCount;

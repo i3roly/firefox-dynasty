@@ -191,6 +191,9 @@ tabbrowser-ctrl-tab-list-all-tabs =
         }
 
 ## Tab manager menu buttons
+## Variables:
+##  $tabGroupName (String): The name of the tab group. See also tab-group-name-default, which will be
+##                          used when the group's name is empty.
 
 tabbrowser-manager-mute-tab =
   .tooltiptext = Mute tab
@@ -198,6 +201,18 @@ tabbrowser-manager-unmute-tab =
   .tooltiptext = Unmute tab
 tabbrowser-manager-close-tab =
   .tooltiptext = Close tab
+# This is for tab groups that have been "saved and closed" (see tab-group-editor-action-save). It does
+# not include "deleted" tab groups (see tab-group-editor-action-delete).
+tabbrowser-manager-closed-tab-group =
+  .label = { $tabGroupName }
+  .tooltiptext = { $tabGroupName } — Closed
+tabbrowser-manager-current-window-tab-group =
+  .label = { $tabGroupName }
+  .tooltiptext = { $tabGroupName } — Current window
+# "Show more" is for showing all open groups from other windows, as well as saved groups. Initially,
+# we only show up to six of these groups.
+tabbrowser-manager-tab-groups-show-more =
+  .label = Show more
 
 ## Tab Groups
 
@@ -215,15 +230,24 @@ tab-group-editor-cancel =
 
 tab-group-editor-color-selector =
   .aria-label = Tab group color
-tab-group-editor-color-selector-blue = Blue
-tab-group-editor-color-selector-purple = Purple
-tab-group-editor-color-selector-cyan = Cyan
-tab-group-editor-color-selector-orange = Orange
-tab-group-editor-color-selector-yellow = Yellow
-tab-group-editor-color-selector-pink = Pink
-tab-group-editor-color-selector-green = Green
-tab-group-editor-color-selector-gray = Gray
-tab-group-editor-color-selector-red = Red
+tab-group-editor-color-selector2-blue = Blue
+  .title = Blue
+tab-group-editor-color-selector2-purple = Purple
+  .title = Purple
+tab-group-editor-color-selector2-cyan = Cyan
+  .title = Cyan
+tab-group-editor-color-selector2-orange = Orange
+  .title = Orange
+tab-group-editor-color-selector2-yellow = Yellow
+  .title = Yellow
+tab-group-editor-color-selector2-pink = Pink
+  .title = Pink
+tab-group-editor-color-selector2-green = Green
+  .title = Green
+tab-group-editor-color-selector2-gray = Gray
+  .title = Gray
+tab-group-editor-color-selector2-red = Red
+  .title = Red
 
 tab-context-unnamed-group =
     .label = Unnamed group

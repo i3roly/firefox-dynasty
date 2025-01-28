@@ -458,7 +458,7 @@ pref("browser.urlbar.suggest.recentsearches",       true);
 pref("browser.urlbar.suggest.quickactions",         true);
 
 pref("browser.urlbar.deduplication.enabled", false);
-pref("browser.urlbar.deduplication.thresholdDays", 7);
+pref("browser.urlbar.deduplication.thresholdDays", 0);
 
 #ifdef NIGHTLY_BUILD
 pref("browser.urlbar.scotchBonnet.enableOverride", true);
@@ -1354,13 +1354,6 @@ pref("browser.backspace_action", 2);
 
 pref("intl.regional_prefs.use_os_locales", false);
 
-// this will automatically enable inline spellchecking (if it is available) for
-// editable elements in HTML
-// 0 = spellcheck nothing
-// 1 = check multi-line controls [default]
-// 2 = check multi/single line controls
-pref("layout.spellcheckDefault", 1);
-
 pref("browser.send_pings", false);
 
 pref("browser.geolocation.warning.infoURL", "https://www.mozilla.org/%LOCALE%/firefox/geolocation/");
@@ -1851,7 +1844,7 @@ pref("browser.newtabpage.activity-stream.newNewtabExperience.colors", "#0090ED,#
 
 // Default layout experimentation
 pref("browser.newtabpage.activity-stream.newtabLayouts.variant-a", false);
-pref("browser.newtabpage.activity-stream.newtabLayouts.variant-b", false);
+pref("browser.newtabpage.activity-stream.newtabLayouts.variant-b", true);
 
 // Discovery stream ad size experiment
 pref("browser.newtabpage.activity-stream.newtabAdSize.variant-a", false);
@@ -1967,6 +1960,8 @@ pref("browser.newtabpage.activity-stream.discoverystream.contextualContent.regio
 pref("browser.newtabpage.activity-stream.discoverystream.sections.locale-content-config", "en-US,en-CA");
 // List of regions that get section layout by default
 pref("browser.newtabpage.activity-stream.discoverystream.sections.region-content-config", "");
+
+pref("browser.newtabpage.activity-stream.discoverystream.sections.cards.enabled", true);
 
 
 pref("browser.newtabpage.activity-stream.discoverystream.merino-provider.endpoint", "merino.services.mozilla.com");
@@ -2945,6 +2940,7 @@ pref("devtools.netmonitor.msg.visibleColumns",
 pref("devtools.netmonitor.msg.displayed-messages.limit", 500);
 
 pref("devtools.netmonitor.response.ui.limit", 10240);
+pref("devtools.netmonitor.ui.default-raw-response", false);
 
 // Save request/response bodies yes/no.
 pref("devtools.netmonitor.saveRequestAndResponseBodies", true);
@@ -3141,11 +3137,11 @@ pref("devtools.debugger.features.async-live-stacks", false);
 pref("devtools.debugger.show-content-scripts", false);
 
 pref("devtools.debugger.hide-ignored-sources", false);
-#if defined(NIGHTLY_BUILD)
-  pref("devtools.debugger.features.codemirror-next", true);
-#else
-  pref("devtools.debugger.features.codemirror-next", false);
-#endif
+
+// When `true` the debugger editor uses Codemirror v6
+// and when `false` the debugger editor uses Codemirror v5
+// This should be removed once the CM5 code is cleaned up. See Bug 1943909
+pref("devtools.debugger.features.codemirror-next", true);
 
 // Disable autohide for DevTools popups and tooltips.
 // This is currently not exposed by any UI to avoid making

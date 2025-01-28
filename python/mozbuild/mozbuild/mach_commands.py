@@ -880,6 +880,29 @@ def join_ensure_dir(dir1, dir2):
     dest="enable_webrender",
     help="Enable the WebRender compositor in Gecko.",
 )
+@CommandArgument(
+    "--enable-inc-origin-init",
+    action="store_true",
+    default=False,
+    dest="enable_inc_origin_init",
+    help="Enable the incremental origin initialization in Gecko.",
+)
+@CommandArgumentGroup("filter sets")
+@CommandArgument(
+    "--filter-set",
+    default=None,
+    dest="filter_set",
+    type=str,
+    group="filter sets",
+    help="Use a predefined gtest filter (this overrides the gtest_filter).",
+)
+@CommandArgument(
+    "--list-filter-sets",
+    action="store_true",
+    dest="list_filter_sets",
+    group="filter sets",
+    help="List available predefined gtest filters.",
+)
 @CommandArgumentGroup("Android")
 @CommandArgument(
     "--package",
@@ -946,6 +969,9 @@ def gtest(
     list_tests,
     tbpl_parser,
     enable_webrender,
+    enable_inc_origin_init,
+    filter_set,
+    list_filter_sets,
     package,
     adb_path,
     device_serial,
@@ -983,6 +1009,15 @@ def gtest(
     if conditions.is_android(command_context):
         if jobs != 1:
             print("--jobs is not supported on Android and will be ignored")
+        if enable_inc_origin_init:
+            print(
+                "--enable-inc-origin-init is not supported on Android and will"
+                "be ignored"
+            )
+        if filter_set:
+            print("--filter-set is not supported on Android and will be ignored")
+        if list_filter_sets:
+            print("--list-filter-sets is not supported on Android and will be ignored")
         if debug or debugger or debugger_args:
             print("--debug options are not supported on Android and will be ignored")
         from mozrunner.devices.android_device import InstallIntent
@@ -1054,6 +1089,28 @@ def gtest(
         gtest_env["MOZ_ACCELERATED"] = "1"
     else:
         gtest_env["MOZ_WEBRENDER"] = "0"
+
+    if enable_inc_origin_init:
+        gtest_env["MOZ_ENABLE_INC_ORIGIN_INIT"] = "1"
+    else:
+        gtest_env["MOZ_ENABLE_INC_ORIGIN_INIT"] = "0"
+
+    if filter_set or list_filter_sets:
+        filter_sets_mod_path = os.path.join("testing", "gtest", "gtest_filter_sets.py")
+        load_source("gtest_filter_sets", filter_sets_mod_path)
+
+        import gtest_filter_sets
+
+        if filter_set:
+            gtest_filter_for_filter_set = gtest_filter_sets.get(filter_set)
+            if gtest_filter_for_filter_set:
+                gtest_env["GTEST_FILTER"] = gtest_filter_for_filter_set
+            else:
+                print("Unknown filter set.")
+                return 1
+        else:
+            gtest_filter_sets.list()
+            return 1
 
     if jobs == 1:
         return command_context.run_process(

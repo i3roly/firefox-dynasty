@@ -1092,6 +1092,11 @@ who = "Mike Hommey <mh+mozilla@glandium.org>"
 criteria = "safe-to-deploy"
 delta = "1.0.73 -> 1.0.78"
 
+[[audits.cc]]
+who = "Erich Gubler <erichdongubler@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "1.0.89 -> 1.2.10"
+
 [[audits.cfg_aliases]]
 who = "Alex Franchuk <afranchuk@mozilla.com>"
 criteria = "safe-to-deploy"
@@ -2530,6 +2535,11 @@ criteria = "safe-to-deploy"
 delta = "0.8.1 -> 0.9.1"
 notes = "New CursorMut struct and other relatively straight-forward changes."
 
+[[audits.hashlink]]
+who = "Erich Gubler <erichdongubler@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.9.1 -> 0.10.0"
+
 [[audits.headers]]
 who = "Mike Hommey <mh+mozilla@glandium.org>"
 criteria = "safe-to-run"
@@ -2833,6 +2843,11 @@ who = "Mike Hommey <mh+mozilla@glandium.org>"
 criteria = "safe-to-deploy"
 delta = "1.9.1 -> 1.9.2"
 
+[[audits.indexmap]]
+who = "Erich Gubler <erichdongubler@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "2.2.6 -> 2.7.1"
+
 [[audits.inherent]]
 who = "Mike Hommey <mh+mozilla@glandium.org>"
 criteria = "safe-to-deploy"
@@ -2963,6 +2978,11 @@ delta = "0.26.0 -> 0.27.0"
 who = "Mark Hammond <mhammond@mozilla.com>"
 criteria = "safe-to-deploy"
 delta = "0.27.0 -> 0.28.0"
+
+[[audits.libsqlite3-sys]]
+who = "Erich Gubler <erichdongubler@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.28.0 -> 0.31.0"
 
 [[audits.libz-rs-sys]]
 who = "Mike Hommey <mh+mozilla@glandium.org>"
@@ -3158,6 +3178,11 @@ delta = "0.29.0 -> 0.30.0"
 who = "Teodor Tanasoaia <ttanasoaia@mozilla.com>"
 criteria = "safe-to-deploy"
 delta = "0.30.0 -> 0.30.0@git:ef768ff9d742ae6a0f4e83ddc8031264e7d460c4"
+
+[[audits.metal]]
+who = "Erich Gubler <erichdongubler@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.30.0 -> 0.31.0"
 
 [[audits.midir]]
 who = "Bobby Holley <bobbyholley@gmail.com>"
@@ -4226,6 +4251,11 @@ who = "Mark Hammond <mhammond@mozilla.com>"
 criteria = "safe-to-deploy"
 delta = "0.30.0 -> 0.31.0"
 notes = "Mostly build and dependency related changes, and bump to sqlite version"
+
+[[audits.rusqlite]]
+who = "Erich Gubler <erichdongubler@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.31.0 -> 0.33.0"
 
 [[audits.rust_cascade]]
 who = "Mike Hommey <mh+mozilla@glandium.org>"

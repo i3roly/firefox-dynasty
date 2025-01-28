@@ -292,31 +292,6 @@ let JSWINDOWACTORS = {
     matches: ["about:messagepreview", "about:messagepreview?*"],
   },
 
-  AboutNewTab: {
-    parent: {
-      esModuleURI: "resource:///actors/AboutNewTabParent.sys.mjs",
-    },
-    child: {
-      esModuleURI: "resource:///actors/AboutNewTabChild.sys.mjs",
-      events: {
-        DOMDocElementInserted: {},
-        DOMContentLoaded: {},
-        load: { capture: true },
-        unload: { capture: true },
-        pageshow: {},
-        visibilitychange: {},
-      },
-    },
-    // The wildcard on about:newtab is for the # parameter
-    // that is used for the newtab devtools. The wildcard for about:home
-    // is similar, and also allows for falling back to loading the
-    // about:home document dynamically if an attempt is made to load
-    // about:home?jscache from the AboutHomeStartupCache as a top-level
-    // load.
-    matches: ["about:home*", "about:welcome", "about:newtab*"],
-    remoteTypes: ["privilegedabout"],
-  },
-
   AboutPocket: {
     parent: {
       esModuleURI: "resource:///actors/AboutPocketParent.sys.mjs",
@@ -2085,21 +2060,21 @@ BrowserGlue.prototype = {
     let tpEnabled = Services.prefs.getBoolPref(
       "privacy.trackingprotection.enabled"
     );
-    Services.telemetry
-      .getHistogramById("TRACKING_PROTECTION_ENABLED")
-      .add(tpEnabled);
+    Glean.contentblocking.trackingProtectionEnabled[
+      tpEnabled ? "true" : "false"
+    ].add();
 
-    let tpPBDisabled = Services.prefs.getBoolPref(
+    let tpPBEnabled = Services.prefs.getBoolPref(
       "privacy.trackingprotection.pbmode.enabled"
     );
-    Services.telemetry
-      .getHistogramById("TRACKING_PROTECTION_PBM_DISABLED")
-      .add(!tpPBDisabled);
+    Glean.contentblocking.trackingProtectionPbmDisabled[
+      !tpPBEnabled ? "true" : "false"
+    ].add();
 
     let cookieBehavior = Services.prefs.getIntPref(
       "network.cookie.cookieBehavior"
     );
-    Services.telemetry.getHistogramById("COOKIE_BEHAVIOR").add(cookieBehavior);
+    Glean.contentblocking.cookieBehavior.accumulateSingleSample(cookieBehavior);
 
     let fpEnabled = Services.prefs.getBoolPref(
       "privacy.trackingprotection.fingerprinting.enabled"

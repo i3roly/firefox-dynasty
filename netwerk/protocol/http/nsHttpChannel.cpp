@@ -12,6 +12,7 @@
 #include "mozilla/ScopeExit.h"
 #include "mozilla/Sprintf.h"
 #include "mozilla/dom/nsCSPContext.h"
+#include "mozilla/glean/AntitrackingMetrics.h"
 #include "mozilla/glean/NetwerkMetrics.h"
 #include "mozilla/glean/NetwerkProtocolHttpMetrics.h"
 #include "mozilla/StoragePrincipalHelper.h"
@@ -2999,7 +3000,9 @@ nsresult nsHttpChannel::ContinueProcessResponse3(nsresult rv) {
         if (mTransaction && mTransaction->ProxyConnectFailed()) {
           return ProcessFailedProxyConnect(httpStatus);
         }
-        if (!mAuthRetryPending) {
+        if (rv == NS_ERROR_BASIC_HTTP_AUTH_DISABLED) {
+          mStatus = rv;
+        } else if (!mAuthRetryPending) {
           MOZ_DIAGNOSTIC_ASSERT(mAuthProvider);
           rv = mAuthProvider ? mAuthProvider->CheckForSuperfluousAuth()
                              : NS_ERROR_UNEXPECTED;
@@ -4561,7 +4564,7 @@ nsHttpChannel::OnCacheEntryCheck(nsICacheEntry* entry, uint32_t* aResult) {
 
   bool isForcedValid = false;
   entry->GetIsForcedValid(&isForcedValid);
-  auto prefetchStatus = Telemetry::LABELS_PREDICTOR_PREFETCH_USE_STATUS::Used;
+  auto prefetchStatus = glean::predictor::PrefetchUseStatusLabel::eUsed;
 
   bool weaklyFramed, isImmutable;
   nsHttp::DetermineFramingAndImmutability(entry, mCachedResponseHead.get(),
@@ -4572,11 +4575,11 @@ nsHttpChannel::OnCacheEntryCheck(nsICacheEntry* entry, uint32_t* aResult) {
     LOG(("Validating based on Vary headers returning TRUE\n"));
     canAddImsHeader = false;
     doValidation = true;
-    prefetchStatus = Telemetry::LABELS_PREDICTOR_PREFETCH_USE_STATUS::WouldVary;
+    prefetchStatus = glean::predictor::PrefetchUseStatusLabel::eWouldvary;
   } else {
     if (mCachedResponseHead->ExpiresInPast() ||
         mCachedResponseHead->MustValidateIfExpired()) {
-      prefetchStatus = Telemetry::LABELS_PREDICTOR_PREFETCH_USE_STATUS::Expired;
+      prefetchStatus = glean::predictor::PrefetchUseStatusLabel::eExpired;
     }
     doValidation = nsHttp::ValidationRequired(
         isForcedValid, mCachedResponseHead.get(), mLoadFlags,
@@ -4620,7 +4623,7 @@ nsHttpChannel::OnCacheEntryCheck(nsICacheEntry* entry, uint32_t* aResult) {
         (fromPreviousSession && !buf.IsEmpty()) ||
         (buf.IsEmpty() && mRequestHead.HasHeader(nsHttp::Authorization));
     if (doValidation) {
-      prefetchStatus = Telemetry::LABELS_PREDICTOR_PREFETCH_USE_STATUS::Auth;
+      prefetchStatus = glean::predictor::PrefetchUseStatusLabel::eAuth;
     }
   }
 
@@ -4650,8 +4653,7 @@ nsHttpChannel::OnCacheEntryCheck(nsICacheEntry* entry, uint32_t* aResult) {
     if (!doValidation) {
       ref->AppendElement(cacheKey);
     } else {
-      prefetchStatus =
-          Telemetry::LABELS_PREDICTOR_PREFETCH_USE_STATUS::Redirect;
+      prefetchStatus = glean::predictor::PrefetchUseStatusLabel::eRedirect;
     }
   }
 
@@ -4663,11 +4665,11 @@ nsHttpChannel::OnCacheEntryCheck(nsICacheEntry* entry, uint32_t* aResult) {
     if (!doValidation) {
       // Could have gotten to a funky state with some of the if chain above
       // and in nsHttp::ValidationRequired. Make sure we get it right here.
-      prefetchStatus = Telemetry::LABELS_PREDICTOR_PREFETCH_USE_STATUS::Used;
+      prefetchStatus = glean::predictor::PrefetchUseStatusLabel::eUsed;
 
       entry->MarkForcedValidUse();
     }
-    Telemetry::AccumulateCategorical(prefetchStatus);
+    glean::predictor::prefetch_use_status.EnumGet(prefetchStatus).Add();
   }
 
   if (doValidation) {
@@ -5979,8 +5981,8 @@ nsresult nsHttpChannel::AsyncProcessRedirection(uint32_t redirectType) {
           // Record telemetry, but only if we stripped any query params.
           Telemetry::AccumulateCategorical(
               Telemetry::LABELS_QUERY_STRIPPING_COUNT::StripForRedirect);
-          Telemetry::Accumulate(Telemetry::QUERY_STRIPPING_PARAM_COUNT,
-                                numStripped);
+          glean::contentblocking::query_stripping_param_count
+              .AccumulateSingleSample(numStripped);
         }
       }
     }
@@ -10913,7 +10915,7 @@ void nsHttpChannel::DisableIsOpaqueResponseAllowedAfterSniffCheck(
           // Step 8.1
           BlockOpaqueResponseAfterSniff(
               u"media request after sniffing, but not initial request"_ns,
-              OpaqueResponseBlockedTelemetryReason::MEDIA_NOT_INITIAL);
+              OpaqueResponseBlockedTelemetryReason::eMediaNotInitial);
           return;
         }
 
@@ -10921,7 +10923,7 @@ void nsHttpChannel::DisableIsOpaqueResponseAllowedAfterSniffCheck(
           // Step 8.2
           BlockOpaqueResponseAfterSniff(
               u"media request's response status is neither 200 nor 206"_ns,
-              OpaqueResponseBlockedTelemetryReason::MEDIA_INCORRECT_RESP);
+              OpaqueResponseBlockedTelemetryReason::eMediaIncorrectResp);
           return;
         }
       }

@@ -341,7 +341,7 @@ add_task(async function notRelevant() {
   await QuickSuggest.blockedSuggestions._test_readyPromise;
 
   Assert.ok(
-    await QuickSuggest.blockedSuggestions.has(result.payload.originalUrl),
+    await QuickSuggest.blockedSuggestions.isResultBlocked(result),
     "The result's URL should be blocked"
   );
 
@@ -529,6 +529,7 @@ function makeExpectedResult({
       icon: isTopPick
         ? "chrome://global/skin/icons/pocket.svg"
         : "chrome://global/skin/icons/pocket-favicon.ico",
+      isSponsored: false,
       helpUrl: QuickSuggest.HELP_URL,
       shouldShowUrl: true,
       bottomTextL10n: {

@@ -1238,7 +1238,7 @@ pref("network.http.http3.default-max-stream-blocked", 20);
 
 // This is only for testing!
 // This adds alt-svc mapping and it has a form of <host-name>;<alt-svc-header>
-// Example: example1.com;h3-29=":443",example2.com;h3-29=":443"
+// Example: example1.com;h3=":443",example2.com;h3=":443"
 pref("network.http.http3.alt-svc-mapping-for-testing", "");
 
 // alt-svc allows separation of transport routing from
@@ -3147,6 +3147,7 @@ pref("extensions.webextensions.protocol.remote", true);
 
 // Enable userScripts API by default.
 pref("extensions.webextensions.userScripts.enabled", true);
+pref("extensions.userScripts.mv3.enabled", true);
 
 // Whether or not the installed extensions should be migrated to the storage.local IndexedDB backend.
 pref("extensions.webextensions.ExtensionStorageIDB.enabled", true);

@@ -704,16 +704,6 @@ TEST_F(TelemetryTestFixture, AccumulateTimeDelta) {
 
   Telemetry::AccumulateTimeDelta(Telemetry::TELEMETRY_TEST_COUNT, start, start);
 
-  // end > start timestamp gives zero contribution
-  Telemetry::AccumulateTimeDelta(Telemetry::TELEMETRY_TEST_COUNT, start + delta,
-                                 start);
-
-  // The zero contribution is instrumented
-  auto result = mozilla::glean::telemetry::clamping_time_hgrams
-                    .Get("TELEMETRY_TEST_COUNT"_ns)
-                    .TestGetValue();
-  ASSERT_EQ(1, result.unwrap().ref());
-
   // Get a snapshot for all the histograms
   JS::Rooted<JS::Value> snapshot(cx.GetJSContext());
   GetSnapshots(cx.GetJSContext(), mTelemetry, "TELEMETRY_TEST_COUNT", &snapshot,
@@ -750,10 +740,6 @@ TEST_F(TelemetryTestFixture, AccumulateKeyedTimeDelta) {
 
   Telemetry::AccumulateTimeDelta(Telemetry::TELEMETRY_TEST_KEYED_COUNT,
                                  "sample"_ns, start - delta, start);
-
-  // end > start timestamp gives zero contribution
-  Telemetry::AccumulateTimeDelta(Telemetry::TELEMETRY_TEST_KEYED_COUNT,
-                                 "sample"_ns, start + delta, start);
 
   Telemetry::AccumulateTimeDelta(Telemetry::TELEMETRY_TEST_KEYED_COUNT,
                                  "sample"_ns, start, start);

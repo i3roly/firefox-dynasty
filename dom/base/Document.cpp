@@ -1371,7 +1371,6 @@ Document::Document(const char* aContentType)
       mIsGoingAway(false),
       mStyleSetFilled(false),
       mQuirkSheetAdded(false),
-      mContentEditableSheetAdded(false),
       mMayHaveTitleElement(false),
       mDOMLoadingSet(false),
       mDOMInteractiveSet(false),
@@ -3302,41 +3301,6 @@ void Document::FillStyleSet() {
   FillStyleSetUserAndUASheets();
   FillStyleSetDocumentSheets();
   mStyleSetFilled = true;
-}
-
-void Document::RemoveContentEditableStyleSheet() {
-  MOZ_ASSERT(IsHTMLOrXHTML());
-
-  ServoStyleSet& styleSet = EnsureStyleSet();
-  auto* cache = GlobalStyleSheetCache::Singleton();
-  bool changed = false;
-  if (mContentEditableSheetAdded) {
-    styleSet.RemoveStyleSheet(*cache->ContentEditableSheet());
-    mContentEditableSheetAdded = false;
-    changed = true;
-  }
-  if (changed) {
-    MOZ_ASSERT(mStyleSetFilled);
-    ApplicableStylesChanged();
-  }
-}
-
-void Document::AddContentEditableStyleSheetToStyleSet() {
-  MOZ_ASSERT(IsHTMLOrXHTML());
-  MOZ_DIAGNOSTIC_ASSERT(mStyleSetFilled,
-                        "Caller should ensure we're being rendered");
-
-  ServoStyleSet& styleSet = EnsureStyleSet();
-  auto* cache = GlobalStyleSheetCache::Singleton();
-  bool changed = false;
-  if (!mContentEditableSheetAdded) {
-    styleSet.AppendStyleSheet(*cache->ContentEditableSheet());
-    mContentEditableSheetAdded = true;
-    changed = true;
-  }
-  if (changed) {
-    ApplicableStylesChanged();
-  }
 }
 
 void Document::FillStyleSetDocumentSheets() {
@@ -6070,9 +6034,6 @@ void Document::SetNotifyFormOrPasswordRemoved(bool aShouldNotify) {
 void Document::TearingDownEditor() {
   if (IsEditingOn()) {
     mEditingState = EditingState::eTearingDown;
-    if (IsHTMLOrXHTML()) {
-      RemoveContentEditableStyleSheet();
-    }
   }
 }
 
@@ -6277,13 +6238,6 @@ nsresult Document::EditingStateChanged() {
     }
 
     MOZ_ASSERT(mStyleSetFilled);
-
-    // Before making this window editable, we need to modify UA style sheet
-    // because new style may change whether focused element will be focusable
-    // or not.
-    if (IsHTMLOrXHTML()) {
-      AddContentEditableStyleSheetToStyleSet();
-    }
 
     if (designMode) {
       // designMode is being turned on (overrides contentEditable).
@@ -6517,7 +6471,7 @@ void Document::DeferredContentEditableCountChange(Element* aElement) {
             aElement->InclusiveDescendantMayNeedSpellchecking(htmlEditor)) {
           RefPtr<nsRange> range = nsRange::Create(aElement);
           IgnoredErrorResult res;
-          range->SelectNode(*aElement, res);
+          range->SelectNodeContents(*aElement, res);
           if (res.Failed()) {
             // The node might be detached from the document at this point,
             // which would cause this call to fail.  In this case, we can
@@ -7450,7 +7404,6 @@ void Document::DeletePresShell() {
   mStyleSet->ShellDetachedFromDocument();
   mStyleSetFilled = false;
   mQuirkSheetAdded = false;
-  mContentEditableSheetAdded = false;
 }
 
 void Document::DisallowBFCaching(uint32_t aStatus) {
@@ -11764,7 +11717,7 @@ bool Document::CanSavePresentation(nsIRequest* aNewRequest,
   // coming out of the bfcache is ok to restore, though.  So
   // we only want to block suspend windows that aren't also
   // frozen.
-  nsPIDOMWindowInner* win = GetInnerWindow();
+  auto* win = nsGlobalWindowInner::Cast(GetInnerWindow());
   if (win && win->IsSuspended() && !win->IsFrozen()) {
     MOZ_LOG(gPageCacheLog, mozilla::LogLevel::Verbose,
             ("Save of %s blocked on suspended Window", uri.get()));

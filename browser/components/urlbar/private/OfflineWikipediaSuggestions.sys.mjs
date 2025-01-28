@@ -40,13 +40,11 @@ export class OfflineWikipediaSuggestions extends SuggestProvider {
       lazy.UrlbarUtils.RESULT_SOURCE.SEARCH,
       ...lazy.UrlbarResult.payloadAndSimpleHighlights(queryContext.tokens, {
         url: suggestion.url,
-        originalUrl: suggestion.url,
         title: suggestion.title,
         qsSuggestion: [
           suggestion.fullKeyword,
           lazy.UrlbarUtils.HIGHLIGHT.SUGGESTED,
         ],
-        isSponsored: suggestion.is_sponsored,
         sponsoredAdvertiser: "Wikipedia",
         sponsoredIabCategory: "5 - Education",
         isBlockable: true,
@@ -65,7 +63,7 @@ export class OfflineWikipediaSuggestions extends SuggestProvider {
     // commands. Dismissal is the only one we need to handle here. `UrlbarInput`
     // handles Manage.
     if (details.selType == "dismiss") {
-      lazy.QuickSuggest.blockedSuggestions.add(result.payload.originalUrl);
+      lazy.QuickSuggest.blockedSuggestions.blockResult(result);
       controller.removeResult(result);
     }
   }

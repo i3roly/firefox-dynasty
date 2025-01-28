@@ -163,13 +163,13 @@ searchConfiguration:
         parameter will not be included in the search url.
 
         Only the search team can update the configuration.
-    seperatePrivateDefaultUIEnabled:
+    separatePrivateDefaultUIEnabled:
       type: boolean
       setPref:
         branch: user
         pref: browser.search.separatePrivateDefault.ui.enabled
       description: Whether the UI for the separate private default feature is enabled.
-    seperatePrivateDefaultUrlbarResultEnabled:
+    separatePrivateDefaultUrlbarResultEnabled:
       type: boolean
       setPref:
         branch: user
@@ -903,6 +903,21 @@ newtabAdSizingExperiment:
         pref: browser.newtabpage.activity-stream.newtabAdSize.billboard.position
       description: >-
         Billboard row position.
+
+newtabInlineTopicSelection:
+  description: >-
+      Adds Inline topic selection to sections layout
+  owner: nbarrett@mozilla.com
+  hasExposure: false
+  variables:
+    TopicSelectionEnabled:
+      type: boolean
+      setPref:
+        branch: user
+        pref: browser.newtabpage.activity-stream.discoverystream.sections.topicSelection.enabled
+      description: >-
+        Enables inline topic selection
+
 
 newtabLayoutExperiment:
   description: >-
@@ -4048,7 +4063,12 @@ certCompression:
 bounceTrackingProtection:
   description: Controls the Bounce Tracking Protection feature.
   owner: emz@mozilla.com
-  hasExposure: false
+  isEarlyStartup: true
+  hasExposure: true
+  exposureDescription: >-
+    Exposure is recored after every purge run which purged at least one tracker.
+    Exposure is only recorded when the feature is fully enabled and not in
+    dry-run mode.
   variables:
     mode:
       type: int

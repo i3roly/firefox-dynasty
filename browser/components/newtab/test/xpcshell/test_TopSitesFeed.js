@@ -22,9 +22,8 @@ ChromeUtils.defineESModuleGetters(this, {
   Screenshots: "resource://activity-stream/lib/Screenshots.sys.mjs",
   Sampling: "resource://gre/modules/components-utils/Sampling.sys.mjs",
   SearchService: "resource://gre/modules/SearchService.sys.mjs",
-  TOP_SITES_DEFAULT_ROWS: "resource://activity-stream/common/Reducers.sys.mjs",
-  TOP_SITES_MAX_SITES_PER_ROW:
-    "resource://activity-stream/common/Reducers.sys.mjs",
+  TOP_SITES_DEFAULT_ROWS: "resource:///modules/topsites/constants.mjs",
+  TOP_SITES_MAX_SITES_PER_ROW: "resource:///modules/topsites/constants.mjs",
 });
 
 const FAKE_FAVICON = "data987";
@@ -2509,9 +2508,9 @@ add_task(async function test_improvesearch_topSitesSearchShortcuts() {
               url: "https://google.com",
               backgroundColor: undefined,
               smallFavicon:
-                "chrome://activity-stream/content/data/content/tippytop/favicons/google-com.ico",
+                "chrome://browser/content/topsites/tippytop/favicons/google-com.ico",
               tippyTopIcon:
-                "chrome://activity-stream/content/data/content/tippytop/images/google-com@2x.png",
+                "chrome://browser/content/topsites/tippytop/images/google-com@2x.png",
             },
             {
               keyword: "@amazon",
@@ -2519,9 +2518,9 @@ add_task(async function test_improvesearch_topSitesSearchShortcuts() {
               url: "https://amazon.com",
               backgroundColor: undefined,
               smallFavicon:
-                "chrome://activity-stream/content/data/content/tippytop/favicons/amazon.ico",
+                "chrome://browser/content/topsites/tippytop/favicons/amazon.ico",
               tippyTopIcon:
-                "chrome://activity-stream/content/data/content/tippytop/images/amazon@2x.png",
+                "chrome://browser/content/topsites/tippytop/images/amazon@2x.png",
             },
           ],
         },

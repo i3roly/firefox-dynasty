@@ -219,7 +219,6 @@ def gecko_profiler_parse_elf(value, target):
 
 
 set_config("MOZ_GECKO_PROFILER_PARSE_ELF", gecko_profiler_parse_elf)
-set_define("MOZ_GECKO_PROFILER_PARSE_ELF", gecko_profiler_parse_elf)
 
 # enable this by default if the profiler is enabled
 # Note: also requires jemalloc
@@ -3121,9 +3120,6 @@ option(
 )
 
 set_define("MOZ_GFX_OPTIMIZE_MOBILE", True, when="--enable-mobile-optimize")
-# We ignore "paint will resample" on mobile for performance.
-# We may want to revisit this later.
-set_define("MOZ_IGNORE_PAINT_WILL_RESAMPLE", True, when="--enable-mobile-optimize")
 
 # Pref extensions
 # ==============================================================
@@ -3677,17 +3673,6 @@ with only_when(target_has_linux_kernel & compile_environment):
             check_msg="for 32-bits ethtool_cmd.speed",
         ),
     )
-
-# Gamepad support
-# ==============================================================
-check_header(
-    "linux/joystick.h",
-    onerror=lambda: die(
-        "Can't find header linux/joystick.h, needed for gamepad support."
-        " Please install Linux kernel headers."
-    ),
-    when=target_has_linux_kernel & compile_environment,
-)
 
 
 # Smart card support

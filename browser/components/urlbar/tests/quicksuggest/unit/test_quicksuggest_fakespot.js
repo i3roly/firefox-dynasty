@@ -315,7 +315,7 @@ add_task(async function notRelevant() {
   await QuickSuggest.blockedSuggestions._test_readyPromise;
 
   Assert.ok(
-    await QuickSuggest.blockedSuggestions.has(result.payload.originalUrl),
+    await QuickSuggest.blockedSuggestions.isResultBlocked(result),
     "The result's URL should be blocked"
   );
 
@@ -857,6 +857,7 @@ function makeExpectedResult({
       totalReviews,
       fakespotGrade,
       fakespotProvider,
+      isSponsored: true,
       dynamicType: "fakespot",
       icon: null,
     },
