@@ -503,14 +503,13 @@ void LIRGeneratorARM::lowerWasmSelectI64(MWasmSelect* select) {
 }
 
 LTableSwitch* LIRGeneratorARM::newLTableSwitch(const LAllocation& in,
-                                               const LDefinition& inputCopy,
-                                               MTableSwitch* tableswitch) {
-  return new (alloc()) LTableSwitch(in, inputCopy, tableswitch);
+                                               const LDefinition& inputCopy) {
+  return new (alloc()) LTableSwitch(in, inputCopy, LDefinition::BogusTemp());
 }
 
-LTableSwitchV* LIRGeneratorARM::newLTableSwitchV(MTableSwitch* tableswitch) {
-  return new (alloc()) LTableSwitchV(useBox(tableswitch->getOperand(0)), temp(),
-                                     tempDouble(), tableswitch);
+LTableSwitchV* LIRGeneratorARM::newLTableSwitchV(const LBoxAllocation& in) {
+  return new (alloc())
+      LTableSwitchV(in, temp(), tempDouble(), LDefinition::BogusTemp());
 }
 
 void LIRGeneratorARM::lowerUrshD(MUrsh* mir) {
@@ -712,7 +711,7 @@ void LIRGenerator::visitWasmStore(MWasmStore* ins) {
     auto* lir = new (alloc()) LWasmAtomicStoreI64(
         useRegister(base),
         useInt64Fixed(ins->value(), Register64(IntArgReg1, IntArgReg0)),
-        memoryBase, tempFixed(IntArgReg2), tempFixed(IntArgReg3));
+        memoryBase, tempInt64Fixed(Register64(IntArgReg3, IntArgReg2)));
     add(lir, ins);
     return;
   }
@@ -1042,7 +1041,7 @@ void LIRGenerator::visitWasmAtomicBinopHeap(MWasmAtomicBinopHeap* ins) {
   if (ins->access().type() == Scalar::Int64) {
     auto* lir = new (alloc()) LWasmAtomicBinopI64(
         useRegister(ins->base()), useInt64Fixed(ins->value(), FetchOpVal64),
-        memoryBase, tempFixed(FetchOpTmpLo), tempFixed(FetchOpTmpHi),
+        memoryBase, tempInt64Fixed(Register64(FetchOpTmpHi, FetchOpTmpLo)),
         ins->access(), ins->operation());
     defineInt64Fixed(lir, ins,
                      LInt64Allocation(LAllocation(AnyRegister(FetchOpOutHi)),

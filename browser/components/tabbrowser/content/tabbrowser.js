@@ -805,6 +805,7 @@
       }
 
       this.showTab(aTab);
+      this.ungroupTab(aTab);
       if (this.tabContainer.verticalMode) {
         this._handleTabMove(aTab, () =>
           this.verticalPinnedTabsContainer.appendChild(aTab)
@@ -5691,6 +5692,33 @@
       });
     }
 
+    /**
+     * @param {MozTabbrowserTab} tab
+     * @param {MozTabbrowserTab|MozTabbrowserTabGroup} targetElement
+     * @param {boolean} dropBefore
+     */
+    dropTab(tab, targetElement, dropBefore) {
+      this._handleTabMove(tab, () => {
+        if (dropBefore) {
+          this.tabContainer.insertBefore(tab, targetElement);
+        } else {
+          targetElement.after(tab);
+        }
+      });
+    }
+
+    /**
+     * @param {MozTabbrowserTab[]} tabs
+     * @param {MozTabbrowserTab|MozTabbrowserTabGroup} targetElement
+     * @param {dropBefore} dropBefore
+     */
+    dropTabs(tabs, targetElement, dropBefore) {
+      this.dropTab(tabs[0], targetElement, dropBefore);
+      for (let i = 1; i < tabs.length; i++) {
+        this.dropTab(tabs[i], tabs[i - 1]);
+      }
+    }
+
     moveTabToGroup(aTab, aGroup) {
       if (aTab.pinned) {
         return;
@@ -8441,6 +8469,17 @@ var TabContextMenu = {
       gBrowser.tabContainer?.verticalMode
         ? "close-tabs-to-the-end-vertical"
         : "close-tabs-to-the-end"
+    );
+
+    // Update context menu item for "Turn (on/off) Vertical Tabs".
+    const toggleVerticalTabsItem = document.getElementById(
+      "context_toggleVerticalTabs"
+    );
+    document.l10n.setAttributes(
+      toggleVerticalTabsItem,
+      gBrowser.tabContainer?.verticalMode
+        ? "tab-context-disable-vertical-tabs"
+        : "tab-context-enable-vertical-tabs"
     );
 
     // Disable "Close Tabs to the Left/Right" if there are no tabs

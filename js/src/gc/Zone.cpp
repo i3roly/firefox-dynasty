@@ -371,14 +371,14 @@ void Zone::checkStringWrappersAfterMovingGC() {
 }
 #endif
 
-void Zone::discardJitCode(JS::GCContext* gcx, const DiscardOptions& options) {
+void Zone::maybeDiscardJitCode(JS::GCContext* gcx) {
   if (!isPreservingCode()) {
-    forceDiscardJitCode(gcx, options);
+    forceDiscardJitCode(gcx);
   }
 }
 
 void Zone::forceDiscardJitCode(JS::GCContext* gcx,
-                               const DiscardOptions& options) {
+                               const JitDiscardOptions& options) {
   if (!jitZone()) {
     return;
   }
@@ -432,7 +432,8 @@ void Zone::forceDiscardJitCode(JS::GCContext* gcx,
           script->maybeReleaseJitScript(gcx);
           jitScript = script->maybeJitScript();
           if (!jitScript) {
-            // Try to discard the ScriptCounts too.
+            // If we successfully discarded the JIT script, try to discard the
+            // ScriptCounts too.
             if (!script->realm()->collectCoverageForDebug() &&
                 !gcx->runtime()->profilingScripts) {
               script->destroyScriptCounts();

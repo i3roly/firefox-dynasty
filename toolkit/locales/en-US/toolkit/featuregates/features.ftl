@@ -10,12 +10,6 @@ experimental-features-css-masonry-description = Enables support for the experime
 
 # The title of the experiment should be kept in English as it may be referenced
 # by various online articles and is technical in nature.
-experimental-features-web-gpu2 =
-    .label = Web API: WebGPU
-experimental-features-web-gpu-description3 = The <a data-l10n-name="wikipedia-webgpu">WebGPU API</a> provides low-level support for performing computation and graphics rendering using the <a data-l10n-name="wikipedia-gpu">Graphics Processing Unit (GPU)</a> of the user’s device or computer. The first version of the <a data-l10n-name="spec">specification</a> is nearing finalization. See <a data-l10n-name="bugzilla">bug 1616739</a> for more details.
-
-# The title of the experiment should be kept in English as it may be referenced
-# by various online articles and is technical in nature.
 experimental-features-media-jxl =
     .label = Media: JPEG XL
 experimental-features-media-jxl-description = With this feature enabled, { -brand-short-name } supports the JPEG XL (JXL) format. This is an enhanced image file format that supports lossless transition from traditional JPEG files. See <a data-l10n-name="bugzilla">bug 1539075</a> for more details.
@@ -42,14 +36,6 @@ experimental-features-auto-pip-description = Enable Picture-in-Picture on active
 
 genai-settings-chat-title =
     .label = AI chatbot
-
-# Updated sidebar settings
-sidebar-title =
-    .label = Sidebar
-sidebar-description = Easily access your history, tabs from other devices, sidebar extensions, and more as you browse. <a data-l10n-name="connect">Share feedback</a>
-vertical-tabs-title =
-    .label = Vertical tabs
-vertical-tabs-description = Move your tabs from the top of the browser to the side. Requires you also try the sidebar. <a data-l10n-name="connect">Share feedback</a>
 
 experimental-features-group-developer-tools =
   .label = Developer Tools

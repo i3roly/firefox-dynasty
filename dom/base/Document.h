@@ -3340,8 +3340,8 @@ class Document : public nsINode,
                  const mozilla::dom::Optional<nsAString>& /* unused */,
                  mozilla::ErrorResult& aError);
   mozilla::dom::Nullable<mozilla::dom::WindowProxyHolder> Open(
-      const nsAString& aURL, const nsAString& aName, const nsAString& aFeatures,
-      mozilla::ErrorResult& rv);
+      const nsACString& aURL, const nsAString& aName,
+      const nsAString& aFeatures, mozilla::ErrorResult& rv);
   void Close(mozilla::ErrorResult& rv);
   MOZ_CAN_RUN_SCRIPT void Write(
       const mozilla::dom::Sequence<OwningTrustedHTMLOrString>& aText,
@@ -3651,6 +3651,10 @@ class Document : public nsINode,
     mUseCounters[aUseCounter] = true;
   }
 
+  bool HasUseCounter(UseCounter aUseCounter) const {
+    return mUseCounters[aUseCounter];
+  }
+
   const StyleUseCounters* GetStyleUseCounters() {
     return mStyleUseCounters.get();
   }
@@ -3863,6 +3867,7 @@ class Document : public nsINode,
   }
   void ClearActiveViewTransition();
   void PerformPendingViewTransitionOperations();
+  void EnsureViewTransitionOperationsHappen();
 
   // Getter for PermissionDelegateHandler. Performs lazy initialization.
   PermissionDelegateHandler* GetPermissionDelegateHandler();
@@ -4534,7 +4539,8 @@ class Document : public nsINode,
   using AutomaticStorageAccessPermissionGrantPromise =
       MozPromise<bool, bool, true>;
   [[nodiscard]] RefPtr<AutomaticStorageAccessPermissionGrantPromise>
-  AutomaticStorageAccessPermissionCanBeGranted(bool hasUserActivation);
+  AutomaticStorageAccessPermissionCanBeGranted(bool hasUserActivation,
+                                               bool aIsThirdPartyTracker);
 
   static void AddToplevelLoadingDocument(Document* aDoc);
   static void RemoveToplevelLoadingDocument(Document* aDoc);

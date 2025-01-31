@@ -43,7 +43,7 @@ Operand CodeGeneratorX64::ToOperand64(const LInt64Allocation& a64) {
 }
 
 void CodeGenerator::visitBox(LBox* box) {
-  const LAllocation* in = box->getOperand(0);
+  const LAllocation* in = box->payload();
   ValueOperand result = ToOutValue(box);
 
   masm.moveValue(TypedOrValueRegister(box->type(), ToAnyRegister(in)), result);
@@ -328,7 +328,7 @@ void CodeGenerator::visitAtomicTypedArrayElementBinop64(
 
   Register elements = ToRegister(lir->elements());
   Register64 value = ToRegister64(lir->value());
-  Register64 temp = ToTempRegister64OrInvalid(lir->temp());
+  Register64 temp = ToTempRegister64OrInvalid(lir->temp0());
   Register64 out = ToOutRegister64(lir);
 
   Scalar::Type arrayType = lir->mir()->arrayType();
@@ -633,8 +633,7 @@ void CodeGenerator::visitWasmAtomicBinopHeap(LWasmAtomicBinopHeap* ins) {
   Register ptr = ToRegister(ins->ptr());
   Register memoryBase = ToRegister(ins->memoryBase());
   const LAllocation* value = ins->value();
-  Register temp =
-      ins->temp()->isBogusTemp() ? InvalidReg : ToRegister(ins->temp());
+  Register temp = ToTempRegisterOrInvalid(ins->temp());
   Register output = ToRegister(ins->output());
   MOZ_ASSERT(ins->addrTemp()->isBogusTemp());
 
@@ -828,18 +827,22 @@ void CodeGenerator::visitTruncateFToInt32(LTruncateFToInt32* ins) {
 }
 
 void CodeGenerator::visitWrapInt64ToInt32(LWrapInt64ToInt32* lir) {
-  const LAllocation* input = lir->getOperand(0);
+  LInt64Allocation input = lir->input();
   Register output = ToRegister(lir->output());
 
   if (lir->mir()->bottomHalf()) {
-    masm.movl(ToOperand(input), output);
+    if (input.value().isMemory()) {
+      masm.load32(ToAddress(input), output);
+    } else {
+      masm.move64To32(ToRegister64(input), output);
+    }
   } else {
     MOZ_CRASH("Not implemented.");
   }
 }
 
 void CodeGenerator::visitExtendInt32ToInt64(LExtendInt32ToInt64* lir) {
-  const LAllocation* input = lir->getOperand(0);
+  const LAllocation* input = lir->input();
   Register output = ToRegister(lir->output());
 
   if (lir->mir()->isUnsigned()) {
@@ -866,9 +869,9 @@ void CodeGenerator::visitWasmWrapU32Index(LWasmWrapU32Index* lir) {
 }
 
 void CodeGenerator::visitSignExtendInt64(LSignExtendInt64* ins) {
-  Register64 input = ToRegister64(ins->getInt64Operand(0));
+  Register64 input = ToRegister64(ins->num());
   Register64 output = ToOutRegister64(ins);
-  switch (ins->mode()) {
+  switch (ins->mir()->mode()) {
     case MSignExtendInt64::Byte:
       masm.movsbq(Operand(input.reg), output.reg);
       break;
@@ -894,7 +897,7 @@ void CodeGenerator::visitWasmTruncateToInt64(LWasmTruncateToInt64* lir) {
   addOutOfLineCode(ool, mir);
 
   FloatRegister temp =
-      mir->isUnsigned() ? ToFloatRegister(lir->temp()) : InvalidFloatReg;
+      mir->isUnsigned() ? ToFloatRegister(lir->temp0()) : InvalidFloatReg;
 
   Label* oolEntry = ool->entry();
   Label* oolRejoin = ool->rejoin();
@@ -919,25 +922,26 @@ void CodeGenerator::visitWasmTruncateToInt64(LWasmTruncateToInt64* lir) {
 }
 
 void CodeGenerator::visitInt64ToFloatingPoint(LInt64ToFloatingPoint* lir) {
-  Register64 input = ToRegister64(lir->getInt64Operand(0));
+  Register64 input = ToRegister64(lir->input());
   FloatRegister output = ToFloatRegister(lir->output());
+  Register temp = ToTempRegisterOrInvalid(lir->temp0());
 
   MInt64ToFloatingPoint* mir = lir->mir();
   bool isUnsigned = mir->isUnsigned();
 
   MIRType outputType = mir->type();
   MOZ_ASSERT(outputType == MIRType::Double || outputType == MIRType::Float32);
-  MOZ_ASSERT(isUnsigned == !lir->getTemp(0)->isBogusTemp());
+  MOZ_ASSERT(isUnsigned == (temp != InvalidReg));
 
   if (outputType == MIRType::Double) {
     if (isUnsigned) {
-      masm.convertUInt64ToDouble(input, output, ToRegister(lir->getTemp(0)));
+      masm.convertUInt64ToDouble(input, output, temp);
     } else {
       masm.convertInt64ToDouble(input, output);
     }
   } else {
     if (isUnsigned) {
-      masm.convertUInt64ToFloat32(input, output, ToRegister(lir->getTemp(0)));
+      masm.convertUInt64ToFloat32(input, output, temp);
     } else {
       masm.convertInt64ToFloat32(input, output);
     }
@@ -945,9 +949,9 @@ void CodeGenerator::visitInt64ToFloatingPoint(LInt64ToFloatingPoint* lir) {
 }
 
 void CodeGenerator::visitBitNotI64(LBitNotI64* ins) {
-  const LAllocation* input = ins->getOperand(0);
-  MOZ_ASSERT(!input->isConstant());
-  Register inputR = ToRegister(input);
-  MOZ_ASSERT(inputR == ToRegister(ins->output()));
-  masm.notq(inputR);
+  LInt64Allocation input = ins->input();
+  MOZ_ASSERT(!IsConstant(input));
+  Register64 inputR = ToRegister64(input);
+  MOZ_ASSERT(inputR == ToOutRegister64(ins));
+  masm.notq(inputR.reg);
 }

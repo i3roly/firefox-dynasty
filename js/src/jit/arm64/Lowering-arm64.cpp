@@ -249,7 +249,7 @@ void LIRGeneratorARM64::lowerDivI(MDiv* div) {
       return;
     }
     if (rhs != 0) {
-      LDivConstantI* lir = new (alloc()) LDivConstantI(lhs, rhs, temp());
+      LDivConstantI* lir = new (alloc()) LDivConstantI(lhs, temp(), rhs);
       if (div->fallible()) {
         assignSnapshot(lir, div->bailoutKind());
       }
@@ -434,14 +434,12 @@ void LIRGenerator::visitAbs(MAbs* ins) {
 }
 
 LTableSwitch* LIRGeneratorARM64::newLTableSwitch(const LAllocation& in,
-                                                 const LDefinition& inputCopy,
-                                                 MTableSwitch* tableswitch) {
-  return new (alloc()) LTableSwitch(in, inputCopy, temp(), tableswitch);
+                                                 const LDefinition& inputCopy) {
+  return new (alloc()) LTableSwitch(in, inputCopy, temp());
 }
 
-LTableSwitchV* LIRGeneratorARM64::newLTableSwitchV(MTableSwitch* tableswitch) {
-  return new (alloc()) LTableSwitchV(useBox(tableswitch->getOperand(0)), temp(),
-                                     tempDouble(), temp(), tableswitch);
+LTableSwitchV* LIRGeneratorARM64::newLTableSwitchV(const LBoxAllocation& in) {
+  return new (alloc()) LTableSwitchV(in, temp(), tempDouble(), temp());
 }
 
 void LIRGeneratorARM64::lowerUrshD(MUrsh* mir) {
@@ -573,7 +571,7 @@ void LIRGeneratorARM64::lowerUDiv(MDiv* div) {
       return;
     }
 
-    LUDivConstantI* lir = new (alloc()) LUDivConstantI(lhs, rhs, temp());
+    LUDivConstantI* lir = new (alloc()) LUDivConstantI(lhs, temp(), rhs);
     if (div->fallible()) {
       assignSnapshot(lir, div->bailoutKind());
     }

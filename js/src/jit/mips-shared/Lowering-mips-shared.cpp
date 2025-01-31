@@ -289,8 +289,7 @@ void LIRGeneratorMIPSShared::lowerModI(MMod* mod) {
       return;
     } else if (shift < 31 && (1 << (shift + 1)) - 1 == rhs) {
       LModMaskI* lir = new (alloc())
-          LModMaskI(useRegister(mod->lhs()), temp(LDefinition::GENERAL),
-                    temp(LDefinition::GENERAL), shift + 1);
+          LModMaskI(useRegister(mod->lhs()), temp(), temp(), shift + 1);
       if (mod->fallible()) {
         assignSnapshot(lir, mod->bailoutKind());
       }
@@ -298,9 +297,8 @@ void LIRGeneratorMIPSShared::lowerModI(MMod* mod) {
       return;
     }
   }
-  LModI* lir =
-      new (alloc()) LModI(useRegister(mod->lhs()), useRegister(mod->rhs()),
-                          temp(LDefinition::GENERAL));
+  LModI* lir = new (alloc())
+      LModI(useRegister(mod->lhs()), useRegister(mod->rhs()), temp());
 
   if (mod->fallible()) {
     assignSnapshot(lir, mod->bailoutKind());
@@ -330,15 +328,13 @@ void LIRGeneratorMIPSShared::lowerWasmSelectI64(MWasmSelect* select) {
 }
 
 LTableSwitch* LIRGeneratorMIPSShared::newLTableSwitch(
-    const LAllocation& in, const LDefinition& inputCopy,
-    MTableSwitch* tableswitch) {
-  return new (alloc()) LTableSwitch(in, inputCopy, temp(), tableswitch);
+    const LAllocation& in, const LDefinition& inputCopy) {
+  return new (alloc()) LTableSwitch(in, inputCopy, temp());
 }
 
 LTableSwitchV* LIRGeneratorMIPSShared::newLTableSwitchV(
-    MTableSwitch* tableswitch) {
-  return new (alloc()) LTableSwitchV(useBox(tableswitch->getOperand(0)), temp(),
-                                     tempDouble(), temp(), tableswitch);
+    const LBoxAllocation& in) {
+  return new (alloc()) LTableSwitchV(in, temp(), tempDouble(), temp());
 }
 
 void LIRGeneratorMIPSShared::lowerUrshD(MUrsh* mir) {
@@ -810,12 +806,9 @@ void LIRGenerator::visitWasmAtomicBinopHeap(MWasmAtomicBinopHeap* ins) {
                            : LGeneralReg(HeapReg);
 
   if (ins->access().type() == Scalar::Int64) {
-    auto* lir = new (alloc()) LWasmAtomicBinopI64(
-        useRegister(base), useInt64Register(ins->value()), memoryBase);
-    lir->setTemp(0, temp());
-#ifdef JS_CODEGEN_MIPS32
-    lir->setTemp(1, temp());
-#endif
+    auto* lir = new (alloc())
+        LWasmAtomicBinopI64(useRegister(base), useInt64Register(ins->value()),
+                            memoryBase, tempInt64());
     defineInt64(lir, ins);
     return;
   }

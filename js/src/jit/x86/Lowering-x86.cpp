@@ -381,7 +381,7 @@ void LIRGenerator::visitWasmLoad(MWasmLoad* ins) {
   if (ins->access().type() == Scalar::Int64 && ins->access().isAtomic()) {
     auto* lir = new (alloc())
         LWasmAtomicLoadI64(useRegister(memoryBase), useRegister(base),
-                           tempFixed(ecx), tempFixed(ebx));
+                           tempInt64Fixed(Register64(ecx, ebx)));
     defineInt64Fixed(lir, ins,
                      LInt64Allocation(LAllocation(AnyRegister(edx)),
                                       LAllocation(AnyRegister(eax))));
@@ -431,7 +431,7 @@ void LIRGenerator::visitWasmStore(MWasmStore* ins) {
     auto* lir = new (alloc())
         LWasmAtomicStoreI64(useRegister(memoryBase), useRegister(base),
                             useInt64Fixed(ins->value(), Register64(ecx, ebx)),
-                            tempFixed(edx), tempFixed(eax));
+                            tempInt64Fixed(Register64(edx, eax)));
     add(lir, ins);
     return;
   }

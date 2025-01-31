@@ -251,6 +251,21 @@ settings-tabs-show-image-in-preview =
     .label = Show an image preview when you hover on a tab
     .accessKey = h
 
+
+browser-layout-header = Browser Layout
+
+browser-layout-horizontal-tabs =
+    .label = Horizontal tabs
+browser-layout-horizontal-tabs-desc = Display at top of browser
+
+browser-layout-vertical-tabs =
+    .label = Vertical tabs
+browser-layout-vertical-tabs-desc = Display on the side, in the sidebar
+
+browser-layout-show-sidebar =
+    .label = Show sidebar
+browser-layout-show-sidebar-desc = Quickly access bookmarks, tabs from your phone, AI chatbots, and more without leaving your main view.
+
 ## General Section - Language & Appearance
 
 language-and-appearance-header = Language and Appearance
@@ -1431,8 +1446,8 @@ permissions-addon-exceptions =
 collection-header2 = { -brand-short-name } Data Collection and Use
     .searchkeywords = telemetry
 
-collection-description = We strive to provide you with choices and collect only what we need to provide and improve { -brand-short-name } for everyone. We always ask permission before receiving personal information.
-collection-privacy-notice = Privacy Notice
+preferences-collection-description = We strive to provide you with choices and collect only the minimal data necessary to improve { -brand-product-name } for everyone.
+preferences-collection-privacy-notice = View Privacy Notice
 
 collection-health-report-telemetry-disabled = You’re no longer allowing { -vendor-short-name } to capture technical and interaction data. All past data will be deleted within 30 days.
 collection-health-report-telemetry-disabled-link = Learn more
@@ -1540,24 +1555,19 @@ space-alert-under-5gb-message2 = <strong>{ -brand-short-name } is running out of
 
 httpsonly-header = HTTPS-Only Mode
 
-httpsonly-description2 = { -brand-short-name } creates secure and encrypted connections to sites you visit. { -brand-short-name } will warn you if a connection isn’t secure when HTTPS-Only is on.
+httpsonly-description3 = Only allows secure connections to websites. { -brand-short-name } will ask before connecting insecurely.
 
-httpsonly-learn-more = Learn more
+httpsonly-learn-more2 = How HTTPS-Only works
 
 httpsonly-radio-enabled =
     .label = Enable HTTPS-Only Mode in all windows
-httpsonly-radio-enabled2 =
-    .label = Only use HTTPS in all windows
 
 httpsonly-radio-enabled-pbm =
     .label = Enable HTTPS-Only Mode in private windows only
-httpsonly-radio-enabled-pbm2 =
-    .label = Only use HTTPS in private windows
 
-httpsonly-radio-disabled =
+httpsonly-radio-disabled3 =
     .label = Don’t enable HTTPS-Only Mode
-httpsonly-radio-disabled2 =
-    .label = Try HTTPS first, but allow connections that are not secure
+    .description = { -brand-short-name } may still upgrade some connections
 
 ## DoH Section
 

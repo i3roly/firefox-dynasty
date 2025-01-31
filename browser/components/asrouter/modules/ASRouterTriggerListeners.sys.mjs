@@ -915,13 +915,13 @@ export const ASRouterTriggerListeners = new Map([
     },
   ],
   [
-    "tabGroupClosed",
+    "tabGroupSaved",
     {
-      id: "tabGroupClosed",
+      id: "tabGroupSaved",
       _initialized: false,
       _triggerHandler: null,
-      // Number of tab groups the user closed this session
-      _tabGroupsClosed: 0,
+      // Number of tab groups the user saved and closed this session
+      _tabGroupsSaved: 0,
 
       init(triggerHandler) {
         this._triggerHandler = triggerHandler;
@@ -929,10 +929,10 @@ export const ASRouterTriggerListeners = new Map([
           lazy.EveryWindow.registerCallback(
             this.id,
             win => {
-              win.addEventListener("TabGroupRemoved", this);
+              win.addEventListener("TabGroupSaved", this);
             },
             win => {
-              win.removeEventListener("TabGroupRemoved", this);
+              win.removeEventListener("TabGroupSaved", this);
             }
           );
           this._initialized = true;
@@ -944,11 +944,11 @@ export const ASRouterTriggerListeners = new Map([
             return;
           }
           const { gBrowser } = event.target.ownerGlobal;
-          this._tabGroupsClosed++;
+          this._tabGroupsSaved++;
           this._triggerHandler(gBrowser.selectedBrowser, {
             id: this.id,
             context: {
-              tabGroupsClosedCount: this._tabGroupsClosed,
+              tabGroupsSavedCount: this._tabGroupsSaved,
             },
           });
         }
@@ -958,7 +958,7 @@ export const ASRouterTriggerListeners = new Map([
           lazy.EveryWindow.unregisterCallback(this.id);
           this._initialized = false;
           this._triggerHandler = null;
-          this._tabGroupsClosed = 0;
+          this._tabGroupsSaved = 0;
         }
       },
     },

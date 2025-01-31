@@ -20,7 +20,7 @@ import mozilla.components.concept.engine.EngineSession.CookieBannerHandlingMode
 import mozilla.components.feature.sitepermissions.SitePermissionsRules
 import mozilla.components.feature.sitepermissions.SitePermissionsRules.Action
 import mozilla.components.feature.sitepermissions.SitePermissionsRules.AutoplayAction
-import mozilla.components.service.mars.contile.ContileTopSitesProvider
+import mozilla.components.feature.top.sites.TopSitesProvider
 import mozilla.components.support.ktx.android.content.PreferencesHolder
 import mozilla.components.support.ktx.android.content.booleanPreference
 import mozilla.components.support.ktx.android.content.floatPreference
@@ -104,10 +104,15 @@ class Settings(private val appContext: Context) : PreferencesHolder {
         const val TOP_SITES_MAX_COUNT = 16
 
         /**
-         * Only fetch top sites from the [ContileTopSitesProvider] when the number of default and
+         * Only fetch top sites from the [TopSitesProvider] when the number of default and
          * pinned sites are below this maximum threshold.
          */
         const val TOP_SITES_PROVIDER_MAX_THRESHOLD = 8
+
+        /**
+         * Number of top sites to take from the [TopSitesProvider].
+         */
+        const val TOP_SITES_PROVIDER_LIMIT = 2
 
         private fun Action.toInt() = when (this) {
             Action.BLOCKED -> BLOCKED_INT
@@ -302,6 +307,11 @@ class Settings(private val appContext: Context) : PreferencesHolder {
         default = false,
     )
 
+    var privateBrowsingBiometricsEnabled by booleanPreference(
+        appContext.getPreferenceKey(R.string.pref_key_private_browsing_biometrics_enabled),
+        default = false,
+    )
+
     var shouldReturnToBrowser by booleanPreference(
         appContext.getString(R.string.pref_key_return_to_browser),
         false,
@@ -351,6 +361,11 @@ class Settings(private val appContext: Context) : PreferencesHolder {
 
     var hasMadeMarketingTelemetrySelection by booleanPreference(
         appContext.getPreferenceKey(R.string.pref_key_marketing_telemetry_selection_made),
+        default = false,
+    )
+
+    var hasAcceptedTermsOfService by booleanPreference(
+        appContext.getPreferenceKey(R.string.pref_key_terms_accepted),
         default = false,
     )
 

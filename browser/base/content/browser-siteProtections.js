@@ -1638,6 +1638,13 @@ var gProtectionsHandler = {
 
     XPCOMUtils.defineLazyPreferenceGetter(
       this,
+      "_protectionsPopupButtonDelay",
+      "security.notification_enable_delay",
+      500
+    );
+
+    XPCOMUtils.defineLazyPreferenceGetter(
+      this,
       "milestoneListPref",
       "browser.contentblocking.cfr-milestone.milestones",
       "[]",
@@ -1694,6 +1701,11 @@ var gProtectionsHandler = {
     Services.obs.addObserver(this, "browser:purge-session-history");
     // Add an observer to listen to requests to open the protections panel
     Services.obs.addObserver(this, "smartblock:open-protections-panel");
+
+    // bind the reset toggle sec delay function to this so we can use it
+    // as an event listener without this becoming the event target inside
+    // the function
+    this._resetToggleSecDelay = this._resetToggleSecDelay.bind(this);
   },
 
   uninit() {
@@ -1835,6 +1847,22 @@ var gProtectionsHandler = {
         });
       }
 
+      // Add the "open" attribute to the tracking protection icon container
+      // for styling.
+      // Only set the attribute once the panel is opened to avoid icon being
+      // incorrectly highlighted if opening is cancelled. See Bug 1926460.
+      this._trackingProtectionIconContainer.setAttribute("open", "true");
+
+      // Disable the toggles for a short time after opening via SmartBlock placeholder button
+      // to prevent clickjacking.
+      if (this._protectionsPopupOpeningReason == "embedPlaceholderButton") {
+        this._disablePopupToggles();
+        this._protectionsPopupToggleDelayTimer = setTimeout(() => {
+          this._enablePopupToggles();
+          delete this._protectionsPopupToggleDelayTimer;
+        }, this._protectionsPopupButtonDelay);
+      }
+
       ReportBrokenSite.updateParentMenu(event);
     }
   },
@@ -1843,18 +1871,24 @@ var gProtectionsHandler = {
     if (event.target == this._protectionsPopup) {
       window.removeEventListener("focus", this, true);
       this._protectionsPopupTPSwitch.removeEventListener("toggle", this);
-    }
 
-    // Record close telemetry, don't record for toasts
-    if (!event.target.hasAttribute("toast")) {
-      Glean.securityUiProtectionspopup.closeProtectionsPopup.record({
-        openingReason: this._protectionsPopupOpeningReason,
-        smartblockToggleClicked: this._hasClickedSmartBlockEmbedToggle,
-      });
-    }
+      // Record close telemetry, don't record for toasts
+      if (!event.target.hasAttribute("toast")) {
+        Glean.securityUiProtectionspopup.closeProtectionsPopup.record({
+          openingReason: this._protectionsPopupOpeningReason,
+          smartblockToggleClicked: this._hasClickedSmartBlockEmbedToggle,
+        });
+      }
 
-    this._hasClickedSmartBlockEmbedToggle = false;
-    this._protectionsPopupOpeningReason = null;
+      if (this._protectionsPopupToggleDelayTimer) {
+        clearTimeout(this._protectionsPopupToggleDelayTimer);
+        this._enablePopupToggles();
+        delete this._protectionsPopupToggleDelayTimer;
+      }
+
+      this._hasClickedSmartBlockEmbedToggle = false;
+      this._protectionsPopupOpeningReason = null;
+    }
   },
 
   async onTrackingProtectionIconHoveredOrFocused() {
@@ -2251,16 +2285,12 @@ var gProtectionsHandler = {
           break;
         }
 
-        if (this._protectionsPopup?.state == "open") {
-          // don't open the panel if it is already open
-          // This is not sufficent since the panel is technically "closed" by the button click
-          // outside the panel, see Bug 1926460
-          break;
-        }
-
         if (gBrowser.selectedBrowser.browserId !== subject.browserId) {
           break;
         }
+
+        // Ensure panel is fully hidden before trying to open
+        this._hidePopup();
 
         this.showProtectionsPopup({
           openingReason: "embedPlaceholderButton",
@@ -2750,10 +2780,6 @@ var gProtectionsHandler = {
       );
     }
 
-    // Add the "open" attribute to the tracking protection icon container
-    // for styling.
-    this._trackingProtectionIconContainer.setAttribute("open", "true");
-
     // Check the panel state of other panels. Hide them if needed.
     let openPanels = Array.from(document.querySelectorAll("panel[openpanel]"));
     for (let panel of openPanels) {
@@ -2999,5 +3025,30 @@ var gProtectionsHandler = {
     }
 
     return messageEl;
+  },
+
+  _resetToggleSecDelay() {
+    // Note: `this` is bound to gProtectionsHandler in init.
+    clearTimeout(this._protectionsPopupToggleDelayTimer);
+    this._protectionsPopupToggleDelayTimer = setTimeout(() => {
+      this._enablePopupToggles();
+      delete this._protectionsPopupToggleDelayTimer;
+    }, this._protectionsPopupButtonDelay);
+  },
+
+  _disablePopupToggles() {
+    // Disables all toggles in the protections panel
+    this._protectionsPopup.querySelectorAll("moz-toggle").forEach(toggle => {
+      toggle.setAttribute("disabled", true);
+      toggle.addEventListener("pointerdown", this._resetToggleSecDelay);
+    });
+  },
+
+  _enablePopupToggles() {
+    // Enables all toggles in the protections panel
+    this._protectionsPopup.querySelectorAll("moz-toggle").forEach(toggle => {
+      toggle.removeAttribute("disabled");
+      toggle.removeEventListener("pointerdown", this._resetToggleSecDelay);
+    });
   },
 };

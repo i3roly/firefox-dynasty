@@ -586,7 +586,7 @@
     <string name="onboarding_terms_of_service_sub_header_2">Navigaziun svelta e segira en il web</string>
     <!-- Terms of service onboarding page continue button label. -->
     <string name="onboarding_term_of_service_agree_and_continue_button_label">Acceptar e cuntinuar</string>
-    <!-- Line one of the terms of service onboarding page. %1$s is replaced by an active link, using onboarding_term_of_service_line_one_link_text as text (“Firefox Terms of Use”). -->
+    <!-- Line one of the terms of service onboarding page. %1$s is replaced by an active link, using onboarding_term_of_service_line_one_link_text_2 as text (“Firefox Terms of Use”). -->
     <string name="onboarding_term_of_service_line_one" moz:removedIn="136" tools:ignore="BrandUsage, UnusedResources">Cun cuntinuar, acceptas ti las %1$s da Firefox.</string>
     <string name="onboarding_term_of_service_line_one_2">Cun cuntinuar acceptas ti las %1$s.</string>
     <!-- Used as text for the link in onboarding_term_of_service_line_one. -->
@@ -3145,4 +3145,5 @@
     <string name="certificate_warning_push_notification_pnw2_message" tools:ignore="UnusedResources">Actualisescha avant ils 14 da mars per pudair cuntinuar ad utilisar supplements ed autras funcziunalitads.</string>
     <!-- Push notification message about old Firefox version -->
     <string name="certificate_warning_push_notification_pnw3_message" tools:ignore="UnusedResources">Tschertas funcziunalitads na vegnan betg pli a star a disposiziun damaun.</string>
-</resources>
+
+    </resources>

@@ -100,6 +100,8 @@
     <menuitem id="context_fullscreenExit"
               contexttype="fullscreen"
               data-lazy-l10n-id="full-screen-exit"/>
+    <menuseparator/>
+    <menuitem id="context_toggleVerticalTabs" data-lazy-l10n-id="tab-context-enable-vertical-tabs"/>
   </menupopup>
 
   <menupopup id="open-tab-group-context-menu">
@@ -164,8 +166,20 @@
     </toolbarbutton>
   </panel>
 
+  <!-- Starting point for selection actions -->
   <panel class="panel-no-padding"
-         id="ask-chat-shortcuts"
+         id="selection-shortcut-action-panel"
+         noautofocus="true"
+         type="arrow">
+    <hbox class="panel-subview-body">
+      <html:moz-button id="ai-action-button"/>
+    </hbox>
+  </panel>
+
+
+  <!-- Shortcut options for Gen AI action -->
+  <panel class="panel-no-padding"
+         id="chat-shortcuts-options-panel"
          noautofocus="true"
          type="arrow">
     <vbox class="panel-subview-body"/>

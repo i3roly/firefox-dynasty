@@ -1160,6 +1160,9 @@ class LInstructionHelper
   // Override the methods in LInstruction with more optimized versions
   // for when we know the exact instruction type.
   LAllocation* getOperand(size_t index) { return &operands_[index]; }
+  const LAllocation* getOperand(size_t index) const {
+    return &operands_[index];
+  }
   void setOperand(size_t index, const LAllocation& a) { operands_[index] = a; }
   void setBoxOperand(size_t index, const LBoxAllocation& alloc) {
 #ifdef JS_NUNBOX32
@@ -1226,6 +1229,25 @@ class LBinaryCallInstructionHelper
  public:
   const LAllocation* lhs() { return this->getOperand(0); }
   const LAllocation* rhs() { return this->getOperand(1); }
+};
+
+// Base class for control instructions (goto, branch, etc.)
+template <size_t Succs, size_t Operands, size_t Temps>
+class LControlInstructionHelper
+    : public LInstructionHelper<0, Operands, Temps> {
+  mozilla::Array<MBasicBlock*, Succs> successors_;
+
+ protected:
+  explicit LControlInstructionHelper(LNode::Opcode opcode)
+      : LInstructionHelper<0, Operands, Temps>(opcode) {}
+
+ public:
+  size_t numSuccessors() const { return Succs; }
+  MBasicBlock* getSuccessor(size_t i) const { return successors_[i]; }
+
+  void setSuccessor(size_t i, MBasicBlock* successor) {
+    successors_[i] = successor;
+  }
 };
 
 class LRecoverInfo : public TempObject {

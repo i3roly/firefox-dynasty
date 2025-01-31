@@ -2458,7 +2458,7 @@
 # Disable cookie-store API
 - name: dom.cookieStore.enabled
   type: RelaxedAtomicBool
-  value: @IS_EARLY_BETA_OR_EARLIER@
+  value: true
   mirror: always
 
 # Is support for CSSPseudoElement enabled?
@@ -2529,7 +2529,7 @@
 # Enable/disable contenteditable="plaintext-only".
 - name: dom.element.contenteditable.plaintext-only.enabled
   type: bool
-  value: @IS_EARLY_BETA_OR_EARLIER@
+  value: true
   mirror: always
 
 # Whether Dialog elements emit beforetoggle and toggle events during opening and closing.
@@ -4135,7 +4135,7 @@
 # request for HTTPS-Only and HTTPS-First
 - name: dom.security.https_only_fire_http_request_background_timer_ms
   type: RelaxedAtomicUint32
-  value: 3000
+  value: 1500
   mirror: always
 
 # If true, tries to break upgrade downgrade cycles where https-only tries
@@ -4186,7 +4186,7 @@
 # downgraded again if the request failed.
 - name: dom.security.https_first
   type: RelaxedAtomicBool
-  value: @IS_EARLY_BETA_OR_EARLIER@
+  value: true
   mirror: always
 
 # If true, HTTPS-First will upgrade non-default ports
@@ -5138,6 +5138,13 @@
 - name: dom.webcomponents.shadowdom.declarative.enabled
   type: bool
   value: true
+  mirror: always
+
+# Is the constructed flag error check disabled during adoptedStyleSheets setter?
+# https://github.com/w3c/csswg-drafts/issues/10013
+- name: dom.webcomponents.lift-adoptedstylesheets-restriction.enabled
+  type: RelaxedAtomicBool
+  value: false
   mirror: always
 
 # Is support for the Web GPU API enabled?
@@ -7720,12 +7727,6 @@
   value: true
   mirror: always
 
-# Whether we use EXIF metadata for image density.
-- name: image.exif-density-correction.enabled
-  type: RelaxedAtomicBool
-  value: true
-  mirror: always
-
 # Whether EXIF density metadata is sanity checked against PixelXDimension and PixelYDimension
 - name: image.exif-density-correction.sanity-check.enabled
   type: RelaxedAtomicBool
@@ -8460,6 +8461,13 @@
 
   # Experimental support for Iterator Sequencing in JavaScript.
 -   name: javascript.options.experimental.iterator_sequencing
+    type: bool
+    value: false
+    mirror: always
+    set_spidermonkey_pref: startup
+
+  # Experimental support for upsert in JavaScript.
+-   name: javascript.options.experimental.upsert
     type: bool
     value: false
     mirror: always
@@ -9602,6 +9610,12 @@
   value: true
   mirror: always
   rust: true
+
+# Is support for CSS hyphenate-limit-chars enabled?
+- name: layout.css.hyphenate-limit-chars.enabled
+  type: RelaxedAtomicBool
+  value: @IS_NIGHTLY_BUILD@
+  mirror: always
 
 # Is support for CSS initial-letter property enabled?
 - name: layout.css.initial-letter.enabled
@@ -12248,9 +12262,19 @@
   value: false
   mirror: always
 
+- name: media.webrtc.simulcast.av1.enabled
+  type: RelaxedAtomicBool
+  value: true
+  mirror: always
+
+- name: media.webrtc.simulcast.h264.enabled
+  type: RelaxedAtomicBool
+  value: true
+  mirror: always
+
 - name: media.webrtc.simulcast.vp9.enabled
   type: RelaxedAtomicBool
-  value: false
+  value: @IS_EARLY_BETA_OR_EARLIER@
   mirror: always
 
 - name: media.webrtc.tls_tunnel_for_all_proxy
@@ -12834,7 +12858,7 @@
   # in response to a Refresh header.
 - name: network.http.referer.sendFromRefresh
   type: bool
-  value: @IS_NIGHTLY_BUILD@
+  value: true
   mirror: always
 
 # false=real referer, true=spoof referer (use target URI as referer).
@@ -14982,7 +15006,7 @@
 # addition to importing them from browser/app/permissions.
 - name: permissions.manager.remote.enabled
   type: bool
-  value: @IS_EARLY_BETA_OR_EARLIER@
+  value: true
   mirror: always
 
 #---------------------------------------------------------------------------
@@ -15543,6 +15567,12 @@
 - name: privacy.restrict3rdpartystorage.heuristic.recently_visited_time
   type: uint32_t
   value: 600    # 10 minutes
+  mirror: always
+
+# Whether to exclude third-party trackers from the storage accessheuristic.
+- name: privacy.restrict3rdpartystorage.heuristic.exclude_third_party_trackers
+  type: bool
+  value: @IS_NIGHTLY_BUILD@
   mirror: always
 
 # Recent visited pages redirection permission expiration.
@@ -18160,6 +18190,13 @@
 - name: widget.windows.uwp-system-colors.enabled
   type: bool
   value: true
+  mirror: always
+
+# Whether PiP windows have window decorations (borders and shadows).
+# Off for now while we fix bug 1934760 and related issues.
+- name: widget.windows.pip-decorations.enabled
+  type: bool
+  value: false
   mirror: always
 
 # Whether we use the accent color for highlight as some other UWP apps do.

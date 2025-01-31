@@ -116,25 +116,6 @@ void MacroAssembler::storeToTypedFloatArray(Scalar::Type arrayType,
   StoreToTypedFloatArray(*this, arrayType, value, dest, temp, volatileLiveRegs);
 }
 
-template <typename S, typename T>
-static void StoreToTypedBigIntArray(MacroAssembler& masm,
-                                    Scalar::Type arrayType, const S& value,
-                                    const T& dest) {
-  MOZ_ASSERT(Scalar::isBigIntType(arrayType));
-  masm.store64(value, dest);
-}
-
-void MacroAssembler::storeToTypedBigIntArray(Scalar::Type arrayType,
-                                             Register64 value,
-                                             const BaseIndex& dest) {
-  StoreToTypedBigIntArray(*this, arrayType, value, dest);
-}
-void MacroAssembler::storeToTypedBigIntArray(Scalar::Type arrayType,
-                                             Register64 value,
-                                             const Address& dest) {
-  StoreToTypedBigIntArray(*this, arrayType, value, dest);
-}
-
 void MacroAssembler::boxUint32(Register source, ValueOperand dest,
                                Uint32Mode mode, Label* fail) {
   switch (mode) {
@@ -217,8 +198,8 @@ template void MacroAssembler::loadFromTypedArray(
     Register temp1, Register temp2, Label* fail,
     LiveRegisterSet volatileLiveRegs);
 
-template <typename T>
-void MacroAssembler::loadFromTypedArray(Scalar::Type arrayType, const T& src,
+void MacroAssembler::loadFromTypedArray(Scalar::Type arrayType,
+                                        const BaseIndex& src,
                                         const ValueOperand& dest,
                                         Uint32Mode uint32Mode, Register temp,
                                         Label* fail,
@@ -270,33 +251,17 @@ void MacroAssembler::loadFromTypedArray(Scalar::Type arrayType, const T& src,
   }
 }
 
-template void MacroAssembler::loadFromTypedArray(
-    Scalar::Type arrayType, const Address& src, const ValueOperand& dest,
-    Uint32Mode uint32Mode, Register temp, Label* fail,
-    LiveRegisterSet volatileLiveRegs);
-template void MacroAssembler::loadFromTypedArray(
-    Scalar::Type arrayType, const BaseIndex& src, const ValueOperand& dest,
-    Uint32Mode uint32Mode, Register temp, Label* fail,
-    LiveRegisterSet volatileLiveRegs);
-
-template <typename T>
 void MacroAssembler::loadFromTypedBigIntArray(Scalar::Type arrayType,
-                                              const T& src, Register bigInt,
+                                              const BaseIndex& src,
+                                              const ValueOperand& dest,
+                                              Register bigInt,
                                               Register64 temp) {
   MOZ_ASSERT(Scalar::isBigIntType(arrayType));
 
   load64(src, temp);
   initializeBigInt64(arrayType, bigInt, temp);
+  tagValue(JSVAL_TYPE_BIGINT, bigInt, dest);
 }
-
-template void MacroAssembler::loadFromTypedBigIntArray(Scalar::Type arrayType,
-                                                       const Address& src,
-                                                       Register bigInt,
-                                                       Register64 temp);
-template void MacroAssembler::loadFromTypedBigIntArray(Scalar::Type arrayType,
-                                                       const BaseIndex& src,
-                                                       Register bigInt,
-                                                       Register64 temp);
 
 // Inlined version of gc::CheckAllocatorState that checks the bare essentials
 // and bails for anything that cannot be handled with our jit allocators.

@@ -124,7 +124,6 @@ class Analytics(
             ),
             enabled = true,
             nonFatalCrashIntent = pendingIntent,
-            notificationsDelegate = context.components.notificationsDelegate,
             useLegacyReporting = !context.settings().crashReportAlwaysSend &&
                 !context.settings().useNewCrashReporterDialog,
             runtimeTagProviders = listOf(ReleaseRuntimeTagProvider()),
@@ -156,7 +155,9 @@ class Analytics(
                 GleanUsageReportingMetricsService(gleanProfileIdStore = GleanProfileIdPreferenceStore(context)),
             ),
             isDataTelemetryEnabled = { context.settings().isTelemetryEnabled },
-            isMarketingDataTelemetryEnabled = { context.settings().isMarketingTelemetryEnabled },
+            isMarketingDataTelemetryEnabled = {
+                context.settings().isMarketingTelemetryEnabled && context.settings().hasMadeMarketingTelemetrySelection
+            },
             isUsageTelemetryEnabled = { context.settings().isDailyUsagePingEnabled },
             context.settings(),
         )

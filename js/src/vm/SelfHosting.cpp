@@ -46,6 +46,7 @@
 #include "builtin/RegExp.h"
 #include "builtin/SelfHostingDefines.h"
 #include "builtin/String.h"
+#include "builtin/WeakMapObject.h"
 #ifdef ENABLE_RECORD_TUPLE
 #  include "builtin/TupleObject.h"
 #endif
@@ -87,6 +88,7 @@
 #include "vm/JSContext.h"
 #include "vm/JSFunction.h"
 #include "vm/JSObject.h"
+#include "vm/Logging.h"
 #include "vm/PIC.h"
 #include "vm/PlainObject.h"  // js::PlainObject
 #include "vm/Realm.h"
@@ -1974,6 +1976,8 @@ static const JSFunctionSpec intrinsic_functions[] = {
           CallNonGenericSelfhostedMethod<Is<StringIteratorObject>>, 2, 0),
     JS_FN("CallTypedArrayMethodIfWrapped",
           CallNonGenericSelfhostedMethod<Is<TypedArrayObject>>, 2, 0),
+    JS_FN("CallWeakMapMethodIfWrapped",
+          CallNonGenericSelfhostedMethod<Is<WeakMapObject>>, 2, 0),
     JS_FN("CallWrapForValidIteratorMethodIfWrapped",
           CallNonGenericSelfhostedMethod<Is<WrapForValidIteratorObject>>, 2, 0),
     JS_FN("ConstructFunction", intrinsic_ConstructFunction, 2, 0),
@@ -2050,6 +2054,8 @@ static const JSFunctionSpec intrinsic_functions[] = {
     JS_INLINABLE_FN("GuardToStringIterator",
                     intrinsic_GuardToBuiltin<StringIteratorObject>, 1, 0,
                     IntrinsicGuardToStringIterator),
+    JS_FN("GuardToWeakMapObject", intrinsic_GuardToBuiltin<WeakMapObject>, 1,
+          0),
     JS_INLINABLE_FN("GuardToWrapForValidIterator",
                     intrinsic_GuardToBuiltin<WrapForValidIteratorObject>, 1, 0,
                     IntrinsicGuardToWrapForValidIterator),
@@ -2342,6 +2348,7 @@ static const JSFunctionSpec intrinsic_functions[] = {
     JS_FN("std_Function_apply", fun_apply, 2, 0),
     JS_FN("std_Map_entries", MapObject::entries, 0, 0),
     JS_FN("std_Map_get", MapObject::get, 1, 0),
+    JS_FN("std_Map_has", MapObject::has, 1, 0),
     JS_FN("std_Map_set", MapObject::set, 2, 0),
     JS_INLINABLE_FN("std_Math_abs", math_abs, 1, 0, MathAbs),
     JS_INLINABLE_FN("std_Math_floor", math_floor, 1, 0, MathFloor),
@@ -2382,6 +2389,9 @@ static const JSFunctionSpec intrinsic_functions[] = {
 #endif
     JS_TRAMPOLINE_FN("std_TypedArray_sort", TypedArrayObject::sort, 1, 0,
                      TypedArraySort),
+    JS_FN("std_WeakMap_get", WeakMapObject::get, 1, 0),
+    JS_FN("std_WeakMap_has", WeakMapObject::has, 1, 0),
+    JS_FN("std_WeakMap_set", WeakMapObject::set, 2, 0),
 
     JS_FS_END,
 };
@@ -2609,6 +2619,7 @@ bool JSRuntime::initSelfHostingStencil(JSContext* cx,
     selfHostStencil_ = parentRuntime->selfHostStencil_;
     return true;
   }
+  auto start = mozilla::TimeStamp::Now();
 
   // Variables used to instantiate scripts.
   CompileOptions options(cx);
@@ -2646,6 +2657,10 @@ bool JSRuntime::initSelfHostingStencil(JSContext* cx,
       // Move it to the runtime.
       setSelfHostingStencil(&input, std::move(stencil));
 
+      auto end = mozilla::TimeStamp::Now();
+      JS_LOG(startup, Info,
+             "Used XDR for process self-hosted startup. Took %f us",
+             (end - start).ToMicroseconds());
       return true;
     }
   }
@@ -2683,8 +2698,10 @@ bool JSRuntime::initSelfHostingStencil(JSContext* cx,
     return false;
   }
 
+  mozilla::TimeDuration xdrDuration;
   // Serialize the stencil to XDR.
   if (xdrWriter) {
+    auto encodeStart = mozilla::TimeStamp::Now();
     JS::TranscodeBuffer xdrBuffer;
     JS::TranscodeResult result = js::EncodeStencil(cx, stencil, xdrBuffer);
     if (result != JS::TranscodeResult::Ok) {
@@ -2695,6 +2712,10 @@ bool JSRuntime::initSelfHostingStencil(JSContext* cx,
     if (!xdrWriter(cx, xdrBuffer)) {
       return false;
     }
+    auto encodeEnd = mozilla::TimeStamp::Now();
+    xdrDuration = (encodeEnd - encodeStart);
+    JS_LOG(startup, Info, "Saved XDR Buffer. Took %f us",
+           xdrDuration.ToMicroseconds());
   }
 
   MOZ_ASSERT(input->atomCache.empty());
@@ -2704,6 +2725,11 @@ bool JSRuntime::initSelfHostingStencil(JSContext* cx,
   // Move it to the runtime.
   setSelfHostingStencil(&input, std::move(stencil));
 
+  auto end = mozilla::TimeStamp::Now();
+  JS_LOG(startup, Info,
+         "Used source text for process self-hosted startup. Took %f us (%f us "
+         "XDR encode)",
+         (end - start).ToMicroseconds(), xdrDuration.ToMicroseconds());
   return true;
 }
 

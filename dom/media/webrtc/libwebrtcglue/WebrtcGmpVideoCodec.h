@@ -36,8 +36,9 @@
 #include <string>
 
 #include "nsThreadUtils.h"
+#include "mozilla/EventTargetCapability.h"
 #include "mozilla/Mutex.h"
-#include "mozilla/Telemetry.h"
+#include "mozilla/glean/DomMediaWebrtcMetrics.h"
 
 #include "mozIGeckoMediaPluginService.h"
 #include "MediaConduitInterface.h"
@@ -65,8 +66,10 @@ static void NotifyGmpInitDone(const std::string& aPCHandle, int32_t aResult,
     return;
   }
 
-  Telemetry::Accumulate(Telemetry::WEBRTC_GMP_INIT_SUCCESS,
-                        aResult == WEBRTC_VIDEO_CODEC_OK);
+  glean::webrtc::gmp_init_success
+      .EnumGet(static_cast<glean::webrtc::GmpInitSuccessLabel>(
+          aResult == WEBRTC_VIDEO_CODEC_OK))
+      .Add();
   if (aResult == WEBRTC_VIDEO_CODEC_OK) {
     // Might be useful to notify the PeerConnection about successful init
     // someday.
@@ -242,8 +245,10 @@ class WebrtcGmpVideoEncoder final : public GMPVideoEncoderCallbackProxy,
   nsCOMPtr<mozIGeckoMediaPluginService> mMPS;
   nsCOMPtr<nsIThread> mGMPThread;
   GMPVideoEncoderProxy* mGMP;
+  Maybe<EventTargetCapability<nsISerialEventTarget>> mEncodeQueue;
   // Used to handle a race where Release() is called while init is in progress
   bool mInitting;
+  uint32_t mConfiguredBitrateKbps MOZ_GUARDED_BY(mEncodeQueue);
   GMPVideoHost* mHost;
   GMPVideoCodec mCodecParams{};
   uint32_t mMaxPayloadSize;

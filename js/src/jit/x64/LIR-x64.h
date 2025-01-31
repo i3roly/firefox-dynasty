@@ -41,28 +41,6 @@ class LUnboxFloatingPoint : public LUnboxBase {
       : LUnboxBase(classOpcode, input) {}
 };
 
-// Convert a 32-bit unsigned integer to a double.
-class LWasmUint32ToDouble : public LInstructionHelper<1, 1, 0> {
- public:
-  LIR_HEADER(WasmUint32ToDouble)
-
-  explicit LWasmUint32ToDouble(const LAllocation& input)
-      : LInstructionHelper(classOpcode) {
-    setOperand(0, input);
-  }
-};
-
-// Convert a 32-bit unsigned integer to a float32.
-class LWasmUint32ToFloat32 : public LInstructionHelper<1, 1, 0> {
- public:
-  LIR_HEADER(WasmUint32ToFloat32)
-
-  explicit LWasmUint32ToFloat32(const LAllocation& input)
-      : LInstructionHelper(classOpcode) {
-    setOperand(0, input);
-  }
-};
-
 class LDivOrModI64 : public LBinaryMath<1> {
  public:
   LIR_HEADER(DivOrModI64)
@@ -142,21 +120,6 @@ class LUDivOrModI64 : public LBinaryMath<1> {
     }
     return mir_->toDiv()->trapSiteDesc();
   }
-};
-
-class LWasmTruncateToInt64 : public LInstructionHelper<1, 1, 1> {
- public:
-  LIR_HEADER(WasmTruncateToInt64);
-
-  LWasmTruncateToInt64(const LAllocation& in, const LDefinition& temp)
-      : LInstructionHelper(classOpcode) {
-    setOperand(0, in);
-    setTemp(0, temp);
-  }
-
-  MWasmTruncateToInt64* mir() const { return mir_->toWasmTruncateToInt64(); }
-
-  const LDefinition* temp() { return getTemp(0); }
 };
 
 }  // namespace jit

@@ -310,7 +310,6 @@
 #include "nsDeviceContext.h"
 #include "nsDocShell.h"
 #include "nsDocShellLoadTypes.h"
-#include "nsEffectiveTLDService.h"
 #include "nsError.h"
 #include "nsEscape.h"
 #include "nsFocusManager.h"
@@ -2061,7 +2060,7 @@ void Document::RecordPageLoadEventTelemetry(
   }
 
   nsCOMPtr<nsIEffectiveTLDService> tldService =
-      do_GetService(NS_EFFECTIVETLDSERVICE_CONTRACTID);
+      mozilla::components::EffectiveTLD::Service();
   if (tldService && mReferrerInfo &&
       (docshell->GetLoadType() & nsIDocShell::LOAD_CMD_NORMAL)) {
     nsAutoCString currentBaseDomain, referrerBaseDomain;
@@ -6786,7 +6785,7 @@ void Document::SetCookie(const nsAString& aCookieString, ErrorResult& aRv) {
   }
 
   nsCOMPtr<nsIEffectiveTLDService> tldService =
-      do_GetService(NS_EFFECTIVETLDSERVICE_CONTRACTID);
+      mozilla::components::EffectiveTLD::Service();
   if (!tldService) {
     return;
   }
@@ -9363,7 +9362,7 @@ bool Document::IsValidDomain(nsIURI* aOrigHost, nsIURI* aNewURI) {
     // We're golden if the new domain is the current page's base domain or a
     // subdomain of it.
     nsCOMPtr<nsIEffectiveTLDService> tldService =
-        do_GetService(NS_EFFECTIVETLDSERVICE_CONTRACTID);
+        mozilla::components::EffectiveTLD::Service();
     if (!tldService) {
       return false;
     }
@@ -9942,7 +9941,7 @@ nsIHTMLCollection* Document::Anchors() {
 }
 
 mozilla::dom::Nullable<mozilla::dom::WindowProxyHolder> Document::Open(
-    const nsAString& aURL, const nsAString& aName, const nsAString& aFeatures,
+    const nsACString& aURL, const nsAString& aName, const nsAString& aFeatures,
     ErrorResult& rv) {
   MOZ_ASSERT(nsContentUtils::CanCallerAccess(this),
              "XOW should have caught this!");
@@ -9960,8 +9959,7 @@ mozilla::dom::Nullable<mozilla::dom::WindowProxyHolder> Document::Open(
   }
   RefPtr<nsGlobalWindowOuter> win = nsGlobalWindowOuter::Cast(outer);
   RefPtr<BrowsingContext> newBC;
-  rv = win->OpenJS(NS_ConvertUTF16toUTF8(aURL), aName, aFeatures,
-                   getter_AddRefs(newBC));
+  rv = win->OpenJS(aURL, aName, aFeatures, getter_AddRefs(newBC));
   if (!newBC) {
     return nullptr;
   }
@@ -10312,6 +10310,20 @@ void Document::WriteCommon(const nsAString& aText, bool aNewlineTerminate,
     return;
   }
 
+  Maybe<nsAutoString> compliantStringHolder;
+  const nsAString* compliantString = &aText;
+  if (!aIsTrusted) {
+    constexpr nsLiteralString sinkWrite = u"Document write"_ns;
+    constexpr nsLiteralString sinkWriteLn = u"Document writeln"_ns;
+    compliantString =
+        TrustedTypeUtils::GetTrustedTypesCompliantStringForTrustedHTML(
+            aText, aNewlineTerminate ? sinkWriteLn : sinkWrite,
+            kTrustedTypesOnlySinkGroup, *this, compliantStringHolder, aRv);
+    if (aRv.Failed()) {
+      return;
+    }
+  }
+
   if (!IsHTMLDocument() || mDisableDocWrite) {
     // No calling document.write*() on XHTML!
 
@@ -10378,36 +10390,17 @@ void Document::WriteCommon(const nsAString& aText, bool aNewlineTerminate,
 
   ++mWriteLevel;
 
-  auto parseString =
-      [this, &aNewlineTerminate, &aRv, &key](const nsAString& aString)
-          MOZ_CAN_RUN_SCRIPT_FOR_DEFINITION -> void {
-    // This could be done with less code, but for performance reasons it
-    // makes sense to have the code for two separate Parse() calls here
-    // since the concatenation of strings costs more than we like. And
-    // why pay that price when we don't need to?
-    if (aNewlineTerminate) {
-      aRv = (static_cast<nsHtml5Parser*>(mParser.get()))
-                ->Parse(aString + new_line, key, false);
-    } else {
-      aRv = (static_cast<nsHtml5Parser*>(mParser.get()))
-                ->Parse(aString, key, false);
-    }
-  };
-
-  if (aIsTrusted) {
-    parseString(aText);
+  // This could be done with less code, but for performance reasons it
+  // makes sense to have the code for two separate Parse() calls here
+  // since the concatenation of strings costs more than we like. And
+  // why pay that price when we don't need to?
+  if (aNewlineTerminate) {
+    aRv = (static_cast<nsHtml5Parser*>(mParser.get()))
+              ->Parse(*compliantString + new_line, key, false);
   } else {
-    constexpr nsLiteralString sinkWrite = u"Document write"_ns;
-    constexpr nsLiteralString sinkWriteLn = u"Document writeln"_ns;
-    Maybe<nsAutoString> compliantStringHolder;
-    const nsAString* compliantString =
-        TrustedTypeUtils::GetTrustedTypesCompliantStringForTrustedHTML(
-            aText, aNewlineTerminate ? sinkWriteLn : sinkWrite,
-            kTrustedTypesOnlySinkGroup, *this, compliantStringHolder, aRv);
-    if (!aRv.Failed()) {
-      parseString(*compliantString);
-    }
-  }
+    aRv = (static_cast<nsHtml5Parser*>(mParser.get()))
+              ->Parse(*compliantString, key, false);
+  };
 
   --mWriteLevel;
 
@@ -18018,11 +18011,8 @@ already_AddRefed<ViewTransition> Document::StartViewTransition(
   // Step 6: Set document's active view transition to transition.
   mActiveViewTransition = transition;
 
-  if (mPresShell) {
-    if (nsRefreshDriver* rd = mPresShell->GetRefreshDriver()) {
-      rd->EnsureViewTransitionOperationsHappen();
-    }
-  }
+  EnsureViewTransitionOperationsHappen();
+
   // Step 7: return transition
   return transition.forget();
 }
@@ -18037,6 +18027,18 @@ void Document::PerformPendingViewTransitionOperations() {
     aDoc.PerformPendingViewTransitionOperations();
     return CallState::Continue;
   });
+}
+
+void Document::EnsureViewTransitionOperationsHappen() {
+  if (!mPresShell) {
+    return;
+  }
+
+  nsRefreshDriver* rd = mPresShell->GetRefreshDriver();
+  if (!rd) {
+    return;
+  }
+  rd->EnsureViewTransitionOperationsHappen();
 }
 
 Selection* Document::GetSelection(ErrorResult& aRv) {
@@ -18287,10 +18289,13 @@ Document::CreatePermissionGrantPromise(
                 Telemetry::LABELS_STORAGE_ACCESS_API_UI::Request);
           }
 
+          bool isThirdPartyTracker =
+              nsContentUtils::IsThirdPartyTrackingResourceWindow(inner);
+
           // Try to auto-grant the storage access so the user doesn't see the
           // prompt.
           self->AutomaticStorageAccessPermissionCanBeGranted(
-                  aHasUserInteraction)
+                  aHasUserInteraction, isThirdPartyTracker)
               ->Then(
                   GetCurrentSerialEventTarget(), __func__,
                   // If the autogrant check didn't fail, call this function
@@ -18810,8 +18815,8 @@ already_AddRefed<Promise> Document::RequestStorageAccessUnderSite(
             // Get a grant for the storage access permission that will be set
             // when this is completed in the embedding context
             nsCString serializedSite;
-            RefPtr<nsEffectiveTLDService> etld =
-                nsEffectiveTLDService::GetInstance();
+            nsCOMPtr<nsIEffectiveTLDService> etld =
+                mozilla::components::EffectiveTLD::Service();
             if (!etld) {
               return StorageAccessAPIHelper::
                   StorageAccessPermissionGrantPromise::CreateAndReject(
@@ -19069,7 +19074,8 @@ void Document::UnlockAllWakeLocks(WakeLockType aType) {
 }
 
 RefPtr<Document::AutomaticStorageAccessPermissionGrantPromise>
-Document::AutomaticStorageAccessPermissionCanBeGranted(bool hasUserActivation) {
+Document::AutomaticStorageAccessPermissionCanBeGranted(
+    bool hasUserActivation, bool isThirdPartyTracker) {
   // requestStorageAccessForOrigin may not require user activation. If we don't
   // have user activation at this point we should always show the prompt.
   if (!hasUserActivation ||
@@ -19077,6 +19083,14 @@ Document::AutomaticStorageAccessPermissionCanBeGranted(bool hasUserActivation) {
     return AutomaticStorageAccessPermissionGrantPromise::CreateAndResolve(
         false, __func__);
   }
+
+  if (isThirdPartyTracker &&
+      !StaticPrefs::
+          privacy_restrict3rdpartystorage_heuristic_exclude_third_party_trackers()) {
+    return AutomaticStorageAccessPermissionGrantPromise::CreateAndResolve(
+        false, __func__);
+  }
+
   if (XRE_IsContentProcess()) {
     // In the content process, we need to ask the parent process to compute
     // this.  The reason is that nsIPermissionManager::GetAllWithTypePrefix()

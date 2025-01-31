@@ -802,7 +802,7 @@ class GCRuntime {
                              const mozilla::TimeStamp& currentTime,
                              JS::GCReason reason, bool canAllocateMoreCode,
                              bool isActiveCompartment);
-  void discardJITCodeForGC();
+  void maybeDiscardJitCodeForGC();
   void startBackgroundFreeAfterMinorGC();
   void relazifyFunctionsForShrinkingGC();
   void purgePropMapTablesForShrinkingGC();
@@ -1118,9 +1118,6 @@ class GCRuntime {
   MainThreadData<bool> perZoneGCEnabled;
 
   mozilla::Atomic<size_t, mozilla::ReleaseAcquire> numActiveZoneIters;
-
-  /* During shutdown, the GC needs to clean up every possible object. */
-  MainThreadData<bool> cleanUpEverything;
 
   /*
    * The gray bits can become invalid if UnmarkGray overflows the stack. A

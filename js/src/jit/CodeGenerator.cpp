@@ -1704,6 +1704,8 @@ void CodeGenerator::visitCompareI64AndBranch(LCompareI64AndBranch* lir) {
 
 void CodeGenerator::visitBitAndAndBranch(LBitAndAndBranch* baab) {
   Assembler::Condition cond = baab->cond();
+  MOZ_ASSERT(cond == Assembler::Zero || cond == Assembler::NonZero);
+
   Register left = ToRegister(baab->left());
   const LAllocation* right = baab->right();
 
@@ -1732,6 +1734,8 @@ void CodeGenerator::visitBitAndAndBranch(LBitAndAndBranch* baab) {
 
 void CodeGenerator::visitBitAnd64AndBranch(LBitAnd64AndBranch* baab) {
   Assembler::Condition cond = baab->cond();
+  MOZ_ASSERT(cond == Assembler::Zero || cond == Assembler::NonZero);
+
   Register64 left = ToRegister64(baab->left());
   LInt64Allocation right = baab->right();
 
@@ -1780,19 +1784,18 @@ void CodeGenerator::visitTestOAndBranch(LTestOAndBranch* lir) {
   Label* truthy = getJumpLabelForBranch(lir->ifTruthy());
   Label* falsy = getJumpLabelForBranch(lir->ifFalsy());
   Register input = ToRegister(lir->input());
+  Register temp = ToRegister(lir->temp0());
 
   bool intact = hasSeenObjectEmulateUndefinedFuseIntactAndDependencyNoted();
   if (intact) {
-    assertObjectDoesNotEmulateUndefined(input, ToRegister(lir->temp()),
-                                        lir->mir());
+    assertObjectDoesNotEmulateUndefined(input, temp, lir->mir());
     // Bug 1874905: It would be fantastic if this could be optimized out
     masm.jump(truthy);
   } else {
     auto* ool = new (alloc()) OutOfLineTestObject();
     addOutOfLineCode(ool, lir->mir());
 
-    testObjectEmulatesUndefined(input, falsy, truthy, ToRegister(lir->temp()),
-                                ool);
+    testObjectEmulatesUndefined(input, falsy, truthy, temp, ool);
   }
 }
 
@@ -1803,10 +1806,10 @@ void CodeGenerator::visitTestVAndBranch(LTestVAndBranch* lir) {
   Label* truthy = getJumpLabelForBranch(lir->ifTruthy());
   Label* falsy = getJumpLabelForBranch(lir->ifFalsy());
 
-  ValueOperand input = ToValue(lir, LTestVAndBranch::Input);
+  ValueOperand input = ToValue(lir, LTestVAndBranch::InputIndex);
   Register tempToUnbox = ToTempUnboxRegister(lir->temp1());
   Register temp = ToRegister(lir->temp2());
-  FloatRegister floatTemp = ToFloatRegister(lir->tempFloat());
+  FloatRegister floatTemp = ToFloatRegister(lir->temp0());
   const TypeDataList& observedTypes = lir->mir()->observedTypes();
 
   testValueTruthy(input, tempToUnbox, temp, floatTemp, observedTypes, truthy,
@@ -3967,36 +3970,35 @@ void CodeGenerator::visitGoto(LGoto* lir) { jumpToBlock(lir->target()); }
 void CodeGenerator::visitTableSwitch(LTableSwitch* ins) {
   MTableSwitch* mir = ins->mir();
   Label* defaultcase = skipTrivialBlocks(mir->getDefault())->lir()->label();
-  const LAllocation* temp;
 
+  Register intIndex;
   if (mir->getOperand(0)->type() != MIRType::Int32) {
-    temp = ins->tempInt()->output();
+    intIndex = ToRegister(ins->temp0());
 
     // The input is a double, so try and convert it to an integer.
     // If it does not fit in an integer, take the default case.
-    masm.convertDoubleToInt32(ToFloatRegister(ins->index()), ToRegister(temp),
+    masm.convertDoubleToInt32(ToFloatRegister(ins->index()), intIndex,
                               defaultcase, false);
   } else {
-    temp = ins->index();
+    intIndex = ToRegister(ins->index());
   }
 
-  emitTableSwitchDispatch(mir, ToRegister(temp),
-                          ToRegisterOrInvalid(ins->tempPointer()));
+  emitTableSwitchDispatch(mir, intIndex, ToTempRegisterOrInvalid(ins->temp1()));
 }
 
 void CodeGenerator::visitTableSwitchV(LTableSwitchV* ins) {
   MTableSwitch* mir = ins->mir();
   Label* defaultcase = skipTrivialBlocks(mir->getDefault())->lir()->label();
 
-  Register index = ToRegister(ins->tempInt());
-  ValueOperand value = ToValue(ins, LTableSwitchV::InputValue);
+  Register index = ToRegister(ins->temp0());
+  ValueOperand value = ToValue(ins, LTableSwitchV::InputIndex);
   Register tag = masm.extractTag(value, index);
   masm.branchTestNumber(Assembler::NotEqual, tag, defaultcase);
 
   Label unboxInt, isInt;
   masm.branchTestInt32(Assembler::Equal, tag, &unboxInt);
   {
-    FloatRegister floatIndex = ToFloatRegister(ins->tempFloat());
+    FloatRegister floatIndex = ToFloatRegister(ins->temp1());
     masm.unboxDouble(value, floatIndex);
     masm.convertDoubleToInt32(floatIndex, index, defaultcase, false);
     masm.jump(&isInt);
@@ -4007,7 +4009,7 @@ void CodeGenerator::visitTableSwitchV(LTableSwitchV* ins) {
 
   masm.bind(&isInt);
 
-  emitTableSwitchDispatch(mir, index, ToRegisterOrInvalid(ins->tempPointer()));
+  emitTableSwitchDispatch(mir, index, ToTempRegisterOrInvalid(ins->temp2()));
 }
 
 void CodeGenerator::visitParameter(LParameter* lir) {}
@@ -4085,8 +4087,8 @@ void CodeGenerator::visitOsrEntry(LOsrEntry* lir) {
 }
 
 void CodeGenerator::visitOsrEnvironmentChain(LOsrEnvironmentChain* lir) {
-  const LAllocation* frame = lir->getOperand(0);
-  const LDefinition* object = lir->getDef(0);
+  const LAllocation* frame = lir->entry();
+  const LDefinition* object = lir->output();
 
   const ptrdiff_t frameOffset =
       BaselineFrame::reverseOffsetOfEnvironmentChain();
@@ -4095,8 +4097,8 @@ void CodeGenerator::visitOsrEnvironmentChain(LOsrEnvironmentChain* lir) {
 }
 
 void CodeGenerator::visitOsrArgumentsObject(LOsrArgumentsObject* lir) {
-  const LAllocation* frame = lir->getOperand(0);
-  const LDefinition* object = lir->getDef(0);
+  const LAllocation* frame = lir->entry();
+  const LDefinition* object = lir->output();
 
   const ptrdiff_t frameOffset = BaselineFrame::reverseOffsetOfArgsObj();
 
@@ -4104,7 +4106,7 @@ void CodeGenerator::visitOsrArgumentsObject(LOsrArgumentsObject* lir) {
 }
 
 void CodeGenerator::visitOsrValue(LOsrValue* value) {
-  const LAllocation* frame = value->getOperand(0);
+  const LAllocation* frame = value->entry();
   const ValueOperand out = ToOutValue(value);
 
   const ptrdiff_t frameOffset = value->mir()->frameOffset();
@@ -5292,7 +5294,7 @@ void CodeGenerator::emitCreateBigInt(LInstruction* lir, Scalar::Type type,
 
 void CodeGenerator::visitInt64ToBigInt(LInt64ToBigInt* lir) {
   Register64 input = ToRegister64(lir->input());
-  Register64 temp = ToRegister64(lir->temp());
+  Register64 temp = ToRegister64(lir->temp0());
   Register output = ToRegister(lir->output());
 
   emitCreateBigInt(lir, Scalar::BigInt64, input, output, temp.scratchReg(),
@@ -8200,7 +8202,7 @@ void CodeGenerator::visitHypot(LHypot* lir) {
 
 void CodeGenerator::visitNewArray(LNewArray* lir) {
   Register objReg = ToRegister(lir->output());
-  Register tempReg = ToRegister(lir->temp());
+  Register tempReg = ToRegister(lir->temp0());
   DebugOnly<uint32_t> length = lir->mir()->length();
 
   MOZ_ASSERT(length <= NativeObject::MAX_DENSE_ELEMENTS_COUNT);
@@ -8592,7 +8594,7 @@ static bool ShouldInitFixedSlots(MIRGenerator* gen, LNewPlainObject* lir,
 
 void CodeGenerator::visitNewObject(LNewObject* lir) {
   Register objReg = ToRegister(lir->output());
-  Register tempReg = ToRegister(lir->temp());
+  Register tempReg = ToRegister(lir->temp0());
 
   if (lir->mir()->isVMCall()) {
     visitNewObjectVMCall(lir);
@@ -9169,7 +9171,7 @@ void CodeGenerator::visitGetArgumentsObjectArg(LGetArgumentsObjectArg* lir) {
 }
 
 void CodeGenerator::visitSetArgumentsObjectArg(LSetArgumentsObjectArg* lir) {
-  Register temp = ToRegister(lir->getTemp(0));
+  Register temp = ToRegister(lir->temp0());
   Register argsObj = ToRegister(lir->argsObject());
   ValueOperand value = ToValue(lir, LSetArgumentsObjectArg::ValueIndex);
 
@@ -11145,10 +11147,10 @@ void CodeGenerator::visitMinMaxI(LMinMaxI* ins) {
 void CodeGenerator::visitMinMaxArrayI(LMinMaxArrayI* ins) {
   Register array = ToRegister(ins->array());
   Register output = ToRegister(ins->output());
-  Register temp1 = ToRegister(ins->temp1());
-  Register temp2 = ToRegister(ins->temp2());
-  Register temp3 = ToRegister(ins->temp3());
-  bool isMax = ins->isMax();
+  Register temp1 = ToRegister(ins->temp0());
+  Register temp2 = ToRegister(ins->temp1());
+  Register temp3 = ToRegister(ins->temp2());
+  bool isMax = ins->mir()->isMax();
 
   Label bail;
   masm.minMaxArrayInt32(array, output, temp1, temp2, temp3, isMax, &bail);
@@ -11158,10 +11160,10 @@ void CodeGenerator::visitMinMaxArrayI(LMinMaxArrayI* ins) {
 void CodeGenerator::visitMinMaxArrayD(LMinMaxArrayD* ins) {
   Register array = ToRegister(ins->array());
   FloatRegister output = ToFloatRegister(ins->output());
+  FloatRegister floatTemp = ToFloatRegister(ins->temp0());
   Register temp1 = ToRegister(ins->temp1());
   Register temp2 = ToRegister(ins->temp2());
-  FloatRegister floatTemp = ToFloatRegister(ins->floatTemp());
-  bool isMax = ins->isMax();
+  bool isMax = ins->mir()->isMax();
 
   Label bail;
   masm.minMaxArrayNumber(array, output, floatTemp, temp1, temp2, isMax, &bail);
@@ -12564,8 +12566,8 @@ void CodeGenerator::visitCompareBigIntInt32AndBranch(
     LCompareBigIntInt32AndBranch* lir) {
   JSOp op = lir->cmpMir()->jsop();
   Register left = ToRegister(lir->left());
-  Register temp1 = ToRegister(lir->temp1());
-  Register temp2 = ToTempRegisterOrInvalid(lir->temp2());
+  Register temp1 = ToRegister(lir->temp0());
+  Register temp2 = ToTempRegisterOrInvalid(lir->temp1());
 
   Label* ifTrue = getJumpLabelForBranch(lir->ifTrue());
   Label* ifFalse = getJumpLabelForBranch(lir->ifFalse());
@@ -12809,7 +12811,7 @@ void CodeGenerator::visitIsNullOrLikeUndefinedAndBranchV(
   MOZ_ASSERT(IsLooseEqualityOp(op));
 
   const ValueOperand value =
-      ToValue(lir, LIsNullOrLikeUndefinedAndBranchV::Value);
+      ToValue(lir, LIsNullOrLikeUndefinedAndBranchV::ValueIndex);
 
   MBasicBlock* ifTrue = lir->ifTrue();
   MBasicBlock* ifFalse = lir->ifFalse();
@@ -12842,9 +12844,9 @@ void CodeGenerator::visitIsNullOrLikeUndefinedAndBranchV(
 #endif
 
   Register objreg = Register::Invalid();
-  Register scratch = ToRegister(lir->temp());
+  Register scratch = ToRegister(lir->temp0());
   if (extractObject) {
-    objreg = masm.extractObject(value, ToTempUnboxRegister(lir->tempToUnbox()));
+    objreg = masm.extractObject(value, ToTempUnboxRegister(lir->temp1()));
   }
   if (!intact) {
     // Objects that emulate undefined are loosely equal to null/undefined.
@@ -12914,8 +12916,8 @@ void CodeGenerator::visitIsNullOrLikeUndefinedAndBranchT(
     std::swap(ifTrue, ifFalse);
   }
 
-  Register input = ToRegister(lir->getOperand(0));
-  Register scratch = ToRegister(lir->temp());
+  Register input = ToRegister(lir->value());
+  Register scratch = ToRegister(lir->temp0());
   Label* ifTrueLabel = getJumpLabelForBranch(ifTrue);
   Label* ifFalseLabel = getJumpLabelForBranch(ifFalse);
 
@@ -12967,7 +12969,7 @@ void CodeGenerator::visitIsNullAndBranch(LIsNullAndBranch* lir) {
   JSOp op = lir->cmpMir()->jsop();
   MOZ_ASSERT(IsStrictEqualityOp(op));
 
-  const ValueOperand value = ToValue(lir, LIsNullAndBranch::Value);
+  const ValueOperand value = ToValue(lir, LIsNullAndBranch::ValueIndex);
 
   Assembler::Condition cond = JSOpToCondition(compareType, op);
 
@@ -12990,7 +12992,7 @@ void CodeGenerator::visitIsUndefinedAndBranch(LIsUndefinedAndBranch* lir) {
   JSOp op = lir->cmpMir()->jsop();
   MOZ_ASSERT(IsStrictEqualityOp(op));
 
-  const ValueOperand value = ToValue(lir, LIsUndefinedAndBranch::Value);
+  const ValueOperand value = ToValue(lir, LIsUndefinedAndBranch::ValueIndex);
 
   Assembler::Condition cond = JSOpToCondition(compareType, op);
 
@@ -14984,7 +14986,7 @@ void CodeGenerator::visitBoundsCheckRange(LBoundsCheckRange* lir) {
   MIRType type = lir->mir()->type();
 
   const LAllocation* length = lir->length();
-  Register temp = ToRegister(lir->getTemp(0));
+  Register temp = ToRegister(lir->temp0());
 
   auto bailoutCmp = [&](Assembler::Condition cond, auto lhs, auto rhs) {
     if (type == MIRType::Int32) {
@@ -15174,7 +15176,7 @@ void CodeGenerator::visitStoreElementT(LStoreElementT* store) {
 }
 
 void CodeGenerator::visitStoreElementV(LStoreElementV* lir) {
-  const ValueOperand value = ToValue(lir, LStoreElementV::Value);
+  const ValueOperand value = ToValue(lir, LStoreElementV::ValueIndex);
   Register elements = ToRegister(lir->elements());
   const LAllocation* index = lir->index();
 
@@ -16064,7 +16066,7 @@ void CodeGenerator::visitIteratorMore(LIteratorMore* lir) {
 }
 
 void CodeGenerator::visitIsNoIterAndBranch(LIsNoIterAndBranch* lir) {
-  ValueOperand input = ToValue(lir, LIsNoIterAndBranch::Input);
+  ValueOperand input = ToValue(lir, LIsNoIterAndBranch::InputIndex);
   Label* ifTrue = getJumpLabelForBranch(lir->ifTrue());
   Label* ifFalse = getJumpLabelForBranch(lir->ifFalse());
 
@@ -17095,7 +17097,7 @@ void CodeGenerator::visitCallBindVar(LCallBindVar* lir) {
 }
 
 void CodeGenerator::visitMegamorphicSetElement(LMegamorphicSetElement* lir) {
-  Register obj = ToRegister(lir->getOperand(0));
+  Register obj = ToRegister(lir->object());
   ValueOperand idVal = ToValue(lir, LMegamorphicSetElement::IndexIndex);
   ValueOperand value = ToValue(lir, LMegamorphicSetElement::ValueIndex);
 
@@ -17156,7 +17158,7 @@ void CodeGenerator::visitMegamorphicSetElement(LMegamorphicSetElement* lir) {
 
 void CodeGenerator::visitLoadScriptedProxyHandler(
     LLoadScriptedProxyHandler* ins) {
-  Register obj = ToRegister(ins->getOperand(0));
+  Register obj = ToRegister(ins->object());
   Register output = ToRegister(ins->output());
 
   masm.loadPtr(Address(obj, ProxyObject::offsetOfReservedSlots()), output);
@@ -17223,7 +17225,7 @@ void CodeGenerator::visitIdToStringOrSymbol(LIdToStringOrSymbol* ins) {
 }
 
 void CodeGenerator::visitLoadFixedSlotV(LLoadFixedSlotV* ins) {
-  const Register obj = ToRegister(ins->getOperand(0));
+  const Register obj = ToRegister(ins->object());
   size_t slot = ins->mir()->slot();
   ValueOperand result = ToOutValue(ins);
 
@@ -17231,9 +17233,9 @@ void CodeGenerator::visitLoadFixedSlotV(LLoadFixedSlotV* ins) {
 }
 
 void CodeGenerator::visitLoadFixedSlotT(LLoadFixedSlotT* ins) {
-  const Register obj = ToRegister(ins->getOperand(0));
+  const Register obj = ToRegister(ins->object());
   size_t slot = ins->mir()->slot();
-  AnyRegister result = ToAnyRegister(ins->getDef(0));
+  AnyRegister result = ToAnyRegister(ins->output());
   MIRType type = ins->mir()->type();
 
   masm.loadUnboxedValue(Address(obj, NativeObject::getFixedSlotOffset(slot)),
@@ -17433,7 +17435,7 @@ void CodeGenerator::emitMaybeAtomizeSlot(LInstruction* ins, Register stringReg,
 
 void CodeGenerator::visitLoadFixedSlotAndAtomize(
     LLoadFixedSlotAndAtomize* ins) {
-  Register obj = ToRegister(ins->getOperand(0));
+  Register obj = ToRegister(ins->object());
   Register temp = ToRegister(ins->temp0());
   size_t slot = ins->mir()->slot();
   ValueOperand result = ToOutValue(ins);
@@ -17508,7 +17510,7 @@ void CodeGenerator::visitLoadDynamicSlotUnboxAndAtomize(
 }
 
 void CodeGenerator::visitAddAndStoreSlot(LAddAndStoreSlot* ins) {
-  const Register obj = ToRegister(ins->getOperand(0));
+  const Register obj = ToRegister(ins->object());
   const ValueOperand value = ToValue(ins, LAddAndStoreSlot::ValueIndex);
   const Register maybeTemp = ToTempRegisterOrInvalid(ins->temp0());
 
@@ -17532,7 +17534,7 @@ void CodeGenerator::visitAddAndStoreSlot(LAddAndStoreSlot* ins) {
 }
 
 void CodeGenerator::visitAllocateAndStoreSlot(LAllocateAndStoreSlot* ins) {
-  const Register obj = ToRegister(ins->getOperand(0));
+  const Register obj = ToRegister(ins->object());
   const ValueOperand value = ToValue(ins, LAllocateAndStoreSlot::ValueIndex);
   const Register temp0 = ToRegister(ins->temp0());
   const Register temp1 = ToRegister(ins->temp1());
@@ -17583,7 +17585,7 @@ void CodeGenerator::visitAddSlotAndCallAddPropHook(
 }
 
 void CodeGenerator::visitStoreFixedSlotV(LStoreFixedSlotV* ins) {
-  const Register obj = ToRegister(ins->getOperand(0));
+  const Register obj = ToRegister(ins->obj());
   size_t slot = ins->mir()->slot();
 
   const ValueOperand value = ToValue(ins, LStoreFixedSlotV::ValueIndex);
@@ -17597,7 +17599,7 @@ void CodeGenerator::visitStoreFixedSlotV(LStoreFixedSlotV* ins) {
 }
 
 void CodeGenerator::visitStoreFixedSlotT(LStoreFixedSlotT* ins) {
-  const Register obj = ToRegister(ins->getOperand(0));
+  const Register obj = ToRegister(ins->obj());
   size_t slot = ins->mir()->slot();
 
   const LAllocation* value = ins->value();
@@ -17854,8 +17856,8 @@ void CodeGenerator::visitIteratorHasIndicesAndBranch(
     LIteratorHasIndicesAndBranch* lir) {
   Register iterator = ToRegister(lir->iterator());
   Register object = ToRegister(lir->object());
-  Register temp = ToRegister(lir->temp());
-  Register temp2 = ToRegister(lir->temp2());
+  Register temp = ToRegister(lir->temp0());
+  Register temp2 = ToRegister(lir->temp1());
   Label* ifTrue = getJumpLabelForBranch(lir->ifTrue());
   Label* ifFalse = getJumpLabelForBranch(lir->ifFalse());
 
@@ -18550,9 +18552,9 @@ void CodeGenerator::visitLoadUnboxedInt64(LLoadUnboxedInt64* lir) {
 void CodeGenerator::visitLoadDataViewElement(LLoadDataViewElement* lir) {
   Register elements = ToRegister(lir->elements());
   const LAllocation* littleEndian = lir->littleEndian();
-  Register temp1 = ToTempRegisterOrInvalid(lir->temp1());
-  Register temp2 = ToTempRegisterOrInvalid(lir->temp2());
-  Register64 temp64 = ToTempRegister64OrInvalid(lir->temp64());
+  Register temp1 = ToTempRegisterOrInvalid(lir->temp0());
+  Register temp2 = ToTempRegisterOrInvalid(lir->temp1());
+  Register64 temp64 = ToTempRegister64OrInvalid(lir->temp2());
   AnyRegister out = ToAnyRegister(lir->output());
 
   const MLoadDataViewElement* mir = lir->mir();
@@ -18776,15 +18778,15 @@ void CodeGenerator::visitLoadTypedArrayElementHoleBigInt(
   Register length = ToRegister(lir->length());
   const ValueOperand out = ToOutValue(lir);
 
-  Register temp = ToRegister(lir->temp());
+  Register temp = ToRegister(lir->temp0());
 
   // On x86 there are not enough registers. In that case reuse the output
   // registers as temporaries.
 #ifdef JS_CODEGEN_X86
-  MOZ_ASSERT(lir->temp64().isBogusTemp());
+  MOZ_ASSERT(lir->temp1().isBogusTemp());
   Register64 temp64 = out.toRegister64();
 #else
-  Register64 temp64 = ToRegister64(lir->temp64());
+  Register64 temp64 = ToRegister64(lir->temp1());
 #endif
 
   // Load undefined if index >= length.
@@ -18855,19 +18857,31 @@ void CodeGenerator::visitStoreUnboxedScalar(LStoreUnboxedScalar* lir) {
   }
 }
 
+template <typename T>
+static inline void StoreToTypedBigIntArray(MacroAssembler& masm,
+                                           const LInt64Allocation& value,
+                                           const T& dest) {
+  if (IsConstant(value)) {
+    masm.storeToTypedBigIntArray(Imm64(ToInt64(value)), dest);
+  } else {
+    masm.storeToTypedBigIntArray(ToRegister64(value), dest);
+  }
+}
+
 void CodeGenerator::visitStoreUnboxedInt64(LStoreUnboxedInt64* lir) {
   Register elements = ToRegister(lir->elements());
-  Register64 value = ToRegister64(lir->value());
+  LInt64Allocation value = lir->value();
 
   Scalar::Type writeType = lir->mir()->writeType();
+  MOZ_ASSERT(Scalar::isBigIntType(writeType));
 
   if (lir->index()->isConstant()) {
     Address dest = ToAddress(elements, lir->index(), writeType);
-    masm.storeToTypedBigIntArray(writeType, value, dest);
+    StoreToTypedBigIntArray(masm, value, dest);
   } else {
     BaseIndex dest(elements, ToRegister(lir->index()),
                    ScaleFromScalarType(writeType));
-    masm.storeToTypedBigIntArray(writeType, value, dest);
+    StoreToTypedBigIntArray(masm, value, dest);
   }
 }
 
@@ -18875,11 +18889,10 @@ void CodeGenerator::visitStoreDataViewElement(LStoreDataViewElement* lir) {
   Register elements = ToRegister(lir->elements());
   const LAllocation* value = lir->value();
   const LAllocation* littleEndian = lir->littleEndian();
-  Register temp = ToTempRegisterOrInvalid(lir->temp());
-  Register64 temp64 = ToTempRegister64OrInvalid(lir->temp64());
+  Register temp = ToTempRegisterOrInvalid(lir->temp0());
+  Register64 temp64 = ToTempRegister64OrInvalid(lir->temp1());
 
-  const MStoreDataViewElement* mir = lir->mir();
-  Scalar::Type writeType = mir->writeType();
+  Scalar::Type writeType = lir->mir()->writeType();
 
   LiveRegisterSet volatileRegs;
   if (MacroAssembler::StoreRequiresCall(writeType)) {
@@ -19005,9 +19018,9 @@ void CodeGenerator::visitStoreDataViewElement(LStoreDataViewElement* lir) {
 
 void CodeGenerator::visitStoreDataViewElement64(LStoreDataViewElement64* lir) {
   Register elements = ToRegister(lir->elements());
-  Register64 value = ToRegister64(lir->value());
+  LInt64Allocation value = lir->value();
   const LAllocation* littleEndian = lir->littleEndian();
-  Register64 temp = ToTempRegister64OrInvalid(lir->temp());
+  Register64 temp = ToTempRegister64OrInvalid(lir->temp0());
 
   MOZ_ASSERT(Scalar::isBigIntType(lir->mir()->writeType()));
 
@@ -19016,36 +19029,49 @@ void CodeGenerator::visitStoreDataViewElement64(LStoreDataViewElement64* lir) {
   bool noSwap = littleEndian->isConstant() &&
                 ToBoolean(littleEndian) == MOZ_LITTLE_ENDIAN();
 
-  if (!noSwap) {
+  // Directly store if no byte swap is needed and the platform supports
+  // unaligned accesses for the access.  (Such support is assumed for integer
+  // types.)
+  if (noSwap) {
+    StoreToTypedBigIntArray(masm, value, dest);
+    return;
+  }
+
+  Register64 valueReg = Register64::Invalid();
+  if (IsConstant(value)) {
+    MOZ_ASSERT(temp != Register64::Invalid());
+    masm.move64(Imm64(ToInt64(value)), temp);
+  } else {
+    valueReg = ToRegister64(value);
+
     // Preserve the input value.
     if (temp != Register64::Invalid()) {
-      masm.move64(value, temp);
-      value = temp;
+      masm.move64(valueReg, temp);
     } else {
-      masm.Push(value);
-    }
-
-    // Swap the bytes in the loaded value.
-    Label skip;
-    if (!littleEndian->isConstant()) {
-      masm.branch32(
-          MOZ_LITTLE_ENDIAN() ? Assembler::NotEqual : Assembler::Equal,
-          ToRegister(littleEndian), Imm32(0), &skip);
-    }
-
-    masm.byteSwap64(value);
-
-    if (skip.used()) {
-      masm.bind(&skip);
+      masm.Push(valueReg);
+      temp = valueReg;
     }
   }
 
+  // Swap the bytes in the loaded value.
+  Label skip;
+  if (!littleEndian->isConstant()) {
+    masm.branch32(MOZ_LITTLE_ENDIAN() ? Assembler::NotEqual : Assembler::Equal,
+                  ToRegister(littleEndian), Imm32(0), &skip);
+  }
+
+  masm.byteSwap64(temp);
+
+  if (skip.used()) {
+    masm.bind(&skip);
+  }
+
   // Store the value into the destination.
-  masm.store64Unaligned(value, dest);
+  masm.store64Unaligned(temp, dest);
 
   // Restore |value| if it was modified.
-  if (!noSwap && temp == Register64::Invalid()) {
-    masm.Pop(value);
+  if (valueReg == temp) {
+    masm.Pop(valueReg);
   }
 }
 
@@ -19081,13 +19107,14 @@ void CodeGenerator::visitStoreTypedArrayElementHole(
 void CodeGenerator::visitStoreTypedArrayElementHoleInt64(
     LStoreTypedArrayElementHoleInt64* lir) {
   Register elements = ToRegister(lir->elements());
-  Register64 value = ToRegister64(lir->value());
+  LInt64Allocation value = lir->value();
 
   Scalar::Type arrayType = lir->mir()->arrayType();
+  MOZ_ASSERT(Scalar::isBigIntType(arrayType));
 
   Register index = ToRegister(lir->index());
   const LAllocation* length = lir->length();
-  Register spectreTemp = ToTempRegisterOrInvalid(lir->temp());
+  Register spectreTemp = ToTempRegisterOrInvalid(lir->temp0());
 
   Label skip;
   if (length->isRegister()) {
@@ -19097,7 +19124,7 @@ void CodeGenerator::visitStoreTypedArrayElementHoleInt64(
   }
 
   BaseIndex dest(elements, index, ScaleFromScalarType(arrayType));
-  masm.storeToTypedBigIntArray(arrayType, value, dest);
+  StoreToTypedBigIntArray(masm, value, dest);
 
   masm.bind(&skip);
 }
@@ -19328,7 +19355,7 @@ void CodeGenerator::visitInstanceOfCache(LInstanceOfCache* ins) {
   // The Lowering ensures that RHS is an object, and that LHS is a value.
   LiveRegisterSet liveRegs = ins->safepoint()->liveRegs();
   TypedOrValueRegister lhs =
-      TypedOrValueRegister(ToValue(ins, LInstanceOfCache::LHS));
+      TypedOrValueRegister(ToValue(ins, LInstanceOfCache::LhsIndex));
   Register rhs = ToRegister(ins->rhs());
   Register output = ToRegister(ins->output());
 
@@ -19337,10 +19364,10 @@ void CodeGenerator::visitInstanceOfCache(LInstanceOfCache* ins) {
 }
 
 void CodeGenerator::visitGetDOMProperty(LGetDOMProperty* ins) {
-  const Register JSContextReg = ToRegister(ins->getJSContextReg());
-  const Register ObjectReg = ToRegister(ins->getObjectReg());
-  const Register PrivateReg = ToRegister(ins->getPrivReg());
-  const Register ValueReg = ToRegister(ins->getValueReg());
+  const Register JSContextReg = ToRegister(ins->temp0());
+  const Register ObjectReg = ToRegister(ins->object());
+  const Register PrivateReg = ToRegister(ins->temp1());
+  const Register ValueReg = ToRegister(ins->temp2());
 
   Label haveValue;
   if (ins->mir()->valueMayBeInSlot()) {
@@ -19476,7 +19503,7 @@ void CodeGenerator::visitGetDOMMemberT(LGetDOMMemberT* ins) {
   // proxies in IonBuilder.
   Register object = ToRegister(ins->object());
   size_t slot = ins->mir()->domMemberSlotIndex();
-  AnyRegister result = ToAnyRegister(ins->getDef(0));
+  AnyRegister result = ToAnyRegister(ins->output());
   MIRType type = ins->mir()->type();
 
   masm.loadUnboxedValue(Address(object, NativeObject::getFixedSlotOffset(slot)),
@@ -19484,17 +19511,17 @@ void CodeGenerator::visitGetDOMMemberT(LGetDOMMemberT* ins) {
 }
 
 void CodeGenerator::visitSetDOMProperty(LSetDOMProperty* ins) {
-  const Register JSContextReg = ToRegister(ins->getJSContextReg());
-  const Register ObjectReg = ToRegister(ins->getObjectReg());
-  const Register PrivateReg = ToRegister(ins->getPrivReg());
-  const Register ValueReg = ToRegister(ins->getValueReg());
+  const Register JSContextReg = ToRegister(ins->temp0());
+  const Register ObjectReg = ToRegister(ins->object());
+  const Register PrivateReg = ToRegister(ins->temp1());
+  const Register ValueReg = ToRegister(ins->temp2());
 
   DebugOnly<uint32_t> initialStack = masm.framePushed();
 
   masm.checkStackAlignment();
 
   // Push the argument. Rooting will happen at GC time.
-  ValueOperand argVal = ToValue(ins, LSetDOMProperty::Value);
+  ValueOperand argVal = ToValue(ins, LSetDOMProperty::ValueIndex);
   masm.Push(argVal);
   // We pass the pointer to our out param as an instance of
   // JSJitGetterCallArgs, since on the binary level it's the same thing.
@@ -19805,7 +19832,7 @@ void CodeGenerator::visitIsObject(LIsObject* ins) {
 }
 
 void CodeGenerator::visitIsObjectAndBranch(LIsObjectAndBranch* ins) {
-  ValueOperand value = ToValue(ins, LIsObjectAndBranch::Input);
+  ValueOperand value = ToValue(ins, LIsObjectAndBranch::InputIndex);
 
   MBasicBlock* ifTrue = ins->ifTrue();
   MBasicBlock* ifFalse = ins->ifFalse();
@@ -19840,7 +19867,7 @@ void CodeGenerator::visitIsNullOrUndefinedAndBranch(
     LIsNullOrUndefinedAndBranch* ins) {
   Label* ifTrue = getJumpLabelForBranch(ins->ifTrue());
   Label* ifFalse = getJumpLabelForBranch(ins->ifFalse());
-  ValueOperand value = ToValue(ins, LIsNullOrUndefinedAndBranch::Input);
+  ValueOperand value = ToValue(ins, LIsNullOrUndefinedAndBranch::InputIndex);
 
   ScratchTagScope tag(masm, value);
   masm.splitTagForTest(value, tag);
@@ -20087,7 +20114,7 @@ void CodeGenerator::emitAssertRangeD(const Range* r, FloatRegister input,
 
 void CodeGenerator::visitAssertClass(LAssertClass* ins) {
   Register obj = ToRegister(ins->input());
-  Register temp = ToRegister(ins->getTemp(0));
+  Register temp = ToRegister(ins->temp0());
 
   Label success;
   if (ins->mir()->getClass() == &FunctionClass) {
@@ -20114,33 +20141,33 @@ void CodeGenerator::visitAssertShape(LAssertShape* ins) {
 
 void CodeGenerator::visitAssertRangeI(LAssertRangeI* ins) {
   Register input = ToRegister(ins->input());
-  const Range* r = ins->range();
+  const Range* r = ins->mir()->assertedRange();
 
   emitAssertRangeI(ins->mir()->input()->type(), r, input);
 }
 
 void CodeGenerator::visitAssertRangeD(LAssertRangeD* ins) {
   FloatRegister input = ToFloatRegister(ins->input());
-  FloatRegister temp = ToFloatRegister(ins->temp());
-  const Range* r = ins->range();
+  FloatRegister temp = ToFloatRegister(ins->temp0());
+  const Range* r = ins->mir()->assertedRange();
 
   emitAssertRangeD(r, input, temp);
 }
 
 void CodeGenerator::visitAssertRangeF(LAssertRangeF* ins) {
   FloatRegister input = ToFloatRegister(ins->input());
-  FloatRegister temp = ToFloatRegister(ins->temp());
-  FloatRegister temp2 = ToFloatRegister(ins->temp2());
+  FloatRegister temp = ToFloatRegister(ins->temp0());
+  FloatRegister temp2 = ToFloatRegister(ins->temp1());
 
-  const Range* r = ins->range();
+  const Range* r = ins->mir()->assertedRange();
 
   masm.convertFloat32ToDouble(input, temp);
   emitAssertRangeD(r, temp, temp2);
 }
 
 void CodeGenerator::visitAssertRangeV(LAssertRangeV* ins) {
-  const Range* r = ins->range();
-  const ValueOperand value = ToValue(ins, LAssertRangeV::Input);
+  const Range* r = ins->mir()->assertedRange();
+  const ValueOperand value = ToValue(ins, LAssertRangeV::InputIndex);
   Label done;
 
   {
@@ -20152,7 +20179,7 @@ void CodeGenerator::visitAssertRangeV(LAssertRangeV* ins) {
       masm.branchTestInt32(Assembler::NotEqual, tag, &isNotInt32);
       {
         ScratchTagScopeRelease _(&tag);
-        Register unboxInt32 = ToTempUnboxRegister(ins->temp());
+        Register unboxInt32 = ToTempUnboxRegister(ins->temp0());
         Register input = masm.extractInt32(value, unboxInt32);
         emitAssertRangeI(MIRType::Int32, r, input);
         masm.jump(&done);
@@ -20165,8 +20192,8 @@ void CodeGenerator::visitAssertRangeV(LAssertRangeV* ins) {
       masm.branchTestDouble(Assembler::NotEqual, tag, &isNotDouble);
       {
         ScratchTagScopeRelease _(&tag);
-        FloatRegister input = ToFloatRegister(ins->floatTemp1());
-        FloatRegister temp = ToFloatRegister(ins->floatTemp2());
+        FloatRegister input = ToFloatRegister(ins->temp1());
+        FloatRegister temp = ToFloatRegister(ins->temp2());
         masm.unboxDouble(value, input);
         emitAssertRangeD(r, input, temp);
         masm.jump(&done);
@@ -22146,8 +22173,8 @@ void CodeGenerator::emitFuzzilliHashBigInt(LInstruction* lir, Register bigInt,
 void CodeGenerator::visitFuzzilliHashV(LFuzzilliHashV* ins) {
   ValueOperand value = ToValue(ins, 0);
 
-  FloatRegister scratchFloat = ToFloatRegister(ins->getTemp(1));
-  Register scratch = ToRegister(ins->getTemp(0));
+  FloatRegister scratchFloat = ToFloatRegister(ins->temp1());
+  Register scratch = ToRegister(ins->temp0());
   Register output = ToRegister(ins->output());
   MOZ_ASSERT(scratch != output);
 
@@ -22228,8 +22255,8 @@ void CodeGenerator::visitFuzzilliHashT(LFuzzilliHashT* ins) {
   const LAllocation* value = ins->value();
   MIRType mirType = ins->mir()->getOperand(0)->type();
 
-  Register scratch = ToTempRegisterOrInvalid(ins->getTemp(0));
-  FloatRegister scratchFloat = ToTempFloatRegisterOrInvalid(ins->getTemp(1));
+  Register scratch = ToTempRegisterOrInvalid(ins->temp0());
+  FloatRegister scratchFloat = ToTempFloatRegisterOrInvalid(ins->temp1());
 
   Register output = ToRegister(ins->output());
   MOZ_ASSERT(scratch != output);
@@ -22291,8 +22318,8 @@ void CodeGenerator::visitFuzzilliHashT(LFuzzilliHashT* ins) {
 
 void CodeGenerator::visitFuzzilliHashStore(LFuzzilliHashStore* ins) {
   Register value = ToRegister(ins->value());
-  Register temp0 = ToRegister(ins->getTemp(0));
-  Register temp1 = ToRegister(ins->getTemp(1));
+  Register temp0 = ToRegister(ins->temp0());
+  Register temp1 = ToRegister(ins->temp1());
 
   masm.fuzzilliStoreHash(value, temp0, temp1);
 }

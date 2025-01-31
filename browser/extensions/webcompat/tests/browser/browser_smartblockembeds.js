@@ -3,58 +3,38 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 "use strict";
 
-add_setup(async function () {
-  await UrlClassifierTestUtils.addTestTrackers();
+const SEC_DELAY_PREF = "security.notification_enable_delay";
+const SMARTBLOCK_EMBEDS_ENABLED_PREF =
+  "extensions.webcompat.smartblockEmbeds.enabled";
 
-  registerCleanupFunction(() => {
-    UrlClassifierTestUtils.cleanupTestTrackers();
-    Services.prefs.clearUserPref(TRACKING_PREF);
-  });
-});
+async function closeProtectionsPanel(win = window) {
+  let protectionsPopup = win.document.getElementById("protections-popup");
+  if (!protectionsPopup) {
+    return;
+  }
+  let popuphiddenPromise = BrowserTestUtils.waitForEvent(
+    protectionsPopup,
+    "popuphidden"
+  );
 
-add_task(async function test_smartblock_embed_replaced() {
-  Services.prefs.setBoolPref(TRACKING_PREF, true);
-  Services.fog.testResetFOG();
+  PanelMultiView.hidePopup(protectionsPopup);
+  await popuphiddenPromise;
+}
 
-  let clickToggle = async toggle => {
-    let changed = BrowserTestUtils.waitForEvent(toggle, "toggle");
-    await EventUtils.synthesizeMouseAtCenter(toggle.buttonEl, {});
-    await changed;
-  };
+async function openProtectionsPanel(win = window) {
+  let popupShownPromise = BrowserTestUtils.waitForEvent(
+    win,
+    "popupshown",
+    true,
+    e => e.target.id == "protections-popup"
+  );
 
-  let closeProtectionsPanel = async (win = window) => {
-    let protectionsPopup = win.document.getElementById("protections-popup");
-    if (!protectionsPopup) {
-      return;
-    }
-    let popuphiddenPromise = BrowserTestUtils.waitForEvent(
-      protectionsPopup,
-      "popuphidden"
-    );
+  win.gProtectionsHandler.showProtectionsPopup();
 
-    PanelMultiView.hidePopup(protectionsPopup);
-    await popuphiddenPromise;
-  };
+  await popupShownPromise;
+}
 
-  let openProtectionsPanel = async (win = window) => {
-    let popupShownPromise = BrowserTestUtils.waitForEvent(
-      win,
-      "popupshown",
-      true,
-      e => e.target.id == "protections-popup"
-    );
-
-    win.gProtectionsHandler.showProtectionsPopup();
-
-    await popupShownPromise;
-  };
-
-  // Open a site with a test "embed"
-  const tab = await BrowserTestUtils.openNewForegroundTab({
-    gBrowser,
-    waitForLoad: true,
-  });
-
+async function loadSmartblockPageOnTab(tab) {
   let smartblockScriptFinished = BrowserTestUtils.waitForContentEvent(
     tab.linkedBrowser,
     "smartblockEmbedScriptFinished",
@@ -68,13 +48,10 @@ add_task(async function test_smartblock_embed_replaced() {
     TEST_PAGE_WITH_SMARTBLOCK_COMPATIBLE_EMBED
   );
 
-  await smartblockScriptFinished;
+  return smartblockScriptFinished;
+}
 
-  // Check TP enabled
-  const TrackingProtection = gProtectionsHandler.blockers.TrackingProtection;
-  ok(TrackingProtection, "TP is attached to the tab");
-  ok(TrackingProtection.enabled, "TP is enabled");
-
+const clickOnPagePlaceholder = async tab => {
   // Setup promise for listening for protections panel open
   let popupShownPromise = BrowserTestUtils.waitForEvent(
     window,
@@ -120,7 +97,40 @@ add_task(async function test_smartblock_embed_replaced() {
   });
 
   // If this await finished, then protections panel is open
-  await popupShownPromise;
+  return popupShownPromise;
+};
+
+add_setup(async function () {
+  await UrlClassifierTestUtils.addTestTrackers();
+  // Extend clickjacking delay for test because timer expiry can happen before we
+  // check the toggle is disabled (especially in chaos mode).
+  Services.prefs.setIntPref(SEC_DELAY_PREF, 1000);
+  Services.prefs.setBoolPref(TRACKING_PREF, true);
+  Services.prefs.setBoolPref(SMARTBLOCK_EMBEDS_ENABLED_PREF, true);
+
+  registerCleanupFunction(() => {
+    UrlClassifierTestUtils.cleanupTestTrackers();
+    Services.prefs.clearUserPref(TRACKING_PREF);
+  });
+
+  Services.fog.testResetFOG();
+});
+
+add_task(async function test_smartblock_embed_replaced() {
+  // Open a site with a test "embed"
+  const tab = await BrowserTestUtils.openNewForegroundTab({
+    gBrowser,
+    waitForLoad: true,
+  });
+
+  await loadSmartblockPageOnTab(tab);
+
+  // Check TP enabled
+  const TrackingProtection = gProtectionsHandler.blockers.TrackingProtection;
+  ok(TrackingProtection, "TP is attached to the tab");
+  ok(TrackingProtection.enabled, "TP is enabled");
+
+  await clickOnPagePlaceholder(tab);
 
   // Check telemetry is triggered
   let protectionsPanelOpenEvents =
@@ -155,10 +165,15 @@ add_task(async function test_smartblock_embed_replaced() {
       .firstElementChild;
   ok(blockedEmbedToggle, "Toggle exists in container");
   ok(BrowserTestUtils.isVisible(blockedEmbedToggle), "Toggle is visible");
-  ok(
-    !blockedEmbedToggle.hasAttribute("pressed"),
-    "Unblock toggle should be off"
-  );
+  ok(!blockedEmbedToggle.pressed, "Unblock toggle should be off");
+
+  // Check toggle disabled by clickjacking protections
+  ok(blockedEmbedToggle.disabled, "Unblock toggle should be disabled");
+
+  // Wait for clickjacking protections to timeout
+  let delayTime = Services.prefs.getIntPref(SEC_DELAY_PREF);
+  // eslint-disable-next-line mozilla/no-arbitrary-setTimeout
+  await new Promise(resolve => setTimeout(resolve, delayTime + 100));
 
   // Setup promise on custom event to wait for placeholders to finish replacing
   let embedScriptFinished = BrowserTestUtils.waitForContentEvent(
@@ -170,9 +185,11 @@ add_task(async function test_smartblock_embed_replaced() {
   );
 
   // Click to toggle to unblock embed and wait for script to finish
-  await clickToggle(blockedEmbedToggle);
+  await EventUtils.synthesizeMouseAtCenter(blockedEmbedToggle.buttonEl, {});
 
   await embedScriptFinished;
+
+  ok(blockedEmbedToggle.pressed, "Unblock toggle should be on");
 
   await SpecialPowers.spawn(tab.linkedBrowser, [], () => {
     let unloadedEmbed = content.document.querySelector(".broken-embed-content");
@@ -236,7 +253,7 @@ add_task(async function test_smartblock_embed_replaced() {
       .firstElementChild;
   ok(blockedEmbedToggle, "Toggle exists in container");
   ok(BrowserTestUtils.isVisible(blockedEmbedToggle), "Toggle is visible");
-  ok(blockedEmbedToggle.hasAttribute("pressed"), "Unblock toggle should be on");
+  ok(blockedEmbedToggle.pressed, "Unblock toggle should be on");
 
   // Check protections panel open telemetry
   // Check telemetry is triggered
@@ -261,7 +278,7 @@ add_task(async function test_smartblock_embed_replaced() {
   );
 
   // Setup promise on custom event to wait for placeholders to finish replacing
-  smartblockScriptFinished = BrowserTestUtils.waitForContentEvent(
+  let smartblockScriptFinished = BrowserTestUtils.waitForContentEvent(
     tab.linkedBrowser,
     "smartblockEmbedScriptFinished",
     false,
@@ -270,10 +287,13 @@ add_task(async function test_smartblock_embed_replaced() {
   );
 
   // click toggle to reblock (this will trigger a reload)
-  clickToggle(blockedEmbedToggle);
+  // Note: clickjacking delay should not happen because panel not opened via embed button
+  await EventUtils.synthesizeMouseAtCenter(blockedEmbedToggle.buttonEl, {});
 
   // Wait for smartblock embed script to finish
   await smartblockScriptFinished;
+
+  ok(!blockedEmbedToggle.pressed, "Unblock toggle should be off");
 
   await SpecialPowers.spawn(tab.linkedBrowser, [], () => {
     // Check that the "embed" was replaced with a placeholder
@@ -300,6 +320,34 @@ add_task(async function test_smartblock_embed_replaced() {
     undefined,
     "Smartblock shown event has correct reason"
   );
+
+  await BrowserTestUtils.removeTab(tab);
+});
+
+add_task(async function test_smartblock_click_while_panel_open() {
+  // Open a site with a test "embed"
+  const tab = await BrowserTestUtils.openNewForegroundTab({
+    gBrowser,
+    waitForLoad: true,
+  });
+
+  await loadSmartblockPageOnTab(tab);
+
+  // Check TP enabled
+  const TrackingProtection = gProtectionsHandler.blockers.TrackingProtection;
+  ok(TrackingProtection, "TP is attached to the tab");
+  ok(TrackingProtection.enabled, "TP is enabled");
+
+  // Click placeholder button once to open panel
+  await clickOnPagePlaceholder(tab);
+
+  // Click again to close panel
+  // Discard promise waiting for protections panel open because panel will close
+  clickOnPagePlaceholder(tab);
+
+  // Click again to open panel immediately after
+  // If this waits infinitely that means panel failed to open on the second click (bad)
+  await clickOnPagePlaceholder(tab);
 
   await BrowserTestUtils.removeTab(tab);
 });

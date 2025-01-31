@@ -7188,7 +7188,7 @@ bool CacheIRCompiler::emitStoreTypedArrayElement(ObjOperandId objId,
 #endif
 
     masm.loadBigInt64(*valBigInt, temp);
-    masm.storeToTypedBigIntArray(elementType, temp, dest);
+    masm.storeToTypedBigIntArray(temp, dest);
 
 #ifndef JS_PUNBOX64
     masm.pop(obj);
@@ -7316,13 +7316,12 @@ bool CacheIRCompiler::emitLoadTypedArrayElementResult(
     Register64 temp(output.valueReg().typeReg(), obj);
 #endif
 
-    masm.loadFromTypedBigIntArray(elementType, source, *bigInt, temp);
+    masm.loadFromTypedBigIntArray(elementType, source, output.valueReg(),
+                                  *bigInt, temp);
 
 #ifndef JS_PUNBOX64
     masm.pop(obj);
 #endif
-
-    masm.tagValue(JSVAL_TYPE_BIGINT, *bigInt, output.valueReg());
   } else {
     MacroAssembler::Uint32Mode uint32Mode =
         forceDoubleForUint32 ? MacroAssembler::Uint32Mode::ForceDouble
@@ -11109,8 +11108,7 @@ bool CacheIRCompiler::emitArrayFromArgumentsObjectResult(ObjOperandId objId,
 }
 
 bool CacheIRCompiler::emitGuardGlobalGeneration(uint32_t expectedOffset,
-                                                uint32_t generationAddrOffset,
-                                                uint32_t realmOffset) {
+                                                uint32_t generationAddrOffset) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
 
   AutoScratchRegister scratch(allocator, masm);

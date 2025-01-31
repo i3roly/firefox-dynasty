@@ -306,6 +306,17 @@ module.exports = function (config) {
               new RegExp("^resource:///modules/topsites/"),
               path.join(__dirname, "../topsites/"),
             ],
+            [
+              new RegExp("^resource://gre/modules/SearchShortcuts.sys.mjs"),
+              path.join(
+                __dirname,
+                "../../../toolkit/components/search/SearchShortcuts.sys.mjs"
+              ),
+            ],
+            [
+              new RegExp("^resource:///modules/Dedupe.sys.mjs"),
+              path.join(__dirname, "../../modules/Dedupe.sys.mjs"),
+            ],
           ],
         }),
         new webpack.DefinePlugin({

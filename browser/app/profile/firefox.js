@@ -460,7 +460,7 @@ pref("browser.urlbar.suggest.quickactions",         true);
 pref("browser.urlbar.deduplication.enabled", false);
 pref("browser.urlbar.deduplication.thresholdDays", 0);
 
-#ifdef NIGHTLY_BUILD
+#ifdef EARLY_BETA_OR_EARLIER
 pref("browser.urlbar.scotchBonnet.enableOverride", true);
 #else
 pref("browser.urlbar.scotchBonnet.enableOverride", false);
@@ -1840,11 +1840,14 @@ pref("browser.newtabpage.activity-stream.newtabWallpapers.highlightHeaderText", 
 pref("browser.newtabpage.activity-stream.newtabWallpapers.highlightContentText", "");
 pref("browser.newtabpage.activity-stream.newtabWallpapers.highlightCtaText", "");
 
-pref("browser.newtabpage.activity-stream.newNewtabExperience.colors", "#0090ED,#FF4F5F,#2AC3A2,#FF7139,#A172FF,#FFA437,#FF2A8A");
+pref("browser.newtabpage.activity-stream.newNewtabExperience.colors", "#004CA4,#009E97,#7550C2,#B63B39,#C96A00,#CA9600,#CC527F");
 
 // Default layout experimentation
 pref("browser.newtabpage.activity-stream.newtabLayouts.variant-a", false);
 pref("browser.newtabpage.activity-stream.newtabLayouts.variant-b", true);
+
+// Shortcuts experiment
+pref("browser.newtabpage.activity-stream.newtabShortcuts.refresh", false);
 
 // Discovery stream ad size experiment
 pref("browser.newtabpage.activity-stream.newtabAdSize.variant-a", false);
@@ -2470,11 +2473,7 @@ pref("privacy.webrtc.deviceGracePeriodTimeoutMs", 3600000);
 pref("privacy.webrtc.showIndicatorsOnMacos14AndAbove", true);
 
 // Enable Smartblock embed placeholders
-#ifdef NIGHTLY_BUILD
-  pref("extensions.webcompat.smartblockEmbeds.enabled", true);
-#else
-  pref("extensions.webcompat.smartblockEmbeds.enabled", false);
-#endif
+pref("extensions.webcompat.smartblockEmbeds.enabled", true);
 
 // Enable including the content in the window title.
 // PBM users might want to disable this to avoid a possible source of disk

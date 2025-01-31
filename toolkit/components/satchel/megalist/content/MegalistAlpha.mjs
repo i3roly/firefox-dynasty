@@ -11,6 +11,10 @@ ChromeUtils.defineESModuleGetters(lazy, {
   BrowserWindowTracker: "resource:///modules/BrowserWindowTracker.sys.mjs",
 });
 
+// Directly import moz-button here, otherwise, moz-button will be loaded and upgraded on DOMContentLoaded, after MegalistAlpha is first updated.
+// eslint-disable-next-line import/no-unassigned-import
+import "chrome://global/content/elements/moz-button.mjs";
+
 // eslint-disable-next-line import/no-unassigned-import
 import "chrome://global/content/megalist/components/password-card/password-card.mjs";
 // eslint-disable-next-line import/no-unassigned-import
@@ -80,6 +84,18 @@ export class MegalistAlpha extends MozLitElement {
     await Promise.all(passwordCards.map(el => el.updateComplete));
   }
 
+  async updated(changedProperties) {
+    if (changedProperties.has("viewMode")) {
+      const mozButton = this.shadowRoot.querySelector("#create-login-button");
+      await mozButton.updateComplete;
+      // Need to set aria-expanded on the button element of the moz-button for screen readers to announce the change.
+      mozButton.buttonEl.setAttribute(
+        "aria-expanded",
+        this.viewMode === VIEW_MODES.ADD ? "true" : "false"
+      );
+    }
+  }
+
   #onPasswordRevealClick(concealed, lineIndex) {
     if (concealed) {
       this.#messageToViewModel("Command", {
@@ -137,6 +153,17 @@ export class MegalistAlpha extends MozLitElement {
 
   #openMenu(e) {
     const panelList = this.shadowRoot.querySelector("panel-list");
+    const menuButton = this.shadowRoot.querySelector(
+      "#more-options-menubutton"
+    );
+    menuButton.setAttribute("aria-expanded", "true");
+
+    panelList.addEventListener(
+      "hidden",
+      () => menuButton.setAttribute("aria-expanded", "false"),
+      { once: true }
+    );
+
     panelList.toggle(e);
   }
 
@@ -415,6 +442,7 @@ export class MegalistAlpha extends MozLitElement {
       data-l10n-id="passwords-no-passwords-found-header"
     >
       <div
+        id="no-results-message"
         class="empty-search-results"
         data-l10n-id="passwords-no-passwords-found-message"
       ></div>
@@ -481,6 +509,8 @@ export class MegalistAlpha extends MozLitElement {
   }
 
   renderSearch() {
+    const hasResults = this.records.length;
+    const describedBy = hasResults ? "" : "no-results-message";
     return html`
       <div
         class="search-container"
@@ -494,6 +524,7 @@ export class MegalistAlpha extends MozLitElement {
           type="search"
           data-l10n-id="filter-input"
           .value=${this.searchText}
+          aria-describedby=${describedBy}
           @input=${e => this.#onInputChange(e)}
         />
       </div>
@@ -504,6 +535,7 @@ export class MegalistAlpha extends MozLitElement {
     return html`<div class="first-row">
       ${this.renderSearch()}
       <moz-button
+        id="create-login-button"
         @click=${this.#onAddButtonClick}
         data-l10n-id="create-login-button"
         type="icon"
@@ -563,29 +595,29 @@ export class MegalistAlpha extends MozLitElement {
       >
         <panel-item
           action="import-from-browser"
-          data-l10n-id="about-logins-menu-menuitem-import-from-another-browser"
+          data-l10n-id="passwords-command-import-from-browser"
           @click=${() => this.#sendCommand("ImportFromBrowser")}
         ></panel-item>
         <panel-item
           action="import-from-file"
-          data-l10n-id="about-logins-menu-menuitem-import-from-a-file"
+          data-l10n-id="passwords-command-import"
           @click=${() => this.#sendCommand("Import")}
         ></panel-item>
         <panel-item
           action="export-logins"
-          data-l10n-id="about-logins-menu-menuitem-export-logins2"
+          data-l10n-id="passwords-command-export"
           @click=${() => this.#sendCommand("Export")}
         ></panel-item>
         <panel-item
           action="remove-all-logins"
-          data-l10n-id="about-logins-menu-menuitem-remove-all-logins2"
+          data-l10n-id="passwords-command-remove-all"
           @click=${() => this.#sendCommand("RemoveAll")}
           ?disabled=${!this.header.value.total}
         ></panel-item>
         <hr />
         <panel-item
           action="open-preferences"
-          data-l10n-id="menu-menuitem-preferences"
+          data-l10n-id="passwords-command-settings"
           @click=${() => {
             const command = this.header.commands.find(
               command => command.id === "Settings"
@@ -595,7 +627,7 @@ export class MegalistAlpha extends MozLitElement {
         ></panel-item>
         <panel-item
           action="open-help"
-          data-l10n-id="about-logins-menu-menuitem-help"
+          data-l10n-id="passwords-command-help"
           @click=${() => {
             const command = this.header.commands.find(
               command => command.id === "Help"

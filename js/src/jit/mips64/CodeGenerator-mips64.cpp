@@ -30,7 +30,7 @@ ValueOperand CodeGeneratorMIPS64::ToTempValue(LInstruction* ins, size_t pos) {
 }
 
 void CodeGenerator::visitBox(LBox* box) {
-  const LAllocation* in = box->getOperand(0);
+  const LAllocation* in = box->payload();
   ValueOperand result = ToOutValue(box);
 
   masm.moveValue(TypedOrValueRegister(box->type(), ToAnyRegister(in)), result);
@@ -123,11 +123,6 @@ void CodeGenerator::visitUnbox(LUnbox* unbox) {
   }
 }
 
-void CodeGeneratorMIPS64::splitTagForTest(const ValueOperand& value,
-                                          ScratchTagScope& tag) {
-  masm.splitTag(value.valueReg(), tag);
-}
-
 void CodeGenerator::visitDivOrModI64(LDivOrModI64* lir) {
   Register lhs = ToRegister(lir->lhs());
   Register rhs = ToRegister(lir->rhs());
@@ -211,10 +206,7 @@ void CodeGeneratorMIPS64::emitWasmLoadI64(T* lir) {
   const MWasmLoad* mir = lir->mir();
 
   Register memoryBase = ToRegister(lir->memoryBase());
-  Register ptrScratch = InvalidReg;
-  if (!lir->ptrCopy()->isBogusTemp()) {
-    ptrScratch = ToRegister(lir->ptrCopy());
-  }
+  Register ptrScratch = ToTempRegisterOrInvalid(lir->ptrCopy());
 
   Register ptrReg = ToRegister(lir->ptr());
   if (mir->base()->type() == MIRType::Int32) {
@@ -245,10 +237,7 @@ void CodeGeneratorMIPS64::emitWasmStoreI64(T* lir) {
   const MWasmStore* mir = lir->mir();
 
   Register memoryBase = ToRegister(lir->memoryBase());
-  Register ptrScratch = InvalidReg;
-  if (!lir->ptrCopy()->isBogusTemp()) {
-    ptrScratch = ToRegister(lir->ptrCopy());
-  }
+  Register ptrScratch = ToTempRegisterOrInvalid(lir->ptrCopy());
 
   Register ptrReg = ToRegister(lir->ptr());
   if (mir->base()->type() == MIRType::Int32) {
@@ -278,7 +267,7 @@ void CodeGenerator::visitWasmSelectI64(LWasmSelectI64* lir) {
   MOZ_ASSERT(lir->mir()->type() == MIRType::Int64);
 
   Register cond = ToRegister(lir->condExpr());
-  const LInt64Allocation falseExpr = lir->falseExpr();
+  LInt64Allocation falseExpr = lir->falseExpr();
 
   Register64 out = ToOutRegister64(lir);
   MOZ_ASSERT(ToRegister64(lir->trueExpr()) == out,
@@ -295,7 +284,7 @@ void CodeGenerator::visitWasmSelectI64(LWasmSelectI64* lir) {
 }
 
 void CodeGenerator::visitExtendInt32ToInt64(LExtendInt32ToInt64* lir) {
-  const LAllocation* input = lir->getOperand(0);
+  const LAllocation* input = lir->input();
   Register output = ToRegister(lir->output());
 
   if (lir->mir()->isUnsigned()) {
@@ -306,14 +295,14 @@ void CodeGenerator::visitExtendInt32ToInt64(LExtendInt32ToInt64* lir) {
 }
 
 void CodeGenerator::visitWrapInt64ToInt32(LWrapInt64ToInt32* lir) {
-  const LAllocation* input = lir->getOperand(0);
+  LInt64Allocation input = lir->input();
   Register output = ToRegister(lir->output());
 
   if (lir->mir()->bottomHalf()) {
-    if (input->isMemory()) {
+    if (input.value().isMemory()) {
       masm.load32(ToAddress(input), output);
     } else {
-      masm.ma_sll(output, ToRegister(input), Imm32(0));
+      masm.move64To32(ToRegister64(input), output);
     }
   } else {
     MOZ_CRASH("Not implemented.");
@@ -321,9 +310,9 @@ void CodeGenerator::visitWrapInt64ToInt32(LWrapInt64ToInt32* lir) {
 }
 
 void CodeGenerator::visitSignExtendInt64(LSignExtendInt64* lir) {
-  Register64 input = ToRegister64(lir->getInt64Operand(0));
+  Register64 input = ToRegister64(lir->num());
   Register64 output = ToOutRegister64(lir);
-  switch (lir->mode()) {
+  switch (lir->mir()->mode()) {
     case MSignExtendInt64::Byte:
       masm.move32To64SignExtend(input.reg, output);
       masm.move8SignExtend(output.reg, output.reg);
@@ -353,11 +342,11 @@ void CodeGenerator::visitWasmWrapU32Index(LWasmWrapU32Index* lir) {
 }
 
 void CodeGenerator::visitBitNotI64(LBitNotI64* ins) {
-  const LAllocation* input = ins->getOperand(0);
-  MOZ_ASSERT(!input->isConstant());
-  Register inputReg = ToRegister(input);
-  MOZ_ASSERT(inputReg == ToRegister(ins->output()));
-  masm.ma_not(inputReg, inputReg);
+  LInt64Allocation input = ins->input();
+  MOZ_ASSERT(!IsConstant(input));
+  Register64 inputReg = ToRegister64(input);
+  MOZ_ASSERT(inputReg == ToOutRegister64(ins));
+  masm.ma_not(inputReg.reg, inputReg.reg);
 }
 
 void CodeGenerator::visitWasmTruncateToInt64(LWasmTruncateToInt64* lir) {
@@ -396,7 +385,7 @@ void CodeGenerator::visitWasmTruncateToInt64(LWasmTruncateToInt64* lir) {
 }
 
 void CodeGenerator::visitInt64ToFloatingPoint(LInt64ToFloatingPoint* lir) {
-  Register64 input = ToRegister64(lir->getInt64Operand(0));
+  Register64 input = ToRegister64(lir->input());
   FloatRegister output = ToFloatRegister(lir->output());
 
   MIRType outputType = lir->mir()->type();

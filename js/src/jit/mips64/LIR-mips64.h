@@ -113,30 +113,6 @@ class LUDivOrModI64 : public LBinaryMath<1> {
   }
 };
 
-class LWasmTruncateToInt64 : public LInstructionHelper<1, 1, 0> {
- public:
-  LIR_HEADER(WasmTruncateToInt64);
-
-  explicit LWasmTruncateToInt64(const LAllocation& in)
-      : LInstructionHelper(classOpcode) {
-    setOperand(0, in);
-  }
-
-  MWasmTruncateToInt64* mir() const { return mir_->toWasmTruncateToInt64(); }
-};
-
-class LInt64ToFloatingPoint : public LInstructionHelper<1, 1, 0> {
- public:
-  LIR_HEADER(Int64ToFloatingPoint);
-
-  explicit LInt64ToFloatingPoint(const LInt64Allocation& in)
-      : LInstructionHelper(classOpcode) {
-    setInt64Operand(0, in);
-  }
-
-  MInt64ToFloatingPoint* mir() const { return mir_->toInt64ToFloatingPoint(); }
-};
-
 }  // namespace jit
 }  // namespace js
 

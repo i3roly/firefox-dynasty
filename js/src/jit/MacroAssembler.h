@@ -5330,15 +5330,14 @@ class MacroAssembler : public MacroAssemblerSpecific {
                           AnyRegister dest, Register temp1, Register temp2,
                           Label* fail, LiveRegisterSet volatileLiveReg);
 
-  template <typename T>
-  void loadFromTypedArray(Scalar::Type arrayType, const T& src,
+  void loadFromTypedArray(Scalar::Type arrayType, const BaseIndex& src,
                           const ValueOperand& dest, Uint32Mode uint32Mode,
                           Register temp, Label* fail,
                           LiveRegisterSet volatileLiveReg);
 
-  template <typename T>
-  void loadFromTypedBigIntArray(Scalar::Type arrayType, const T& src,
-                                Register bigInt, Register64 temp);
+  void loadFromTypedBigIntArray(Scalar::Type arrayType, const BaseIndex& src,
+                                const ValueOperand& dest, Register bigInt,
+                                Register64 temp);
 
   template <typename S, typename T>
   void storeToTypedIntArray(Scalar::Type arrayType, const S& value,
@@ -5369,10 +5368,10 @@ class MacroAssembler : public MacroAssemblerSpecific {
                               const Address& dest, Register temp,
                               LiveRegisterSet volatileLiveRegs);
 
-  void storeToTypedBigIntArray(Scalar::Type arrayType, Register64 value,
-                               const BaseIndex& dest);
-  void storeToTypedBigIntArray(Scalar::Type arrayType, Register64 value,
-                               const Address& dest);
+  template <typename S, typename T>
+  void storeToTypedBigIntArray(const S& value, const T& dest) {
+    store64(value, dest);
+  }
 
   void memoryBarrierBefore(Synchronization sync);
   void memoryBarrierAfter(Synchronization sync);

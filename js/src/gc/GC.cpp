@@ -433,7 +433,6 @@ GCRuntime::GCRuntime(JSRuntime* rt)
       incrementalGCEnabled(TuningDefaults::IncrementalGCEnabled),
       perZoneGCEnabled(TuningDefaults::PerZoneGCEnabled),
       numActiveZoneIters(0),
-      cleanUpEverything(false),
       grayBitsValid(true),
       majorGCTriggerReason(JS::GCReason::NO_REASON),
       minorGCNumber(0),
@@ -2476,26 +2475,48 @@ bool GCRuntime::shouldPreserveJITCode(Realm* realm,
                                       JS::GCReason reason,
                                       bool canAllocateMoreCode,
                                       bool isActiveCompartment) {
-  if (cleanUpEverything) {
+  // During shutdown, we must clean everything up, for the sake of leak
+  // detection.
+  if (isShutdownGC()) {
     return false;
   }
+
+  // A shrinking GC is trying to clear out as much as it can, and so we should
+  // not preserve JIT code here!
+  if (isShrinkingGC()) {
+    return false;
+  }
+
+  // We are close to our allocatable code limit, so let's try to clean it out.
   if (!canAllocateMoreCode) {
     return false;
   }
 
+  // The topmost frame of JIT code is in this compartment, and so we should
+  // try to preserve this zone's code.
   if (isActiveCompartment) {
     return true;
   }
+
+  // The gcPreserveJitCode testing function was used.
   if (alwaysPreserveCode) {
     return true;
   }
+
+  // This realm explicitly requested we try to preserve its JIT code.
   if (realm->preserveJitCode()) {
     return true;
   }
+
+  // If we're currently animating, and we've already discarded code recently
+  // we can preserve jit code; however we shouldn't hold onto JIT code forever
+  // during animation.
   if (IsCurrentlyAnimating(realm->lastAnimationTime, currentTime) &&
       DiscardedCodeRecently(realm->zone(), currentTime)) {
     return true;
   }
+
+  // GC Invoked via a testing function.
   if (reason == JS::GCReason::DEBUG_GC) {
     return true;
   }
@@ -2582,13 +2603,6 @@ void GCRuntime::checkForCompartmentMismatches() {
 }
 #endif
 
-static bool ShouldCleanUpEverything(JS::GCOptions options) {
-  // During shutdown, we must clean everything up, for the sake of leak
-  // detection. When a runtime has no contexts, or we're doing a GC before a
-  // shutdown CC, those are strong indications that we're shutting down.
-  return options == JS::GCOptions::Shutdown || options == JS::GCOptions::Shrink;
-}
-
 static bool ShouldUseBackgroundThreads(bool isIncremental,
                                        JS::GCReason reason) {
   bool shouldUse = isIncremental && CanUseExtraThreads();
@@ -2604,7 +2618,6 @@ void GCRuntime::startCollection(JS::GCReason reason) {
           reason == JS::GCReason::XPCONNECT_SHUTDOWN /* Bug 1650075 */);
 
   initialReason = reason;
-  cleanUpEverything = ShouldCleanUpEverything(gcOptions());
   isCompacting = shouldCompact();
   rootsRemoved = false;
   sweepGroupIndex = 0;
@@ -2692,7 +2705,9 @@ bool GCRuntime::prepareZonesForCollection(JS::GCReason reason,
   return any;
 }
 
-void GCRuntime::discardJITCodeForGC() {
+// Update JIT Code state for GC: A few different actions are combined here to
+// minimize the number of iterations over zones & scripts that required.
+void GCRuntime::maybeDiscardJitCodeForGC() {
   size_t nurserySiteResetCount = 0;
   size_t pretenuredSiteResetCount = 0;
 
@@ -2707,11 +2722,11 @@ void GCRuntime::discardJITCodeForGC() {
     bool resetPretenuredSites = pz.shouldResetPretenuredAllocSites();
 
     if (!zone->isPreservingCode()) {
-      Zone::DiscardOptions options;
+      Zone::JitDiscardOptions options;
       options.discardJitScripts = true;
       options.resetNurseryAllocSites = resetNurserySites;
       options.resetPretenuredAllocSites = resetPretenuredSites;
-      zone->discardJitCode(rt->gcContext(), options);
+      zone->forceDiscardJitCode(rt->gcContext(), options);
     } else if (resetNurserySites || resetPretenuredSites) {
       zone->resetAllocSitesAndInvalidate(resetNurserySites,
                                          resetPretenuredSites);
@@ -2935,7 +2950,7 @@ void GCRuntime::endPreparePhase(JS::GCReason reason) {
 
     AutoUnlockHelperThreadState unlock(helperLock);
 
-    discardJITCodeForGC();
+    maybeDiscardJitCodeForGC();
 
     /*
      * We must purge the runtime at the beginning of an incremental GC. The
@@ -4948,6 +4963,14 @@ void GCRuntime::collectNursery(JS::GCOptions options, JS::GCReason reason,
       MOZ_ASSERT(nursery().isEmpty());
       startBackgroundFreeAfterMinorGC();
     }
+
+    // Disabling the nursery triggers pre-barriers when we discard JIT
+    // code. Normally we don't allow any barriers in a major GC and there is an
+    // assertion to check this in PreWriteBarrier. For the case where we disable
+    // the nursery during a major GC, set up a minor GC session to silence the
+    // assertion.
+    AutoGCSession session(this, JS::HeapState::MinorCollecting);
+
     nursery().disable();
   }
 }

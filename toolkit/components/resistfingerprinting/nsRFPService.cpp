@@ -24,6 +24,7 @@
 #include "mozilla/Assertions.h"
 #include "mozilla/Atomics.h"
 #include "mozilla/Casting.h"
+#include "mozilla/Components.h"
 #include "mozilla/ClearOnShutdown.h"
 #include "mozilla/ContentBlockingNotifier.h"
 #include "mozilla/glean/ResistfingerprintingMetrics.h"
@@ -62,7 +63,6 @@
 #include "nsCoord.h"
 #include "nsTHashMap.h"
 #include "nsDebug.h"
-#include "nsEffectiveTLDService.h"
 #include "nsError.h"
 #include "nsHashKeys.h"
 #include "nsJSUtils.h"
@@ -81,6 +81,7 @@
 
 #include "nsICookieJarSettings.h"
 #include "nsICryptoHash.h"
+#include "nsIEffectiveTLDService.h"
 #include "nsIGlobalObject.h"
 #include "nsILoadInfo.h"
 #include "nsIObserverService.h"
@@ -312,7 +313,9 @@ bool nsRFPService::IsRFPEnabledFor(
   }
 #endif
 
-  if (!aSkipChromePrincipalCheck && IsJSContextCurrentlyChromePrivileged()) {
+  if (!aSkipChromePrincipalCheck &&
+      aTarget != RFPTarget::IsAlwaysEnabledForPrecompute &&
+      IsJSContextCurrentlyChromePrivileged()) {
     return false;
   }
 
@@ -2356,8 +2359,8 @@ Maybe<RFPTargetSet> nsRFPService::GetOverriddenFingerprintingSettingsForURI(
   Maybe<RFPTargetSet> result =
       service->mFingerprintingOverrides.MaybeGet("*"_ns);
 
-  RefPtr<nsEffectiveTLDService> eTLDService =
-      nsEffectiveTLDService::GetInstance();
+  nsCOMPtr<nsIEffectiveTLDService> eTLDService =
+      mozilla::components::EffectiveTLD::Service();
   if (NS_WARN_IF(!eTLDService)) {
     return Nothing();
   }
