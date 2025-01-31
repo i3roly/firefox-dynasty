@@ -601,7 +601,7 @@
     <string name="onboarding_terms_of_service_sub_header_2">Snabb och säker webbläsning</string>
     <!-- Terms of service onboarding page continue button label. -->
     <string name="onboarding_term_of_service_agree_and_continue_button_label">Godkänn och fortsätt</string>
-    <!-- Line one of the terms of service onboarding page. %1$s is replaced by an active link, using onboarding_term_of_service_line_one_link_text as text (“Firefox Terms of Use”). -->
+    <!-- Line one of the terms of service onboarding page. %1$s is replaced by an active link, using onboarding_term_of_service_line_one_link_text_2 as text (“Firefox Terms of Use”). -->
     <string name="onboarding_term_of_service_line_one" moz:removedIn="136" tools:ignore="BrandUsage, UnusedResources">Genom att fortsätta godkänner du Firefox %1$s.</string>
     <string name="onboarding_term_of_service_line_one_2">Genom att fortsätta godkänner du %1$s.</string>
     <!-- Used as text for the link in onboarding_term_of_service_line_one. -->
@@ -3171,4 +3171,10 @@
     <string name="certificate_warning_push_notification_pnw2_message" tools:ignore="UnusedResources">Uppdatera före 14 mars för att fortsätta använda tillägg och andra funktioner.</string>
     <!-- Push notification message about old Firefox version -->
     <string name="certificate_warning_push_notification_pnw3_message" tools:ignore="UnusedResources">Vissa funktioner kommer att sluta fungera i morgon.</string>
+
+    <!-- TextField Design System Component -->
+    <!-- The default content description for the eye trailing icon button in TextField -->
+    <string name="text_field_eye_trailing_icon_default_content_description">Visa dold text</string>
+    <!-- The default content description for the cross trailing icon button in TextField -->
+    <string name="text_field_cross_trailing_icon_default_content_description">Rensa text</string>
 </resources>
