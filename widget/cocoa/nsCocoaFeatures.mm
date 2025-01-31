@@ -101,7 +101,7 @@ int32_t nsCocoaFeatures::GetVersion(int32_t aMajor, int32_t aMinor,
     NS_ERROR("Couldn't determine macOS version, assuming 10.6");
     macOSVersion = MACOS_VERSION_10_6_HEX;
   } else if (aMajor == 10 && aMinor < 6) {
-    aMinor = 9;
+    aMinor = 6;
     NS_ERROR("macOS version too old, assuming 10.6");
     macOSVersion = MACOS_VERSION_10_6_HEX;
   } else {
