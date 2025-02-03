@@ -10,23 +10,6 @@
 namespace js {
 namespace jit {
 
-class LBoxFloatingPoint : public LInstructionHelper<2, 1, 1> {
-  MIRType type_;
-
- public:
-  LIR_HEADER(BoxFloatingPoint);
-
-  LBoxFloatingPoint(const LAllocation& in, const LDefinition& temp,
-                    MIRType type)
-      : LInstructionHelper(classOpcode), type_(type) {
-    setOperand(0, in);
-    setTemp(0, temp);
-  }
-
-  MIRType type() const { return type_; }
-  const char* extraName() const { return StringFromMIRType(type_); }
-};
-
 class LUnbox : public LInstructionHelper<1, 2, 0> {
  public:
   LIR_HEADER(Unbox);
@@ -37,20 +20,6 @@ class LUnbox : public LInstructionHelper<1, 2, 0> {
   const LAllocation* payload() { return getOperand(0); }
   const LAllocation* type() { return getOperand(1); }
   const char* extraName() const { return StringFromMIRType(mir()->type()); }
-};
-
-class LUnboxFloatingPoint : public LInstructionHelper<1, 2, 0> {
- public:
-  LIR_HEADER(UnboxFloatingPoint);
-
-  static const size_t Input = 0;
-
-  explicit LUnboxFloatingPoint(const LBoxAllocation& input)
-      : LInstructionHelper(classOpcode) {
-    setBoxOperand(Input, input);
-  }
-
-  MUnbox* mir() const { return mir_->toUnbox(); }
 };
 
 class LDivOrModI64
@@ -145,76 +114,13 @@ class LUDivOrModI64
   }
 };
 
-class LDivPowTwoI : public LInstructionHelper<1, 1, 0> {
-  const int32_t shift_;
+// Definitions for `extraName` methods of generated LIR instructions.
 
- public:
-  LIR_HEADER(DivPowTwoI)
-
-  LDivPowTwoI(const LAllocation& lhs, int32_t shift)
-      : LInstructionHelper(classOpcode), shift_(shift) {
-    setOperand(0, lhs);
-  }
-
-  const LAllocation* numerator() { return getOperand(0); }
-
-  int32_t shift() { return shift_; }
-
-  MDiv* mir() const { return mir_->toDiv(); }
-};
-
-class LModI : public LBinaryMath<0> {
- public:
-  LIR_HEADER(ModI);
-
-  LModI(const LAllocation& lhs, const LAllocation& rhs)
-      : LBinaryMath(classOpcode) {
-    setOperand(0, lhs);
-    setOperand(1, rhs);
-  }
-
-  MMod* mir() const { return mir_->toMod(); }
-};
-
-class LMulI : public LBinaryMath<0> {
- public:
-  LIR_HEADER(MulI);
-
-  LMulI() : LBinaryMath(classOpcode) {}
-
-  MMul* mir() { return mir_->toMul(); }
-};
-
-class LUDiv : public LBinaryMath<0> {
- public:
-  LIR_HEADER(UDiv);
-
-  LUDiv() : LBinaryMath(classOpcode) {}
-
-  MDiv* mir() { return mir_->toDiv(); }
-};
-
-class LUMod : public LBinaryMath<0> {
- public:
-  LIR_HEADER(UMod);
-
-  LUMod() : LBinaryMath(classOpcode) {}
-
-  MMod* mir() { return mir_->toMod(); }
-};
-
-class LSoftUDivOrMod : public LBinaryCallInstructionHelper<1, 0> {
- public:
-  LIR_HEADER(SoftUDivOrMod);
-
-  LSoftUDivOrMod(const LAllocation& lhs, const LAllocation& rhs)
-      : LBinaryCallInstructionHelper(classOpcode) {
-    setOperand(0, lhs);
-    setOperand(1, rhs);
-  }
-
-  MInstruction* mir() { return mir_->toInstruction(); }
-};
+#ifdef JS_JITSPEW
+const char* LBoxFloatingPoint::extraName() const {
+  return StringFromMIRType(type_);
+}
+#endif
 
 }  // namespace jit
 }  // namespace js

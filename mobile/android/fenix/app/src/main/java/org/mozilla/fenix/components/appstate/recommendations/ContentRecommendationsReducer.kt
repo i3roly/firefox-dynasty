@@ -106,6 +106,7 @@ internal object ContentRecommendationsReducer {
                     pocketStories = emptyList(),
                     pocketSponsoredStories = emptyList(),
                     contentRecommendations = emptyList(),
+                    sponsoredContents = emptyList(),
                 )
             }
 
@@ -122,6 +123,26 @@ internal object ContentRecommendationsReducer {
                             updatedStoriesState.getStories()
                         } else {
                             updatedStoriesState.getFilteredStories()
+                        },
+                    )
+                }
+            }
+
+            is ContentRecommendationsAction.SponsoredContentsChange -> {
+                val updatedSponsoredContentsState = state.copyWithRecommendationsState {
+                    it.copy(
+                        sponsoredContents = action.sponsoredContents,
+                    )
+                }
+
+                updatedSponsoredContentsState.copyWithRecommendationsState {
+                    it.copy(
+                        pocketStories = if (action.showContentRecommendations) {
+                            updatedSponsoredContentsState.getStories(useSponsoredStoriesState = false)
+                        } else {
+                            updatedSponsoredContentsState.getFilteredStories(
+                                useSponsoredStoriesState = false,
+                            )
                         },
                     )
                 }

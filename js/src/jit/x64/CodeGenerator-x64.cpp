@@ -25,14 +25,6 @@ CodeGeneratorX64::CodeGeneratorX64(MIRGenerator* gen, LIRGraph* graph,
                                    MacroAssembler* masm)
     : CodeGeneratorX86Shared(gen, graph, masm) {}
 
-ValueOperand CodeGeneratorX64::ToValue(LInstruction* ins, size_t pos) {
-  return ValueOperand(ToRegister(ins->getOperand(pos)));
-}
-
-ValueOperand CodeGeneratorX64::ToTempValue(LInstruction* ins, size_t pos) {
-  return ValueOperand(ToRegister(ins->getTemp(pos)));
-}
-
 Operand CodeGeneratorX64::ToOperand64(const LInt64Allocation& a64) {
   const LAllocation& a = a64.value();
   MOZ_ASSERT(!a.isFloatReg());
@@ -62,7 +54,7 @@ void CodeGenerator::visitUnbox(LUnbox* unbox) {
   Register result = ToRegister(unbox->output());
 
   if (mir->fallible()) {
-    const ValueOperand value = ToValue(unbox, LUnbox::Input);
+    ValueOperand value = ToValue(unbox->input());
     Label bail;
     switch (mir->type()) {
       case MIRType::Int32:
@@ -567,7 +559,7 @@ void CodeGeneratorX64::emitWasmStore(T* ins) {
   mir->access().assertOffsetInGuardPages();
   uint32_t offset = access.offset32();
 
-  const LAllocation* value = ins->getOperand(ins->ValueIndex);
+  const LAllocation* value = ins->value();
   const LAllocation* ptr = ins->ptr();
   Register memoryBase = ToRegister(ins->memoryBase());
   Operand dstAddr =
@@ -591,7 +583,6 @@ void CodeGenerator::visitWasmCompareExchangeHeap(
   Register oldval = ToRegister(ins->oldValue());
   Register newval = ToRegister(ins->newValue());
   Register memoryBase = ToRegister(ins->memoryBase());
-  MOZ_ASSERT(ins->addrTemp()->isBogusTemp());
 
   Scalar::Type accessType = mir->access().type();
   BaseIndex srcAddr(memoryBase, ptr, TimesOne, mir->access().offset32());
@@ -611,7 +602,6 @@ void CodeGenerator::visitWasmAtomicExchangeHeap(LWasmAtomicExchangeHeap* ins) {
   Register ptr = ToRegister(ins->ptr());
   Register value = ToRegister(ins->value());
   Register memoryBase = ToRegister(ins->memoryBase());
-  MOZ_ASSERT(ins->addrTemp()->isBogusTemp());
 
   Scalar::Type accessType = mir->access().type();
 
@@ -633,9 +623,8 @@ void CodeGenerator::visitWasmAtomicBinopHeap(LWasmAtomicBinopHeap* ins) {
   Register ptr = ToRegister(ins->ptr());
   Register memoryBase = ToRegister(ins->memoryBase());
   const LAllocation* value = ins->value();
-  Register temp = ToTempRegisterOrInvalid(ins->temp());
+  Register temp = ToTempRegisterOrInvalid(ins->temp0());
   Register output = ToRegister(ins->output());
-  MOZ_ASSERT(ins->addrTemp()->isBogusTemp());
 
   Scalar::Type accessType = mir->access().type();
   if (accessType == Scalar::Uint32) {
@@ -667,7 +656,6 @@ void CodeGenerator::visitWasmAtomicBinopHeapForEffect(
   Register ptr = ToRegister(ins->ptr());
   Register memoryBase = ToRegister(ins->memoryBase());
   const LAllocation* value = ins->value();
-  MOZ_ASSERT(ins->addrTemp()->isBogusTemp());
 
   Scalar::Type accessType = mir->access().type();
   AtomicOp op = mir->operation();
@@ -798,7 +786,7 @@ void CodeGenerator::visitTruncateDToInt32(LTruncateDToInt32* ins) {
 
 void CodeGenerator::visitWasmBuiltinTruncateDToInt32(
     LWasmBuiltinTruncateDToInt32* lir) {
-  FloatRegister input = ToFloatRegister(lir->in());
+  FloatRegister input = ToFloatRegister(lir->input());
   Register output = ToRegister(lir->output());
   Register temp = ToRegister(lir->temp0());
   MOZ_ASSERT(lir->instance()->isBogus(), "instance not used for x64");
@@ -812,7 +800,7 @@ void CodeGenerator::visitWasmBuiltinTruncateDToInt32(
 
 void CodeGenerator::visitWasmBuiltinTruncateFToInt32(
     LWasmBuiltinTruncateFToInt32* lir) {
-  FloatRegister input = ToFloatRegister(lir->in());
+  FloatRegister input = ToFloatRegister(lir->input());
   Register output = ToRegister(lir->output());
   MOZ_ASSERT(lir->instance()->isBogus(), "instance not used for x64");
 
@@ -869,7 +857,7 @@ void CodeGenerator::visitWasmWrapU32Index(LWasmWrapU32Index* lir) {
 }
 
 void CodeGenerator::visitSignExtendInt64(LSignExtendInt64* ins) {
-  Register64 input = ToRegister64(ins->num());
+  Register64 input = ToRegister64(ins->input());
   Register64 output = ToOutRegister64(ins);
   switch (ins->mir()->mode()) {
     case MSignExtendInt64::Byte:

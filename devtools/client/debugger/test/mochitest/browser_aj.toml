@@ -195,6 +195,7 @@ skip-if = ["debug"] # Window leaks: bug 1575332
 
 ["browser_dbg-event-breakpoints.js"]
 fail-if = ["a11y_checks"] # Bug 1849028 clicked element may not be focusable and/or labeled
+skip-if = ["os == 'mac'"] # Frequent failures on macos only: bug 1830888
 
 ["browser_dbg-event-handler.js"]
 
@@ -282,7 +283,6 @@ skip-if = ["ccov && os == 'win'"] # Bug 1443132
 ["browser_dbg-inline-exceptions.js"]
 
 ["browser_dbg-inline-preview.js"]
-skip-if = ["true"] # bug 1607636
 
 ["browser_dbg-inline-script-offset.js"]
 
@@ -320,6 +320,11 @@ skip-if = [
 ]
 
 ["browser_dbg-javascript-tracer-values.js"]
+skip-if = [
+  "tsan", # Bug 1832135
+]
+
+["browser_dbg-javascript-tracer-values-preview.js"]
 skip-if = [
   "tsan", # Bug 1832135
 ]

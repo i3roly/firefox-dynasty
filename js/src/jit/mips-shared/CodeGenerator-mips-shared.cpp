@@ -416,11 +416,11 @@ void CodeGenerator::visitMulI64(LMulI64* lir) {
             return;
           }
         }
-        Register temp = ToTempRegisterOrInvalid(lir->temp());
+        Register temp = ToTempRegisterOrInvalid(lir->temp0());
         masm.mul64(Imm64(constant), ToRegister64(lhs), temp);
     }
   } else {
-    Register temp = ToTempRegisterOrInvalid(lir->temp());
+    Register temp = ToTempRegisterOrInvalid(lir->temp0());
     masm.mul64(ToOperandOrRegister64(rhs), ToRegister64(lhs), temp);
   }
 }
@@ -513,7 +513,7 @@ void CodeGenerator::visitDivI(LDivI* ins) {
 void CodeGenerator::visitDivPowTwoI(LDivPowTwoI* ins) {
   Register lhs = ToRegister(ins->numerator());
   Register dest = ToRegister(ins->output());
-  Register tmp = ToRegister(ins->getTemp(0));
+  Register tmp = ToRegister(ins->temp0());
   int32_t shift = ins->shift();
 
   if (shift != 0) {
@@ -555,7 +555,7 @@ void CodeGenerator::visitModI(LModI* ins) {
   Register lhs = ToRegister(ins->lhs());
   Register rhs = ToRegister(ins->rhs());
   Register dest = ToRegister(ins->output());
-  Register callTemp = ToRegister(ins->callTemp());
+  Register callTemp = ToRegister(ins->temp0());
   MMod* mir = ins->mir();
   Label done;
 
@@ -840,40 +840,6 @@ void CodeGenerator::visitShiftI64(LShiftI64* lir) {
   }
 }
 
-void CodeGenerator::visitRotateI64(LRotateI64* lir) {
-  MRotate* mir = lir->mir();
-  LAllocation* count = lir->count();
-
-  Register64 input = ToRegister64(lir->input());
-  Register64 output = ToOutRegister64(lir);
-  Register temp = ToTempRegisterOrInvalid(lir->temp());
-
-#ifdef JS_CODEGEN_MIPS64
-  MOZ_ASSERT(input == output);
-#endif
-
-  if (count->isConstant()) {
-    int32_t c = int32_t(count->toConstant()->toInt64() & 0x3F);
-    if (!c) {
-#ifdef JS_CODEGEN_MIPS32
-      masm.move64(input, output);
-#endif
-      return;
-    }
-    if (mir->isLeftRotate()) {
-      masm.rotateLeft64(Imm32(c), input, output, temp);
-    } else {
-      masm.rotateRight64(Imm32(c), input, output, temp);
-    }
-  } else {
-    if (mir->isLeftRotate()) {
-      masm.rotateLeft64(ToRegister(count), input, output, temp);
-    } else {
-      masm.rotateRight64(ToRegister(count), input, output, temp);
-    }
-  }
-}
-
 void CodeGenerator::visitUrshD(LUrshD* ins) {
   Register lhs = ToRegister(ins->lhs());
   Register temp = ToRegister(ins->temp0());
@@ -985,13 +951,13 @@ void CodeGenerator::visitTruncateFToInt32(LTruncateFToInt32* ins) {
 
 void CodeGenerator::visitWasmBuiltinTruncateDToInt32(
     LWasmBuiltinTruncateDToInt32* lir) {
-  emitTruncateDouble(ToFloatRegister(lir->in()), ToRegister(lir->output()),
+  emitTruncateDouble(ToFloatRegister(lir->input()), ToRegister(lir->output()),
                      lir->mir());
 }
 
 void CodeGenerator::visitWasmBuiltinTruncateFToInt32(
     LWasmBuiltinTruncateFToInt32* lir) {
-  emitTruncateFloat32(ToFloatRegister(lir->in()), ToRegister(lir->output()),
+  emitTruncateFloat32(ToFloatRegister(lir->input()), ToRegister(lir->output()),
                       lir->mir());
 }
 
@@ -1315,7 +1281,7 @@ void CodeGeneratorMIPSShared::emitWasmLoad(T* lir) {
 
   Register memoryBase = ToRegister(lir->memoryBase());
   Register ptr = ToRegister(lir->ptr());
-  Register ptrScratch = ToTempRegisterOrInvalid(lir->ptrCopy());
+  Register ptrScratch = ToTempRegisterOrInvalid(lir->temp0());
 
   if (mir->base()->type() == MIRType::Int32) {
     masm.move32To64ZeroExtend(ptr, Register64(scratch2));
@@ -1323,17 +1289,19 @@ void CodeGeneratorMIPSShared::emitWasmLoad(T* lir) {
     ptrScratch = ptrScratch != InvalidReg ? scratch2 : InvalidReg;
   }
 
-  if (IsUnaligned(mir->access())) {
+  if constexpr (std::is_same_v<T, LWasmUnalignedLoad>) {
+    MOZ_ASSERT(IsUnaligned(mir->access()));
     if (IsFloatingPointType(mir->type())) {
       masm.wasmUnalignedLoadFP(mir->access(), memoryBase, ptr, ptrScratch,
                                ToFloatRegister(lir->output()),
-                               ToRegister(lir->getTemp(1)));
+                               ToRegister(lir->temp1()));
     } else {
       masm.wasmUnalignedLoad(mir->access(), memoryBase, ptr, ptrScratch,
                              ToRegister(lir->output()),
-                             ToRegister(lir->getTemp(1)));
+                             ToRegister(lir->temp1()));
     }
   } else {
+    MOZ_ASSERT(!IsUnaligned(mir->access()));
     masm.wasmLoad(mir->access(), memoryBase, ptr, ptrScratch,
                   ToAnyRegister(lir->output()));
   }
@@ -1352,7 +1320,7 @@ void CodeGeneratorMIPSShared::emitWasmStore(T* lir) {
 
   Register memoryBase = ToRegister(lir->memoryBase());
   Register ptr = ToRegister(lir->ptr());
-  Register ptrScratch = ToTempRegisterOrInvalid(lir->ptrCopy());
+  Register ptrScratch = ToTempRegisterOrInvalid(lir->temp0());
 
   if (mir->base()->type() == MIRType::Int32) {
     masm.move32To64ZeroExtend(ptr, Register64(scratch2));
@@ -1360,18 +1328,20 @@ void CodeGeneratorMIPSShared::emitWasmStore(T* lir) {
     ptrScratch = ptrScratch != InvalidReg ? scratch2 : InvalidReg;
   }
 
-  if (IsUnaligned(mir->access())) {
+  if constexpr (std::is_same_v<T, LWasmUnalignedStore>) {
+    MOZ_ASSERT(IsUnaligned(mir->access()));
     if (mir->access().type() == Scalar::Float32 ||
         mir->access().type() == Scalar::Float64) {
       masm.wasmUnalignedStoreFP(mir->access(), ToFloatRegister(lir->value()),
                                 memoryBase, ptr, ptrScratch,
-                                ToRegister(lir->getTemp(1)));
+                                ToRegister(lir->temp1()));
     } else {
       masm.wasmUnalignedStore(mir->access(), ToRegister(lir->value()),
                               memoryBase, ptr, ptrScratch,
-                              ToRegister(lir->getTemp(1)));
+                              ToRegister(lir->temp1()));
     }
   } else {
+    MOZ_ASSERT(!IsUnaligned(mir->access()));
     masm.wasmStore(mir->access(), ToAnyRegister(lir->value()), memoryBase, ptr,
                    ptrScratch);
   }
@@ -1542,13 +1512,12 @@ void CodeGenerator::visitWasmCompareExchangeHeap(
   Register memoryBase = ToRegister(ins->memoryBase());
   Register ptrReg = ToRegister(ins->ptr());
   BaseIndex srcAddr(memoryBase, ptrReg, TimesOne, mir->access().offset32());
-  MOZ_ASSERT(ins->addrTemp()->isBogusTemp());
 
   Register oldval = ToRegister(ins->oldValue());
   Register newval = ToRegister(ins->newValue());
-  Register valueTemp = ToTempRegisterOrInvalid(ins->valueTemp());
-  Register offsetTemp = ToTempRegisterOrInvalid(ins->offsetTemp());
-  Register maskTemp = ToTempRegisterOrInvalid(ins->maskTemp());
+  Register valueTemp = ToTempRegisterOrInvalid(ins->temp0());
+  Register offsetTemp = ToTempRegisterOrInvalid(ins->temp1());
+  Register maskTemp = ToTempRegisterOrInvalid(ins->temp2());
 
   masm.wasmCompareExchange(mir->access(), srcAddr, oldval, newval, valueTemp,
                            offsetTemp, maskTemp, ToRegister(ins->output()));
@@ -1560,11 +1529,10 @@ void CodeGenerator::visitWasmAtomicExchangeHeap(LWasmAtomicExchangeHeap* ins) {
   Register ptrReg = ToRegister(ins->ptr());
   Register value = ToRegister(ins->value());
   BaseIndex srcAddr(memoryBase, ptrReg, TimesOne, mir->access().offset32());
-  MOZ_ASSERT(ins->addrTemp()->isBogusTemp());
 
-  Register valueTemp = ToTempRegisterOrInvalid(ins->valueTemp());
-  Register offsetTemp = ToTempRegisterOrInvalid(ins->offsetTemp());
-  Register maskTemp = ToTempRegisterOrInvalid(ins->maskTemp());
+  Register valueTemp = ToTempRegisterOrInvalid(ins->temp0());
+  Register offsetTemp = ToTempRegisterOrInvalid(ins->temp1());
+  Register maskTemp = ToTempRegisterOrInvalid(ins->temp2());
 
   masm.wasmAtomicExchange(mir->access(), srcAddr, value, valueTemp, offsetTemp,
                           maskTemp, ToRegister(ins->output()));
@@ -1572,14 +1540,13 @@ void CodeGenerator::visitWasmAtomicExchangeHeap(LWasmAtomicExchangeHeap* ins) {
 
 void CodeGenerator::visitWasmAtomicBinopHeap(LWasmAtomicBinopHeap* ins) {
   MOZ_ASSERT(ins->mir()->hasUses());
-  MOZ_ASSERT(ins->addrTemp()->isBogusTemp());
 
   MWasmAtomicBinopHeap* mir = ins->mir();
   Register memoryBase = ToRegister(ins->memoryBase());
   Register ptrReg = ToRegister(ins->ptr());
-  Register valueTemp = ToTempRegisterOrInvalid(ins->valueTemp());
-  Register offsetTemp = ToTempRegisterOrInvalid(ins->offsetTemp());
-  Register maskTemp = ToTempRegisterOrInvalid(ins->maskTemp());
+  Register valueTemp = ToTempRegisterOrInvalid(ins->temp0());
+  Register offsetTemp = ToTempRegisterOrInvalid(ins->temp1());
+  Register maskTemp = ToTempRegisterOrInvalid(ins->temp2());
 
   BaseIndex srcAddr(memoryBase, ptrReg, TimesOne, mir->access().offset32());
 
@@ -1591,14 +1558,13 @@ void CodeGenerator::visitWasmAtomicBinopHeap(LWasmAtomicBinopHeap* ins) {
 void CodeGenerator::visitWasmAtomicBinopHeapForEffect(
     LWasmAtomicBinopHeapForEffect* ins) {
   MOZ_ASSERT(!ins->mir()->hasUses());
-  MOZ_ASSERT(ins->addrTemp()->isBogusTemp());
 
   MWasmAtomicBinopHeap* mir = ins->mir();
   Register memoryBase = ToRegister(ins->memoryBase());
   Register ptrReg = ToRegister(ins->ptr());
-  Register valueTemp = ToTempRegisterOrInvalid(ins->valueTemp());
-  Register offsetTemp = ToTempRegisterOrInvalid(ins->offsetTemp());
-  Register maskTemp = ToTempRegisterOrInvalid(ins->maskTemp());
+  Register valueTemp = ToTempRegisterOrInvalid(ins->temp0());
+  Register offsetTemp = ToTempRegisterOrInvalid(ins->temp1());
+  Register maskTemp = ToTempRegisterOrInvalid(ins->temp2());
 
   BaseIndex srcAddr(memoryBase, ptrReg, TimesOne, mir->access().offset32());
   masm.wasmAtomicEffectOp(mir->access(), mir->operation(),
@@ -1780,7 +1746,7 @@ void CodeGenerator::visitNegI(LNegI* ins) {
 }
 
 void CodeGenerator::visitNegI64(LNegI64* ins) {
-  Register64 input = ToRegister64(ins->num());
+  Register64 input = ToRegister64(ins->input());
   MOZ_ASSERT(input == ToOutRegister64(ins));
   masm.neg64(input);
 }

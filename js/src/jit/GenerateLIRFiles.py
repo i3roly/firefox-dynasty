@@ -99,7 +99,7 @@ def make_int64_index(index, reg_operands, value_operands):
     return " + ".join(expr) if expr else "0"
 
 
-def gen_operands(operands):
+def gen_operands(operands, defer_init):
     # Group operands by operand type.
     sorted_operands = {
         k: [op for op, _ in v]
@@ -120,39 +120,71 @@ def gen_operands(operands):
     # Parameters for the class constructor.
     params = []
 
-    # Setter instructions for constructor body.
-    setters = []
+    # Initializer instructions for constructor body.
+    initializers = []
 
     # Getter definitions.
     getters = []
 
+    # Setter definitions.
+    setters = []
+
     # Constructor parameters are generated in the order defined in the YAML file.
-    for operand, op_type in operands.items():
-        params.append(f"const {operand_types[op_type]}& {operand}")
+    if not defer_init:
+        for operand, op_type in operands.items():
+            params.append(f"const {operand_types[op_type]}& {operand}")
 
     # First initialize all word-sized operands.
-    for index_value, operand in enumerate(reg_operands):
-        setters.append(f"setOperand({index_value}, {operand});")
+    for index, operand in enumerate(reg_operands):
+        cap_operand = operand[0].upper() + operand[1:]
+        index_value = cap_operand + "Index"
+        init_expr = f"setOperand({index_value}, {operand});"
+
+        indices.append(f"static constexpr size_t {index_value} = {index};")
+        if not defer_init:
+            initializers.append(init_expr)
+        else:
+            setters.append(
+                f"void set{cap_operand}(const LAllocation& {operand}) {{ {init_expr} }}"
+            )
         getters.append(
             f"const LAllocation* {operand}() const {{ return getOperand({index_value}); }}"
         )
 
     # Next initialize all BoxedValue operands.
     for box_index, operand in enumerate(value_operands):
-        index_value = operand[0].upper() + operand[1:] + "Index"
+        cap_operand = operand[0].upper() + operand[1:]
+        index_value = cap_operand + "Index"
+        init_expr = f"setBoxOperand({index_value}, {operand});"
+
         indices.append(
             f"static constexpr size_t {index_value} = {make_boxed_index(box_index, reg_operands)};"
         )
-        setters.append(f"setBoxOperand({index_value}, {operand});")
-        # No getters generated for BoxedValue operands.
+        if not defer_init:
+            initializers.append(init_expr)
+        else:
+            setters.append(
+                f"void {cap_operand}(const LBoxAllocation& {operand}) {{ {init_expr} }}"
+            )
+        getters.append(
+            f"LBoxAllocation {operand}() const {{ return getBoxOperand({index_value}); }}"
+        )
 
     # Finally initialize all Int64 operands.
     for int64_index, operand in enumerate(int64_operands):
-        index_value = operand[0].upper() + operand[1:] + "Index"
+        cap_operand = operand[0].upper() + operand[1:]
+        index_value = cap_operand + "Index"
+        init_expr = f"setInt64Operand({index_value}, {operand});"
+
         indices.append(
             f"static constexpr size_t {index_value} = {make_int64_index(int64_index, reg_operands, value_operands)};"
         )
-        setters.append(f"setInt64Operand({index_value}, {operand});")
+        if not defer_init:
+            initializers.append(init_expr)
+        else:
+            setters.append(
+                f"void set{cap_operand}(const LInt64Allocation& {operand}) {{ {init_expr} }}"
+            )
         getters.append(
             f"LInt64Allocation {operand}() const {{ return getInt64Operand({index_value}); }}"
         )
@@ -168,8 +200,9 @@ def gen_operands(operands):
         num_operands,
         indices,
         params,
-        setters,
+        initializers,
         getters,
+        setters,
     )
 
 
@@ -197,27 +230,43 @@ def gen_arguments(arguments):
     return (members, params, initializers, getters)
 
 
-def gen_temps(num_temps, num_temps64):
+def gen_temps(num_temps, num_temps64, defer_init):
     # Parameters for the class constructor.
     params = []
 
-    # Setter instructions for constructor body.
-    setters = []
+    # Initializer instructions for constructor body.
+    initializers = []
 
     # Getter definitions.
     getters = []
 
+    # Setter definitions.
+    setters = []
+
     for temp in range(num_temps):
-        params.append(f"const LDefinition& temp{temp}")
-        setters.append(f"setTemp({temp}, temp{temp});")
+        param_decl = f"const LDefinition& temp{temp}"
+        init_expr = f"setTemp({temp}, temp{temp});"
+
+        if not defer_init:
+            params.append(param_decl)
+            initializers.append(init_expr)
+        else:
+            initializers.append(f"setTemp({temp}, LDefinition::BogusTemp());")
+            setters.append(f"void setTemp{temp}({param_decl}) {{ {init_expr} }}")
         getters.append(f"const LDefinition* temp{temp}() {{ return getTemp({temp}); }}")
 
     for int64_temp in range(num_temps64):
         temp = num_temps + int64_temp
         temp_index = f"{num_temps} + {int64_temp} * INT64_PIECES"
+        param_decl = f"const LInt64Definition& temp{temp}"
+        init_expr = f"setInt64Temp({temp_index}, temp{temp});"
 
-        params.append(f"const LInt64Definition& temp{temp}")
-        setters.append(f"setInt64Temp({temp_index}, temp{temp});")
+        if not defer_init:
+            params.append(param_decl)
+            initializers.append(init_expr)
+        else:
+            initializers.append(f"setTemp({temp}, LInt64Definition::BogusTemp());")
+            setters.append(f"void setTemp{temp}({param_decl}) {{ {init_expr} }}")
         getters.append(
             f"LInt64Definition temp{temp}() {{ return getInt64Temp({temp_index}); }}"
         )
@@ -227,27 +276,27 @@ def gen_temps(num_temps, num_temps64):
     if num_temps64:
         num_temps_total += f" + {num_temps64} * INT64_PIECES"
 
-    return (num_temps_total, params, setters, getters)
+    return (num_temps_total, params, initializers, getters, setters)
 
 
 def gen_successors(successors):
     # Parameters for the class constructor.
     params = []
 
-    # Setter instructions for constructor body.
-    setters = []
+    # Initializer instructions for constructor body.
+    initializers = []
 
     # Getter definitions.
     getters = []
 
-    for index, successor in enumerate(successors):
+    for index, successor in enumerate(successors or []):
         params.append(f"MBasicBlock* {successor}")
-        setters.append(f"setSuccessor({index}, {successor});")
+        initializers.append(f"setSuccessor({index}, {successor});")
         getters.append(
             f"MBasicBlock* {successor}() const {{ return getSuccessor({index}); }}"
         )
 
-    return (params, setters, getters)
+    return (params, initializers, getters)
 
 
 def gen_lir_class(
@@ -261,25 +310,31 @@ def gen_lir_class(
     call_instruction,
     mir_op,
     extra_name,
+    defer_init,
 ):
     """Generates class definition for a single LIR opcode."""
     class_name = "L" + name
 
-    num_operands, oper_indices, oper_params, oper_setters, oper_getters = gen_operands(
-        operands
-    )
+    (
+        num_operands,
+        oper_indices,
+        oper_params,
+        oper_initializers,
+        oper_getters,
+        oper_setters,
+    ) = gen_operands(operands, defer_init)
 
     args_members, args_params, args_initializers, args_getters = gen_arguments(
         arguments
     )
 
-    num_temps_total, temp_params, temp_setters, temp_getters = gen_temps(
-        num_temps, num_temps64
+    num_temps_total, temp_params, temp_initializers, temp_getters, temp_setters = (
+        gen_temps(num_temps, num_temps64, defer_init)
     )
 
-    succ_params, succ_setters, succ_getters = gen_successors(successors)
+    succ_params, succ_initializers, succ_getters = gen_successors(successors)
 
-    if successors:
+    if successors is not None:
         if result_type:
             raise Exception("Control instructions don't return a result")
         num_defs = len(successors)
@@ -316,14 +371,16 @@ class {class_name} : public {parent_class}<{num_defs}, {num_operands}, {num_temp
 
   explicit {class_name}({", ".join(succ_params + oper_params + temp_params + args_params)}) : {parent_class}(classOpcode){", ".join([""] + args_initializers)} {{
     {constructor_init}
-    {nl("    ").join(succ_setters)}
-    {nl("    ").join(oper_setters)}
-    {nl("    ").join(temp_setters)}
+    {nl("    ").join(succ_initializers)}
+    {nl("    ").join(oper_initializers)}
+    {nl("    ").join(temp_initializers)}
   }}
 
   {nl("  ").join(succ_getters)}
   {nl("  ").join(oper_getters)}
+  {nl("  ").join(oper_setters)}
   {nl("  ").join(temp_getters)}
+  {nl("  ").join(temp_setters)}
   {nl("  ").join(args_getters)}
   {mir_accessor}
   {extra_name_decl}
@@ -359,8 +416,8 @@ def generate_lir_header(c_out, yaml_path, mir_yaml_path):
             result_type = op.get("result_type", None)
             assert result_type is None or result_type in result_types
 
-            successors = op.get("successors", [])
-            assert isinstance(successors, list)
+            successors = op.get("successors", None)
+            assert successors is None or isinstance(successors, list)
 
             operands = op.get("operands") or {}
             assert isinstance(operands, dict)
@@ -386,6 +443,9 @@ def generate_lir_header(c_out, yaml_path, mir_yaml_path):
             extra_name = op.get("extra_name", False)
             assert isinstance(extra_name, bool)
 
+            defer_init = op.get("defer_init", False)
+            assert isinstance(defer_init, bool)
+
             lir_op_classes.append(
                 gen_lir_class(
                     name,
@@ -398,6 +458,7 @@ def generate_lir_header(c_out, yaml_path, mir_yaml_path):
                     call_instruction,
                     mir_op,
                     extra_name,
+                    defer_init,
                 )
             )
 
@@ -420,7 +481,7 @@ def generate_lir_header(c_out, yaml_path, mir_yaml_path):
                 result_type = mir_type_to_lir_type(result_type)
                 assert result_type in result_types
 
-            successors = []
+            successors = None
 
             operands_raw = op.get("operands", {})
             assert isinstance(operands_raw, dict)
@@ -442,6 +503,8 @@ def generate_lir_header(c_out, yaml_path, mir_yaml_path):
 
             extra_name = False
 
+            defer_init = False
+
             lir_op_classes.append(
                 gen_lir_class(
                     name,
@@ -454,6 +517,7 @@ def generate_lir_header(c_out, yaml_path, mir_yaml_path):
                     call_instruction,
                     mir_op,
                     extra_name,
+                    defer_init,
                 )
             )
 

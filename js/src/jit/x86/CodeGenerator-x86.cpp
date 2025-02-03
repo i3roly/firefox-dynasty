@@ -39,18 +39,6 @@ CodeGeneratorX86::CodeGeneratorX86(MIRGenerator* gen, LIRGraph* graph,
                                    MacroAssembler* masm)
     : CodeGeneratorX86Shared(gen, graph, masm) {}
 
-ValueOperand CodeGeneratorX86::ToValue(LInstruction* ins, size_t pos) {
-  Register typeReg = ToRegister(ins->getOperand(pos + TYPE_INDEX));
-  Register payloadReg = ToRegister(ins->getOperand(pos + PAYLOAD_INDEX));
-  return ValueOperand(typeReg, payloadReg);
-}
-
-ValueOperand CodeGeneratorX86::ToTempValue(LInstruction* ins, size_t pos) {
-  Register typeReg = ToRegister(ins->getTemp(pos + TYPE_INDEX));
-  Register payloadReg = ToRegister(ins->getTemp(pos + PAYLOAD_INDEX));
-  return ValueOperand(typeReg, payloadReg);
-}
-
 void CodeGenerator::visitBox(LBox* box) {
   const LDefinition* type = box->getDef(TYPE_INDEX);
 
@@ -69,7 +57,7 @@ void CodeGenerator::visitBoxFloatingPoint(LBoxFloatingPoint* box) {
   masm.moveValue(TypedOrValueRegister(box->type(), in), out);
 
   if (JitOptions.spectreValueMasking) {
-    Register scratch = ToRegister(box->spectreTemp());
+    Register scratch = ToRegister(box->temp1());
     masm.move32(Imm32(JSVAL_TAG_CLEAR), scratch);
     masm.cmp32Move32(Assembler::Below, scratch, out.typeReg(), scratch,
                      out.typeReg());
@@ -332,12 +320,11 @@ void CodeGeneratorX86::emitWasmStore(T* ins) {
                     offset ? offset : mir->base()->toConstant()->toInt32())
           : Operand(ToRegister(memoryBase), ToRegister(ptr), TimesOne, offset);
 
-  if (mir->access().type() == Scalar::Int64) {
-    Register64 value =
-        ToRegister64(ins->getInt64Operand(LWasmStoreI64::ValueIndex));
+  if constexpr (std::is_same_v<T, LWasmStoreI64>) {
+    Register64 value = ToRegister64(ins->value());
     masm.wasmStoreI64(mir->access(), value, dstAddr);
   } else {
-    AnyRegister value = ToAnyRegister(ins->getOperand(LWasmStore::ValueIndex));
+    AnyRegister value = ToAnyRegister(ins->value());
     masm.wasmStore(mir->access(), value, dstAddr);
   }
 }
@@ -355,7 +342,7 @@ void CodeGenerator::visitWasmCompareExchangeHeap(
   Register ptrReg = ToRegister(ins->ptr());
   Register oldval = ToRegister(ins->oldValue());
   Register newval = ToRegister(ins->newValue());
-  Register addrTemp = ToRegister(ins->addrTemp());
+  Register addrTemp = ToRegister(ins->temp0());
   Register memoryBase = ToRegister(ins->memoryBase());
   Register output = ToRegister(ins->output());
 
@@ -371,7 +358,7 @@ void CodeGenerator::visitWasmAtomicExchangeHeap(LWasmAtomicExchangeHeap* ins) {
 
   Register ptrReg = ToRegister(ins->ptr());
   Register value = ToRegister(ins->value());
-  Register addrTemp = ToRegister(ins->addrTemp());
+  Register addrTemp = ToRegister(ins->temp0());
   Register memoryBase = ToRegister(ins->memoryBase());
   Register output = ToRegister(ins->output());
 
@@ -386,8 +373,8 @@ void CodeGenerator::visitWasmAtomicBinopHeap(LWasmAtomicBinopHeap* ins) {
   MWasmAtomicBinopHeap* mir = ins->mir();
 
   Register ptrReg = ToRegister(ins->ptr());
-  Register temp = ToTempRegisterOrInvalid(ins->temp());
-  Register addrTemp = ToRegister(ins->addrTemp());
+  Register temp = ToTempRegisterOrInvalid(ins->temp0());
+  Register addrTemp = ToRegister(ins->temp1());
   Register out = ToRegister(ins->output());
   const LAllocation* value = ins->value();
   AtomicOp op = mir->operation();
@@ -412,7 +399,7 @@ void CodeGenerator::visitWasmAtomicBinopHeapForEffect(
   MOZ_ASSERT(!mir->hasUses());
 
   Register ptrReg = ToRegister(ins->ptr());
-  Register addrTemp = ToRegister(ins->addrTemp());
+  Register addrTemp = ToRegister(ins->temp0());
   const LAllocation* value = ins->value();
   AtomicOp op = mir->operation();
   Register memoryBase = ToRegister(ins->memoryBase());
@@ -608,7 +595,7 @@ void CodeGenerator::visitTruncateDToInt32(LTruncateDToInt32* ins) {
 
 void CodeGenerator::visitWasmBuiltinTruncateDToInt32(
     LWasmBuiltinTruncateDToInt32* lir) {
-  FloatRegister input = ToFloatRegister(lir->in());
+  FloatRegister input = ToFloatRegister(lir->input());
   Register output = ToRegister(lir->output());
 
   OutOfLineTruncate* ool = new (alloc()) OutOfLineTruncate(lir);
@@ -631,7 +618,7 @@ void CodeGenerator::visitTruncateFToInt32(LTruncateFToInt32* ins) {
 
 void CodeGenerator::visitWasmBuiltinTruncateFToInt32(
     LWasmBuiltinTruncateFToInt32* lir) {
-  FloatRegister input = ToFloatRegister(lir->in());
+  FloatRegister input = ToFloatRegister(lir->input());
   Register output = ToRegister(lir->output());
 
   OutOfLineTruncateFloat32* ool = new (alloc()) OutOfLineTruncateFloat32(lir);
@@ -1071,7 +1058,7 @@ void CodeGenerator::visitExtendInt32ToInt64(LExtendInt32ToInt64* lir) {
 
 void CodeGenerator::visitSignExtendInt64(LSignExtendInt64* lir) {
 #ifdef DEBUG
-  Register64 input = ToRegister64(lir->num());
+  Register64 input = ToRegister64(lir->input());
   Register64 output = ToOutRegister64(lir);
   MOZ_ASSERT(input.low == eax);
   MOZ_ASSERT(output.low == eax);

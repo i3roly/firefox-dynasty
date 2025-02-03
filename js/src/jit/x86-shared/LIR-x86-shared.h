@@ -10,30 +10,6 @@
 namespace js {
 namespace jit {
 
-// Signed division by a power-of-two constant.
-class LDivPowTwoI : public LBinaryMath<0> {
-  const int32_t shift_;
-  const bool negativeDivisor_;
-
- public:
-  LIR_HEADER(DivPowTwoI)
-
-  LDivPowTwoI(const LAllocation& lhs, const LAllocation& lhsCopy, int32_t shift,
-              bool negativeDivisor)
-      : LBinaryMath(classOpcode),
-        shift_(shift),
-        negativeDivisor_(negativeDivisor) {
-    setOperand(0, lhs);
-    setOperand(1, lhsCopy);
-  }
-
-  const LAllocation* numerator() { return getOperand(0); }
-  const LAllocation* numeratorCopy() { return getOperand(1); }
-  int32_t shift() const { return shift_; }
-  bool negativeDivisor() const { return negativeDivisor_; }
-  MDiv* mir() const { return mir_->toDiv(); }
-};
-
 class LDivOrModConstantI : public LInstructionHelper<1, 1, 1> {
   const int32_t denominator_;
 
@@ -59,25 +35,6 @@ class LDivOrModConstantI : public LInstructionHelper<1, 1, 1> {
     }
     return mir_->toDiv()->canBeNegativeDividend();
   }
-};
-
-class LModI : public LBinaryMath<1> {
- public:
-  LIR_HEADER(ModI)
-
-  LModI(const LAllocation& lhs, const LAllocation& rhs, const LDefinition& temp)
-      : LBinaryMath(classOpcode) {
-    setOperand(0, lhs);
-    setOperand(1, rhs);
-    setTemp(0, temp);
-  }
-
-  const char* extraName() const {
-    return mir()->isTruncated() ? "Truncated" : nullptr;
-  }
-
-  const LDefinition* remainder() { return getDef(0); }
-  MMod* mir() const { return mir_->toMod(); }
 };
 
 // This class performs a simple x86 'div', yielding either a quotient or
@@ -165,28 +122,6 @@ class LUDivOrModConstant : public LInstructionHelper<1, 1, 1> {
     }
     return mir_->toDiv()->trapSiteDesc();
   }
-};
-
-class LMulI : public LBinaryMath<0, 1> {
- public:
-  LIR_HEADER(MulI)
-
-  LMulI(const LAllocation& lhs, const LAllocation& rhs,
-        const LAllocation& lhsCopy)
-      : LBinaryMath(classOpcode) {
-    setOperand(0, lhs);
-    setOperand(1, rhs);
-    setOperand(2, lhsCopy);
-  }
-
-  const char* extraName() const {
-    return (mir()->mode() == MMul::Integer)
-               ? "Integer"
-               : (mir()->canBeNegativeZero() ? "CanBeNegativeZero" : nullptr);
-  }
-
-  MMul* mir() const { return mir_->toMul(); }
-  const LAllocation* lhsCopy() { return this->getOperand(2); }
 };
 
 }  // namespace jit

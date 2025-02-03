@@ -356,12 +356,21 @@ class HomeFragment : Fragment() {
             }
 
             if (showSponsoredStories) {
-                components.appStore.dispatch(
-                    ContentRecommendationsAction.PocketSponsoredStoriesChange(
-                        sponsoredStories = components.core.pocketStoriesService.getSponsoredStories(),
-                        showContentRecommendations = showContentRecommendations,
-                    ),
-                )
+                if (requireContext().settings().marsAPIEnabled) {
+                    components.appStore.dispatch(
+                        ContentRecommendationsAction.SponsoredContentsChange(
+                            sponsoredContents = components.core.pocketStoriesService.getSponsoredContents(),
+                            showContentRecommendations = showContentRecommendations,
+                        ),
+                    )
+                } else {
+                    components.appStore.dispatch(
+                        ContentRecommendationsAction.PocketSponsoredStoriesChange(
+                            sponsoredStories = components.core.pocketStoriesService.getSponsoredStories(),
+                            showContentRecommendations = showContentRecommendations,
+                        ),
+                    )
+                }
             }
         }
 
@@ -515,6 +524,8 @@ class HomeFragment : Fragment() {
                 homeActivity = activity,
                 appStore = components.appStore,
                 settings = components.settings,
+                marsUseCases = components.useCases.marsUseCases,
+                viewLifecycleScope = viewLifecycleOwner.lifecycleScope,
             ),
             privateBrowsingController = DefaultPrivateBrowsingController(
                 activity = activity,

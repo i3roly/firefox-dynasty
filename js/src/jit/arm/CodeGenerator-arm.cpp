@@ -383,11 +383,11 @@ void CodeGenerator::visitMulI64(LMulI64* lir) {
             return;
           }
         }
-        Register temp = ToTempRegisterOrInvalid(lir->temp());
+        Register temp = ToTempRegisterOrInvalid(lir->temp0());
         masm.mul64(Imm64(constant), ToRegister64(lhs), temp);
     }
   } else {
-    Register temp = ToTempRegisterOrInvalid(lir->temp());
+    Register temp = ToTempRegisterOrInvalid(lir->temp0());
     masm.mul64(ToOperandOrRegister64(rhs), ToRegister64(lhs), temp);
   }
 }
@@ -1156,7 +1156,7 @@ void CodeGenerator::visitTruncateDToInt32(LTruncateDToInt32* ins) {
 
 void CodeGenerator::visitWasmBuiltinTruncateDToInt32(
     LWasmBuiltinTruncateDToInt32* ins) {
-  emitTruncateDouble(ToFloatRegister(ins->in()), ToRegister(ins->output()),
+  emitTruncateDouble(ToFloatRegister(ins->input()), ToRegister(ins->output()),
                      ins->mir());
 }
 
@@ -1167,20 +1167,8 @@ void CodeGenerator::visitTruncateFToInt32(LTruncateFToInt32* ins) {
 
 void CodeGenerator::visitWasmBuiltinTruncateFToInt32(
     LWasmBuiltinTruncateFToInt32* ins) {
-  emitTruncateFloat32(ToFloatRegister(ins->in()), ToRegister(ins->output()),
+  emitTruncateFloat32(ToFloatRegister(ins->input()), ToRegister(ins->output()),
                       ins->mir());
-}
-
-ValueOperand CodeGeneratorARM::ToValue(LInstruction* ins, size_t pos) {
-  Register typeReg = ToRegister(ins->getOperand(pos + TYPE_INDEX));
-  Register payloadReg = ToRegister(ins->getOperand(pos + PAYLOAD_INDEX));
-  return ValueOperand(typeReg, payloadReg);
-}
-
-ValueOperand CodeGeneratorARM::ToTempValue(LInstruction* ins, size_t pos) {
-  Register typeReg = ToRegister(ins->getTemp(pos + TYPE_INDEX));
-  Register payloadReg = ToRegister(ins->getTemp(pos + PAYLOAD_INDEX));
-  return ValueOperand(typeReg, payloadReg);
 }
 
 void CodeGenerator::visitBox(LBox* box) {
@@ -1732,9 +1720,9 @@ void CodeGeneratorARM::emitWasmLoad(T* lir) {
   Register memoryBase = ToRegister(lir->memoryBase());
 
   if (mir->access().offset32() || mir->access().type() == Scalar::Int64) {
-    ptr = ToRegister(lir->ptrCopy());
+    ptr = ToRegister(lir->temp0());
   } else {
-    MOZ_ASSERT(lir->ptrCopy()->isBogusTemp());
+    MOZ_ASSERT(lir->temp0()->isBogusTemp());
     ptr = ToRegister(lir->ptr());
   }
 
@@ -1787,20 +1775,23 @@ void CodeGeneratorARM::emitWasmStore(T* lir) {
 
   // Maybe add the offset.
   if (mir->access().offset32() || accessType == Scalar::Int64) {
-    ptr = ToRegister(lir->ptrCopy());
+    ptr = ToRegister(lir->temp0());
   } else {
-    MOZ_ASSERT(lir->ptrCopy()->isBogusTemp());
+    MOZ_ASSERT(lir->temp0()->isBogusTemp());
     ptr = ToRegister(lir->ptr());
   }
 
-  if (accessType == Scalar::Int64) {
-    masm.wasmStoreI64(mir->access(),
-                      ToRegister64(lir->getInt64Operand(lir->ValueIndex)),
-                      memoryBase, ptr, ptr);
+  if constexpr (std::is_same_v<T, LWasmStoreI64>) {
+    Register64 value = ToRegister64(lir->value());
+    if (accessType == Scalar::Int64) {
+      masm.wasmStoreI64(mir->access(), value, memoryBase, ptr, ptr);
+    } else {
+      masm.wasmStore(mir->access(), AnyRegister(value.low), memoryBase, ptr,
+                     ptr);
+    }
   } else {
-    masm.wasmStore(mir->access(),
-                   ToAnyRegister(lir->getOperand(lir->ValueIndex)), memoryBase,
-                   ptr, ptr);
+    masm.wasmStore(mir->access(), ToAnyRegister(lir->value()), memoryBase, ptr,
+                   ptr);
   }
 }
 
@@ -1875,8 +1866,6 @@ void CodeGenerator::visitWasmCompareExchangeHeap(
   Register memoryBase = ToRegister(ins->memoryBase());
   BaseIndex srcAddr(memoryBase, ptrReg, TimesOne, mir->access().offset32());
 
-  MOZ_ASSERT(ins->addrTemp()->isBogusTemp());
-
   Register oldval = ToRegister(ins->oldValue());
   Register newval = ToRegister(ins->newValue());
   Register out = ToRegister(ins->output());
@@ -1892,7 +1881,6 @@ void CodeGenerator::visitWasmAtomicExchangeHeap(LWasmAtomicExchangeHeap* ins) {
   Register memoryBase = ToRegister(ins->memoryBase());
   Register output = ToRegister(ins->output());
   BaseIndex srcAddr(memoryBase, ptrReg, TimesOne, mir->access().offset32());
-  MOZ_ASSERT(ins->addrTemp()->isBogusTemp());
 
   masm.wasmAtomicExchange(mir->access(), srcAddr, value, output);
 }
@@ -1903,11 +1891,10 @@ void CodeGenerator::visitWasmAtomicBinopHeap(LWasmAtomicBinopHeap* ins) {
 
   Register ptrReg = ToRegister(ins->ptr());
   Register memoryBase = ToRegister(ins->memoryBase());
-  Register flagTemp = ToRegister(ins->flagTemp());
+  Register flagTemp = ToRegister(ins->temp0());
   Register output = ToRegister(ins->output());
   const LAllocation* value = ins->value();
   AtomicOp op = mir->operation();
-  MOZ_ASSERT(ins->addrTemp()->isBogusTemp());
 
   BaseIndex srcAddr(memoryBase, ptrReg, TimesOne, mir->access().offset32());
   masm.wasmAtomicFetchOp(mir->access(), op, ToRegister(value), srcAddr,
@@ -1921,10 +1908,9 @@ void CodeGenerator::visitWasmAtomicBinopHeapForEffect(
 
   Register ptrReg = ToRegister(ins->ptr());
   Register memoryBase = ToRegister(ins->memoryBase());
-  Register flagTemp = ToRegister(ins->flagTemp());
+  Register flagTemp = ToRegister(ins->temp0());
   const LAllocation* value = ins->value();
   AtomicOp op = mir->operation();
-  MOZ_ASSERT(ins->addrTemp()->isBogusTemp());
 
   BaseIndex srcAddr(memoryBase, ptrReg, TimesOne, mir->access().offset32());
   masm.wasmAtomicEffectOp(mir->access(), op, ToRegister(value), srcAddr,
@@ -2118,7 +2104,7 @@ void CodeGenerator::visitNegI(LNegI* ins) {
 }
 
 void CodeGenerator::visitNegI64(LNegI64* ins) {
-  Register64 input = ToRegister64(ins->num());
+  Register64 input = ToRegister64(ins->input());
   MOZ_ASSERT(input == ToOutRegister64(ins));
   masm.neg64(input);
 }
@@ -2359,7 +2345,7 @@ void CodeGenerator::visitExtendInt32ToInt64(LExtendInt32ToInt64* lir) {
 }
 
 void CodeGenerator::visitSignExtendInt64(LSignExtendInt64* lir) {
-  Register64 input = ToRegister64(lir->num());
+  Register64 input = ToRegister64(lir->input());
   Register64 output = ToOutRegister64(lir);
   switch (lir->mir()->mode()) {
     case MSignExtendInt64::Byte:
@@ -2564,34 +2550,6 @@ void CodeGenerator::visitBitOpI64(LBitOpI64* lir) {
       break;
     default:
       MOZ_CRASH("unexpected binary opcode");
-  }
-}
-
-void CodeGenerator::visitRotateI64(LRotateI64* lir) {
-  MRotate* mir = lir->mir();
-  LAllocation* count = lir->count();
-
-  Register64 input = ToRegister64(lir->input());
-  Register64 output = ToOutRegister64(lir);
-  Register temp = ToTempRegisterOrInvalid(lir->temp());
-
-  if (count->isConstant()) {
-    int32_t c = int32_t(count->toConstant()->toInt64() & 0x3F);
-    if (!c) {
-      masm.move64(input, output);
-      return;
-    }
-    if (mir->isLeftRotate()) {
-      masm.rotateLeft64(Imm32(c), input, output, temp);
-    } else {
-      masm.rotateRight64(Imm32(c), input, output, temp);
-    }
-  } else {
-    if (mir->isLeftRotate()) {
-      masm.rotateLeft64(ToRegister(count), input, output, temp);
-    } else {
-      masm.rotateRight64(ToRegister(count), input, output, temp);
-    }
   }
 }
 

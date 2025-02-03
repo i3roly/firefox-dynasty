@@ -10,13 +10,7 @@
 namespace js {
 namespace jit {
 
-class LUnbox : public LInstructionHelper<1, 1, 0> {
- protected:
-  LUnbox(LNode::Opcode opcode, const LAllocation& input)
-      : LInstructionHelper(opcode) {
-    setOperand(0, input);
-  }
-
+class LUnbox : public LInstructionHelper<1, BOX_PIECES, 0> {
  public:
   LIR_HEADER(Unbox);
 
@@ -26,58 +20,10 @@ class LUnbox : public LInstructionHelper<1, 1, 0> {
 
   static const size_t Input = 0;
 
+  LBoxAllocation input() const { return getBoxOperand(Input); }
+
   MUnbox* mir() const { return mir_->toUnbox(); }
   const char* extraName() const { return StringFromMIRType(mir()->type()); }
-};
-
-class LUnboxFloatingPoint : public LUnbox {
- public:
-  LIR_HEADER(UnboxFloatingPoint);
-
-  explicit LUnboxFloatingPoint(const LAllocation& input)
-      : LUnbox(classOpcode, input) {}
-};
-
-class LDivPowTwoI : public LInstructionHelper<1, 1, 1> {
-  const int32_t shift_;
-
- public:
-  LIR_HEADER(DivPowTwoI)
-
-  LDivPowTwoI(const LAllocation& lhs, int32_t shift, const LDefinition& temp)
-      : LInstructionHelper(classOpcode), shift_(shift) {
-    setOperand(0, lhs);
-    setTemp(0, temp);
-  }
-
-  const LAllocation* numerator() { return getOperand(0); }
-  int32_t shift() const { return shift_; }
-  MDiv* mir() const { return mir_->toDiv(); }
-};
-
-class LModI : public LBinaryMath<1> {
- public:
-  LIR_HEADER(ModI);
-
-  LModI(const LAllocation& lhs, const LAllocation& rhs,
-        const LDefinition& callTemp)
-      : LBinaryMath(classOpcode) {
-    setOperand(0, lhs);
-    setOperand(1, rhs);
-    setTemp(0, callTemp);
-  }
-
-  const LDefinition* callTemp() { return getTemp(0); }
-  MMod* mir() const { return mir_->toMod(); }
-};
-
-class LMulI : public LBinaryMath<0> {
- public:
-  LIR_HEADER(MulI);
-
-  LMulI() : LBinaryMath(classOpcode) {}
-
-  MMul* mir() { return mir_->toMul(); }
 };
 
 class LUDivOrMod : public LBinaryMath<0> {

@@ -10,77 +10,20 @@
 namespace js {
 namespace jit {
 
-class LUnboxBase : public LInstructionHelper<1, 1, 0> {
+class LUnbox : public LInstructionHelper<1, BOX_PIECES, 0> {
  public:
-  LUnboxBase(LNode::Opcode opcode, const LAllocation& input)
-      : LInstructionHelper(opcode) {
+  LIR_HEADER(Unbox);
+
+  explicit LUnbox(const LAllocation& input) : LInstructionHelper(classOpcode) {
     setOperand(0, input);
   }
 
   static const size_t Input = 0;
 
+  LBoxAllocation input() const { return getBoxOperand(Input); }
+
   MUnbox* mir() const { return mir_->toUnbox(); }
-};
-
-class LUnbox : public LUnboxBase {
- public:
-  LIR_HEADER(Unbox);
-
-  explicit LUnbox(const LAllocation& input) : LUnboxBase(classOpcode, input) {}
-
   const char* extraName() const { return StringFromMIRType(mir()->type()); }
-};
-
-class LUnboxFloatingPoint : public LUnboxBase {
- public:
-  LIR_HEADER(UnboxFloatingPoint);
-
-  explicit LUnboxFloatingPoint(const LAllocation& input)
-      : LUnboxBase(classOpcode, input) {}
-};
-
-class LDivPowTwoI : public LInstructionHelper<1, 1, 0> {
-  const int32_t shift_;
-  const bool negativeDivisor_;
-
- public:
-  LIR_HEADER(DivPowTwoI)
-
-  LDivPowTwoI(const LAllocation& lhs, int32_t shift, bool negativeDivisor)
-      : LInstructionHelper(classOpcode),
-        shift_(shift),
-        negativeDivisor_(negativeDivisor) {
-    setOperand(0, lhs);
-  }
-
-  const LAllocation* numerator() { return getOperand(0); }
-
-  int32_t shift() { return shift_; }
-  bool negativeDivisor() { return negativeDivisor_; }
-
-  MDiv* mir() const { return mir_->toDiv(); }
-};
-
-class LModI : public LBinaryMath<0> {
- public:
-  LIR_HEADER(ModI);
-
-  LModI(const LAllocation& lhs, const LAllocation& rhs)
-      : LBinaryMath(classOpcode) {
-    setOperand(0, lhs);
-    setOperand(1, rhs);
-  }
-
-  MMod* mir() const { return mir_->toMod(); }
-};
-
-class LMulI : public LBinaryMath<0> {
- public:
-  LIR_HEADER(MulI);
-
-  LMulI() : LBinaryMath(classOpcode) {}
-
-  MMul* mir() { return mir_->toMul(); }
 };
 
 class LDivOrModI64 : public LBinaryMath<0> {

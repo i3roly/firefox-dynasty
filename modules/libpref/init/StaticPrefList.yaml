@@ -12249,9 +12249,7 @@
 - name: media.webrtc.codec.video.av1.enabled
   type: RelaxedAtomicBool
 #if defined(MOZ_AV1)
-  value: @IS_NIGHTLY_BUILD@
-#else
-  value: false
+  value: true
 #endif
   mirror: always
 
@@ -13690,11 +13688,7 @@
 # every page reload.
 - name: network.dns.only_refresh_on_fresh_connection
   type: RelaxedAtomicBool
-#ifdef EARLY_BETA_OR_EARLIER
-  value: false
-#else
   value: true
-#endif
   mirror: always
 
 # When true, DNS resolutions will downgrade DNS
@@ -15410,13 +15404,6 @@
   mirror: always
   do_not_use_directly: true
 
-# Control whether we should check for system principal in the current JSContext
-# when checking for whether we should resist fingerprinting.
-- name: privacy.resistFingerprinting.principalCheckEnabled
-  type: RelaxedAtomicBool
-  value: true
-  mirror: always
-
 # Disables FPP Remote settings bucket. Allows user to stop overriding
 # of FPP overrides
 - name: privacy.fingerprintingProtection.remoteOverrides.enabled
@@ -15471,6 +15458,12 @@
 
 # Control whether we use the SipHash to generate the canvas random key.
 - name:  privacy.resistFingerprinting.randomization.canvas.use_siphash
+  type: RelaxedAtomicBool
+  value: false
+  mirror: always
+
+# Check if the caller is system. Only used during user char data collection.
+- name:  privacy.resistFingerprinting.randomization.canvas.disable_for_chrome
   type: RelaxedAtomicBool
   value: false
   mirror: always
