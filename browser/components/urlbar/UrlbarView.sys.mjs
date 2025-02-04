@@ -677,6 +677,17 @@ export class UrlbarView {
       }
     }
 
+    // Disable autofill when search terms persist, as users are likely refining
+    // their search rather than navigating to a website matching the search
+    // term. If they do want to navigate directly, users can modify their
+    // search, which resets persistence and re-enables autofill.
+    let state = this.input.getBrowserState(
+      this.window.gBrowser.selectedBrowser
+    );
+    if (state.persist?.shouldPersist) {
+      queryOptions.allowAutofill = false;
+    }
+
     this.controller.engagementEvent.discard();
     queryOptions.searchString = this.input.value;
     queryOptions.autofillIgnoresSelection = true;
@@ -2118,9 +2129,11 @@ export class UrlbarView {
   }
 
   #getBlobUrlForResult(result, blob) {
-    // Blob icons are currently limited to Suggest results, which will define
-    // a `payload.originalUrl` if the result URL contains timestamp templates
-    // that are replaced at query time.
+    // For some Suggest results, `url` is a value that is modified at query time
+    // and that is potentially unique per query. For example, it might contain
+    // timestamps or query-related search params. Those results will also have
+    // an `originalUrl` that is the unmodified URL, and it should be used as the
+    // map key.
     let resultUrl = result.payload.originalUrl || result.payload.url;
     if (resultUrl) {
       let blobUrl = this.#blobUrlsByResultUrl?.get(resultUrl);
@@ -2730,6 +2743,10 @@ export class UrlbarView {
 
   #setAccessibleFocus(item) {
     if (item) {
+      if (!item.id) {
+        // Assign an id to dynamic actions as required by aria-activedescendant.
+        item.id = getUniqueId("aria-activedescendant-target-");
+      }
       this.input.inputField.setAttribute("aria-activedescendant", item.id);
     } else {
       this.input.inputField.removeAttribute("aria-activedescendant");

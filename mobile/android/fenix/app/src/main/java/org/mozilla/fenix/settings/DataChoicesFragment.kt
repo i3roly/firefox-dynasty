@@ -4,6 +4,7 @@
 
 package org.mozilla.fenix.settings
 
+import android.content.Context
 import android.os.Bundle
 import androidx.annotation.VisibleForTesting
 import androidx.navigation.findNavController
@@ -19,9 +20,7 @@ import org.mozilla.fenix.ext.nav
 import org.mozilla.fenix.ext.requireComponents
 import org.mozilla.fenix.ext.settings
 import org.mozilla.fenix.ext.showToolbar
-import org.mozilla.fenix.nimbus.FxNimbus
-import org.mozilla.fenix.nimbus.OnboardingCardData
-import org.mozilla.fenix.nimbus.OnboardingCardType
+import org.mozilla.fenix.utils.Settings
 
 /**
  * Lets the user toggle telemetry on/off.
@@ -54,6 +53,14 @@ class DataChoicesFragment : PreferenceFragmentCompat() {
                 } else {
                     context.components.analytics.metrics.stop(MetricServiceType.Marketing)
                 }
+            } else if (key == getPreferenceKey(R.string.pref_key_daily_usage_ping)) {
+                with(context.components.analytics.metrics) {
+                    if (context.settings().isDailyUsagePingEnabled) {
+                        start(MetricServiceType.UsageReporting)
+                    } else {
+                        stop(MetricServiceType.UsageReporting)
+                    }
+                }
             }
         }
     }
@@ -81,12 +88,17 @@ class DataChoicesFragment : PreferenceFragmentCompat() {
                 isChecked =
                     context.settings().isMarketingTelemetryEnabled && !Config.channel.isMozillaOnline
                 onPreferenceChangeListener = SharedPreferenceUpdater()
-                isVisible =
-                    !Config.channel.isMozillaOnline && shouldShowMarketingTelemetryPreference()
+                isVisible = !Config.channel.isMozillaOnline &&
+                    shouldShowMarketingTelemetryPreference(requireContext().settings())
             }
 
         requirePreference<Preference>(R.string.pref_key_learn_about_marketing_telemetry).apply {
             isVisible = marketingTelemetryPref.isVisible
+        }
+
+        requirePreference<SwitchPreference>(R.string.pref_key_daily_usage_ping).apply {
+            isChecked = context.settings().isDailyUsagePingEnabled
+            onPreferenceChangeListener = SharedPreferenceUpdater()
         }
 
         requirePreference<SwitchPreference>(R.string.pref_key_crash_reporting_always_report).apply {
@@ -96,28 +108,33 @@ class DataChoicesFragment : PreferenceFragmentCompat() {
     }
 
     @VisibleForTesting
-    internal fun shouldShowMarketingTelemetryPreference(
-        cards: Collection<OnboardingCardData> = FxNimbus.features.junoOnboarding.value().cards.values,
-        hasValidTermsOfServiceData: (OnboardingCardData) -> Boolean = { it.hasValidTermsOfServiceData() },
-    ) = cards.any {
-        it.cardType == OnboardingCardType.TERMS_OF_SERVICE && hasValidTermsOfServiceData(it)
-    }
+    internal fun shouldShowMarketingTelemetryPreference(settings: Settings) =
+        settings.hasMadeMarketingTelemetrySelection
 
     override fun onPreferenceTreeClick(preference: Preference): Boolean {
-        when (preference.key) {
-            getPreferenceKey(R.string.pref_key_learn_about_marketing_telemetry) ->
-                openLearnMoreUrlInSandboxedTab()
-        }
+        context?.also { context ->
+            when (preference.key) {
+                getPreferenceKey(R.string.pref_key_learn_about_marketing_telemetry) -> openLearnMoreUrlInSandboxedTab(
+                    context,
+                    SupportUtils.getGenericSumoURLForTopic(SupportUtils.SumoTopic.HELP),
+                )
 
+                getPreferenceKey(R.string.pref_key_learn_about_daily_usage_ping) -> openLearnMoreUrlInSandboxedTab(
+                    context,
+                    SupportUtils.getSumoURLForTopic(
+                        context = context,
+                        topic = SupportUtils.SumoTopic.USAGE_PING_SETTINGS,
+                    ),
+                )
+            }
+        }
         return super.onPreferenceTreeClick(preference)
     }
 
-    private fun openLearnMoreUrlInSandboxedTab() {
-        startActivity(
-            SupportUtils.createSandboxCustomTabIntent(
-                context = requireContext(),
-                url = SupportUtils.getGenericSumoURLForTopic(SupportUtils.SumoTopic.HELP),
-            ),
+    private fun openLearnMoreUrlInSandboxedTab(context: Context, url: String) {
+        SupportUtils.launchSandboxCustomTab(
+            context = context,
+            url = url,
         )
     }
 
@@ -139,6 +156,3 @@ class DataChoicesFragment : PreferenceFragmentCompat() {
         }
     }
 }
-
-@VisibleForTesting
-internal fun OnboardingCardData.hasValidTermsOfServiceData() = extraData?.termOfServiceData != null

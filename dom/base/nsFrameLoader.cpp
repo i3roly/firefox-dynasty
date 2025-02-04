@@ -141,7 +141,7 @@
 #endif
 
 #if defined(MOZ_TELEMETRY_REPORTING)
-#  include "mozilla/glean/GleanMetrics.h"
+#  include "mozilla/glean/DomMetrics.h"
 #endif  // defined(MOZ_TELEMETRY_REPORTING)
 
 using namespace mozilla;
@@ -963,7 +963,7 @@ bool nsFrameLoader::Show(nsSubDocumentFrame* aFrame) {
   if (IsRemoteFrame()) {
     return ShowRemoteFrame(aFrame);
   }
-  const LayoutDeviceIntSize size = aFrame->GetSubdocumentSize();
+  const LayoutDeviceIntSize size = aFrame->GetInitialSubdocumentSize();
   nsresult rv = MaybeCreateDocShell();
   if (NS_FAILED(rv)) {
     return false;

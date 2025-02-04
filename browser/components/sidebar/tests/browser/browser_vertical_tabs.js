@@ -287,6 +287,17 @@ add_task(async function test_toggle_vertical_tabs() {
     }
   );
 
+  await openAndWaitForContextMenu(
+    toolbarContextMenu,
+    gBrowser.tabContainer,
+    () => {
+      ok(
+        !document.getElementById("toolbar-context-customize-sidebar").hidden,
+        "Customize sidebar should be visible"
+      );
+    }
+  );
+
   let newTabButton = document.getElementById("tabs-newtab-button");
   info("Open a new tab using the new tab button.");
   EventUtils.synthesizeMouseAtCenter(newTabButton, {});
@@ -419,7 +430,7 @@ add_task(async function test_vertical_tabs_expanded() {
       ["sidebar.verticalTabs", true],
     ],
   });
-  await SidebarController.setUIState({ expanded: true });
+  await SidebarController.initializeUIState({ launcherExpanded: true });
 
   info("Disable revamped sidebar.");
   Services.prefs.setBoolPref("sidebar.revamp", false);

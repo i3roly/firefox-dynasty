@@ -28,7 +28,7 @@
 #include "mozilla/dom/PerformanceStorage.h"
 #include "mozilla/dom/PerformanceTiming.h"
 #include "mozilla/dom/ServiceWorkerDescriptor.h"
-#include "mozilla/glean/GleanMetrics.h"
+#include "mozilla/glean/NetwerkMetrics.h"
 #include "mozilla/ipc/BackgroundUtils.h"
 #include "mozilla/net/CookieJarSettings.h"
 
@@ -276,7 +276,13 @@ RefPtr<FetchServicePromises> FetchService::FetchInstance::Fetch() {
     }
     mFetchDriver->SetAssociatedBrowsingContextID(
         args.mAssociatedBrowsingContextID);
-    mFetchDriver->SetIsThirdPartyWorker(Some(args.mIsThirdPartyContext));
+    mFetchDriver->SetIsThirdPartyContext(Some(args.mIsThirdPartyContext));
+    mFetchDriver->SetIsOn3PCBExceptionList(args.mIsOn3PCBExceptionList);
+  }
+
+  if (mArgsType == FetchArgsType::MainThreadFetch) {
+    auto& args = mArgs.as<MainThreadFetchArgs>();
+    mFetchDriver->SetIsThirdPartyContext(Some(args.mIsThirdPartyContext));
   }
 
   mFetchDriver->EnableNetworkInterceptControl();

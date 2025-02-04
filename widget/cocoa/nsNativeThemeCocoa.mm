@@ -3366,6 +3366,31 @@ LayoutDeviceIntSize nsNativeThemeCocoa::GetMinimumWidgetSize(
   NS_OBJC_END_TRY_BLOCK_RETURN(LayoutDeviceIntSize());
 }
 
+bool nsNativeThemeCocoa::WidgetAttributeChangeRequiresRepaint(
+    StyleAppearance aAppearance, nsAtom* aAttribute) {
+  // Some widget types just never change state.
+  switch (aAppearance) {
+    case StyleAppearance::MozWindowTitlebar:
+    case StyleAppearance::Statusbar:
+    case StyleAppearance::Tooltip:
+    case StyleAppearance::Tabpanels:
+    case StyleAppearance::Tabpanel:
+    case StyleAppearance::Menupopup:
+    case StyleAppearance::Progresschunk:
+    case StyleAppearance::ProgressBar:
+    case StyleAppearance::Meter:
+    case StyleAppearance::Meterchunk:
+    case StyleAppearance::MozMacVibrancyLight:
+    case StyleAppearance::MozMacVibrancyDark:
+    case StyleAppearance::MozMacVibrantTitlebarLight:
+    case StyleAppearance::MozMacVibrantTitlebarDark:
+      return false;
+    default:
+      break;
+  }
+  return Theme::WidgetAttributeChangeRequiresRepaint(aAppearance, aAttribute);
+}
+
 NS_IMETHODIMP
 nsNativeThemeCocoa::ThemeChanged() {
   // This is unimplemented because we don't care if gecko changes its theme

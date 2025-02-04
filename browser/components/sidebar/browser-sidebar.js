@@ -15,9 +15,6 @@ const defaultTools = {
   viewBookmarksSidebar: "bookmarks",
 };
 
-const LAUNCHER_MINIMUM_WIDTH = 100;
-const SIDEBAR_MAXIMUM_WIDTH = "75vw";
-
 var SidebarController = {
   makeSidebar({ elementId, ...rest }) {
     return {
@@ -169,6 +166,8 @@ var SidebarController = {
           menuL10nId: "menu-view-review-checker",
           revampL10nId: "sidebar-menu-review-checker-label",
           iconUrl: "chrome://browser/content/shopping/assets/shopping.svg",
+          gleanEvent: Glean.shopping.sidebarToggle,
+          recordSidebarVersion: true,
         }
       );
     }
@@ -226,6 +225,7 @@ var SidebarController = {
   POSITION_START_PREF: "sidebar.position_start",
   DEFAULT_SIDEBAR_ID: "viewBookmarksSidebar",
   TOOLS_PREF: "sidebar.main.tools",
+  VISIBILITY_PREF: "sidebar.visibility",
 
   // lastOpenedId is set in show() but unlike currentID it's not cleared out on hide
   // and isn't persisted across windows
@@ -434,7 +434,7 @@ var SidebarController = {
       // privacy level.)
       if (!this.uiStateInitialized && !isPopup && windowPrivacyMatches) {
         const backupState = this.SidebarManager.getBackupState();
-        this.setUIState(backupState);
+        this.initializeUIState(backupState);
       }
     });
     this._initDeferred.resolve();
@@ -486,10 +486,7 @@ var SidebarController = {
    * @param {ResizeObserverEntry} entry
    */
   _handleLauncherResize(entry) {
-    let sidebarBox = document.getElementById("sidebar-box");
-    let launcherWidth = entry.contentBoxSize[0].inlineSize;
-    sidebarBox.style.maxWidth = `calc(${SIDEBAR_MAXIMUM_WIDTH} - ${launcherWidth}px)`;
-    this._state.launcherWidth = launcherWidth;
+    this._state.launcherWidth = entry.contentBoxSize[0].inlineSize;
     if (this.isLauncherDragging) {
       this._state.launcherDragActive = true;
     }
@@ -500,35 +497,38 @@ var SidebarController = {
   },
 
   /**
-   * Update and store the UI state of the sidebar for this window.
+   * Load the UI state information given by session store, backup state, or
+   * adopted window.
    *
    * @param {SidebarStateProps} state
    */
-  async setUIState(state) {
-    // TODO: Bug 1935482 - Replace legacy properties with SidebarState properties
+  async initializeUIState(state) {
     if (!state) {
       return;
     }
-    const shouldOpenSidebar =
+    const hasOpenPanel =
       state.command &&
       this.sidebars.has(state.command) &&
       this.currentID !== state.command;
-    if (shouldOpenSidebar) {
-      // there's a sidebar to show, so ignore the contradictory hidden property
+    if (hasOpenPanel) {
+      // There's a panel to show, so ignore the contradictory hidden property.
       delete state.hidden;
-    }
-    if (shouldOpenSidebar && !this.isOpen) {
-      await this.showInitially(state.command);
+    } else {
+      delete state.command;
     }
     await this.promiseInitialized;
-    this._state.updateState({
-      panelWidth: state.width,
-      launcherWidth: state.launcherWidth,
-      expandedLauncherWidth: state.expandedLauncherWidth,
-      launcherExpanded: state.expanded,
-      launcherVisible: !state.hidden,
-    });
+    this._state.loadInitialState(state);
     this.uiStateInitialized = true;
+  },
+
+  /**
+   * Toggle the vertical tabs preference.
+   */
+  toggleVerticalTabs() {
+    Services.prefs.setBoolPref(
+      "sidebar.verticalTabs",
+      !this.sidebarVerticalTabsEnabled
+    );
   },
 
   /**
@@ -782,7 +782,7 @@ var SidebarController = {
 
     // Adopt the other window's UI state.
     const sourceState = sourceController.getUIState();
-    await this.setUIState(sourceState);
+    await this.initializeUIState(sourceState);
 
     return true;
   },
@@ -1093,11 +1093,16 @@ var SidebarController = {
     }
     if (!this.sidebarRevampEnabled) {
       toolbarButton.dataset.l10nId = "show-sidebars";
+      toolbarButton.checked = this.isOpen;
     } else {
       let sidebarToggleKey = document.getElementById("toggleSidebarKb");
       const shortcut = ShortcutUtils.prettifyShortcut(sidebarToggleKey);
       toolbarButton.dataset.l10nArgs = JSON.stringify({ shortcut });
-      toolbarButton.toggleAttribute("expanded", this.sidebarMain.expanded);
+      if (this.sidebarVerticalTabsEnabled) {
+        toolbarButton.toggleAttribute("expanded", this.sidebarMain.expanded);
+      } else {
+        toolbarButton.toggleAttribute("expanded", false);
+      }
       switch (this.sidebarRevampVisibility) {
         case "always-show":
           // Toolbar button controls expanded state.
@@ -1126,10 +1131,9 @@ var SidebarController = {
       // Nothing to do.
       return;
     }
-    this._panelResizeObserver = new ResizeObserver(([entry]) => {
-      const panelWidth = entry.contentBoxSize[0].inlineSize;
-      this.sidebarContainer.style.maxWidth = `calc(${SIDEBAR_MAXIMUM_WIDTH} - ${panelWidth}px)`;
-    });
+    this._panelResizeObserver = new ResizeObserver(
+      ([entry]) => (this._state.panelWidth = entry.contentBoxSize[0].inlineSize)
+    );
     this._panelResizeObserver.observe(this._box);
 
     this._launcherDropHandler = () => (this._state.launcherDragActive = false);
@@ -1824,10 +1828,14 @@ XPCOMUtils.defineLazyPreferenceGetter(
   "always-show",
   (_aPreference, _previousValue, newValue) => {
     if (!SidebarController.uninitializing) {
-      SidebarController.updateToolbarButton();
       SidebarController.recordVisibilitySetting(newValue);
       SidebarController._state.revampVisibility = newValue;
-      SidebarController._state.updateVisibility(newValue != "hide-sidebar");
+      SidebarController._state.updateVisibility(
+        (newValue != "hide-sidebar" &&
+          SidebarController.sidebarVerticalTabsEnabled) ||
+          !SidebarController.sidebarVerticalTabsEnabled
+      );
+      SidebarController.updateToolbarButton();
     }
   }
 );
@@ -1839,6 +1847,10 @@ XPCOMUtils.defineLazyPreferenceGetter(
   (_aPreference, _previousValue, newValue) => {
     if (!SidebarController.uninitializing) {
       SidebarController.recordTabsLayoutSetting(newValue);
+      Services.prefs.setStringPref(
+        SidebarController.VISIBILITY_PREF,
+        newValue ? "always-show" : "hide-sidebar"
+      );
     }
   }
 );

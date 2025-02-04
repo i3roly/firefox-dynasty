@@ -568,10 +568,10 @@ AppleVDADecoder::CreateDecoderSpecification()
                  extradata,
                  extrasize);
 
-  const void* decoderKeys[] = { kVDADecoderConfiguration_Width,
-                                kVDADecoderConfiguration_Height,
-                                kVDADecoderConfiguration_SourceFormat,
-                                kVDADecoderConfiguration_avcCData };
+  const void* decoderKeys[] = { AppleVDALinker::skPropWidth,
+                                AppleVDALinker::skPropHeight,
+                                AppleVDALinker::skPropSourceFormat,
+                                AppleVDALinker::skPropAVCCData };
   const void* decoderValue[] = { avc_width,
                                  avc_height,
                                  avc_format,

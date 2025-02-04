@@ -445,6 +445,14 @@ static nsresult ConvertToProtobuf(
   if (!urlString.IsEmpty()) {
     requestData->set_url(urlString.get());
   }
+  RefPtr<dom::WindowGlobalParent> windowGlobal;
+  rv = aIn->GetWindowGlobalParent(getter_AddRefs(windowGlobal));
+  NS_ENSURE_SUCCESS(rv, rv);
+  if (windowGlobal) {
+    nsString title;
+    windowGlobal->GetDocumentTitle(title);
+    requestData->set_tab_title(NS_ConvertUTF16toUTF8(title).get());
+  }
 
   nsString email;
   rv = aIn->GetEmail(email);
@@ -1784,18 +1792,35 @@ ContentAnalysis::CancelContentAnalysisRequest(const nsACString& aRequestToken,
           return;
         }
 
-        content_analysis::sdk::ContentAnalysisCancelRequests requests;
-        requests.set_user_action_id(requestToken.get(), requestToken.Length());
-        int err = client->CancelRequests(requests);
-        if (err != 0) {
-          LOGE("CancelContentAnalysisRequest got error %d for request %s", err,
-               requestToken.get());
-        } else {
-          LOGD(
-              "CancelContentAnalysisRequest successfully cancelled request "
-              "%s",
-              requestToken.get());
-        }
+        NS_DispatchBackgroundTask(
+            NS_NewCancelableRunnableFunction(
+                __func__,
+                [requestToken = std::move(requestToken),
+                 client = std::move(client)]() {
+                  auto owner = GetContentAnalysisFromService();
+                  if (!owner) {
+                    // May be shutting down
+                    return;
+                  }
+
+                  content_analysis::sdk::ContentAnalysisCancelRequests requests;
+                  requests.set_user_action_id(requestToken.get(),
+                                              requestToken.Length());
+                  int err = client->CancelRequests(requests);
+                  if (err != 0) {
+                    LOGE(
+                        "CancelContentAnalysisRequest got error %d for request "
+                        "%s",
+                        err, requestToken.get());
+                  } else {
+                    LOGD(
+                        "CancelContentAnalysisRequest successfully cancelled "
+                        "request "
+                        "%s",
+                        requestToken.get());
+                  }
+                }),
+            NS_DISPATCH_EVENT_MAY_BLOCK);
       },
       [](nsresult rv) {
         LOGE("CancelContentAnalysisRequest failed to get the client");
@@ -1854,18 +1879,34 @@ ContentAnalysis::CancelAllRequests() {
           return;
         }
         requestsToCancel.AppendElements(std::move(warnRequestsToCancel));
-        size_t numRequests = requestsToCancel.Length();
-        for (const auto& requestToken : requestsToCancel) {
-          content_analysis::sdk::ContentAnalysisCancelRequests requests;
-          requests.set_user_action_id(requestToken.get(),
-                                      requestToken.Length());
-          int err = client->CancelRequests(requests);
-          if (err != 0) {
-            LOGE("CancelAllRequests got error %d cancelling request %s", err,
-                 requestToken.get());
-          }
-        }
-        LOGD("CancelAllRequests done cancelling %zu requests", numRequests);
+        NS_DispatchBackgroundTask(
+            NS_NewCancelableRunnableFunction(
+                __func__,
+                [client = std::move(client),
+                 requestsToCancel = std::move(requestsToCancel)]() {
+                  auto owner = GetContentAnalysisFromService();
+                  if (!owner) {
+                    // May be shutting down
+                    return;
+                  }
+                  size_t numRequests = requestsToCancel.Length();
+                  for (const auto& requestToken : requestsToCancel) {
+                    content_analysis::sdk::ContentAnalysisCancelRequests
+                        requests;
+                    requests.set_user_action_id(requestToken.get(),
+                                                requestToken.Length());
+                    int err = client->CancelRequests(requests);
+                    if (err != 0) {
+                      LOGE(
+                          "CancelAllRequests got error %d cancelling request "
+                          "%s",
+                          err, requestToken.get());
+                    }
+                  }
+                  LOGD("CancelAllRequests done cancelling %zu requests",
+                       numRequests);
+                }),
+            NS_DISPATCH_EVENT_MAY_BLOCK);
       },
       [&](nsresult rv) { LOGE("CancelAllRequests failed to get the client"); });
   return NS_OK;

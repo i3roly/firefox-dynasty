@@ -39,7 +39,7 @@
 #include "mozilla/StaticPrefs_browser.h"
 #include "mozilla/StaticPrefs_docshell.h"
 #include "mozilla/StaticPrefs_fission.h"
-#include "mozilla/glean/GleanMetrics.h"
+#include "mozilla/glean/DomMetrics.h"
 #include "nsILayoutHistoryState.h"
 #include "nsIPrintSettings.h"
 #include "nsIPrintSettingsService.h"
@@ -3231,6 +3231,32 @@ CanonicalBrowsingContext::GetBounceTrackingState() {
     return nullptr;
   }
   return mWebProgress->GetBounceTrackingState();
+}
+
+bool CanonicalBrowsingContext::CanOpenModalPicker() {
+  if (!mozilla::StaticPrefs::browser_disable_pickers_background_tabs()) {
+    return true;
+  }
+
+  // Alway allows to open picker from chrome.
+  if (IsChrome()) {
+    return true;
+  }
+
+  if (!IsActive()) {
+    return false;
+  }
+
+  RefPtr<Document> chromeDoc = TopCrossChromeBoundary()->GetExtantDocument();
+  if (!chromeDoc || !chromeDoc->HasFocus(mozilla::IgnoreErrors())) {
+    return false;
+  }
+
+  // Only allow web content to open a picker when it has focus. For example, if
+  // the focus is on the URL bar, web content cannot open a picker, even if it
+  // is the foreground tab.
+  mozilla::dom::Element* topFrameElement = GetTopFrameElement();
+  return !topFrameElement || topFrameElement == chromeDoc->GetActiveElement();
 }
 
 NS_IMPL_CYCLE_COLLECTION_CLASS(CanonicalBrowsingContext)
