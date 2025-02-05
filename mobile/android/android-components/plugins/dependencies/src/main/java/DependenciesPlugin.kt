@@ -71,7 +71,7 @@ object Versions {
         const val lifecycle = "2.8.7"
         const val localbroadcastmanager = "1.0.0"
         const val media = "1.7.0"
-        const val navigation = "2.8.5"
+        const val navigation = "2.8.6"
         const val paging = "3.3.5"
         const val palette = "1.0.0"
         const val preferences = "1.2.1"
@@ -116,7 +116,7 @@ object Versions {
     }
 
     object ThirdParty {
-        const val sentry = "7.19.0"
+        const val sentry = "8.1.0"
     }
 }
 

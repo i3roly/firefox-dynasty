@@ -2432,6 +2432,7 @@ dependencies = [
  "gkrust_utils",
  "http_sfv",
  "idna_glue",
+ "ipcclientcerts",
  "ipdl_utils",
  "jog",
  "jsrust_shared",
@@ -3237,11 +3238,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "ipcclientcerts-static"
+name = "ipcclientcerts"
 version = "0.1.0"
 dependencies = [
  "byteorder",
- "mozilla-central-workspace-hack",
  "pkcs11-bindings",
  "rsclientcerts",
  "sha2",

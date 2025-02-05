@@ -72,8 +72,8 @@ nsHttpConnection::~nsHttpConnection() {
   if (!mEverUsedSpdy) {
     LOG(("nsHttpConnection %p performed %d HTTP/1.x transactions\n", this,
          mHttp1xTransactionCount));
-    Telemetry::Accumulate(Telemetry::HTTP_REQUEST_PER_CONN,
-                          mHttp1xTransactionCount);
+    glean::http::request_per_conn.AccumulateSingleSample(
+        mHttp1xTransactionCount);
     nsHttpConnectionInfo* ci = nullptr;
     if (mTransaction) {
       ci = mTransaction->ConnectionInfo();
@@ -93,9 +93,11 @@ nsHttpConnection::~nsHttpConnection() {
     uint32_t totalKBRead = static_cast<uint32_t>(mTotalBytesRead >> 10);
     LOG(("nsHttpConnection %p read %dkb on connection spdy=%d\n", this,
          totalKBRead, mEverUsedSpdy));
-    Telemetry::Accumulate(mEverUsedSpdy ? Telemetry::SPDY_KBREAD_PER_CONN2
-                                        : Telemetry::HTTP_KBREAD_PER_CONN2,
-                          totalKBRead);
+    if (mEverUsedSpdy) {
+      glean::spdy::kbread_per_conn.Accumulate(totalKBRead);
+    } else {
+      glean::http::kbread_per_conn2.Accumulate(totalKBRead);
+    }
   }
 
   if (mForceSendTimer) {

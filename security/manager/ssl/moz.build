@@ -12,7 +12,6 @@ if (CONFIG["OS_ARCH"] == "WINNT" and CONFIG["TARGET_CPU"] != "aarch64") or CONFI
 ] == "Darwin":
     DIRS += ["osclientcerts"]
 
-DIRS += ["ipcclientcerts"]
 DIRS += ["builtins"]
 
 TEST_DIRS += ["tests"]

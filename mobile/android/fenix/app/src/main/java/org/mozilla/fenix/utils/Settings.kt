@@ -1686,9 +1686,10 @@ class Settings(private val appContext: Context) : PreferencesHolder {
     /**
      * Indicates if Merino content recommendations should be shown.
      */
-    var showContentRecommendations by booleanPreference(
+    var showContentRecommendations by lazyFeatureFlagPreference(
         key = appContext.getPreferenceKey(R.string.pref_key_pocket_content_recommendations),
-        default = FeatureFlags.MERINO_CONTENT_RECOMMENDATIONS,
+        default = { FxNimbus.features.merinoRecommendations.value().enabled },
+        featureFlag = true,
     )
 
     /**
@@ -1925,6 +1926,14 @@ class Settings(private val appContext: Context) : PreferencesHolder {
     var enableUnifiedTrustPanel by booleanPreference(
         key = appContext.getPreferenceKey(R.string.pref_key_enable_unified_trust_panel),
         default = FeatureFlags.UNIFIED_TRUST_PANEL,
+    )
+
+    /**
+     * Indicates if Trending Searches is enabled.
+     */
+    var enableTrendingSearches by booleanPreference(
+        key = appContext.getPreferenceKey(R.string.pref_key_enable_trending_searches),
+        default = FeatureFlags.TRENDING_SEARCHES,
     )
 
     /**
@@ -2267,5 +2276,10 @@ class Settings(private val appContext: Context) : PreferencesHolder {
         key = appContext.getPreferenceKey(R.string.pref_key_use_new_bookmarks_ui),
         default = { FxNimbus.features.bookmarks.value().newComposeUi },
         featureFlag = true,
+    )
+
+    var lastSavedInFolderGuid by stringPreference(
+        key = appContext.getPreferenceKey(R.string.pref_last_folder_saved_in),
+        default = "",
     )
 }

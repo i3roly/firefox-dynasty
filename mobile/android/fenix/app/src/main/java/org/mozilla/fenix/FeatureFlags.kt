@@ -79,14 +79,14 @@ object FeatureFlags {
     const val HOMEPAGE_AS_NEW_TAB = false
 
     /**
-     * Enables Merino content recommendations.
-     */
-    const val MERINO_CONTENT_RECOMMENDATIONS = false
-
-    /**
      * Enables the Unified Trust Panel.
      */
     const val UNIFIED_TRUST_PANEL = false
+
+    /**
+     * Enables Trending Searches.
+     */
+    const val TRENDING_SEARCHES = false
 
     /**
      * Enables native WebCompat Reporter.
