@@ -1551,15 +1551,8 @@ void nsWindow::Show(bool aState) {
 #endif  // defined(ACCESSIBILITY)
   }
 
-  if (mWindowType == WindowType::Popup) {
-    MOZ_ASSERT(ChooseWindowClass(mWindowType) == kClassNameDropShadow);
-    // WS_EX_COMPOSITED conflicts with the WS_EX_LAYERED style and causes
-    // some popup menus to become invisible.
-    LONG_PTR exStyle = ::GetWindowLongPtrW(mWnd, GWL_EXSTYLE);
-    if (exStyle & WS_EX_LAYERED) {
-      ::SetWindowLongPtrW(mWnd, GWL_EXSTYLE, exStyle & ~WS_EX_COMPOSITED);
-    }
-  }
+    MOZ_ASSERT_IF(mWindowType == WindowType::Popup,
+                  ChooseWindowClass(mWindowType) == kClassNameDropShadow);
 
   bool syncInvalidate = false;
 
@@ -2946,30 +2939,6 @@ void nsWindow::SetCursor(const Cursor& aCursor) {
   sCurrentHCursor = cursor;
   sCurrentHCursorIsCustom = custom;
   ::SetCursor(cursor);
-}
-
-/**************************************************************
- *
- * SECTION: nsIWidget::Get/SetTransparencyMode
- *
- * Manage the transparency mode of the window containing this
- * widget.
- *
- **************************************************************/
-
-TransparencyMode nsWindow::GetTransparencyMode() {
-  return GetTopLevelWindow(true)->GetWindowTranslucencyInner();
-}
-
-void nsWindow::SetTransparencyMode(TransparencyMode aMode) {
-  nsWindow* window = GetTopLevelWindow(true);
-  MOZ_ASSERT(window);
-
-  if (!window || window->DestroyCalled()) {
-    return;
-  }
-
-  window->SetWindowTranslucencyInner(aMode);
 }
 
 /**************************************************************
@@ -7174,18 +7143,8 @@ a11y::LocalAccessible* nsWindow::GetAccessible() {
 }
 #endif
 
-/**************************************************************
- **************************************************************
- **
- ** BLOCK: Transparency
- **
- ** Window transparency helpers.
- **
- **************************************************************
- **************************************************************/
-
-void nsWindow::SetWindowTranslucencyInner(TransparencyMode aMode) {
-  if (aMode == mTransparencyMode) {
+void nsWindow::SetTransparencyMode(TransparencyMode aMode) {
+  if (aMode == mTransparencyMode || DestroyCalled()) {
     return;
   }
 

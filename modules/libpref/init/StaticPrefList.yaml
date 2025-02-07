@@ -4416,14 +4416,14 @@
   mirror: always
 
 - name: dom.workers.throttling.enabled
-  type: RelaxedAtomicBool
+  type: bool
   value: false
-  mirror: always
+  mirror: once
 
 - name: dom.workers.timeoutmanager
-  type: RelaxedAtomicBool
+  type: bool
   value: false
-  mirror: always
+  mirror: once
 
 - name: dom.workers.serialized-sab-access
   type: RelaxedAtomicBool
@@ -4625,7 +4625,7 @@
 # This enables the SVGPathSegment APIs
 - name: dom.svg.pathSegment.enabled
   type: bool
-  value: @IS_NIGHTLY_BUILD@
+  value: true
   mirror: always
 
 # For area and anchor elements with target=_blank and no rel set to
@@ -4661,6 +4661,11 @@
 - name: dom.text_fragments.create_text_fragment.enabled
   type: bool
   value: false
+  mirror: always
+
+- name: dom.text_fragments.create_text_fragment.timeout_seconds
+  type: uint32_t
+  value: 5
   mirror: always
 
 - name: dom.textMetrics.actualBoundingBox.enabled
@@ -5046,7 +5051,7 @@
   # Control consuming WM_POINTER for touch pointers instead of WM_TOUCH
 -   name: dom.w3c_pointer_events.dispatch_by_pointer_messages.touch
     type: bool
-    value: @IS_NIGHTLY_BUILD@
+    value: false
     mirror: always
 
   # Control whether to fire WidgetTouchEvent from pen pointers for APZ to handle scrolling.
@@ -11464,14 +11469,6 @@
     value: true
     mirror: always
 
-# Enable HEVC support via the windows media foundation
-# 0 : disable, 1 : enable for media engine and MFT,
-# 2 : enable for media engine only
--   name: media.wmf.hevc.enabled
-    type: RelaxedAtomicUint32
-    value: 1
-    mirror: always
-
 # Enable Widevine experiment DRM for EME
 -   name: media.eme.widevine.experiment.enabled
     type: RelaxedAtomicBool
@@ -11490,6 +11487,19 @@
     mirror: always
 
 #endif  # MOZ_WMF
+
+- name: media.hevc.enabled
+  type: RelaxedAtomicBool
+#if defined(XP_WIN)
+  value: true
+#elif defined(XP_MACOSX)
+  value: true
+#elif defined(ANDROID)
+  value: true
+#else
+  value: false
+#endif
+  mirror: always
 
 - name: media.decoder-doctor.testing
   type: bool
@@ -12274,6 +12284,11 @@
 - name: media.webrtc.simulcast.vp9.enabled
   type: RelaxedAtomicBool
   value: @IS_EARLY_BETA_OR_EARLIER@
+  mirror: always
+
+- name: media.peerconnection.video.use_dd
+  type: RelaxedAtomicBool
+  value: true
   mirror: always
 
 - name: media.webrtc.tls_tunnel_for_all_proxy
@@ -15015,6 +15030,16 @@
   value: false
   mirror: once
 
+- name: places.frecency.pages.alternative.maxDaysFromToday
+  type: uint32_t
+  value: 60
+  mirror: once
+
+- name: places.frecency.pages.alternative.veryHighWeight
+  type: uint32_t
+  value: 200
+  mirror: once
+
 - name: places.frecency.pages.alternative.highWeight
   type: uint32_t
   value: 100
@@ -15038,6 +15063,35 @@
 - name: places.frecency.pages.alternative.numSampledVisits
   type: uint32_t
   value: 10
+  mirror: once
+
+- name: places.frecency.pages.alternative.interactions.numInteractions
+  type: uint32_t
+  value: 20
+  mirror: once
+
+# Max difference allowed between a visit and an interaction.
+- name: places.frecency.pages.alternative.interactions.maxVisitGapSeconds
+  type: uint32_t
+  value: 20 * 60
+  mirror: once
+
+# Minimum time required to upgrade a visit score.
+- name: places.frecency.pages.alternative.interactions.viewTimeSeconds
+  type: uint32_t
+  value: 60
+  mirror: once
+
+# Minimum time required to upgrade a visit score of a visit
+# provided there is a minimum threshold of keypresses.
+- name: places.frecency.pages.alternative.interactions.viewTimeIfManyKeypressesSeconds
+  type: uint32_t
+  value: 20
+  mirror: once
+
+- name: places.frecency.pages.alternative.interactions.manyKeypresses
+  type: uint32_t
+  value: 50
   mirror: once
 
 # Whether flooding prevention feature is enabled or not.
@@ -16745,7 +16799,7 @@
 # This enables discard processing
 - name: svg.discard.enabled
   type: bool
-  value: @IS_NIGHTLY_BUILD@
+  value: true
   mirror: always
 
 # Tweak which elements are allowed in <svg:use> subtrees, and in which

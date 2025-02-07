@@ -77,12 +77,10 @@ module.exports = [
   // Generated data files
   "browser/extensions/formautofill/phonenumberutils/PhoneNumberMetaData.sys.mjs",
 
-  // JS files using the #include pre-processor macro, leading to syntax errors.
-  "browser/extensions/webcompat/data/injections.js",
-  "browser/extensions/webcompat/data/ua_overrides.js",
+  // JS file using the #include pre-processor macro, leading to syntax errors.
+  "browser/extensions/webcompat/run.js",
 
   // Ignore newtab files
-  "browser/extensions/newtab/data/",
   "browser/extensions/newtab/logs/",
 
   // Ignore devtools debugger files which aren't intended for linting.
@@ -274,8 +272,6 @@ module.exports = [
   // Built files
   "toolkit/components/pdfjs/content/build",
   "toolkit/components/pdfjs/content/web",
-
-  "toolkit/components/pdfjs/PdfJsOverridePrefs.js",
 
   // Uses preprocessing
   "toolkit/components/reader/Readerable.sys.mjs",

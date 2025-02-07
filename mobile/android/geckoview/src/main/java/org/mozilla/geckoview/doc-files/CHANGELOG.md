@@ -13,6 +13,15 @@ exclude: true
 
 ⚠️  breaking change and deprecation notices
 
+## v137
+- ⚠️ [`GeckoSession.requestAnalysis`][118.4], [`GeckoSession.requestCreateAnalysis`][122.2], [`GeckoSession.requestAnalysisStatus`][137.1], [`GeckoSession.sendPlacementAttributionEvent`][123.3], [`GeckoSession.pollForAnalysisCompleted`][137.2], [`GeckoSession.sendClickAttributionEvent`][121.4], [`GeckoSession.sendImpressionAttributionEvent`][121.5], [`GeckoSession.sendPlacementAttributionEvent`][123.3], [`GeckoSession.requestRecommendations`][118.5], [`GeckoSession.reportBackInStock`][122.1], `AnalysisStatusResponse`, [`ReviewAnalysis`][120.2] and [`Recommendation`][120.3] are deprecated, and it will be deleted in version 139 see https://bugzilla.mozilla.org/show_bug.cgi?id=1941470.
+- Added support for controlling `network.trr.default_provider_uri` via [`GeckoRuntimeSettings.setDefaultRecursiveResolverUri`][137.3] and [`GeckoRuntimeSettings.getDefaultRecursiveResolverUri`][137.4]
+
+[137.1]: {{javadoc_uri}}/GeckoSession.html#requestAnalysisStatus(String)
+[137.2]: {{javadoc_uri}}/GeckoSession.html#pollForAnalysisCompleted(String)
+[137.3]: {{javadoc_uri}}/GeckoRuntimeSettings.html#setDefaultRecursiveResolverUri
+[137.4]: {{javadoc_uri}}/GeckoRuntimeSettings.html#getDefaultRecursiveResolverUri
+
 ## v136
 - Added support for controlling `security.pki.certificate_transparency.mode` via [`GeckoRuntimeSettings.setCertificateTransparencyMode`][136.1]
 - Added [`GeckoSession.CompositorScrollDelegate`][136.2] interface, which allows reacting to scroll position changes as soon as they are composited
@@ -1661,4 +1670,4 @@ to allow adding gecko profiler markers.
 [65.24]: {{javadoc_uri}}/CrashReporter.html#sendCrashReport(android.content.Context,android.os.Bundle,java.lang.String)
 [65.25]: {{javadoc_uri}}/GeckoResult.html
 
-[api-version]: b65c54429cfd61cdb0b8741813f037d0f02c8e2a
+[api-version]: 9f93da27a3ae3048c8953f0005b5ac4d4f192d3a

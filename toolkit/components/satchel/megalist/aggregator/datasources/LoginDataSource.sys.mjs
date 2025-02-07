@@ -36,7 +36,13 @@ XPCOMUtils.defineLazyPreferenceGetter(
 const ALERT_VALUES = {
   breached: 0,
   vulnerable: 1,
-  none: 2,
+  noUsername: 2,
+  none: 3,
+};
+
+export const DISPLAY_MODES = {
+  ALERTS: "DisplayAlerts",
+  ALL: "DisplayAll",
 };
 
 const VIEW_MODES = {
@@ -78,7 +84,7 @@ export class LoginDataSource extends DataSourceBase {
   #enabled;
   #header;
   #exportPasswordsStrings;
-  #sortId;
+  #displayMode;
 
   constructor(...args) {
     super(...args);
@@ -169,11 +175,7 @@ export class LoginDataSource extends DataSourceBase {
           url: PREFERENCES_URL,
         },
         { id: "Help", label: "passwords-command-help", url: SUPPORT_URL },
-        { id: "SortByName", label: "passwords-command-sort-name" },
-        {
-          id: "SortByAlerts",
-          label: "passwords-command-sort-alerts",
-        },
+        { id: "UpdateDisplayMode" },
         { id: "OpenLink" }
       );
       this.#header.executeImport = async () =>
@@ -206,17 +208,11 @@ export class LoginDataSource extends DataSourceBase {
           strings.passwordsExportFilePickerCsvFilterTitle,
       };
 
-      this.#header.executeSortByName = () => {
-        if (this.#sortId !== "name") {
-          this.#sortId = "name";
+      this.#header.executeUpdateDisplayMode = displayMode => {
+        if (this.#displayMode !== displayMode) {
+          this.#displayMode = displayMode;
           this.#reloadDataSource();
-        }
-      };
-
-      this.#header.executeSortByAlerts = async () => {
-        if (this.#sortId !== "alerts") {
-          this.#sortId = "alerts";
-          this.#reloadDataSource();
+          this.setDisplayMode(this.#displayMode);
         }
       };
 
@@ -376,7 +372,7 @@ export class LoginDataSource extends DataSourceBase {
       });
 
       // Sort by origin, then by username, then by GUID
-      this.#sortId = "name";
+      this.#displayMode = DISPLAY_MODES.ALL;
       Services.obs.addObserver(this, "passwordmgr-storage-changed");
       Services.prefs.addObserver("signon.rememberSignons", this);
       Services.prefs.addObserver(
@@ -495,6 +491,7 @@ export class LoginDataSource extends DataSourceBase {
       this.setNotification({
         id: "delete-login-success",
         l10nArgs: { total },
+        viewMode: VIEW_MODES.LIST,
       });
     }
   }
@@ -770,14 +767,15 @@ export class LoginDataSource extends DataSourceBase {
       ? await lazy.LoginBreaches.getPotentialBreachesByLoginGUID(logins)
       : new Map();
 
-    const breachedOrVulnerableLogins = logins.filter(
+    const loginsWithAlerts = logins.filter(
       login =>
         breachesMap.has(login.guid) ||
-        lazy.LoginBreaches.isVulnerablePassword(login)
+        lazy.LoginBreaches.isVulnerablePassword(login) ||
+        !login.username.length
     );
 
     const filteredLogins =
-      this.#sortId === "alerts" ? breachedOrVulnerableLogins : logins;
+      this.#displayMode === DISPLAY_MODES.ALERTS ? loginsWithAlerts : logins;
 
     filteredLogins.forEach(login => {
       // Similar domains will be grouped together
@@ -791,19 +789,22 @@ export class LoginDataSource extends DataSourceBase {
       }
       const isLoginBreached = breachesMap.has(login.guid);
       const isLoginVulnerable = lazy.LoginBreaches.isVulnerablePassword(login);
+      const loginNoUsername = !login.username.length;
 
       let alertValue;
       if (isLoginBreached) {
         alertValue = ALERT_VALUES.breached;
       } else if (isLoginVulnerable) {
         alertValue = ALERT_VALUES.vulnerable;
+      } else if (loginNoUsername) {
+        alertValue = ALERT_VALUES.noUsername;
       } else {
         alertValue = ALERT_VALUES.none;
       }
 
       const domain = parts.reverse().join(".");
       const lineId =
-        this.#sortId === "alerts"
+        this.#displayMode === DISPLAY_MODES.ALERTS
           ? `${alertValue}:${domain}:${login.username}:${login.guid}`
           : `${domain}:${login.username}:${login.guid}`;
 
@@ -824,7 +825,7 @@ export class LoginDataSource extends DataSourceBase {
     });
 
     this.#header.value.total = logins.length;
-    this.#header.value.alerts = breachedOrVulnerableLogins.length;
+    this.#header.value.alerts = loginsWithAlerts.length;
     this.afterReloadingDataSource();
     this.doneReloadDataSource = true;
   }

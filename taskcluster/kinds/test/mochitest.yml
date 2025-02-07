@@ -760,7 +760,7 @@ mochitest-media:
     schedules-component: mochitest-plain
     max-run-time:
         by-test-platform:
-            windows.*-ccov.*/.*: 7200
+            windows.*-ccov.*: 7200
             linux.*64-tsan-qr/opt: 7200
             default: 5400
     variants:
@@ -793,7 +793,7 @@ mochitest-media:
                     linux.*64(-asan|-devedition|-shippable)?-qr/(opt|debug): built-projects
                     linux.*64-tsan-qr/opt: ['autoland', 'mozilla-central']
                     macosx.*-64(-devedition|-shippable)?(-qr)?/(opt|debug): built-projects
-                    windows.*-asan.*/opt: ['autoland', 'mozilla-central']
+                    windows.*-asan.*: ['autoland', 'mozilla-central']
                     windows1.*: built-projects
                     default: []
             webrender-sw+no-fission:
@@ -836,8 +836,8 @@ mochitest-media:
                 by-test-platform:
                     windows11.*hw-ref.*: ['autoland', 'mozilla-central', 'mozilla-beta']
                     (macosx.*64)(-shippable)?(-qr)?/(opt|debug): ['autoland', 'mozilla-central', 'mozilla-beta']
+                    android-hw-.*: ['autoland', 'mozilla-central', 'mozilla-beta']
                     default: []
-                    # TODO : add Android, it hasn't supported 'tags'
                     # TODO : add Linux, it would crash on gfxFeature.cpp:180
             default:
                 by-test-platform:

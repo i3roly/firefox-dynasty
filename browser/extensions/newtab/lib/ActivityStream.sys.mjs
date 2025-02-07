@@ -344,13 +344,6 @@ export const PREFS_CONFIG = new Map([
     },
   ],
   [
-    "newtabLogo.aprilfools",
-    {
-      title: "Show an April Fools version of the logo",
-      value: false,
-    },
-  ],
-  [
     "topSitesRows",
     {
       title: "Number of rows of Top Sites to display",
@@ -451,6 +444,14 @@ export const PREFS_CONFIG = new Map([
     "newtabWallpapers.customColor.enabled",
     {
       title: "Boolean flag to turn show custom color select box",
+      value: false,
+    },
+  ],
+  [
+    "newtabWallpapers.customWallpaper.enabled",
+    {
+      title:
+        "Boolean flag to enable custom/user-uploaded wallpaper functionality",
       value: false,
     },
   ],
@@ -577,6 +578,13 @@ export const PREFS_CONFIG = new Map([
     {
       title: "Boolean flag to enable inline topic selection",
       value: false,
+    },
+  ],
+  [
+    "discoverystream.sections.topicSelection.position",
+    {
+      title: "index position of inline topic selection",
+      value: 1,
     },
   ],
   [

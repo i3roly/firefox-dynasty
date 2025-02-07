@@ -2461,9 +2461,11 @@ metrics:
     send_in_pings:
       - metrics
       - usage-reporting
+      - baseline
     bugs:
       - https://github.com/mozilla-mobile/fenix/issues/960
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1923842
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1941007
     data_reviews:
       - https://github.com/mozilla-mobile/fenix/pull/1067#issuecomment-474598673
       - https://github.com/mozilla-mobile/fenix/pull/15713#issuecomment-703972068
@@ -2478,6 +2480,8 @@ metrics:
     metadata:
       tags:
         - Settings
+    no_lint:
+      - BASELINE_PING
   set_as_default_browser_native_prompt_shown:
     type: event
     description: >
@@ -3588,12 +3592,19 @@ preferences:
     type: event
     description: >
       An event indicating whether or not the user has studies enabled.
+    extra_keys:
+      enabled:
+        type: boolean
+        description: |
+          Whether or not studies is enabled from Settings screen.
     bugs:
       - https://github.com/mozilla-mobile/fenix/issues/22192
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=1930868
     data_reviews:
       - https://github.com/mozilla-mobile/fenix/pull/22193
       - https://github.com/mozilla-mobile/fenix/pull/27068#issuecomment-1251509973
       - https://github.com/mozilla-mobile/firefox-android/pull/3319
+      - https://phabricator.services.mozilla.com/D236728
     data_sensitivity:
       - interaction
     notification_emails:

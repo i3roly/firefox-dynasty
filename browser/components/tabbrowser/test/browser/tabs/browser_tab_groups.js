@@ -8,9 +8,9 @@ add_setup(async function () {
   });
 });
 
-function createManyTabs(number) {
+function createManyTabs(number, win = window) {
   return Array.from({ length: number }, () => {
-    return BrowserTestUtils.addTab(gBrowser, "about:blank", {
+    return BrowserTestUtils.addTab(win.gBrowser, "about:blank", {
       skipAnimation: true,
     });
   });
@@ -2007,8 +2007,52 @@ add_task(async function test_pinFirstGroupedTab() {
   gBrowser.pinTab(tabs[0]);
   Assert.ok(tabs[0].pinned, "pinned first tab of group");
   Assert.ok(!tabs[0].group, "pinning first tab ungroups it");
+  gBrowser.unpinTab(tabs[0]);
 
   await removeTabGroup(group);
+});
+
+add_task(async function test_adoptTab() {
+  let newWin = await BrowserTestUtils.openNewBrowserWindow();
+  let tabs = createManyTabs(3, newWin);
+  let group = newWin.gBrowser.addTabGroup(tabs);
+
+  let otherWinTab = BrowserTestUtils.addTab(gBrowser, "about:robots", {
+    skipAnimation: true,
+  });
+  let adoptedTab = newWin.gBrowser.adoptTab(otherWinTab, 1);
+
+  Assert.equal(adoptedTab._tPos, 1, "tab adopted into expected position");
+  Assert.equal(adoptedTab.group, group, "tab adopted into tab group");
+
+  await BrowserTestUtils.closeWindow(newWin, { animate: false });
+});
+
+add_task(async function test_insertAfterCurrent() {
+  await SpecialPowers.pushPrefEnv({
+    set: [["browser.tabs.insertAfterCurrent", true]],
+  });
+
+  let group = gBrowser.addTabGroup([gBrowser.selectedTab]);
+  let extraTab = BrowserTestUtils.addTab(gBrowser, "about:robots", {
+    skipAnimation: true,
+  });
+  let newTabPromise = BrowserTestUtils.waitForEvent(window, "TabOpen");
+  BrowserCommands.openTab();
+  let { target: newTab } = await newTabPromise;
+
+  Assert.equal(newTab.group, group, "new tab added to current group");
+  Assert.equal(
+    group.tabs.indexOf(newTab),
+    1,
+    "new tab added as second tab to group"
+  );
+
+  group.ungroupTabs();
+  BrowserTestUtils.removeTab(newTab);
+  BrowserTestUtils.removeTab(extraTab);
+
+  await SpecialPowers.popPrefEnv();
 });
 
 add_task(async function test_bug1936015() {

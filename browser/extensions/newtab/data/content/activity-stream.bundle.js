@@ -2265,7 +2265,9 @@ class ContextMenuButton extends (external_React_default()).PureComponent {
       className: "context-menu-button icon",
       onKeyDown: this.onKeyDown,
       onClick: this.onClick,
-      ref: refFunction
+      ref: refFunction,
+      tabIndex: this.props.tabIndex || 0,
+      onFocus: this.props.onFocus
     }), showContextMenu ? /*#__PURE__*/external_React_default().cloneElement(children, {
       keyboardAccess: contextMenuKeyboard,
       onUpdate: this.onUpdate
@@ -8081,18 +8083,20 @@ class TopSiteLink extends (external_React_default()).PureComponent {
       onDrop: this.onDragEvent,
       onDragOver: this.onDragEvent,
       onDragEnter: this.onDragEvent,
-      onDragLeave: this.onDragEvent
+      onDragLeave: this.onDragEvent,
+      ref: this.props.setRef
     }, draggableProps), /*#__PURE__*/external_React_default().createElement("div", {
       className: "top-site-inner"
     }, /*#__PURE__*/external_React_default().createElement("a", {
       className: "top-site-button",
       href: link.searchTopSite ? undefined : link.url,
-      tabIndex: "0",
+      tabIndex: this.props.tabIndex,
       onKeyPress: this.onKeyPress,
       onClick: onClick,
       draggable: true,
       "data-is-sponsored-link": !!link.sponsored_tile_id,
-      title: title
+      title: title,
+      onFocus: this.props.onFocus
     }, /*#__PURE__*/external_React_default().createElement("div", {
       className: "tile",
       "aria-hidden": true
@@ -8312,13 +8316,18 @@ class TopSite extends (external_React_default()).PureComponent {
       onClick: this.onLinkClick,
       onDragEvent: this.props.onDragEvent,
       className: `${props.className || ""}${isContextMenuOpen ? " active" : ""}`,
-      title: title
+      title: title,
+      setPref: this.props.setPref,
+      tabIndex: this.props.tabIndex,
+      onFocus: this.props.onFocus
     }), /*#__PURE__*/external_React_default().createElement("div", null, /*#__PURE__*/external_React_default().createElement(ContextMenuButton, {
       tooltip: "newtab-menu-content-tooltip",
       tooltipArgs: {
         title
       },
-      onUpdate: this.onMenuUpdate
+      onUpdate: this.onMenuUpdate,
+      tabIndex: this.props.tabIndex,
+      onFocus: this.props.onFocus
     }, /*#__PURE__*/external_React_default().createElement(LinkMenu, {
       dispatch: props.dispatch,
       index: props.index,
@@ -8360,7 +8369,9 @@ class TopSitePlaceholder extends (external_React_default()).PureComponent {
       ...addButtonProps
     } : {}, {
       className: `placeholder ${this.props.className || ""} ${this.props.isAddButton ? "add-button" : ""}`,
-      isDraggable: false
+      setPref: this.props.setPref,
+      isDraggable: false,
+      tabIndex: this.props.tabIndex
     }));
   }
 }
@@ -8371,7 +8382,8 @@ class _TopSiteList extends (external_React_default()).PureComponent {
       draggedIndex: null,
       draggedSite: null,
       draggedTitle: null,
-      topSitesPreview: null
+      topSitesPreview: null,
+      focusedIndex: 0
     };
   }
   constructor(props) {
@@ -8379,6 +8391,10 @@ class _TopSiteList extends (external_React_default()).PureComponent {
     this.state = _TopSiteList.DEFAULT_STATE;
     this.onDragEvent = this.onDragEvent.bind(this);
     this.onActivate = this.onActivate.bind(this);
+    this.onWrapperFocus = this.onWrapperFocus.bind(this);
+    this.onTopsiteFocus = this.onTopsiteFocus.bind(this);
+    this.onWrapperBlur = this.onWrapperBlur.bind(this);
+    this.onKeyDown = this.onKeyDown.bind(this);
   }
   componentWillReceiveProps(nextProps) {
     if (this.state.draggedSite) {
@@ -8520,6 +8536,34 @@ class _TopSiteList extends (external_React_default()).PureComponent {
       activeIndex: index
     });
   }
+  onKeyDown(e) {
+    if (this.state.activeIndex || this.state.activeIndex === 0) {
+      return;
+    }
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      // prevent the page from scrolling up/down while navigating.
+      e.preventDefault();
+    }
+    if (this.focusedRef?.nextSibling?.querySelector("a") && e.key === "ArrowDown") {
+      this.focusedRef.nextSibling.querySelector("a").tabIndex = 0;
+      this.focusedRef.nextSibling.querySelector("a").focus();
+    }
+    if (this.focusedRef?.previousSibling?.querySelector("a") && e.key === "ArrowUp") {
+      this.focusedRef.previousSibling.querySelector("a").tabIndex = 0;
+      this.focusedRef.previousSibling.querySelector("a").focus();
+    }
+  }
+  onWrapperFocus() {
+    this.focusRef?.addEventListener("keydown", this.onKeyDown);
+  }
+  onWrapperBlur() {
+    this.focusRef?.removeEventListener("keydown", this.onKeyDown);
+  }
+  onTopsiteFocus(focusIndex) {
+    this.setState(() => ({
+      focusedIndex: focusIndex
+    }));
+  }
   render() {
     const {
       props
@@ -8558,7 +8602,14 @@ class _TopSiteList extends (external_React_default()).PureComponent {
       if (!link || props.App.isForStartupCache && isSponsored(link) || topSites[i]?.isAddButton) {
         if (link) {
           topSiteLink = /*#__PURE__*/external_React_default().createElement(TopSitePlaceholder, TopSite_extends({}, slotProps, commonProps, {
-            isAddButton: topSites[i] && topSites[i].isAddButton
+            isAddButton: topSites[i] && topSites[i].isAddButton,
+            setRef: i === this.state.focusedIndex ? el => {
+              this.focusedRef = el;
+            } : () => {},
+            tabIndex: i === this.state.focusedIndex ? 0 : -1,
+            onFocus: () => {
+              this.onTopsiteFocus(i);
+            }
           }));
         }
       } else {
@@ -8568,7 +8619,14 @@ class _TopSiteList extends (external_React_default()).PureComponent {
           onActivate: this.onActivate
         }, slotProps, commonProps, {
           colors: props.colors,
-          shortcutsRefresh: shortcutsRefresh
+          shortcutsRefresh: shortcutsRefresh,
+          setRef: i === this.state.focusedIndex ? el => {
+            this.focusedRef = el;
+          } : () => {},
+          tabIndex: i === this.state.focusedIndex ? 0 : -1,
+          onFocus: () => {
+            this.onTopsiteFocus(i);
+          }
         }));
       }
       topSitesUI.push(topSiteLink);
@@ -8576,6 +8634,13 @@ class _TopSiteList extends (external_React_default()).PureComponent {
     return /*#__PURE__*/external_React_default().createElement("div", {
       className: "top-sites-list-wrapper"
     }, /*#__PURE__*/external_React_default().createElement("ul", {
+      role: "group",
+      "aria-label": "Shortcuts",
+      onFocus: this.onWrapperFocus,
+      onBlur: this.onWrapperBlur,
+      ref: el => {
+        this.focusRef = el;
+      },
       className: `top-sites-list${this.state.draggedSite ? " dnd-active" : ""}`
     }, topSitesUI));
   }
@@ -9954,10 +10019,112 @@ function SectionContextMenu({
     }
   }));
 }
+;// CONCATENATED MODULE: ./content-src/components/DiscoveryStreamComponents/InlineTopicSelection/InlineTopicSelection.jsx
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this file,
+ * You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+
+
+
+const PREF_FOLLOWED_SECTIONS = "discoverystream.sections.following";
+
+/**
+ * Shows a list of recommended topics with visual indication whether
+ * the user follows some of the topics (active, blue, selected topics)
+ * or is yet to do so (neutrally-coloured topics with a "plus" button).
+ *
+ * @returns {React.Element}
+ */
+function InlineTopicSelection() {
+  const dispatch = (0,external_ReactRedux_namespaceObject.useDispatch)();
+  const prefs = (0,external_ReactRedux_namespaceObject.useSelector)(state => state.Prefs.values);
+  const following = prefs[PREF_FOLLOWED_SECTIONS] ? prefs[PREF_FOLLOWED_SECTIONS].split(", ") : [];
+  // Stub out topics, will replace with server topics
+  const topics = [{
+    label: "Politics",
+    id: "government"
+  }, {
+    label: "Sports",
+    id: "sports"
+  }, {
+    label: "Life Hacks",
+    id: "society"
+  }, {
+    label: "Food",
+    id: "food"
+  }, {
+    label: "Tech",
+    id: "tech"
+  }, {
+    label: "Travel",
+    id: "travel"
+  }, {
+    label: "Health",
+    id: "health"
+  }, {
+    label: "Money",
+    id: "finance"
+  }, {
+    label: "Science",
+    id: "education-science"
+  }, {
+    label: "Home & Garden",
+    id: "home"
+  }, {
+    label: "Entertainment",
+    id: "arts"
+  }];
+
+  // Updates user preferences as they follow or unfollow topics
+  // by selecting them from the list
+  function handleChange(e) {
+    const {
+      name: topic,
+      checked
+    } = e.target;
+    let updatedTopics = following;
+    if (checked) {
+      updatedTopics = updatedTopics.length ? [...updatedTopics, topic] : [topic];
+    } else {
+      updatedTopics = updatedTopics.filter(t => t !== topic);
+    }
+    dispatch(actionCreators.SetPref(PREF_FOLLOWED_SECTIONS, updatedTopics.join(", ")));
+  }
+  return /*#__PURE__*/external_React_default().createElement("section", {
+    className: "inline-selection-wrapper"
+  }, /*#__PURE__*/external_React_default().createElement("h2", null, "Follow topics to personalize your feed"), /*#__PURE__*/external_React_default().createElement("p", {
+    className: "inline-selection-copy"
+  }, "We will bring you personalized content, all while respecting your privacy. You'll have powerful control over what content you see and what you don't."), /*#__PURE__*/external_React_default().createElement("ul", {
+    className: "topic-list"
+  }, topics.map(topic => {
+    const checked = following.includes(topic.id);
+    return /*#__PURE__*/external_React_default().createElement("li", {
+      key: topic.id
+    }, /*#__PURE__*/external_React_default().createElement("label", null, /*#__PURE__*/external_React_default().createElement("input", {
+      type: "checkbox",
+      id: topic.id,
+      name: topic.id,
+      checked: checked,
+      "aria-checked": checked,
+      onChange: handleChange,
+      tabIndex: -1
+    }), /*#__PURE__*/external_React_default().createElement("span", {
+      className: "topic-item-label"
+    }, topic.label), /*#__PURE__*/external_React_default().createElement("div", {
+      className: `topic-item-icon icon ${checked ? "icon-check-filled" : "icon-add-circle-fill"}`
+    })));
+  })), /*#__PURE__*/external_React_default().createElement("p", null, /*#__PURE__*/external_React_default().createElement("a", {
+    href: prefs["support.url"],
+    "data-l10n-id": "newtab-topic-selection-privacy-link"
+  })));
+}
+
 ;// CONCATENATED MODULE: ./content-src/components/DiscoveryStreamComponents/CardSections/CardSections.jsx
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
 
 
 
@@ -9973,10 +10140,12 @@ const PREF_SECTIONS_CARDS_THUMBS_UP_DOWN_ENABLED = "discoverystream.sections.car
 const PREF_SECTIONS_PERSONALIZATION_ENABLED = "discoverystream.sections.personalization.enabled";
 const CardSections_PREF_TOPICS_ENABLED = "discoverystream.topicLabels.enabled";
 const CardSections_PREF_TOPICS_SELECTED = "discoverystream.topicSelection.selectedTopics";
-const PREF_FOLLOWED_SECTIONS = "discoverystream.sections.following";
+const CardSections_PREF_FOLLOWED_SECTIONS = "discoverystream.sections.following";
 const PREF_BLOCKED_SECTIONS = "discoverystream.sections.blocked";
 const CardSections_PREF_TOPICS_AVAILABLE = "discoverystream.topicSelection.topics";
 const CardSections_PREF_THUMBS_UP_DOWN_ENABLED = "discoverystream.thumbsUpDown.enabled";
+const PREF_TOPIC_SELECTION_ENABLED = "discoverystream.sections.topicSelection.enabled";
+const PREF_TOPIC_SELECTION_POSITION = "discoverystream.sections.topicSelection.position";
 function getLayoutData(responsiveLayouts, index) {
   let layoutData = {
     classNames: []
@@ -10041,7 +10210,7 @@ function CardSection({
   const mayHaveThumbsUpDown = prefs[CardSections_PREF_THUMBS_UP_DOWN_ENABLED];
   const selectedTopics = prefs[CardSections_PREF_TOPICS_SELECTED];
   const availableTopics = prefs[CardSections_PREF_TOPICS_AVAILABLE];
-  const followedSectionsPref = prefs[PREF_FOLLOWED_SECTIONS] || "";
+  const followedSectionsPref = prefs[CardSections_PREF_FOLLOWED_SECTIONS] || "";
   const blockedSectionsPref = prefs[PREF_BLOCKED_SECTIONS] || "";
   const {
     saveToPocketCard
@@ -10075,7 +10244,7 @@ function CardSection({
   // Only show thumbs up/down buttons if both default thumbs and sections thumbs prefs are enabled
   const mayHaveCombinedThumbsUpDown = mayHaveSectionsCardsThumbsUpDown && mayHaveThumbsUpDown;
   const onFollowClick = (0,external_React_namespaceObject.useCallback)(() => {
-    dispatch(actionCreators.SetPref(PREF_FOLLOWED_SECTIONS, [...followedSections, sectionKey].join(", ")));
+    dispatch(actionCreators.SetPref(CardSections_PREF_FOLLOWED_SECTIONS, [...followedSections, sectionKey].join(", ")));
     // Telemetry Event Dispatch
     dispatch(actionCreators.OnlyToMain({
       type: "FOLLOW_SECTION",
@@ -10087,7 +10256,7 @@ function CardSection({
     }));
   }, [dispatch, followedSections, sectionKey, sectionPosition]);
   const onUnfollowClick = (0,external_React_namespaceObject.useCallback)(() => {
-    dispatch(actionCreators.SetPref(PREF_FOLLOWED_SECTIONS, [...followedSections.filter(item => item !== sectionKey)].join(", ")));
+    dispatch(actionCreators.SetPref(CardSections_PREF_FOLLOWED_SECTIONS, [...followedSections.filter(item => item !== sectionKey)].join(", ")));
     // Telemetry Event Dispatch
     dispatch(actionCreators.OnlyToMain({
       type: "UNFOLLOW_SECTION",
@@ -10222,6 +10391,9 @@ function CardSections({
   ctaButtonSponsors
 }) {
   const prefs = (0,external_ReactRedux_namespaceObject.useSelector)(state => state.Prefs.values);
+  const personalizationEnabled = prefs[PREF_SECTIONS_PERSONALIZATION_ENABLED];
+  const topicSelectionEnabled = prefs[PREF_TOPIC_SELECTION_ENABLED];
+  const topicSelectionPosition = prefs[PREF_TOPIC_SELECTION_POSITION];
 
   // Handle a render before feed has been fetched by displaying nothing
   if (!data) {
@@ -10243,7 +10415,8 @@ function CardSections({
   })) : /*#__PURE__*/external_React_default().createElement("div", {
     className: "ds-section-wrapper"
   }, sections.map((section, sectionPosition) => {
-    return /*#__PURE__*/external_React_default().createElement(CardSection, {
+    const shouldRenderTopicSelection = sectionPosition === topicSelectionPosition && personalizationEnabled && topicSelectionEnabled;
+    return /*#__PURE__*/external_React_default().createElement((external_React_default()).Fragment, null, shouldRenderTopicSelection && /*#__PURE__*/external_React_default().createElement(InlineTopicSelection, null), /*#__PURE__*/external_React_default().createElement(CardSection, {
       key: `section-${section.sectionKey}`,
       sectionPosition: sectionPosition,
       section: section,
@@ -10254,7 +10427,7 @@ function CardSections({
       spocMessageVariant: spocMessageVariant,
       ctaButtonVariant: ctaButtonVariant,
       ctaButtonSponsors: ctaButtonSponsors
-    });
+    }));
   }));
 }
 
@@ -11614,17 +11787,15 @@ const NEWTAB_DARK_THEME = {
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 
-function Logo({
-  isAprilFoolsLogo
-}) {
+function Logo() {
   return /*#__PURE__*/external_React_default().createElement("h1", {
     className: "logo-and-wordmark-wrapper"
   }, /*#__PURE__*/external_React_default().createElement("div", {
-    className: `logo-and-wordmark ${isAprilFoolsLogo ? "april-fools" : ""}`,
+    className: "logo-and-wordmark",
     role: "img",
     "data-l10n-id": "newtab-logo-and-wordmark"
   }, /*#__PURE__*/external_React_default().createElement("div", {
-    className: `logo ${isAprilFoolsLogo ? "april-fools" : ""}`
+    className: "logo"
   }), /*#__PURE__*/external_React_default().createElement("div", {
     className: "wordmark"
   })));
@@ -11752,9 +11923,7 @@ class _Search extends (external_React_default()).PureComponent {
     const wrapperClassName = ["search-wrapper", this.props.disable && "search-disabled", this.props.fakeFocus && "fake-focus"].filter(v => v).join(" ");
     return /*#__PURE__*/external_React_default().createElement("div", {
       className: wrapperClassName
-    }, this.props.showLogo && /*#__PURE__*/external_React_default().createElement(Logo, {
-      isAprilFoolsLogo: this.props.Prefs.values["newtabLogo.aprilfools"]
-    }), !this.props.handoffEnabled && /*#__PURE__*/external_React_default().createElement("div", {
+    }, this.props.showLogo && /*#__PURE__*/external_React_default().createElement(Logo, null), !this.props.handoffEnabled && /*#__PURE__*/external_React_default().createElement("div", {
       className: "search-inner-wrapper"
     }, /*#__PURE__*/external_React_default().createElement("input", {
       id: "newtab-search-text",
@@ -12785,6 +12954,14 @@ class BaseContent extends (external_React_default()).PureComponent {
       return;
     }
     const prefs = this.props.Prefs.values;
+    const {
+      showSearch
+    } = prefs;
+    if (!showSearch) {
+      // Bug 1944718: Only apply fixed-search logic
+      // if search is visible.
+      return;
+    }
     const logoAlwaysVisible = prefs["logowordmark.alwaysVisible"];
     const layoutsVariantAEnabled = prefs["newtabLayouts.variant-a"];
     const layoutsVariantBEnabled = prefs["newtabLayouts.variant-b"];
@@ -13205,9 +13382,7 @@ class BaseContent extends (external_React_default()).PureComponent {
     }, /*#__PURE__*/external_React_default().createElement(ErrorBoundary, null, /*#__PURE__*/external_React_default().createElement(Search_Search, Base_extends({
       showLogo: noSectionsEnabled || prefs["logowordmark.alwaysVisible"],
       handoffEnabled: searchHandoffEnabled
-    }, props.Search)))), !prefs.showSearch && layoutsVariantAorB && !noSectionsEnabled && /*#__PURE__*/external_React_default().createElement(Logo, {
-      isAprilFoolsLogo: this.props.Prefs.values["newtabLogo.aprilfools"]
-    }), /*#__PURE__*/external_React_default().createElement("div", {
+    }, props.Search)))), !prefs.showSearch && layoutsVariantAorB && !noSectionsEnabled && /*#__PURE__*/external_React_default().createElement(Logo, null), /*#__PURE__*/external_React_default().createElement("div", {
       className: `body-wrapper${initialized ? " on" : ""}`
     }, isDiscoveryStream ? /*#__PURE__*/external_React_default().createElement(ErrorBoundary, {
       className: "borderless-error"

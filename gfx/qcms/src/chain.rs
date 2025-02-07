@@ -23,7 +23,7 @@ use crate::{
     iccread::LAB_SIGNATURE,
     iccread::RGB_SIGNATURE,
     iccread::XYZ_SIGNATURE,
-    iccread::{lutType, lutmABType, Profile, CMYK_SIGNATURE},
+    iccread::{curveType, lutType, lutmABType, Profile, CMYK_SIGNATURE},
     matrix::Matrix,
     s15Fixed16Number_to_float,
     transform_util::clamp_float,
@@ -144,20 +144,21 @@ impl ModularTransform for XYZtoLAB {
         }
     }
 }
-#[derive(Default)]
+
 struct ClutOnly {
-    clut: Option<Vec<f32>>,
+    clut: Box<[f32]>,
     grid_size: u16,
 }
+
 impl ModularTransform for ClutOnly {
     fn transform(&self, src: &[f32], dest: &mut [f32]) {
         let xy_len: i32 = 1;
         let x_len: i32 = self.grid_size as i32;
         let len: i32 = x_len * x_len;
 
-        let r_table = &self.clut.as_ref().unwrap()[0..];
-        let g_table = &self.clut.as_ref().unwrap()[1..];
-        let b_table = &self.clut.as_ref().unwrap()[2..];
+        let r_table = &self.clut[0..];
+        let g_table = &self.clut[1..];
+        let b_table = &self.clut[2..];
 
         let CLU = |table: &[f32], x, y, z| table[((x * len + y * x_len + z * xy_len) * 3) as usize];
 
@@ -488,26 +489,39 @@ static void qcms_transform_module_tetra_clut(struct qcms_modular_transform *tran
     }
 }
 */
-#[derive(Default)]
+
 struct GammaTable {
-    input_clut_table: [Option<Vec<f32>>; 3],
+    input_clut_table: [[f32; 256]; 3],
 }
+
+impl GammaTable {
+    pub fn from_curves(curve: [&curveType; 3]) -> Box<Self> {
+        Box::new(Self {
+            input_clut_table: [
+                build_input_gamma_table(curve[0]),
+                build_input_gamma_table(curve[1]),
+                build_input_gamma_table(curve[2]),
+            ],
+        })
+    }
+}
+
 impl ModularTransform for GammaTable {
     fn transform(&self, src: &[f32], dest: &mut [f32]) {
         let mut out_r: f32;
         let mut out_g: f32;
         let mut out_b: f32;
-        let input_clut_table_r = self.input_clut_table[0].as_ref().unwrap();
-        let input_clut_table_g = self.input_clut_table[1].as_ref().unwrap();
-        let input_clut_table_b = self.input_clut_table[2].as_ref().unwrap();
+        let input_clut_table_r = &self.input_clut_table[0];
+        let input_clut_table_g = &self.input_clut_table[1];
+        let input_clut_table_b = &self.input_clut_table[2];
 
         for (dest, src) in dest.chunks_exact_mut(3).zip(src.chunks_exact(3)) {
             let in_r: f32 = src[0];
             let in_g: f32 = src[1];
             let in_b: f32 = src[2];
-            out_r = lut_interp_linear_float(in_r, input_clut_table_r);
-            out_g = lut_interp_linear_float(in_g, input_clut_table_g);
-            out_b = lut_interp_linear_float(in_b, input_clut_table_b);
+            out_r = lut_interp_linear_float(in_r, &input_clut_table_r[..]);
+            out_g = lut_interp_linear_float(in_g, &input_clut_table_g[..]);
+            out_b = lut_interp_linear_float(in_b, &input_clut_table_b[..]);
 
             dest[0] = clamp_float(out_r);
             dest[1] = clamp_float(out_g);
@@ -573,10 +587,11 @@ impl ModularTransform for MatrixTranslate {
         }
     }
 }
-#[derive(Default)]
+
 struct MatrixTransform {
     matrix: Matrix,
 }
+
 impl ModularTransform for MatrixTransform {
     fn transform(&self, src: &[f32], dest: &mut [f32]) {
         let mut mat: Matrix = Matrix { m: [[0.; 3]; 3] };
@@ -608,19 +623,11 @@ impl ModularTransform for MatrixTransform {
 fn modular_transform_create_mAB(lut: &lutmABType) -> Option<Vec<Box<dyn ModularTransform>>> {
     let mut transforms: Vec<Box<dyn ModularTransform>> = Vec::new();
     if lut.a_curves[0].is_some() {
-        let clut_length: usize;
         // If the A curve is present this also implies the
         // presence of a CLUT.
-        lut.clut_table.as_ref()?;
+        let clut_table = lut.clut_table.as_deref()?;
 
         // Prepare A curve.
-        let mut transform = Box::new(GammaTable::default());
-        transform.input_clut_table[0] = build_input_gamma_table(lut.a_curves[0].as_deref())
-            .map(|x| (x as Box<[f32]>).into_vec());
-        transform.input_clut_table[1] = build_input_gamma_table(lut.a_curves[1].as_deref())
-            .map(|x| (x as Box<[f32]>).into_vec());
-        transform.input_clut_table[2] = build_input_gamma_table(lut.a_curves[2].as_deref())
-            .map(|x| (x as Box<[f32]>).into_vec());
 
         if lut.num_grid_points[0] as i32 != lut.num_grid_points[1] as i32
             || lut.num_grid_points[1] as i32 != lut.num_grid_points[2] as i32
@@ -628,29 +635,31 @@ fn modular_transform_create_mAB(lut: &lutmABType) -> Option<Vec<Box<dyn ModularT
             //XXX: We don't currently support clut that are not squared!
             return None;
         }
-        transforms.push(transform);
+        transforms.push(GammaTable::from_curves([
+            lut.a_curves[0].as_deref()?,
+            lut.a_curves[1].as_deref()?,
+            lut.a_curves[2].as_deref()?,
+        ]));
+
+        let clut_length = (lut.num_grid_points[0] as usize).pow(3) * 3;
+        assert_eq!(clut_length, clut_table.len());
 
         // Prepare CLUT
-        let mut transform = Box::new(ClutOnly::default());
-        clut_length = (lut.num_grid_points[0] as usize).pow(3) * 3;
-        assert_eq!(clut_length, lut.clut_table.as_ref().unwrap().len());
-        transform.clut = lut.clut_table.clone();
-        transform.grid_size = lut.num_grid_points[0] as u16;
-        transforms.push(transform);
+        transforms.push(Box::new(ClutOnly {
+            clut: clut_table.into(),
+            grid_size: lut.num_grid_points[0] as u16,
+        }));
     }
 
     if lut.m_curves[0].is_some() {
         // M curve imples the presence of a Matrix
 
         // Prepare M curve
-        let mut transform = Box::new(GammaTable::default());
-        transform.input_clut_table[0] = build_input_gamma_table(lut.m_curves[0].as_deref())
-            .map(|x| (x as Box<[f32]>).into_vec());
-        transform.input_clut_table[1] = build_input_gamma_table(lut.m_curves[1].as_deref())
-            .map(|x| (x as Box<[f32]>).into_vec());
-        transform.input_clut_table[2] = build_input_gamma_table(lut.m_curves[2].as_deref())
-            .map(|x| (x as Box<[f32]>).into_vec());
-        transforms.push(transform);
+        transforms.push(GammaTable::from_curves([
+            lut.m_curves[0].as_deref()?,
+            lut.m_curves[1].as_deref()?,
+            lut.m_curves[2].as_deref()?,
+        ]));
 
         // Prepare Matrix
         let mut transform = Box::new(MatrixTranslate::default());
@@ -663,14 +672,11 @@ fn modular_transform_create_mAB(lut: &lutmABType) -> Option<Vec<Box<dyn ModularT
 
     if lut.b_curves[0].is_some() {
         // Prepare B curve
-        let mut transform = Box::new(GammaTable::default());
-        transform.input_clut_table[0] = build_input_gamma_table(lut.b_curves[0].as_deref())
-            .map(|x| (x as Box<[f32]>).into_vec());
-        transform.input_clut_table[1] = build_input_gamma_table(lut.b_curves[1].as_deref())
-            .map(|x| (x as Box<[f32]>).into_vec());
-        transform.input_clut_table[2] = build_input_gamma_table(lut.b_curves[2].as_deref())
-            .map(|x| (x as Box<[f32]>).into_vec());
-        transforms.push(transform);
+        transforms.push(GammaTable::from_curves([
+            lut.b_curves[0].as_deref()?,
+            lut.b_curves[1].as_deref()?,
+            lut.b_curves[2].as_deref()?,
+        ]));
     } else {
         // B curve is mandatory
         return None;
@@ -688,11 +694,9 @@ fn modular_transform_create_lut(lut: &lutType) -> Option<Vec<Box<dyn ModularTran
     let mut transforms: Vec<Box<dyn ModularTransform>> = Vec::new();
 
     let clut_length: usize;
-    let mut transform = Box::new(MatrixTransform::default());
-
-    transform.matrix = build_lut_matrix(lut);
-    if true {
-        transforms.push(transform);
+    transforms.push(Box::new(MatrixTransform {
+        matrix: build_lut_matrix(lut),
+    }));
 
         // Prepare input curves
         let mut transform = Box::new(Clut3x3::default());
@@ -729,8 +733,6 @@ fn modular_transform_create_lut(lut: &lutType) -> Option<Vec<Box<dyn ModularTran
         );
         transforms.push(transform);
         return Some(transforms);
-    }
-    None
 }
 
 fn modular_transform_create_lut4x3(lut: &lutType) -> Vec<Box<dyn ModularTransform>> {
@@ -807,40 +809,29 @@ fn modular_transform_create_input(input: &Profile) -> Option<Vec<Box<dyn Modular
             return None;
         }
     } else {
-        let mut transform = Box::new(GammaTable::default());
-        transform.input_clut_table[0] =
-            build_input_gamma_table(input.redTRC.as_deref()).map(|x| (x as Box<[f32]>).into_vec());
-        transform.input_clut_table[1] = build_input_gamma_table(input.greenTRC.as_deref())
-            .map(|x| (x as Box<[f32]>).into_vec());
-        transform.input_clut_table[2] =
-            build_input_gamma_table(input.blueTRC.as_deref()).map(|x| (x as Box<[f32]>).into_vec());
-        if transform.input_clut_table[0].is_none()
-            || transform.input_clut_table[1].is_none()
-            || transform.input_clut_table[2].is_none()
-        {
-            return None;
-        } else {
-            transforms.push(transform);
+        transforms.push(GammaTable::from_curves([
+            input.redTRC.as_deref()?,
+            input.greenTRC.as_deref()?,
+            input.blueTRC.as_deref()?,
+        ]));
 
-            let mut transform = Box::new(MatrixTransform::default());
-            transform.matrix.m[0][0] = 1. / 1.999_969_5;
-            transform.matrix.m[0][1] = 0.0;
-            transform.matrix.m[0][2] = 0.0;
-            transform.matrix.m[1][0] = 0.0;
-            transform.matrix.m[1][1] = 1. / 1.999_969_5;
-            transform.matrix.m[1][2] = 0.0;
-            transform.matrix.m[2][0] = 0.0;
-            transform.matrix.m[2][1] = 0.0;
-            transform.matrix.m[2][2] = 1. / 1.999_969_5;
-            transforms.push(transform);
+        transforms.push(Box::new(MatrixTransform {
+            matrix: Matrix {
+                m: [
+                    [1. / 1.999_969_5, 0.0, 0.0],
+                    [0.0, 1. / 1.999_969_5, 0.0],
+                    [0.0, 0.0, 1. / 1.999_969_5],
+                ],
+            },
+        }));
 
-            let mut transform = Box::new(MatrixTransform::default());
-            transform.matrix = build_colorant_matrix(input);
-            transforms.push(transform);
-        }
+        transforms.push(Box::new(MatrixTransform {
+            matrix: build_colorant_matrix(input),
+        }));
     }
     Some(transforms)
 }
+
 fn modular_transform_create_output(out: &Profile) -> Option<Vec<Box<dyn ModularTransform>>> {
     let mut transforms = Vec::new();
     if let Some(B2A0) = &out.B2A0 {
@@ -866,21 +857,19 @@ fn modular_transform_create_output(out: &Profile) -> Option<Vec<Box<dyn ModularT
     } else if let (Some(redTRC), Some(greenTRC), Some(blueTRC)) =
         (&out.redTRC, &out.greenTRC, &out.blueTRC)
     {
-        let mut transform = Box::new(MatrixTransform::default());
-        transform.matrix = build_colorant_matrix(out).invert()?;
-        transforms.push(transform);
+        transforms.push(Box::new(MatrixTransform {
+            matrix: build_colorant_matrix(out).invert()?,
+        }));
 
-        let mut transform = Box::new(MatrixTransform::default());
-        transform.matrix.m[0][0] = 1.999_969_5;
-        transform.matrix.m[0][1] = 0.0;
-        transform.matrix.m[0][2] = 0.0;
-        transform.matrix.m[1][0] = 0.0;
-        transform.matrix.m[1][1] = 1.999_969_5;
-        transform.matrix.m[1][2] = 0.0;
-        transform.matrix.m[2][0] = 0.0;
-        transform.matrix.m[2][1] = 0.0;
-        transform.matrix.m[2][2] = 1.999_969_5;
-        transforms.push(transform);
+        transforms.push(Box::new(MatrixTransform {
+            matrix: Matrix {
+                m: [
+                    [1.999_969_5, 0.0, 0.0],
+                    [0.0, 1.999_969_5, 0.0],
+                    [0.0, 0.0, 1.999_969_5],
+                ],
+            },
+        }));
 
         let mut transform = Box::new(GammaLut::default());
         transform.output_gamma_lut_r = Some(build_output_lut(redTRC)?);

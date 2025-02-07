@@ -1049,6 +1049,8 @@ pref("browser.tabs.groups.enabled", true);
 #else
 pref("browser.tabs.groups.enabled", false);
 #endif
+pref("browser.tabs.groups.smart.enabled", false);
+
 pref("browser.tabs.groups.dragOverThresholdPercent", 20);
 pref("browser.tabs.groups.dragOverDelayMS", 120);
 pref("browser.tabs.dragdrop.moveOverThresholdPercent", 70);
@@ -1171,7 +1173,7 @@ pref("privacy.clearOnShutdown_v2.browsingHistoryAndDownloads", true);
 pref("privacy.clearOnShutdown_v2.cookiesAndStorage", true);
 pref("privacy.clearOnShutdown_v2.cache", true);
 pref("privacy.clearOnShutdown_v2.siteSettings", false);
-pref("privacy.clearOnShutdown_v2.formData", false);
+pref("privacy.clearOnShutdown_v2.formdata", false);
 
 pref("privacy.cpd.history",                 true);
 pref("privacy.cpd.formdata",                true);
@@ -1191,13 +1193,13 @@ pref("privacy.clearHistory.browsingHistoryAndDownloads", true);
 pref("privacy.clearHistory.cookiesAndStorage", true);
 pref("privacy.clearHistory.cache", true);
 pref("privacy.clearHistory.siteSettings", false);
-pref("privacy.clearHistory.formData", false);
+pref("privacy.clearHistory.formdata", false);
 pref("privacy.clearSiteData.historyFormDataAndDownloads", false);
 pref("privacy.clearSiteData.browsingHistoryAndDownloads", false);
 pref("privacy.clearSiteData.cookiesAndStorage", true);
 pref("privacy.clearSiteData.cache", true);
 pref("privacy.clearSiteData.siteSettings", false);
-pref("privacy.clearSiteData.formData", false);
+pref("privacy.clearSiteData.formdata", false);
 
 pref("privacy.history.custom",              false);
 
@@ -1822,6 +1824,7 @@ pref("browser.newtabpage.activity-stream.discoverystream.locale-weather-config",
 pref("browser.newtabpage.activity-stream.newtabWallpapers.enabled", true);
 pref("browser.newtabpage.activity-stream.newtabWallpapers.v2.enabled", true);
 pref("browser.newtabpage.activity-stream.newtabWallpapers.customColor.enabled", false);
+pref("browser.newtabpage.activity-stream.newtabWallpapers.customWallpaper.enabled", false);
 
 // Current new tab page background images.
 pref("browser.newtabpage.activity-stream.newtabWallpapers.wallpaper-light", "");
@@ -1848,9 +1851,6 @@ pref("browser.newtabpage.activity-stream.newtabShortcuts.refresh", false);
 // Discovery stream ad size experiment
 pref("browser.newtabpage.activity-stream.newtabAdSize.variant-a", false);
 pref("browser.newtabpage.activity-stream.newtabAdSize.variant-b", false);
-
-// April Fools experiment
-pref("browser.newtabpage.activity-stream.newtabLogo.aprilfools", false);
 
 // Activity Stream prefs that control to which page to redirect
 #ifndef RELEASE_OR_BETA
@@ -2076,6 +2076,7 @@ pref("sidebar.revamp.round-content-area", false);
 #endif
 pref("sidebar.animation.enabled", true);
 pref("sidebar.animation.duration-ms", 200);
+pref("sidebar.animation.expand-on-hover.duration-ms", 400);
 pref("sidebar.main.tools", "aichat,syncedtabs,history");
 pref("sidebar.verticalTabs", false);
 pref("sidebar.visibility", "always-show");
@@ -2083,6 +2084,7 @@ pref("sidebar.visibility", "always-show");
 // as a backup to restore the sidebar UI state when a user has PPB mode on
 // or has history cleared on browser close.
 pref("sidebar.backupState", "{}");
+pref("sidebar.expandOnHover", false);
 
 pref("browser.ml.chat.enabled", true);
 pref("browser.ml.chat.hideLocalhost", true);
@@ -2507,6 +2509,10 @@ pref("browser.tabs.unloadTabInContextMenu", true);
 #else
 pref("browser.tabs.unloadTabInContextMenu", false);
 #endif
+
+// Whether unloaded tabs (either from session restore or because
+// they are explicitly unloaded) are faded out in the tab bar
+pref("browser.tabs.fadeOutUnloadedTabs", false);
 
 // If true, unprivileged extensions may use experimental APIs on
 // nightly and developer edition.

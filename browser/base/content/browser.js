@@ -21,7 +21,6 @@ ChromeUtils.defineESModuleGetters(this, {
   AboutNewTab: "resource:///modules/AboutNewTab.sys.mjs",
   AboutReaderParent: "resource:///actors/AboutReaderParent.sys.mjs",
   AddonManager: "resource://gre/modules/AddonManager.sys.mjs",
-  BrowserSearchTelemetry: "resource:///modules/BrowserSearchTelemetry.sys.mjs",
   BrowserTelemetryUtils: "resource://gre/modules/BrowserTelemetryUtils.sys.mjs",
   BrowserUIUtils: "resource:///modules/BrowserUIUtils.sys.mjs",
   BrowserUsageTelemetry: "resource:///modules/BrowserUsageTelemetry.sys.mjs",
@@ -50,6 +49,7 @@ ChromeUtils.defineESModuleGetters(this, {
   NimbusFeatures: "resource://nimbus/ExperimentAPI.sys.mjs",
   nsContextMenu: "chrome://browser/content/nsContextMenu.sys.mjs",
   OpenInTabsUtils: "resource:///modules/OpenInTabsUtils.sys.mjs",
+  OpenSearchManager: "resource:///modules/OpenSearchManager.sys.mjs",
   PageActions: "resource:///modules/PageActions.sys.mjs",
   PageThumbs: "resource://gre/modules/PageThumbs.sys.mjs",
   PanelMultiView: "resource:///modules/PanelMultiView.sys.mjs",
@@ -410,13 +410,17 @@ ChromeUtils.defineLazyGetter(this, "ReferrerInfo", () =>
 
 // High priority notification bars shown at the top of the window.
 ChromeUtils.defineLazyGetter(this, "gNotificationBox", () => {
+  let securityDelayMS = Services.prefs.getIntPref(
+    "security.notification_enable_delay"
+  );
+
   return new MozElements.NotificationBox(element => {
     element.classList.add("global-notificationbox");
     element.setAttribute("notificationside", "top");
     element.setAttribute("prepend-notifications", true);
     // We want this before the tab notifications.
     document.getElementById("notifications-toolbar").prepend(element);
-  });
+  }, securityDelayMS);
 });
 
 ChromeUtils.defineLazyGetter(this, "InlineSpellCheckerUI", () => {
@@ -1291,7 +1295,7 @@ function HandleAppCommandEvent(evt) {
       }
       break;
     case "Search":
-      BrowserSearch.webSearch();
+      SearchUIUtils.webSearch(window);
       break;
     case "Bookmarks":
       SidebarController.toggle("viewBookmarksSidebar");
@@ -1834,608 +1838,6 @@ var newWindowButtonObserver = {
     }
   },
 };
-
-const BrowserSearch = {
-  _searchInitComplete: false,
-
-  init() {
-    Services.obs.addObserver(this, "browser-search-engine-modified");
-  },
-
-  delayedStartupInit() {
-    // Asynchronously initialize the search service if necessary, to get the
-    // current engine for working out the placeholder.
-    this._updateURLBarPlaceholderFromDefaultEngine(
-      PrivateBrowsingUtils.isWindowPrivate(window),
-      // Delay the update for this until so that we don't change it while
-      // the user is looking at it / isn't expecting it.
-      true
-    ).then(() => {
-      this._searchInitComplete = true;
-    });
-  },
-
-  uninit() {
-    Services.obs.removeObserver(this, "browser-search-engine-modified");
-  },
-
-  observe(engine, topic, data) {
-    // There are two kinds of search engine objects, nsISearchEngine objects and
-    // plain { uri, title, icon } objects.  `engine` in this method is the
-    // former.  The browser.engines and browser.hiddenEngines arrays are the
-    // latter, and they're the engines offered by the the page in the browser.
-    //
-    // The two types of engines are currently related by their titles/names,
-    // although that may change; see bug 335102.
-    let engineName = engine.wrappedJSObject.name;
-    switch (data) {
-      case "engine-removed":
-        // An engine was removed from the search service.  If a page is offering
-        // the engine, then the engine needs to be added back to the corresponding
-        // browser's offered engines.
-        this._addMaybeOfferedEngine(engineName);
-        break;
-      case "engine-added":
-        // An engine was added to the search service.  If a page is offering the
-        // engine, then the engine needs to be removed from the corresponding
-        // browser's offered engines.
-        this._removeMaybeOfferedEngine(engineName);
-        break;
-      case "engine-default":
-        if (
-          this._searchInitComplete &&
-          !PrivateBrowsingUtils.isWindowPrivate(window)
-        ) {
-          this._updateURLBarPlaceholder(engineName, false);
-        }
-        break;
-      case "engine-default-private":
-        if (
-          this._searchInitComplete &&
-          PrivateBrowsingUtils.isWindowPrivate(window)
-        ) {
-          this._updateURLBarPlaceholder(engineName, true);
-        }
-        break;
-    }
-  },
-
-  _addMaybeOfferedEngine(engineName) {
-    let selectedBrowserOffersEngine = false;
-    for (let browser of gBrowser.browsers) {
-      for (let i = 0; i < (browser.hiddenEngines || []).length; i++) {
-        if (browser.hiddenEngines[i].title == engineName) {
-          if (!browser.engines) {
-            browser.engines = [];
-          }
-          browser.engines.push(browser.hiddenEngines[i]);
-          browser.hiddenEngines.splice(i, 1);
-          if (browser == gBrowser.selectedBrowser) {
-            selectedBrowserOffersEngine = true;
-          }
-          break;
-        }
-      }
-    }
-    if (selectedBrowserOffersEngine) {
-      this.updateOpenSearchBadge();
-    }
-  },
-
-  _removeMaybeOfferedEngine(engineName) {
-    let selectedBrowserOffersEngine = false;
-    for (let browser of gBrowser.browsers) {
-      for (let i = 0; i < (browser.engines || []).length; i++) {
-        if (browser.engines[i].title == engineName) {
-          if (!browser.hiddenEngines) {
-            browser.hiddenEngines = [];
-          }
-          browser.hiddenEngines.push(browser.engines[i]);
-          browser.engines.splice(i, 1);
-          if (browser == gBrowser.selectedBrowser) {
-            selectedBrowserOffersEngine = true;
-          }
-          break;
-        }
-      }
-    }
-    if (selectedBrowserOffersEngine) {
-      this.updateOpenSearchBadge();
-    }
-  },
-
-  /**
-   * Initializes the urlbar placeholder to the pre-saved engine name. We do this
-   * via a preference, to avoid needing to synchronously init the search service.
-   *
-   * This should be called around the time of DOMContentLoaded, so that it is
-   * initialized quickly before the user sees anything.
-   *
-   * Note: If the preference doesn't exist, we don't do anything as the default
-   * placeholder is a string which doesn't have the engine name; however, this
-   * can be overridden using the `force` parameter.
-   *
-   * @param {Boolean} force If true and the preference doesn't exist, the
-   *                        placeholder will be set to the default version
-   *                        without an engine name ("Search or enter address").
-   */
-  initPlaceHolder(force = false) {
-    const prefName =
-      "browser.urlbar.placeholderName" +
-      (PrivateBrowsingUtils.isWindowPrivate(window) ? ".private" : "");
-    let engineName = Services.prefs.getStringPref(prefName, "");
-    if (engineName || force) {
-      // We can do this directly, since we know we're at DOMContentLoaded.
-      this._setURLBarPlaceholder(engineName);
-    }
-  },
-
-  /**
-   * This is a wrapper around '_updateURLBarPlaceholder' that uses the
-   * appropriate default engine to get the engine name.
-   *
-   * @param {Boolean} isPrivate      Set to true if this is a private window.
-   * @param {Boolean} [delayUpdate]  Set to true, to delay update until the
-   *                                 placeholder is not displayed.
-   */
-  async _updateURLBarPlaceholderFromDefaultEngine(
-    isPrivate,
-    delayUpdate = false
-  ) {
-    const getDefault = isPrivate
-      ? Services.search.getDefaultPrivate
-      : Services.search.getDefault;
-    let defaultEngine = await getDefault();
-    if (!this._searchInitComplete) {
-      // If we haven't finished initialising, ensure the placeholder
-      // preference is set for the next startup.
-      SearchUIUtils.updatePlaceholderNamePreference(defaultEngine, isPrivate);
-    }
-    this._updateURLBarPlaceholder(defaultEngine.name, isPrivate, delayUpdate);
-  },
-
-  /**
-   * Updates the URLBar placeholder for the specified engine, delaying the
-   * update if required. This also saves the current engine name in preferences
-   * for the next restart.
-   *
-   * Note: The engine name will only be displayed for built-in engines, as we
-   * know they should have short names.
-   *
-   * @param {String}  engineName     The search engine name to use for the update.
-   * @param {Boolean} isPrivate      Set to true if this is a private window.
-   * @param {Boolean} [delayUpdate]  Set to true, to delay update until the
-   *                                 placeholder is not displayed.
-   */
-  _updateURLBarPlaceholder(engineName, isPrivate, delayUpdate = false) {
-    if (!engineName) {
-      throw new Error("Expected an engineName to be specified");
-    }
-
-    const engine = Services.search.getEngineByName(engineName);
-    if (!engine.isAppProvided) {
-      // Set the engine name to an empty string for non-default engines, which'll
-      // make sure we display the default placeholder string.
-      engineName = "";
-    }
-
-    // Only delay if requested, and we're not displaying text in the URL bar
-    // currently.
-    if (delayUpdate && !gURLBar.value) {
-      // Delays changing the URL Bar placeholder until the user is not going to be
-      // seeing it, e.g. when there is a value entered in the bar, or if there is
-      // a tab switch to a tab which has a url loaded. We delay the update until
-      // the user is out of search mode since an alternative placeholder is used
-      // in search mode.
-      let placeholderUpdateListener = () => {
-        if (gURLBar.value && !gURLBar.searchMode) {
-          // By the time the user has switched, they may have changed the engine
-          // again, so we need to call this function again but with the
-          // new engine name.
-          // No need to await for this to finish, we're in a listener here anyway.
-          this._updateURLBarPlaceholderFromDefaultEngine(isPrivate, false);
-          gURLBar.removeEventListener("input", placeholderUpdateListener);
-          gBrowser.tabContainer.removeEventListener(
-            "TabSelect",
-            placeholderUpdateListener
-          );
-        }
-      };
-
-      gURLBar.addEventListener("input", placeholderUpdateListener);
-      gBrowser.tabContainer.addEventListener(
-        "TabSelect",
-        placeholderUpdateListener
-      );
-    } else if (!gURLBar.searchMode) {
-      this._setURLBarPlaceholder(engineName);
-    }
-  },
-
-  /**
-   * Sets the URLBar placeholder to either something based on the engine name,
-   * or the default placeholder.
-   *
-   * @param {String} name The name of the engine to use, an empty string if to
-   *                      use the default placeholder.
-   */
-  _setURLBarPlaceholder(name) {
-    document.l10n.setAttributes(
-      gURLBar.inputField,
-      name ? "urlbar-placeholder-with-name" : "urlbar-placeholder",
-      name ? { name } : undefined
-    );
-  },
-
-  addEngine(browser, engine) {
-    if (!this._searchInitComplete) {
-      // We haven't finished initialising search yet. This means we can't
-      // call getEngineByName here. Since this is only on start-up and unlikely
-      // to happen in the normal case, we'll just return early rather than
-      // trying to handle it asynchronously.
-      return;
-    }
-    // Check to see whether we've already added an engine with this title
-    if (browser.engines) {
-      if (browser.engines.some(e => e.title == engine.title)) {
-        return;
-      }
-    }
-
-    var hidden = false;
-    // If this engine (identified by title) is already in the list, add it
-    // to the list of hidden engines rather than to the main list.
-    if (Services.search.getEngineByName(engine.title)) {
-      hidden = true;
-    }
-
-    var engines = (hidden ? browser.hiddenEngines : browser.engines) || [];
-
-    engines.push({
-      uri: engine.href,
-      title: engine.title,
-      get icon() {
-        return browser.mIconURL;
-      },
-    });
-
-    if (hidden) {
-      browser.hiddenEngines = engines;
-    } else {
-      browser.engines = engines;
-      if (browser == gBrowser.selectedBrowser) {
-        this.updateOpenSearchBadge();
-      }
-    }
-  },
-
-  /**
-   * Update the browser UI to show whether or not additional engines are
-   * available when a page is loaded or the user switches tabs to a page that
-   * has search engines.
-   */
-  updateOpenSearchBadge() {
-    gURLBar.addSearchEngineHelper.setEnginesFromBrowser(
-      gBrowser.selectedBrowser
-    );
-
-    var searchBar = this.searchBar;
-    if (!searchBar) {
-      return;
-    }
-
-    var engines = gBrowser.selectedBrowser.engines;
-    if (engines && engines.length) {
-      searchBar.setAttribute("addengines", "true");
-    } else {
-      searchBar.removeAttribute("addengines");
-    }
-  },
-
-  /**
-   * Focuses the search bar if present on the toolbar, or the address bar,
-   * putting it in search mode. Will do so in an existing non-popup browser
-   * window or open a new one if necessary.
-   */
-  webSearch: function BrowserSearch_webSearch() {
-    if (
-      window.location.href != AppConstants.BROWSER_CHROME_URL ||
-      gURLBar.readOnly
-    ) {
-      let win = URILoadingHelper.getTopWin(window, { skipPopups: true });
-      if (win) {
-        // If there's an open browser window, it should handle this command
-        win.focus();
-        win.BrowserSearch.webSearch();
-      } else {
-        // If there are no open browser windows, open a new one
-        var observer = function (subject) {
-          if (subject == win) {
-            BrowserSearch.webSearch();
-            Services.obs.removeObserver(
-              observer,
-              "browser-delayed-startup-finished"
-            );
-          }
-        };
-        win = window.openDialog(
-          AppConstants.BROWSER_CHROME_URL,
-          "_blank",
-          "chrome,all,dialog=no",
-          "about:blank"
-        );
-        Services.obs.addObserver(observer, "browser-delayed-startup-finished");
-      }
-      return;
-    }
-
-    let focusUrlBarIfSearchFieldIsNotActive = function (aSearchBar) {
-      if (!aSearchBar || document.activeElement != aSearchBar.textbox) {
-        // Limit the results to search suggestions, like the search bar.
-        gURLBar.searchModeShortcut();
-      }
-    };
-
-    let searchBar = this.searchBar;
-    let placement = CustomizableUI.getPlacementOfWidget("search-container");
-    let focusSearchBar = () => {
-      searchBar = this.searchBar;
-      searchBar.select();
-      focusUrlBarIfSearchFieldIsNotActive(searchBar);
-    };
-    if (
-      placement &&
-      searchBar &&
-      ((searchBar.parentNode.getAttribute("overflowedItem") == "true" &&
-        placement.area == CustomizableUI.AREA_NAVBAR) ||
-        placement.area == CustomizableUI.AREA_FIXED_OVERFLOW_PANEL)
-    ) {
-      let navBar = document.getElementById(CustomizableUI.AREA_NAVBAR);
-      navBar.overflowable.show().then(focusSearchBar);
-      return;
-    }
-    if (searchBar) {
-      if (window.fullScreen) {
-        FullScreen.showNavToolbox();
-      }
-      searchBar.select();
-    }
-    focusUrlBarIfSearchFieldIsNotActive(searchBar);
-  },
-
-  /**
-   * Loads a search results page, given a set of search terms. Uses the current
-   * engine if the search bar is visible, or the default engine otherwise.
-   *
-   * @param searchText
-   *        The search terms to use for the search.
-   * @param where
-   *        String indicating where the search should load. Most commonly used
-   *        are 'tab' or 'window', defaults to 'current'.
-   * @param usePrivate
-   *        Whether to use the Private Browsing mode default search engine.
-   *        Defaults to `false`.
-   * @param purpose [optional]
-   *        A string meant to indicate the context of the search request. This
-   *        allows the search service to provide a different nsISearchSubmission
-   *        depending on e.g. where the search is triggered in the UI.
-   * @param triggeringPrincipal
-   *        The principal to use for a new window or tab.
-   * @param csp
-   *        The content security policy to use for a new window or tab.
-   * @param inBackground [optional]
-   *        Set to true for the tab to be loaded in the background, default false.
-   * @param engine [optional]
-   *        The search engine to use for the search.
-   * @param tab [optional]
-   *        The tab to show the search result.
-   *
-   * @return engine The search engine used to perform a search, or null if no
-   *                search was performed.
-   */
-  async _loadSearch(
-    searchText,
-    where,
-    usePrivate,
-    purpose,
-    triggeringPrincipal,
-    csp,
-    inBackground = false,
-    engine = null,
-    tab = null
-  ) {
-    if (!triggeringPrincipal) {
-      throw new Error(
-        "Required argument triggeringPrincipal missing within _loadSearch"
-      );
-    }
-
-    if (!engine) {
-      engine = usePrivate
-        ? await Services.search.getDefaultPrivate()
-        : await Services.search.getDefault();
-    }
-
-    let submission = engine.getSubmission(searchText, null, purpose); // HTML response
-
-    // getSubmission can return null if the engine doesn't have a URL
-    // with a text/html response type.  This is unlikely (since
-    // SearchService._addEngineToStore() should fail for such an engine),
-    // but let's be on the safe side.
-    if (!submission) {
-      return null;
-    }
-
-    openLinkIn(submission.uri.spec, where || "current", {
-      private: usePrivate && !PrivateBrowsingUtils.isWindowPrivate(window),
-      postData: submission.postData,
-      inBackground,
-      relatedToCurrent: true,
-      triggeringPrincipal,
-      csp,
-      targetBrowser: tab?.linkedBrowser,
-      globalHistoryOptions: {
-        triggeringSearchEngine: engine.name,
-      },
-    });
-
-    return { engine, url: submission.uri };
-  },
-
-  /**
-   * Perform a search initiated from the context menu.
-   *
-   * This should only be called from the context menu. See
-   * BrowserSearch.loadSearch for the preferred API.
-   */
-  async loadSearchFromContext(
-    terms,
-    usePrivate,
-    triggeringPrincipal,
-    csp,
-    event
-  ) {
-    event = BrowserUtils.getRootEvent(event);
-    let where = BrowserUtils.whereToOpenLink(event);
-    if (where == "current") {
-      // override: historically search opens in new tab
-      where = "tab";
-    }
-    if (usePrivate && !PrivateBrowsingUtils.isWindowPrivate(window)) {
-      where = "window";
-    }
-    let inBackground = Services.prefs.getBoolPref(
-      "browser.search.context.loadInBackground"
-    );
-    if (event.button == 1 || event.ctrlKey) {
-      inBackground = !inBackground;
-    }
-
-    let { engine } = await BrowserSearch._loadSearch(
-      terms,
-      where,
-      usePrivate,
-      "contextmenu",
-      Services.scriptSecurityManager.createNullPrincipal(
-        triggeringPrincipal.originAttributes
-      ),
-      csp,
-      inBackground
-    );
-
-    if (engine) {
-      BrowserSearchTelemetry.recordSearch(
-        gBrowser.selectedBrowser,
-        engine,
-        "contextmenu"
-      );
-    }
-  },
-
-  /**
-   * Perform a search initiated from the command line.
-   */
-  async loadSearchFromCommandLine(terms, usePrivate, triggeringPrincipal, csp) {
-    let { engine } = await BrowserSearch._loadSearch(
-      terms,
-      "current",
-      usePrivate,
-      "system",
-      triggeringPrincipal,
-      csp
-    );
-    if (engine) {
-      BrowserSearchTelemetry.recordSearch(
-        gBrowser.selectedBrowser,
-        engine,
-        "system"
-      );
-    }
-  },
-
-  /**
-   * Perform a search initiated from an extension.
-   */
-  async loadSearchFromExtension({
-    query,
-    engine,
-    where,
-    tab,
-    triggeringPrincipal,
-  }) {
-    const result = await BrowserSearch._loadSearch(
-      query,
-      where,
-      PrivateBrowsingUtils.isWindowPrivate(window),
-      "webextension",
-      triggeringPrincipal,
-      null,
-      false,
-      engine,
-      tab
-    );
-
-    BrowserSearchTelemetry.recordSearch(
-      gBrowser.selectedBrowser,
-      result.engine,
-      "webextension"
-    );
-  },
-
-  /**
-   * Returns the search bar element if it is present in the toolbar, null otherwise.
-   */
-  get searchBar() {
-    return document.getElementById("searchbar");
-  },
-
-  /**
-   * Infobar to notify the user's search engine has been removed
-   * and replaced with an application default search engine.
-   *
-   * @param {string} oldEngine
-   *   name of the engine to be moved and replaced.
-   * @param {string} newEngine
-   *   name of the application default engine to replaced the removed engine.
-   */
-  async removalOfSearchEngineNotificationBox(oldEngine, newEngine) {
-    let buttons = [
-      {
-        "l10n-id": "remove-search-engine-button",
-        primary: true,
-        callback() {
-          const notificationBox = gNotificationBox.getNotificationWithValue(
-            "search-engine-removal"
-          );
-          gNotificationBox.removeNotification(notificationBox);
-        },
-      },
-      {
-        supportPage: "search-engine-removal",
-      },
-    ];
-
-    await gNotificationBox.appendNotification(
-      "search-engine-removal",
-      {
-        label: {
-          "l10n-id": "removed-search-engine-message2",
-          "l10n-args": { oldEngine, newEngine },
-        },
-        priority: gNotificationBox.PRIORITY_SYSTEM,
-      },
-      buttons
-    );
-
-    // Update engine name in the placeholder to the new default engine name.
-    this._updateURLBarPlaceholderFromDefaultEngine(
-      PrivateBrowsingUtils.isWindowPrivate(window),
-      false
-    ).catch(console.error);
-  },
-};
-
-XPCOMUtils.defineConstant(this, "BrowserSearch", BrowserSearch);
 
 function CreateContainerTabMenu(event) {
   // Do not open context menus within menus.
@@ -3195,8 +2597,7 @@ var XULBrowserWindow = {
       aStateFlags & nsIWebProgressListener.STATE_IS_NETWORK
     ) {
       if (aRequest && aWebProgress.isTopLevel) {
-        // clear out search-engine data
-        browser.engines = null;
+        OpenSearchManager.clearEngines(browser);
       }
 
       this.isBusy = true;
@@ -3598,7 +2999,7 @@ var XULBrowserWindow = {
   },
 
   asyncUpdateUI() {
-    BrowserSearch.updateOpenSearchBadge();
+    OpenSearchManager.updateOpenSearchBadge(window);
   },
 
   onStatusChange(aWebProgress, aRequest, aStatus, aMessage) {
@@ -4116,7 +3517,7 @@ var TabsProgressListener = {
     if (browser == gBrowser.selectedBrowser) {
       // If the "Add Search Engine" page action is in the urlbar, its image
       // needs to be set to the new icon, so call updateOpenSearchBadge.
-      BrowserSearch.updateOpenSearchBadge();
+      OpenSearchManager.updateOpenSearchBadge(window);
     }
   },
 };
@@ -4778,7 +4179,7 @@ var gUIDensity = {
     }
 
     gBrowser.tabContainer.uiDensityChanged();
-    gURLBar.updateLayoutBreakout();
+    gURLBar.uiDensityChanged();
   },
 };
 

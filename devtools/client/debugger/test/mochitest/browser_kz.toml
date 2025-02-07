@@ -147,6 +147,9 @@ fail-if = ["a11y_checks"] # Bug 1849028 clicked element may not be focusable and
 ["browser_dbg-preview-invalid-tokens.js"]
 skip-if = ["true"] # This specific test is heavily intermittent, and sometimes leaks on debug.
 
+["browser_dbg-preview-jump-to-definition.js"]
+fail-if = ["a11y_checks"] # Bug 1849028 clicked element may not be focusable and/or labeled
+
 ["browser_dbg-preview-module.js"]
 skip-if = ["os == 'win'"]
 
@@ -154,6 +157,9 @@ skip-if = ["os == 'win'"]
 
 ["browser_dbg-preview-source-maps.js"]
 skip-if = ["os == 'win'"]
+
+["browser_dbg-preview-switch.js"]
+fail-if = ["a11y_checks"] # Bug 1849028 Node is not focusable via the accessibility API
 
 ["browser_dbg-preview-wrapped-lines.js"]
 fail-if = ["a11y_checks"] # Bug 1860733 splitter element is not focusable
@@ -173,10 +179,7 @@ skip-if = [
 ]
 
 ["browser_dbg-react-app.js"]
-skip-if = [
-  "os == 'win'",
-  "os == 'linux' && os_version == '18.04' && processor == 'x86_64' && tsan", # Bug 1813196
-]
+skip-if = ["tsan"]
 
 ["browser_dbg-react-jsx.js"]
 

@@ -198,7 +198,7 @@ var gBrowserInit = {
         elem.removeAttribute("skipintoolbarset");
       }
     }
-    BrowserSearch.initPlaceHolder();
+    gURLBar.initPlaceHolder();
 
     // Hack to ensure that the various initial pages favicon is loaded
     // instantaneously, to avoid flickering and improve perceived performance.
@@ -285,7 +285,6 @@ var gBrowserInit = {
     Win10TabletModeUpdater.init();
     CombinedStopReload.ensureInitialized();
     gPrivateBrowsingUI.init();
-    BrowserSearch.init();
     BrowserPageActions.init();
     if (gToolbarKeyNavEnabled) {
       ToolbarKeyboardNavigator.init();
@@ -430,7 +429,7 @@ var gBrowserInit = {
     UpdateUrlbarSearchSplitterState();
 
     BookmarkingUI.init();
-    BrowserSearch.delayedStartupInit();
+    gURLBar.delayedStartupInit();
     gProtectionsHandler.init();
 
     let safeMode = document.getElementById("helpSafeMode");
@@ -1076,8 +1075,6 @@ var gBrowserInit = {
     if (gToolbarKeyNavEnabled) {
       ToolbarKeyboardNavigator.uninit();
     }
-
-    BrowserSearch.uninit();
 
     NewTabPagePreloading.removePreloadedBrowser(window);
 

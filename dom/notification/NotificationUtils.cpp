@@ -153,8 +153,10 @@ nsresult GetOrigin(nsIPrincipal* aPrincipal, nsString& aOrigin) {
     return NS_ERROR_FAILURE;
   }
 
-  MOZ_TRY(
-      nsContentUtils::GetWebExposedOriginSerialization(aPrincipal, aOrigin));
+  nsAutoCString origin;
+  MOZ_TRY(aPrincipal->GetOrigin(origin));
+
+  CopyUTF8toUTF16(origin, aOrigin);
 
   return NS_OK;
 }
@@ -187,7 +189,6 @@ nsCOMPtr<nsINotificationStorage> GetNotificationStorage(bool isPrivate) {
 }
 
 nsresult PersistNotification(nsIPrincipal* aPrincipal, const nsString& aId,
-                             const nsString& aAlertName,
                              const IPCNotificationOptions& aOptions,
                              const nsString& aScope) {
   nsCOMPtr<nsINotificationStorage> notificationStorage =
@@ -205,7 +206,7 @@ nsresult PersistNotification(nsIPrincipal* aPrincipal, const nsString& aId,
   rv = notificationStorage->Put(
       origin, aId, aOptions.title(), GetEnumString(aOptions.dir()),
       aOptions.lang(), aOptions.body(), aOptions.tag(), aOptions.icon(),
-      aAlertName, aOptions.dataSerialized(), aScope);
+      aOptions.dataSerialized(), aScope);
 
   if (NS_FAILED(rv)) {
     return rv;

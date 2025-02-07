@@ -331,6 +331,9 @@ void WebGPUParent::MaintainDevices() {
 
 void WebGPUParent::LoseDevice(const RawId aDeviceId, Maybe<uint8_t> aReason,
                               const nsACString& aMessage) {
+  if (mActiveDeviceIds.Contains(aDeviceId)) {
+    mActiveDeviceIds.Remove(aDeviceId);
+  }
   // Check to see if we've already sent a DeviceLost message to aDeviceId.
   if (mLostDeviceIds.Contains(aDeviceId)) {
     return;
@@ -507,6 +510,9 @@ ipc::IPCResult WebGPUParent::RecvAdapterRequestDevice(
   }
 #endif
 
+  MOZ_ASSERT(!mActiveDeviceIds.Contains(aDeviceId));
+  mActiveDeviceIds.Insert(aDeviceId);
+
   return IPC_OK();
 }
 
@@ -521,6 +527,10 @@ ipc::IPCResult WebGPUParent::RecvDeviceDestroy(RawId aDeviceId) {
 }
 
 ipc::IPCResult WebGPUParent::RecvDeviceDrop(RawId aDeviceId) {
+  if (mActiveDeviceIds.Contains(aDeviceId)) {
+    mActiveDeviceIds.Remove(aDeviceId);
+  }
+
   ffi::wgpu_server_device_drop(mContext.get(), aDeviceId);
 
   mErrorScopeStackByDevice.erase(aDeviceId);
@@ -1260,14 +1270,6 @@ ipc::IPCResult WebGPUParent::GetFrontBufferSnapshot(
   }
 
   auto it = mExternalTextures.find(data->mLastSubmittedTextureId.ref());
-
-  // ExternalTexture is still in use as no readback
-  if (data->mUseExternalTextureInSwapChain && it != mExternalTextures.end()) {
-    auto& externalTexture = it->second;
-    externalTexture->GetSnapshot(shmem, aSize);
-    return IPC_OK();
-  }
-
   // External texture is already invalid and posted to RemoteTextureMap
   if (it == mExternalTextures.end()) {
     if (!mRemoteTextureOwner || !mRemoteTextureOwner->IsRegistered(aOwnerId)) {
@@ -1648,6 +1650,7 @@ void WebGPUParent::ActorDestroy(ActorDestroyReason aWhy) {
     mRemoteTextureOwner->UnregisterAllTextureOwners();
     mRemoteTextureOwner = nullptr;
   }
+  mActiveDeviceIds.Clear();
   ffi::wgpu_server_poll_all_devices(mContext.get(), true);
   mContext = nullptr;
 }
@@ -1962,11 +1965,11 @@ VkImageHandle::~VkImageHandle() {
     return;
   }
   auto* context = mParent->GetContext();
-  if (!context || !mVkImageHandle) {
-    return;
+  if (context && mParent->IsDeviceActive(mDeviceId) && mVkImageHandle) {
+    wgpu_vkimage_destroy(context, mDeviceId,
+                         const_cast<ffi::WGPUVkImageHandle*>(mVkImageHandle));
   }
-  wgpu_vkimage_delete(context, mDeviceId,
-                      const_cast<ffi::WGPUVkImageHandle*>(mVkImageHandle));
+  wgpu_vkimage_delete(const_cast<ffi::WGPUVkImageHandle*>(mVkImageHandle));
 }
 #endif
 

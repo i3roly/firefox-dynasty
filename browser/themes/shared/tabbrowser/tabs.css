@@ -443,6 +443,22 @@
     image-rendering: -moz-crisp-edges;
   }
 
+  /* stylelint-disable-next-line media-query-no-invalid */
+  @media (-moz-bool-pref: "browser.tabs.fadeOutUnloadedTabs") {
+    &[pending] {
+      opacity: 0.5;
+      /* Fade the favicon out */
+      transition-property: opacity;
+      transition-duration: 1s;
+    }
+    &:not([pending]) {
+      /* When loading the tab, just show the favicon without a transition.
+        The favicon turns into the "loading" state anyway, so we don't want
+        to interfere with that. */
+      transition: none;
+    }
+  }
+
   &:not([src]),
   &:-moz-broken {
     content: url("chrome://global/skin/icons/defaultFavicon.svg");
@@ -997,11 +1013,12 @@
   }
 
   input[name="tab-group-color"] {
-    width: 0;
-    height: 0;
-    opacity: 0;
-    margin: 0;
-    position: absolute;
+     width: 0;
+     height: 0;
+     opacity: 0;
+     margin: 0;
+     position: absolute;
+     pointer-events: none;
   }
 
   .tab-group-editor-swatch {
@@ -1381,6 +1398,16 @@
 
       .tabbrowser-tab:not([pinned]):hover & {
         opacity: 1;
+      }
+
+      /* stylelint-disable-next-line media-query-no-invalid */
+      @media (-moz-bool-pref: "sidebar.expandOnHover") {
+        /* Tab close button when the sidebar is collapsed should
+        not be shown when expand on hover is enabled because once
+        you hover over the launcher to use the button, the launcher
+        starts to expand and the button is no longer shown. Users can
+        rely on the close button within the tab once expanded. */
+        display: none;
       }
     }
   }

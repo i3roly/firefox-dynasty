@@ -1717,7 +1717,6 @@ add_task(
     const manager = loader.manager;
 
     sandbox.stub(ExperimentAPI, "_manager").get(() => manager);
-    sandbox.stub(ExperimentAPI, "_store").get(() => manager.store);
 
     await loader.init();
     await manager.onStartup();
@@ -1744,7 +1743,6 @@ add_task(
     const manager = loader.manager;
 
     sandbox.stub(ExperimentAPI, "_manager").get(() => manager);
-    sandbox.stub(ExperimentAPI, "_store").get(() => manager.store);
 
     const slug = "foo";
     const EXPERIMENT = ExperimentFakes.recipe(slug, {
@@ -1917,6 +1915,7 @@ add_task(async function test_updateRecipesClearsOptIns() {
       isFirefoxLabsOptIn: true,
       firefoxLabsTitle: "opt-in-1-title",
       firefoxLabsDescription: "opt-in-1-desc",
+      firefoxLabsDescriptionLinks: null,
       firefoxLabsGroup: "group",
       requiresRestart: false,
       isRollout: true,
@@ -1932,6 +1931,7 @@ add_task(async function test_updateRecipesClearsOptIns() {
       isFirefoxLabsOptIn: true,
       firefoxLabsTitle: "opt-in-2-title",
       firefoxLabsDescription: "opt-in-2-desc",
+      firefoxLabsDescriptionLinks: null,
       firefoxLabsGroup: "group",
       requiresRestart: false,
       isRollout: true,
@@ -1990,6 +1990,7 @@ add_task(async function test_updateRecipes_optInsStayEnrolled() {
     isFirefoxLabsOptIn: true,
     firefoxLabsTitle: "opt-in-title",
     firefoxLabsDescription: "opt-in-desc",
+    firefoxLabsDescriptionLinks: null,
     firefoxLabsGroup: "group",
     requiresRestart: false,
   });
@@ -2047,6 +2048,7 @@ add_task(async function test_updateRecipes_optInsUnerollOnFalseTargeting() {
     isFirefoxLabsOptIn: true,
     firefoxLabsTitle: "opt-in-title",
     firefoxLabsDescription: "opt-in-desc",
+    firefoxLabsDescriptionLinks: null,
     firefoxLabsGroup: "group",
     requiresRestart: false,
   });
@@ -2099,6 +2101,7 @@ add_task(async function test_updateRecipes_bucketingCausesOptInUnenrollments() {
     isRollout: true,
     firefoxLabsTitle: "opt-in-title",
     firefoxLabsDescription: "opt-in-desc",
+    firefoxLabsDescriptionLinks: null,
     firefoxLabsGroup: "group",
     requiresRestart: false,
   });
@@ -2153,6 +2156,7 @@ add_task(async function test_updateRecipes_reEnrollRolloutOptin() {
     isRollout: true,
     firefoxLabsTitle: "opt-in-title",
     firefoxLabsDescription: "opt-in-desc",
+    firefoxLabsDescriptionLinks: null,
     firefoxLabsGroup: "group",
     requiresRestart: false,
   });

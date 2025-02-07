@@ -2491,6 +2491,7 @@ name = "gkrust-uniffi-components"
 version = "0.1.0"
 dependencies = [
  "relevancy",
+ "search",
  "suggest",
  "tabs",
  "uniffi",
@@ -2545,9 +2546,9 @@ dependencies = [
 
 [[package]]
 name = "glean"
-version = "63.0.0"
+version = "63.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6edc2134eac59587dc100b301eeba2dd473d74d6ecd51d635419a1865cc92496"
+checksum = "e2afa6754943cac5243099efd0d26e89cc8e06f1585776ba14ab0c6ee99e1f71"
 dependencies = [
  "crossbeam-channel",
  "glean-core",
@@ -2559,9 +2560,9 @@ dependencies = [
 
 [[package]]
 name = "glean-core"
-version = "63.0.0"
+version = "63.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b840b5177e3e102332cfa09bbbe57ae69f939a180d73cb02351b2ddf4cb1fbee"
+checksum = "53cd53bb7a3b89b17d3989e95dd808b137ff47c504d1d19f14cb0d820cc2f42e"
 dependencies = [
  "android_logger",
  "bincode",
@@ -4437,7 +4438,7 @@ dependencies = [
 [[package]]
 name = "mp4parse"
 version = "0.17.0"
-source = "git+https://github.com/mozilla/mp4parse-rust?rev=a138e40ec1c603615873e524b5b22e11c0ec4820#a138e40ec1c603615873e524b5b22e11c0ec4820"
+source = "git+https://github.com/mozilla/mp4parse-rust?rev=e64650a686e5c5732395cd059e17cfd3b1e5b63b#e64650a686e5c5732395cd059e17cfd3b1e5b63b"
 dependencies = [
  "bitreader",
  "byteorder",
@@ -4454,7 +4455,7 @@ version = "0.1.0"
 [[package]]
 name = "mp4parse_capi"
 version = "0.17.0"
-source = "git+https://github.com/mozilla/mp4parse-rust?rev=a138e40ec1c603615873e524b5b22e11c0ec4820#a138e40ec1c603615873e524b5b22e11c0ec4820"
+source = "git+https://github.com/mozilla/mp4parse-rust?rev=e64650a686e5c5732395cd059e17cfd3b1e5b63b#e64650a686e5c5732395cd059e17cfd3b1e5b63b"
 dependencies = [
  "byteorder",
  "fallible_collections",
@@ -5705,6 +5706,20 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "search"
+version = "0.1.0"
+source = "git+https://github.com/mozilla/application-services?rev=25934715ecc08fc922c80797c637dea64ee742d1#25934715ecc08fc922c80797c637dea64ee742d1"
+dependencies = [
+ "error-support",
+ "firefox-versioning",
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "thiserror 1.999.999",
+ "uniffi",
 ]
 
 [[package]]

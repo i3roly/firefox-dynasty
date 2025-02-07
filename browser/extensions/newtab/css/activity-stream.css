@@ -298,6 +298,9 @@ input {
 .icon.icon-add {
   background-image: url("chrome://global/skin/icons/plus.svg");
 }
+.icon.icon-add-circle-fill {
+  background-image: url("chrome://activity-stream/content/data/content/assets/glyph-add-circle-fill-16.svg");
+}
 .icon.icon-minimize {
   background-image: url("chrome://activity-stream/content/data/content/assets/glyph-minimize-16.svg");
 }
@@ -709,17 +712,6 @@ main section {
 .as-error-fallback a {
   color: var(--newtab-text-secondary-color);
   text-decoration: underline;
-}
-
-.april-fools .logo.april-fools {
-  background-image: url("chrome://activity-stream/content/data/content/assets/derp-fox.png");
-  background-size: 64px;
-  width: 64px;
-  height: 64px;
-  transition: transform 0.5s ease-in-out;
-}
-.april-fools .logo.april-fools:hover {
-  transform: rotate(360deg);
 }
 
 .logo-and-wordmark-wrapper {
@@ -1450,7 +1442,7 @@ main section {
 .top-sites-list .top-site-outer:hover .title:not(.sponsored) .title-label, .top-sites-list .top-site-outer:focus-within .title:not(.sponsored) .title-label {
   -webkit-line-clamp: 2;
   white-space: wrap;
-  word-break: break-all;
+  word-break: break-word;
 }
 
 @keyframes fade-up-tt {
@@ -3075,7 +3067,10 @@ main section {
 }
 
 .weatherCity {
+  -webkit-line-clamp: 1;
   text-overflow: ellipsis;
+  overflow: hidden;
+  word-break: break-word;
   font-size: var(--font-size-small);
 }
 
@@ -7929,4 +7924,78 @@ main section {
   /* Position the context menu on top of the card grid, below the menu button. */
   top: calc(2.5 * var(--size-item-small));
   inset-inline-start: calc(-6.25 * var(--size-item-small));
+}
+
+.inline-selection-wrapper {
+  padding-block-end: var(--space-xxlarge);
+}
+.lightWallpaper .inline-selection-wrapper {
+  color-scheme: light;
+}
+.darkWallpaper .inline-selection-wrapper {
+  color-scheme: dark;
+}
+.inline-selection-wrapper h2 {
+  font-weight: var(--font-weight-bold);
+  font-size: var(--font-size-xlarge);
+  color: var(--newtab-contextual-text-primary-color);
+  margin-block: 0;
+}
+@media (min-width: 724px) {
+  .inline-selection-wrapper h2 {
+    font-size: var(--font-size-xxlarge);
+  }
+}
+.inline-selection-wrapper .inline-selection-copy {
+  color: var(--newtab-contextual-text-primary-color);
+}
+.inline-selection-wrapper .topic-list {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--size-item-small);
+  justify-content: flex-start;
+  padding-inline-start: 0;
+  width: fit-content;
+}
+.inline-selection-wrapper .topic-list li {
+  align-items: center;
+  display: flex;
+  justify-self: flex-start;
+  max-width: fit-content;
+  position: relative;
+}
+.inline-selection-wrapper .topic-list li > label {
+  background-color: var(--background-color-canvas);
+  border: var(--border-width) solid var(--border-color-interactive);
+  border-radius: 40px;
+  color: var(--newtab-contextual-text-primary-color);
+  padding: var(--space-small) var(--space-medium);
+}
+.inline-selection-wrapper .topic-list li > label input[type=checkbox] {
+  appearance: none;
+}
+.inline-selection-wrapper .topic-list li > label .topic-item-icon {
+  -moz-context-properties: fill;
+  fill: currentColor;
+  margin-inline-start: var(--space-small);
+}
+.inline-selection-wrapper .topic-list li > label:hover {
+  background-color: var(--newtab-button-static-hover-background);
+  cursor: pointer;
+}
+.inline-selection-wrapper .topic-list li > label:hover:active {
+  background-color: var(--newtab-button-static-active-background);
+}
+.inline-selection-wrapper .topic-list li > label:has(input:checked) {
+  background-color: var(--color-accent-primary);
+  border-color: var(--color-accent-primary);
+  color: var(--button-text-color-primary);
+}
+.inline-selection-wrapper .topic-list li > label:has(input:checked) .topic-item-icon {
+  color: var(--button-text-color-primary);
+}
+.inline-selection-wrapper .topic-list li > label:focus-within {
+  outline-offset: var(--focus-outline-offset);
+  outline: var(--focus-outline);
 }

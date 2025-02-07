@@ -900,9 +900,10 @@ bool nsWindow::ToplevelUsesCSD() const {
     static auto sGdkWaylandDisplayPrefersSsd =
         (gboolean(*)(const GdkWaylandDisplay*))dlsym(
             RTLD_DEFAULT, "gdk_wayland_display_prefers_ssd");
+    // NOTE(emilio): Not using GDK_WAYLAND_DISPLAY to avoid bug 1946088.
     return !sGdkWaylandDisplayPrefersSsd ||
            !sGdkWaylandDisplayPrefersSsd(
-               GDK_WAYLAND_DISPLAY(gdk_display_get_default()));
+               static_cast<GdkWaylandDisplay*>(gdk_display_get_default()));
   }
 #endif
 
@@ -919,7 +920,7 @@ bool nsWindow::GetCSDDecorationOffset(int* aDx, int* aDy) {
   if (!DrawsToCSDTitlebar()) {
     return false;
   }
-  GtkBorder decorationSize = GetCSDDecorationSize(IsPopup());
+  GtkBorder decorationSize = GetTopLevelCSDDecorationSize();
   *aDx = decorationSize.left;
   *aDy = decorationSize.top;
   return true;
@@ -2115,7 +2116,7 @@ bool nsWindow::IsPopupDirectionRTL() {
 // It's used when we position noautihode popup and we don't use xdg_positioner.
 // See Bug 1718867
 void nsWindow::WaylandPopupSetDirectPosition() {
-  GdkPoint topLeft = DevicePixelsToGdkPointRoundDown(mBounds.TopLeft());
+  GdkPoint topLeft = DevicePixelsToGdkPointRoundDown(mLastMoveRequest);
   GdkRectangle size = DevicePixelsToGdkSizeRoundUp(mLastSizeRequest);
 
   LOG("nsWindow::WaylandPopupSetDirectPosition %d,%d -> %d x %d\n", topLeft.x,
@@ -2197,7 +2198,7 @@ bool nsWindow::WaylandPopupFitsToplevelWindow(bool aMove) {
   LOG("  parent size %d x %d", parentWidth, parentHeight);
 
   GdkPoint topLeft = aMove ? mPopupPosition
-                           : DevicePixelsToGdkPointRoundDown(mBounds.TopLeft());
+                           : DevicePixelsToGdkPointRoundDown(mLastMoveRequest);
   GdkRectangle size = DevicePixelsToGdkSizeRoundUp(mLastSizeRequest);
   LOG("  popup topleft %d, %d size %d x %d", topLeft.x, topLeft.y, size.width,
       size.height);
@@ -2210,7 +2211,7 @@ bool nsWindow::WaylandPopupFitsToplevelWindow(bool aMove) {
 }
 
 void nsWindow::NativeMoveResizeWaylandPopup(bool aMove, bool aResize) {
-  GdkPoint topLeft = DevicePixelsToGdkPointRoundDown(mBounds.TopLeft());
+  GdkPoint topLeft = DevicePixelsToGdkPointRoundDown(mLastMoveRequest);
   GdkRectangle size = DevicePixelsToGdkSizeRoundUp(mLastSizeRequest);
 
   LOG("nsWindow::NativeMoveResizeWaylandPopup Bounds %d,%d -> %d x %d move %d "
@@ -3276,10 +3277,9 @@ void nsWindow::RecomputeBounds() {
       if (!ToplevelUsesCSD()) {
         return LayoutDeviceIntMargin();
       }
-      // FIXME: This needs to account for the gtk-inserted headerbar.
       GtkBorder decorationRect{0};
       if (mSizeMode == nsSizeMode_Normal) {
-        decorationRect = GetCSDDecorationSize(IsPopup());
+        decorationRect = GetTopLevelCSDDecorationSize();
       }
       if (!mDrawInTitlebar) {
         decorationRect.top += moz_gtk_get_titlebar_preferred_height();
@@ -9611,28 +9611,31 @@ nsWindow* nsWindow::GetFocusedWindow() { return gFocusWindow; }
 #ifdef MOZ_WAYLAND
 bool nsWindow::SetEGLNativeWindowSize(
     const LayoutDeviceIntSize& aEGLWindowSize) {
-  if (!GdkIsWaylandDisplay() || !mIsMapped) {
+  // SetEGLNativeWindowSize() is Wayland only call.
+  MOZ_ASSERT(GdkIsWaylandDisplay());
+
+  if (!mIsMapped) {
     return true;
   }
 
-  float scale = FractionalScaleFactor();
 #  ifdef MOZ_LOGGING
-  if (LOG_ENABLED()) {
+  if (LOG_ENABLED_VERBOSE()) {
+    float scale = FractionalScaleFactor();
     static uintptr_t lastSizeLog = 0;
     uintptr_t sizeLog =
         uintptr_t(this) + aEGLWindowSize.width + aEGLWindowSize.height + scale +
         aEGLWindowSize.width / scale + aEGLWindowSize.height / scale;
     if (lastSizeLog != sizeLog) {
       lastSizeLog = sizeLog;
-      LOG("nsWindow::SetEGLNativeWindowSize() %d x %d scale %f (unscaled "
+      LOGVERBOSE(
+          "nsWindow::SetEGLNativeWindowSize() %d x %d scale %f (unscaled "
           "%f x %f)",
           aEGLWindowSize.width, aEGLWindowSize.height, scale,
           aEGLWindowSize.width / scale, aEGLWindowSize.height / scale);
     }
   }
 #  endif
-  return moz_container_wayland_egl_window_set_size(
-      mContainer, aEGLWindowSize.ToUnknownSize());
+  return mSurface->SetEGLWindowSize(aEGLWindowSize.ToUnknownSize());
 }
 #endif
 

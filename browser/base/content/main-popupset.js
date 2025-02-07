@@ -491,6 +491,15 @@ document.addEventListener(
           event.target.querySelector(
             "#open-tab-group-context-menu_moveToThisWindow"
           ).disabled = tabGroupIsInThisWindow;
+
+          // Disable "Move Group to New Window" menu option for tab groups
+          // that are the only things in their respective window.
+          let groupAloneInWindow =
+            tabGroup.tabs.length ==
+            tabGroup.ownerGlobal.gBrowser.openTabs.length;
+          event.target.querySelector(
+            "#open-tab-group-context-menu_moveToNewWindow"
+          ).disabled = groupAloneInWindow;
         }
       });
 
@@ -516,9 +525,6 @@ document.addEventListener(
 
     mainPopupSet.addEventListener("popuphidden", event => {
       switch (event.target.id) {
-        case "tabContextMenu":
-          TabContextMenu.contextTab = null;
-          break;
         case "full-page-translations-panel-settings-menupopup":
           FullPageTranslationsPanel.handleSettingsPopupHiddenEvent();
           break;

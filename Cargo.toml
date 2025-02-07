@@ -67,7 +67,7 @@ uniffi_bindgen = "0.28.2"
 # Shared across multiple application-services consumers.
 rusqlite = "0.31.0"
 # Shared across multiple glean consumers.
-glean = "=63.0.0"
+glean = "=63.1.0"
 
 # Explicitly specify what our profiles use.  The opt-level setting here is
 # a total fiction; see the setup of MOZ_RUST_DEFAULT_FLAGS for what the
@@ -153,6 +153,7 @@ backtrace = { path = "build/rust/backtrace" }
 # Patch bindgen 0.63 to 0.69
 bindgen_0_63 = { package = "bindgen", path = "build/rust/bindgen-0.63" }
 # Locally patch bindgen for https://github.com/rust-lang/rust-bindgen/pull/2824
+# and for bug 1945218
 bindgen = { path = "third_party/rust/bindgen" }
 
 # Patch nix 0.26 to 0.29
@@ -226,6 +227,7 @@ objc = { git = "https://github.com/glandium/rust-objc", rev = "4de89f5aa9851ceca
 # application-services overrides to make updating them all simpler.
 interrupt-support = { git = "https://github.com/mozilla/application-services", rev = "25934715ecc08fc922c80797c637dea64ee742d1" }
 relevancy = { git = "https://github.com/mozilla/application-services", rev = "25934715ecc08fc922c80797c637dea64ee742d1" }
+search = { git = "https://github.com/mozilla/application-services", rev = "25934715ecc08fc922c80797c637dea64ee742d1" }
 sql-support = { git = "https://github.com/mozilla/application-services", rev = "25934715ecc08fc922c80797c637dea64ee742d1" }
 suggest = { git = "https://github.com/mozilla/application-services", rev = "25934715ecc08fc922c80797c637dea64ee742d1" }
 sync15 = { git = "https://github.com/mozilla/application-services", rev = "25934715ecc08fc922c80797c637dea64ee742d1" }

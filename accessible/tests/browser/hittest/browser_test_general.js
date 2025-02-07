@@ -132,6 +132,48 @@ async function runTests(browser, accDoc) {
     wrappedTextLeafFirstMark,
     wrappedTextLeafFirstMark.firstChild
   );
+  const wrappedTextNestedInlineP = findAccessibleChildByID(
+    accDoc,
+    "wrappedTextNestedInlineP"
+  );
+  const wrappedTextNestedInlineEm = findAccessibleChildByID(
+    accDoc,
+    "wrappedTextNestedInlineEm"
+  );
+  const wrappedTextNestedInlineStrong = findAccessibleChildByID(
+    accDoc,
+    "wrappedTextNestedInlineStrong"
+  );
+  await hitTest(
+    browser,
+    wrappedTextNestedInlineP,
+    wrappedTextNestedInlineEm,
+    wrappedTextNestedInlineStrong.firstChild
+  );
+  const wrappedTextPre = findAccessibleChildByID(accDoc, "wrappedTextPre");
+  const wrappedTextPreCode = findAccessibleChildByID(
+    accDoc,
+    "wrappedTextPreCode"
+  );
+  await hitTest(
+    browser,
+    wrappedTextPre,
+    wrappedTextPreCode,
+    wrappedTextPreCode.firstChild
+  );
+  // hitTest() can only test the first character. We need to test a subsequent
+  // character for this case.
+  let [x, y, w] = await getContentBoundsForDOMElm(
+    browser,
+    "wrappedTextPreCode"
+  );
+  // Use the top center of the element.
+  x = x + w / 2;
+  await untilCacheIs(
+    () => getChildAtPoint(wrappedTextPre, x, y, true),
+    wrappedTextPreCode.firstChild,
+    `Wrong deepest child accessible at the point (${x}, ${y}) of wrappedTextPre, sought wrappedTextPreCode leaf`
+  );
 
   info("Testing image");
   const imageP = findAccessibleChildByID(accDoc, "imageP");
@@ -191,6 +233,13 @@ addAccessibleTask(
   <p id="wrappedTextLeafFirstP" style="width: 3ch; font-family: monospace;">
     <mark id="wrappedTextLeafFirstMark">a</mark><a href="https://example.com/">b cd</a>
   </p>
+
+  <p id="wrappedTextNestedInlineP" style="width: 1ch; font-family: monospace;">
+    <em id="wrappedTextNestedInlineEm"><strong id="wrappedTextNestedInlineStrong">y </strong>z</em>
+  </p>
+
+  <pre id="wrappedTextPre"><code id="wrappedTextPreCode">ab cd
+e</pre>
 
   <p id="imageP">
     <img id="image" src="http://example.com/a11y/accessible/tests/mochitest/letters.gif">
