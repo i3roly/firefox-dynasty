@@ -144,7 +144,7 @@ class API_AVAILABLE(macos(13.3)) MicrosoftEntraSSOUtils final {
   }
 
   if ([ssoCookiesDict objectForKey:@"prt_headers"]) {
-    [allHeaders addObject:[ssoCookiesDict objectForKey:@"prt_headers"];
+    [allHeaders addObject:[ssoCookiesDict objectForKey:@"prt_headers"]];
   } else {
     MOZ_LOG(gMacOSWebAuthnServiceLog, mozilla::LogLevel::Debug,
             ("SSORequestDelegate::didCompleteWithAuthorization: "
