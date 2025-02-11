@@ -72,47 +72,6 @@ add_task(async function test_merino() {
   });
 });
 
-add_task(async function test_scenario_online() {
-  await doBasicScenarioTest("online", {
-    urlbarPrefs: {
-      // prefs
-      "quicksuggest.scenario": "online",
-      "quicksuggest.enabled": true,
-      "quicksuggest.dataCollection.enabled": false,
-      "quicksuggest.shouldShowOnboardingDialog": true,
-      "suggest.quicksuggest.nonsponsored": true,
-      "suggest.quicksuggest.sponsored": true,
-
-      // Nimbus variables
-      quickSuggestScenario: "online",
-      quickSuggestEnabled: true,
-      quickSuggestShouldShowOnboardingDialog: true,
-    },
-    defaults: [
-      {
-        name: "browser.urlbar.quicksuggest.enabled",
-        value: true,
-      },
-      {
-        name: "browser.urlbar.quicksuggest.dataCollection.enabled",
-        value: false,
-      },
-      {
-        name: "browser.urlbar.quicksuggest.shouldShowOnboardingDialog",
-        value: true,
-      },
-      {
-        name: "browser.urlbar.suggest.quicksuggest.nonsponsored",
-        value: true,
-      },
-      {
-        name: "browser.urlbar.suggest.quicksuggest.sponsored",
-        value: true,
-      },
-    ],
-  });
-});
-
 add_task(async function test_scenario_offline() {
   await doBasicScenarioTest("offline", {
     urlbarPrefs: {
@@ -120,14 +79,12 @@ add_task(async function test_scenario_offline() {
       "quicksuggest.scenario": "offline",
       "quicksuggest.enabled": true,
       "quicksuggest.dataCollection.enabled": false,
-      "quicksuggest.shouldShowOnboardingDialog": false,
       "suggest.quicksuggest.nonsponsored": true,
       "suggest.quicksuggest.sponsored": true,
 
       // Nimbus variables
       quickSuggestScenario: "offline",
       quickSuggestEnabled: true,
-      quickSuggestShouldShowOnboardingDialog: false,
     },
     defaults: [
       {
@@ -136,10 +93,6 @@ add_task(async function test_scenario_offline() {
       },
       {
         name: "browser.urlbar.quicksuggest.dataCollection.enabled",
-        value: false,
-      },
-      {
-        name: "browser.urlbar.quicksuggest.shouldShowOnboardingDialog",
         value: false,
       },
       {
@@ -182,8 +135,8 @@ async function doBasicScenarioTest(scenario, expectedPrefs) {
     callback: () => {
       // Pref updates should always settle down by the time enrollment is done.
       Assert.ok(
-        !UrlbarPrefs.updatingFirefoxSuggestPrefs,
-        "updatingFirefoxSuggestPrefs is false"
+        !UrlbarPrefs.updatingFirefoxSuggestScenario,
+        "updatingFirefoxSuggestScenario is false"
       );
 
       assertScenarioPrefs(expectedPrefs);
@@ -193,8 +146,8 @@ async function doBasicScenarioTest(scenario, expectedPrefs) {
   // Similarly, pref updates should always settle down by the time unenrollment
   // is done.
   Assert.ok(
-    !UrlbarPrefs.updatingFirefoxSuggestPrefs,
-    "updatingFirefoxSuggestPrefs is false"
+    !UrlbarPrefs.updatingFirefoxSuggestScenario,
+    "updatingFirefoxSuggestScenario is false"
   );
 
   assertDefaultScenarioPrefs();
@@ -221,7 +174,6 @@ function assertDefaultScenarioPrefs() {
       "quicksuggest.scenario": "offline",
       "quicksuggest.enabled": true,
       "quicksuggest.dataCollection.enabled": false,
-      "quicksuggest.shouldShowOnboardingDialog": false,
       "suggest.quicksuggest.nonsponsored": true,
       "suggest.quicksuggest.sponsored": true,
 
@@ -235,10 +187,6 @@ function assertDefaultScenarioPrefs() {
       },
       {
         name: "browser.urlbar.quicksuggest.dataCollection.enabled",
-        value: false,
-      },
-      {
-        name: "browser.urlbar.quicksuggest.shouldShowOnboardingDialog",
         value: false,
       },
       {
@@ -257,7 +205,6 @@ function clearOnboardingPrefs() {
   UrlbarPrefs.clear("suggest.quicksuggest.nonsponsored");
   UrlbarPrefs.clear("suggest.quicksuggest.sponsored");
   UrlbarPrefs.clear("quicksuggest.dataCollection.enabled");
-  UrlbarPrefs.clear("quicksuggest.shouldShowOnboardingDialog");
   UrlbarPrefs.clear("quicksuggest.showedOnboardingDialog");
   UrlbarPrefs.clear("quicksuggest.seenRestarts");
 }
@@ -275,13 +222,13 @@ function clearOnboardingPrefs() {
 add_task(async function () {
   await checkEnrollments({
     initialPrefsToSet: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.history,
+      defaultBranch: QuickSuggest.DEFAULT_PREFS.history,
     },
     valueOverrides: {
       quickSuggestScenario: "history",
     },
     expectedPrefs: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.history,
+      defaultBranch: QuickSuggest.DEFAULT_PREFS.history,
     },
   });
 });
@@ -297,35 +244,13 @@ add_task(async function () {
 add_task(async function () {
   await checkEnrollments({
     initialPrefsToSet: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.history,
+      defaultBranch: QuickSuggest.DEFAULT_PREFS.history,
     },
     valueOverrides: {
       quickSuggestScenario: "offline",
     },
     expectedPrefs: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.offline,
-    },
-  });
-});
-
-// Initial state:
-// * History (quick suggest feature disabled)
-//
-// Enrollment:
-// * Online
-//
-// Expected:
-// * All online prefs set on the default branch
-add_task(async function () {
-  await checkEnrollments({
-    initialPrefsToSet: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.history,
-    },
-    valueOverrides: {
-      quickSuggestScenario: "online",
-    },
-    expectedPrefs: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.online,
+      defaultBranch: QuickSuggest.DEFAULT_PREFS.offline,
     },
   });
 });
@@ -344,13 +269,13 @@ add_task(async function () {
 add_task(async function () {
   await checkEnrollments({
     initialPrefsToSet: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.offline,
+      defaultBranch: QuickSuggest.DEFAULT_PREFS.offline,
     },
     valueOverrides: {
       quickSuggestScenario: "offline",
     },
     expectedPrefs: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.offline,
+      defaultBranch: QuickSuggest.DEFAULT_PREFS.offline,
     },
   });
 });
@@ -371,7 +296,7 @@ add_task(async function () {
 add_task(async function () {
   await checkEnrollments({
     initialPrefsToSet: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.offline,
+      defaultBranch: QuickSuggest.DEFAULT_PREFS.offline,
       userBranch: {
         "suggest.quicksuggest.sponsored": false,
       },
@@ -380,7 +305,7 @@ add_task(async function () {
       quickSuggestScenario: "offline",
     },
     expectedPrefs: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.offline,
+      defaultBranch: QuickSuggest.DEFAULT_PREFS.offline,
       userBranch: {
         "suggest.quicksuggest.sponsored": false,
       },
@@ -404,7 +329,7 @@ add_task(async function () {
 add_task(async function () {
   await checkEnrollments({
     initialPrefsToSet: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.offline,
+      defaultBranch: QuickSuggest.DEFAULT_PREFS.offline,
       userBranch: {
         "suggest.quicksuggest.nonsponsored": false,
       },
@@ -413,7 +338,7 @@ add_task(async function () {
       quickSuggestScenario: "offline",
     },
     expectedPrefs: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.offline,
+      defaultBranch: QuickSuggest.DEFAULT_PREFS.offline,
       userBranch: {
         "suggest.quicksuggest.nonsponsored": false,
       },
@@ -437,7 +362,7 @@ add_task(async function () {
 add_task(async function () {
   await checkEnrollments({
     initialPrefsToSet: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.offline,
+      defaultBranch: QuickSuggest.DEFAULT_PREFS.offline,
       userBranch: {
         "suggest.quicksuggest.nonsponsored": false,
         "suggest.quicksuggest.sponsored": false,
@@ -447,7 +372,7 @@ add_task(async function () {
       quickSuggestScenario: "offline",
     },
     expectedPrefs: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.offline,
+      defaultBranch: QuickSuggest.DEFAULT_PREFS.offline,
       userBranch: {
         "suggest.quicksuggest.nonsponsored": false,
         "suggest.quicksuggest.sponsored": false,
@@ -472,7 +397,7 @@ add_task(async function () {
 add_task(async function () {
   await checkEnrollments({
     initialPrefsToSet: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.offline,
+      defaultBranch: QuickSuggest.DEFAULT_PREFS.offline,
       userBranch: {
         "quicksuggest.dataCollection.enabled": true,
       },
@@ -481,7 +406,7 @@ add_task(async function () {
       quickSuggestScenario: "offline",
     },
     expectedPrefs: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.offline,
+      defaultBranch: QuickSuggest.DEFAULT_PREFS.offline,
       userBranch: {
         "quicksuggest.dataCollection.enabled": true,
       },
@@ -505,7 +430,7 @@ add_task(async function () {
 add_task(async function () {
   await checkEnrollments({
     initialPrefsToSet: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.offline,
+      defaultBranch: QuickSuggest.DEFAULT_PREFS.offline,
       userBranch: {
         "suggest.quicksuggest.nonsponsored": false,
         "suggest.quicksuggest.sponsored": false,
@@ -516,539 +441,7 @@ add_task(async function () {
       quickSuggestScenario: "offline",
     },
     expectedPrefs: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.offline,
-      userBranch: {
-        "suggest.quicksuggest.nonsponsored": false,
-        "suggest.quicksuggest.sponsored": false,
-        "quicksuggest.dataCollection.enabled": true,
-      },
-    },
-  });
-});
-
-// The following tasks test OFFLINE TO ONLINE
-
-// Initial state:
-// * Offline (suggestions on and data collection off by default)
-// * User did not override any defaults
-//
-// Enrollment:
-// * Online
-//
-// Expected:
-// * All online prefs set on the default branch
-add_task(async function () {
-  await checkEnrollments({
-    initialPrefsToSet: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.offline,
-    },
-    valueOverrides: {
-      quickSuggestScenario: "online",
-    },
-    expectedPrefs: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.online,
-    },
-  });
-});
-
-// Initial state:
-// * Offline (suggestions on and data collection off by default)
-// * Non-sponsored suggestions: user left on
-// * Sponsored suggestions: user turned off
-// * Data collection: user left off
-//
-// Enrollment:
-// * Online
-//
-// Expected:
-// * Non-sponsored suggestions: remain on
-// * Sponsored suggestions: remain off
-// * Data collection: remains off
-add_task(async function () {
-  await checkEnrollments({
-    initialPrefsToSet: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.offline,
-      userBranch: {
-        "suggest.quicksuggest.sponsored": false,
-      },
-    },
-    valueOverrides: {
-      quickSuggestScenario: "online",
-    },
-    expectedPrefs: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.online,
-      userBranch: {
-        "suggest.quicksuggest.sponsored": false,
-      },
-    },
-  });
-});
-
-// Initial state:
-// * Offline (suggestions on and data collection off by default)
-// * Non-sponsored suggestions: user turned off
-// * Sponsored suggestions: user left on
-// * Data collection: user left off
-//
-// Enrollment:
-// * Online
-//
-// Expected:
-// * Non-sponsored suggestions: remain off
-// * Sponsored suggestions: remain on
-// * Data collection: remains off
-add_task(async function () {
-  await checkEnrollments({
-    initialPrefsToSet: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.offline,
-      userBranch: {
-        "suggest.quicksuggest.nonsponsored": false,
-      },
-    },
-    valueOverrides: {
-      quickSuggestScenario: "online",
-    },
-    expectedPrefs: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.online,
-      userBranch: {
-        "suggest.quicksuggest.nonsponsored": false,
-      },
-    },
-  });
-});
-
-// Initial state:
-// * Offline (suggestions on and data collection off by default)
-// * Non-sponsored suggestions: user turned off
-// * Sponsored suggestions: user turned off
-// * Data collection: user left off
-//
-// Enrollment:
-// * Online
-//
-// Expected:
-// * Non-sponsored suggestions: remain off
-// * Sponsored suggestions: remain off
-// * Data collection: remains off
-add_task(async function () {
-  await checkEnrollments({
-    initialPrefsToSet: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.offline,
-      userBranch: {
-        "suggest.quicksuggest.nonsponsored": false,
-        "suggest.quicksuggest.sponsored": false,
-      },
-    },
-    valueOverrides: {
-      quickSuggestScenario: "online",
-    },
-    expectedPrefs: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.online,
-      userBranch: {
-        "suggest.quicksuggest.nonsponsored": false,
-        "suggest.quicksuggest.sponsored": false,
-      },
-    },
-  });
-});
-
-// Initial state:
-// * Offline (suggestions on and data collection off by default)
-// * Non-sponsored suggestions: user left on
-// * Sponsored suggestions: user left on
-// * Data collection: user turned on
-//
-// Enrollment:
-// * Online
-//
-// Expected:
-// * Non-sponsored suggestions: remain on
-// * Sponsored suggestions: remain on
-// * Data collection: remains on
-add_task(async function () {
-  await checkEnrollments({
-    initialPrefsToSet: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.offline,
-      userBranch: {
-        "quicksuggest.dataCollection.enabled": true,
-      },
-    },
-    valueOverrides: {
-      quickSuggestScenario: "online",
-    },
-    expectedPrefs: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.online,
-      userBranch: {
-        "quicksuggest.dataCollection.enabled": true,
-      },
-    },
-  });
-});
-
-// Initial state:
-// * Offline (suggestions on and data collection off by default)
-// * Non-sponsored suggestions: user left on
-// * Sponsored suggestions: user turned off
-// * Data collection: user turned on
-//
-// Enrollment:
-// * Online
-//
-// Expected:
-// * Non-sponsored suggestions: remain on
-// * Sponsored suggestions: remain off
-// * Data collection: remains on
-add_task(async function () {
-  await checkEnrollments({
-    initialPrefsToSet: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.offline,
-      userBranch: {
-        "suggest.quicksuggest.sponsored": false,
-        "quicksuggest.dataCollection.enabled": true,
-      },
-    },
-    valueOverrides: {
-      quickSuggestScenario: "online",
-    },
-    expectedPrefs: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.online,
-      userBranch: {
-        "suggest.quicksuggest.sponsored": false,
-        "quicksuggest.dataCollection.enabled": true,
-      },
-    },
-  });
-});
-
-// Initial state:
-// * Offline (suggestions on and data collection off by default)
-// * Non-sponsored suggestions: user turned off
-// * Sponsored suggestions: user left on
-// * Data collection: user turned on
-//
-// Enrollment:
-// * Online
-//
-// Expected:
-// * Non-sponsored suggestions: remain off
-// * Sponsored suggestions: remain on
-// * Data collection: remains on
-add_task(async function () {
-  await checkEnrollments({
-    initialPrefsToSet: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.offline,
-      userBranch: {
-        "suggest.quicksuggest.nonsponsored": false,
-        "quicksuggest.dataCollection.enabled": true,
-      },
-    },
-    valueOverrides: {
-      quickSuggestScenario: "online",
-    },
-    expectedPrefs: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.online,
-      userBranch: {
-        "suggest.quicksuggest.nonsponsored": false,
-        "quicksuggest.dataCollection.enabled": true,
-      },
-    },
-  });
-});
-
-// Initial state:
-// * Offline (suggestions on and data collection off by default)
-// * Non-sponsored suggestions: user turned off
-// * Sponsored suggestions: user turned off
-// * Data collection: user turned on
-//
-// Enrollment:
-// * Online
-//
-// Expected:
-// * Non-sponsored suggestions: remain off
-// * Sponsored suggestions: remain off
-// * Data collection: remains on
-add_task(async function () {
-  await checkEnrollments({
-    initialPrefsToSet: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.offline,
-      userBranch: {
-        "suggest.quicksuggest.nonsponsored": false,
-        "suggest.quicksuggest.sponsored": false,
-        "quicksuggest.dataCollection.enabled": true,
-      },
-    },
-    valueOverrides: {
-      quickSuggestScenario: "online",
-    },
-    expectedPrefs: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.online,
-      userBranch: {
-        "suggest.quicksuggest.nonsponsored": false,
-        "suggest.quicksuggest.sponsored": false,
-        "quicksuggest.dataCollection.enabled": true,
-      },
-    },
-  });
-});
-
-// The following tasks test ONLINE TO ONLINE
-
-// Initial state:
-// * Online (suggestions on and data collection off by default)
-// * User did not override any defaults
-//
-// Enrollment:
-// * Online
-//
-// Expected:
-// * All online prefs set on the default branch
-add_task(async function () {
-  await checkEnrollments({
-    initialPrefsToSet: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.online,
-    },
-    valueOverrides: {
-      quickSuggestScenario: "online",
-    },
-    expectedPrefs: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.online,
-    },
-  });
-});
-
-// Initial state:
-// * Online (suggestions on and data collection off by default)
-// * Non-sponsored suggestions: user left on
-// * Sponsored suggestions: user turned off
-// * Data collection: user left off
-//
-// Enrollment:
-// * Online
-//
-// Expected:
-// * Non-sponsored suggestions: remain on
-// * Sponsored suggestions: remain off
-// * Data collection: remains off
-add_task(async function () {
-  await checkEnrollments({
-    initialPrefsToSet: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.online,
-      userBranch: {
-        "suggest.quicksuggest.sponsored": false,
-      },
-    },
-    valueOverrides: {
-      quickSuggestScenario: "online",
-    },
-    expectedPrefs: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.online,
-      userBranch: {
-        "suggest.quicksuggest.sponsored": false,
-      },
-    },
-  });
-});
-
-// Initial state:
-// * Online (suggestions on and data collection off by default)
-// * Non-sponsored suggestions: user turned off
-// * Sponsored suggestions: user left on
-// * Data collection: user left off
-//
-// Enrollment:
-// * Online
-//
-// Expected:
-// * Non-sponsored suggestions: remain off
-// * Sponsored suggestions: remain on
-// * Data collection: remains off
-add_task(async function () {
-  await checkEnrollments({
-    initialPrefsToSet: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.online,
-      userBranch: {
-        "suggest.quicksuggest.nonsponsored": false,
-      },
-    },
-    valueOverrides: {
-      quickSuggestScenario: "online",
-    },
-    expectedPrefs: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.online,
-      userBranch: {
-        "suggest.quicksuggest.nonsponsored": false,
-      },
-    },
-  });
-});
-
-// Initial state:
-// * Online (suggestions on and data collection off by default)
-// * Non-sponsored suggestions: user turned off
-// * Sponsored suggestions: user turned off
-// * Data collection: user left off
-//
-// Enrollment:
-// * Online
-//
-// Expected:
-// * Non-sponsored suggestions: remain off
-// * Sponsored suggestions: remain off
-// * Data collection: remains off
-add_task(async function () {
-  await checkEnrollments({
-    initialPrefsToSet: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.online,
-      userBranch: {
-        "suggest.quicksuggest.nonsponsored": false,
-        "suggest.quicksuggest.sponsored": false,
-      },
-    },
-    valueOverrides: {
-      quickSuggestScenario: "online",
-    },
-    expectedPrefs: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.online,
-      userBranch: {
-        "suggest.quicksuggest.nonsponsored": false,
-        "suggest.quicksuggest.sponsored": false,
-      },
-    },
-  });
-});
-
-// Initial state:
-// * Online (suggestions on and data collection off by default)
-// * Non-sponsored suggestions: user left on
-// * Sponsored suggestions: user left on
-// * Data collection: user turned on
-//
-// Enrollment:
-// * Online
-//
-// Expected:
-// * Non-sponsored suggestions: remain on
-// * Sponsored suggestions: remain on
-// * Data collection: remains on
-add_task(async function () {
-  await checkEnrollments({
-    initialPrefsToSet: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.online,
-      userBranch: {
-        "quicksuggest.dataCollection.enabled": true,
-      },
-    },
-    valueOverrides: {
-      quickSuggestScenario: "online",
-    },
-    expectedPrefs: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.online,
-      userBranch: {
-        "quicksuggest.dataCollection.enabled": true,
-      },
-    },
-  });
-});
-
-// Initial state:
-// * Online (suggestions on and data collection off by default)
-// * Non-sponsored suggestions: user left on
-// * Sponsored suggestions: user turned off
-// * Data collection: user turned on
-//
-// Enrollment:
-// * Online
-//
-// Expected:
-// * Non-sponsored suggestions: remain on
-// * Sponsored suggestions: remain off
-// * Data collection: remains on
-add_task(async function () {
-  await checkEnrollments({
-    initialPrefsToSet: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.online,
-      userBranch: {
-        "suggest.quicksuggest.sponsored": false,
-        "quicksuggest.dataCollection.enabled": true,
-      },
-    },
-    valueOverrides: {
-      quickSuggestScenario: "online",
-    },
-    expectedPrefs: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.online,
-      userBranch: {
-        "suggest.quicksuggest.sponsored": false,
-        "quicksuggest.dataCollection.enabled": true,
-      },
-    },
-  });
-});
-
-// Initial state:
-// * Online (suggestions on and data collection off by default)
-// * Non-sponsored suggestions: user turned off
-// * Sponsored suggestions: user left on
-// * Data collection: user turned on
-//
-// Enrollment:
-// * Online
-//
-// Expected:
-// * Non-sponsored suggestions: remain off
-// * Sponsored suggestions: remain on
-// * Data collection: remains on
-add_task(async function () {
-  await checkEnrollments({
-    initialPrefsToSet: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.online,
-      userBranch: {
-        "suggest.quicksuggest.nonsponsored": false,
-        "quicksuggest.dataCollection.enabled": true,
-      },
-    },
-    valueOverrides: {
-      quickSuggestScenario: "online",
-    },
-    expectedPrefs: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.online,
-      userBranch: {
-        "suggest.quicksuggest.nonsponsored": false,
-        "quicksuggest.dataCollection.enabled": true,
-      },
-    },
-  });
-});
-
-// Initial state:
-// * Online (suggestions on and data collection off by default)
-// * Non-sponsored suggestions: user turned off
-// * Sponsored suggestions: user turned off
-// * Data collection: user turned on
-//
-// Enrollment:
-// * Online
-//
-// Expected:
-// * Non-sponsored suggestions: remain off
-// * Sponsored suggestions: remain off
-// * Data collection: remains on
-add_task(async function () {
-  await checkEnrollments({
-    initialPrefsToSet: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.online,
-      userBranch: {
-        "suggest.quicksuggest.nonsponsored": false,
-        "suggest.quicksuggest.sponsored": false,
-        "quicksuggest.dataCollection.enabled": true,
-      },
-    },
-    valueOverrides: {
-      quickSuggestScenario: "online",
-    },
-    expectedPrefs: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.online,
+      defaultBranch: QuickSuggest.DEFAULT_PREFS.offline,
       userBranch: {
         "suggest.quicksuggest.nonsponsored": false,
         "suggest.quicksuggest.sponsored": false,
@@ -1074,7 +467,7 @@ add_task(async function () {
 add_task(async function () {
   await checkEnrollments({
     initialPrefsToSet: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.offline,
+      defaultBranch: QuickSuggest.DEFAULT_PREFS.offline,
     },
     valueOverrides: {
       quickSuggestScenario: "offline",
@@ -1082,7 +475,7 @@ add_task(async function () {
     },
     expectedPrefs: {
       defaultBranch: {
-        ...UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.offline,
+        ...QuickSuggest.DEFAULT_PREFS.offline,
         "suggest.quicksuggest.sponsored": true,
       },
     },
@@ -1102,7 +495,7 @@ add_task(async function () {
 add_task(async function () {
   await checkEnrollments({
     initialPrefsToSet: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.offline,
+      defaultBranch: QuickSuggest.DEFAULT_PREFS.offline,
       userBranch: {
         "suggest.quicksuggest.sponsored": false,
       },
@@ -1113,7 +506,7 @@ add_task(async function () {
     },
     expectedPrefs: {
       defaultBranch: {
-        ...UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.offline,
+        ...QuickSuggest.DEFAULT_PREFS.offline,
         "suggest.quicksuggest.sponsored": true,
       },
       userBranch: {
@@ -1136,7 +529,7 @@ add_task(async function () {
 add_task(async function () {
   await checkEnrollments({
     initialPrefsToSet: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.offline,
+      defaultBranch: QuickSuggest.DEFAULT_PREFS.offline,
     },
     valueOverrides: {
       quickSuggestScenario: "offline",
@@ -1144,7 +537,7 @@ add_task(async function () {
     },
     expectedPrefs: {
       defaultBranch: {
-        ...UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.offline,
+        ...QuickSuggest.DEFAULT_PREFS.offline,
         "quicksuggest.dataCollection.enabled": true,
       },
     },
@@ -1165,7 +558,7 @@ add_task(async function () {
 add_task(async function () {
   await checkEnrollments({
     initialPrefsToSet: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.offline,
+      defaultBranch: QuickSuggest.DEFAULT_PREFS.offline,
       userBranch: {
         "quicksuggest.dataCollection.enabled": false,
       },
@@ -1176,133 +569,7 @@ add_task(async function () {
     },
     expectedPrefs: {
       defaultBranch: {
-        ...UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.offline,
-        "quicksuggest.dataCollection.enabled": true,
-      },
-      userBranch: {
-        "quicksuggest.dataCollection.enabled": false,
-      },
-    },
-  });
-});
-
-// Initial state:
-// * Online (suggestions on and data collection off by default)
-// * User did not override any defaults
-//
-// Enrollment:
-// * Online
-// * Sponsored suggestions individually forced off
-//
-// Expected:
-// * Sponsored suggestions: off
-add_task(async function () {
-  await checkEnrollments({
-    initialPrefsToSet: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.online,
-    },
-    valueOverrides: {
-      quickSuggestScenario: "online",
-      quickSuggestSponsoredEnabled: false,
-    },
-    expectedPrefs: {
-      defaultBranch: {
-        ...UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.online,
-        "suggest.quicksuggest.sponsored": false,
-      },
-    },
-  });
-});
-
-// Initial state:
-// * Online (suggestions on and data collection off by default)
-// * Sponsored suggestions: user turned on (they're on by default, so this
-//   simulates when the user toggled them off and then back on)
-//
-// Enrollment:
-// * Online
-// * Sponsored suggestions individually forced off
-//
-// Expected:
-// * Sponsored suggestions: remain on
-add_task(async function () {
-  await checkEnrollments({
-    initialPrefsToSet: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.online,
-      userBranch: {
-        "suggest.quicksuggest.sponsored": true,
-      },
-    },
-    valueOverrides: {
-      quickSuggestScenario: "online",
-      quickSuggestSponsoredEnabled: false,
-    },
-    expectedPrefs: {
-      defaultBranch: {
-        ...UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.online,
-        "suggest.quicksuggest.sponsored": false,
-      },
-      userBranch: {
-        "suggest.quicksuggest.sponsored": true,
-      },
-    },
-  });
-});
-
-// Initial state:
-// * Online (suggestions on and data collection off by default)
-// * User did not override any defaults
-//
-// Enrollment:
-// * Online
-// * Data collection individually forced on
-//
-// Expected:
-// * Data collection: on
-add_task(async function () {
-  await checkEnrollments({
-    initialPrefsToSet: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.online,
-    },
-    valueOverrides: {
-      quickSuggestScenario: "online",
-      quickSuggestDataCollectionEnabled: true,
-    },
-    expectedPrefs: {
-      defaultBranch: {
-        ...UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.online,
-        "quicksuggest.dataCollection.enabled": true,
-      },
-    },
-  });
-});
-
-// Initial state:
-// * Online (suggestions on and data collection off by default)
-// * Data collection: user turned off (it's off by default, so this simulates
-//   when the user toggled it on and then back off)
-//
-// Enrollment:
-// * Online
-// * Data collection individually forced on
-//
-// Expected:
-// * Data collection: remains off
-add_task(async function () {
-  await checkEnrollments({
-    initialPrefsToSet: {
-      defaultBranch: UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.online,
-      userBranch: {
-        "quicksuggest.dataCollection.enabled": false,
-      },
-    },
-    valueOverrides: {
-      quickSuggestScenario: "online",
-      quickSuggestDataCollectionEnabled: true,
-    },
-    expectedPrefs: {
-      defaultBranch: {
-        ...UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.online,
+        ...QuickSuggest.DEFAULT_PREFS.offline,
         "quicksuggest.dataCollection.enabled": true,
       },
       userBranch: {
@@ -1728,7 +995,7 @@ async function checkEnrollments(options) {
     let { initialPrefsToSet, valueOverrides, expectedPrefs } = enrollments[i];
 
     // Set initial prefs.
-    UrlbarPrefs._updatingFirefoxSuggestScenario = true;
+    QuickSuggest._updatingFirefoxSuggestScenario = true;
     let { defaultBranch: initialDefaultBranch, userBranch: initialUserBranch } =
       initialPrefsToSet;
     initialDefaultBranch = initialDefaultBranch || {};
@@ -1746,7 +1013,7 @@ async function checkEnrollments(options) {
         branch.setBoolPref(name, value);
       }
     }
-    UrlbarPrefs._updatingFirefoxSuggestScenario = false;
+    QuickSuggest._updatingFirefoxSuggestScenario = false;
 
     let {
       defaultBranch: expectedDefaultBranch,
@@ -1813,10 +1080,7 @@ async function checkEnrollments(options) {
     // or if there's not a user value, the original value on the default branch
     // before enrollment. This assumes the default values reflect the offline
     // scenario (the case for the U.S. region).
-    let effectivePrefs = Object.assign(
-      {},
-      UrlbarPrefs.FIREFOX_SUGGEST_DEFAULT_PREFS.offline
-    );
+    let effectivePrefs = Object.assign({}, QuickSuggest.DEFAULT_PREFS.offline);
     for (let [name, value] of Object.entries(expectedUserBranch)) {
       effectivePrefs[name] = value;
     }
@@ -1829,11 +1093,11 @@ async function checkEnrollments(options) {
     }
 
     // Clean up.
-    UrlbarPrefs._updatingFirefoxSuggestScenario = true;
+    QuickSuggest._updatingFirefoxSuggestScenario = true;
     for (let name of Object.keys(expectedUserBranch)) {
       UrlbarPrefs.clear(name);
     }
-    UrlbarPrefs._updatingFirefoxSuggestScenario = false;
+    QuickSuggest._updatingFirefoxSuggestScenario = false;
   }
 }
 

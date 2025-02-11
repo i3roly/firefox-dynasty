@@ -570,16 +570,12 @@ export class URLChecker {
    * @returns {string} - Normalized URL.
    */
   normalizeLocalhost(url) {
-    try {
-      const parsedURL = new URL(url);
-      if (parsedURL.hostname === "localhost") {
-        // Normalize to only scheme and localhost without port or user info
-        return `${parsedURL.protocol}//localhost/`;
-      }
-      return url;
-    } catch (error) {
-      return url;
+    const parsedURL = URL.parse(url);
+    if (parsedURL?.hostname === "localhost") {
+      // Normalize to only scheme and localhost without port or user info
+      return `${parsedURL.protocol}//localhost/`;
     }
+    return url;
   }
 
   /**
@@ -609,4 +605,14 @@ export class URLChecker {
     // If no matches, return a default rejectionType
     return { allowed: false, rejectionType: RejectionType.DISALLOWED };
   }
+}
+
+/**
+ * Returns the optimal CPU concurrency for ML
+ *
+ * @returns {number} The number of threads we should be using
+ */
+export function getOptimalCPUConcurrency() {
+  let mlUtils = Cc["@mozilla.org/ml-utils;1"].createInstance(Ci.nsIMLUtils);
+  return mlUtils.getOptimalCPUConcurrency();
 }

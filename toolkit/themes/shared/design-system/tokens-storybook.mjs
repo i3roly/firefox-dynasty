@@ -171,8 +171,10 @@ export const storybookTables = {
     {
       value: {
         default: "transparent",
-        prefersContrast: "var(--button-background-color)",
-        forcedColors: "var(--button-background-color)",
+        brand: {
+          prefersContrast: "var(--button-background-color)",
+          forcedColors: "var(--button-background-color)",
+        },
       },
       name: "--button-background-color-ghost",
     },
@@ -183,7 +185,7 @@ export const storybookTables = {
     {
       value: {
         default: "var(--button-background-color-ghost)",
-        forcedColors: "var(--button-background-color-disabled)",
+        brand: { forcedColors: "var(--button-background-color-disabled)" },
       },
       name: "--button-background-color-ghost-disabled",
     },
@@ -405,6 +407,10 @@ export const storybookTables = {
     { value: "var(--font-weight-bold)", name: "--button-font-weight" },
     { value: "normal", name: "--font-weight" },
     { value: 600, name: "--font-weight-bold" },
+  ],
+  "icon-fill": [{ value: "currentColor", name: "--button-icon-fill" }],
+  "icon-stroke": [
+    { value: "var(--button-icon-fill)", name: "--button-icon-stroke" },
   ],
   "min-height": [
     { value: "var(--size-item-large)", name: "--button-min-height" },
@@ -727,8 +733,6 @@ export const storybookTables = {
       },
       name: "--icon-color-critical",
     },
-    { value: "currentColor", name: "--button-icon-fill" },
-    { value: "var(--button-icon-fill)", name: "--button-icon-stroke" },
   ],
   "icon-size": [
     { value: "var(--size-item-small)", name: "--icon-size-default" },
@@ -928,14 +932,16 @@ export const variableLookupTable = {
   },
   "button-background-color-ghost": {
     default: "transparent",
-    prefersContrast: "var(--button-background-color)",
-    forcedColors: "var(--button-background-color)",
+    brand: {
+      prefersContrast: "var(--button-background-color)",
+      forcedColors: "var(--button-background-color)",
+    },
   },
   "button-background-color-ghost-active":
     "var(--button-background-color-active)",
   "button-background-color-ghost-disabled": {
     default: "var(--button-background-color-ghost)",
-    forcedColors: "var(--button-background-color-disabled)",
+    brand: { forcedColors: "var(--button-background-color-disabled)" },
   },
   "button-background-color-ghost-hover": "var(--button-background-color-hover)",
   "button-border": "var(--border-width) solid var(--button-border-color)",

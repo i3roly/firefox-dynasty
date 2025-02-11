@@ -128,7 +128,8 @@ class CodeGenerator final : public CodeGeneratorSpecific {
                                   size_t trapExitLayoutNumWords,
                                   wasm::FuncOffsets* offsets,
                                   wasm::StackMaps* stackMaps,
-                                  wasm::Decoder* decoder);
+                                  wasm::Decoder* decoder,
+                                  jit::IonPerfSpewer* spewer);
 
   [[nodiscard]] bool link(JSContext* cx);
 
@@ -352,6 +353,11 @@ class CodeGenerator final : public CodeGeneratorSpecific {
   void emitCreateBigInt(LInstruction* lir, Scalar::Type type, Register64 input,
                         Register output, Register maybeTemp,
                         Register64 maybeTemp64 = Register64::Invalid());
+
+  void emitCallMegamorphicGetter(LInstruction* lir,
+                                 ValueOperand accessorAndOutput, Register obj,
+                                 Register calleeScratch, Register argcScratch,
+                                 Label* nullGetter);
 
   template <size_t NumDefs>
   void emitIonToWasmCallBase(LIonToWasmCallBase<NumDefs>* lir);

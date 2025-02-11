@@ -364,6 +364,7 @@ var SidebarController = {
     }
     if (this._mainResizeObserver) {
       this._mainResizeObserver.disconnect();
+      this._mainResizeObserverAdded = false;
     }
     this._mainResizeObserver = new ResizeObserver(([entry]) =>
       this._handleLauncherResize(entry)
@@ -2008,6 +2009,13 @@ XPCOMUtils.defineLazyPreferenceGetter(
       if (SidebarController._state) {
         const isVerticalTabs = SidebarController.sidebarVerticalTabsEnabled;
         SidebarController._state.revampVisibility = newValue;
+        if (
+          SidebarController._animationEnabled &&
+          !window.gReduceMotion &&
+          newValue !== "expand-on-hover"
+        ) {
+          SidebarController._animateSidebarMain();
+        }
         SidebarController._state.updateVisibility(
           (newValue != "hide-sidebar" && isVerticalTabs) || !isVerticalTabs,
           false,

@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-// Tests `UrlbarPrefs.updateFirefoxSuggestScenario` in isolation under the
+// Tests `QuickSuggest.updateFirefoxSuggestScenario` in isolation under the
 // assumption that the offline scenario should be enabled by default for US en.
 
 "use strict";
@@ -16,13 +16,6 @@ const PREFS = [
     get: "getBoolPref",
     set: "setBoolPref",
     expectedOfflineValue: true,
-    expectedOtherValue: false,
-  },
-  {
-    name: "browser.urlbar.quicksuggest.shouldShowOnboardingDialog",
-    get: "getBoolPref",
-    set: "setBoolPref",
-    expectedOfflineValue: false,
     expectedOtherValue: false,
   },
   {
@@ -63,7 +56,7 @@ add_task(async function test() {
 
 /**
  * Sets the app's locale and region, calls
- * `UrlbarPrefs.updateFirefoxSuggestScenario`, and asserts that the pref values
+ * `QuickSuggest.updateFirefoxSuggestScenario`, and asserts that the pref values
  * are correct.
  *
  * @param {object} options
@@ -90,7 +83,7 @@ async function doTest({ locale, home, expectedOfflineDefault }) {
     homeRegion: home,
     locales: [locale],
     callback: async () => {
-      await UrlbarPrefs.updateFirefoxSuggestScenario();
+      await QuickSuggest.updateFirefoxSuggestScenario();
       for (let {
         name,
         get,

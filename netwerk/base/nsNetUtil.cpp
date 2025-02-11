@@ -3875,11 +3875,17 @@ bool IsFontMimeType(const nsAString& aType) {
 }
 
 static const nsAttrValue::EnumTable kAsAttributeTable[] = {
-    {"", DESTINATION_INVALID},      {"audio", DESTINATION_AUDIO},
-    {"font", DESTINATION_FONT},     {"image", DESTINATION_IMAGE},
-    {"script", DESTINATION_SCRIPT}, {"style", DESTINATION_STYLE},
-    {"track", DESTINATION_TRACK},   {"video", DESTINATION_VIDEO},
-    {"fetch", DESTINATION_FETCH},   {nullptr, 0}};
+    {"", DESTINATION_INVALID},
+    {"audio", DESTINATION_AUDIO},
+    {"font", DESTINATION_FONT},
+    {"image", DESTINATION_IMAGE},
+    {"script", DESTINATION_SCRIPT},
+    {"style", DESTINATION_STYLE},
+    {"track", DESTINATION_TRACK},
+    {"video", DESTINATION_VIDEO},
+    {"fetch", DESTINATION_FETCH},
+    {"json", DESTINATION_JSON},
+    {nullptr, 0}};
 
 void ParseAsValue(const nsAString& aValue, nsAttrValue& aResult) {
   DebugOnly<bool> success =
@@ -3911,6 +3917,8 @@ nsContentPolicyType AsValueToContentPolicy(const nsAttrValue& aValue) {
       return nsIContentPolicy::TYPE_STYLESHEET;
     case DESTINATION_FETCH:
       return nsIContentPolicy::TYPE_INTERNAL_FETCH_PRELOAD;
+    case DESTINATION_JSON:
+      return nsIContentPolicy::TYPE_JSON;
   }
   return nsIContentPolicy::TYPE_INVALID;
 }
@@ -3930,7 +3938,7 @@ bool IsScriptLikeOrInvalid(const nsAString& aAs) {
       aAs.LowerCaseEqualsASCII("report") || aAs.LowerCaseEqualsASCII("style") ||
       aAs.LowerCaseEqualsASCII("track") || aAs.LowerCaseEqualsASCII("video") ||
       aAs.LowerCaseEqualsASCII("webidentity") ||
-      aAs.LowerCaseEqualsASCII("xslt"));
+      aAs.LowerCaseEqualsASCII("xslt") || aAs.LowerCaseEqualsASCII("json"));
 }
 
 bool CheckPreloadAttrs(const nsAttrValue& aAs, const nsAString& aType,
@@ -3986,6 +3994,9 @@ bool CheckPreloadAttrs(const nsAttrValue& aAs, const nsAString& aType,
   }
   if (policyType == nsIContentPolicy::TYPE_STYLESHEET) {
     return type.EqualsASCII("text/css");
+  }
+  if (policyType == nsIContentPolicy::TYPE_JSON) {
+    return nsContentUtils::IsJsonMimeType(type);
   }
   return false;
 }

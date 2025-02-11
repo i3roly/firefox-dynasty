@@ -498,6 +498,8 @@ bool BaseCompiler::beginFunction() {
     }
   }
 
+  perfSpewer_.markStartOffset(masm.currentOffset());
+  perfSpewer_.recordOffset(masm, "Prologue");
   GenerateFunctionPrologue(
       masm, CallIndirectId::forFunc(codeMeta_, func_.index),
       compilerEnv_.mode() != CompileMode::Once ? Some(func_.index) : Nothing(),
@@ -711,6 +713,7 @@ bool BaseCompiler::endFunction() {
   // baseline can clobber it.
   fr.loadInstancePtr(InstanceReg);
 #endif
+  perfSpewer_.recordOffset(masm, "Epilogue");
   GenerateFunctionEpilogue(masm, fr.fixedAllocSize(), &offsets_);
 
 #if defined(JS_ION_PERF)
@@ -722,6 +725,7 @@ bool BaseCompiler::endFunction() {
   JitSpew(JitSpew_Codegen, "# endFunction: end of function epilogue");
 
   JitSpew(JitSpew_Codegen, "# endFunction: start of OOL code");
+  perfSpewer_.recordOffset(masm, "OOLCode");
   if (!generateOutOfLineCode()) {
     return false;
   }
@@ -10366,6 +10370,10 @@ bool BaseCompiler::emitBody() {
       }
     }
 
+#ifdef JS_ION_PERF
+    perfSpewer_.recordInstruction(masm, op);
+#endif
+
     // Going below framePushedAtEntryToBody would imply that we've
     // popped off the machine stack, part of the frame created by
     // beginFunction().
@@ -12368,6 +12376,13 @@ bool js::wasm::BaselineCompileFunctions(const CodeMetadata& codeMeta,
             func.index, f.iter_.featureUsage(),
             CallRefMetricsRange(callRefMetricsBefore, callRefMetricsLength))) {
       return false;
+    }
+
+    if (PerfEnabled()) {
+      if (!code->funcBaselineSpewers.emplaceBack(func.index,
+                                                 std::move(f.perfSpewer_))) {
+        return false;
+      }
     }
 
     // Accumulate observed feature usage

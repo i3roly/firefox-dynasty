@@ -1869,8 +1869,10 @@ def _run_android(
             # The app is waiting for jdb to attach and will not continue running
             # until we do so.
             def _jdb_ping(local_jdb_port):
+                java_bin_path = os.path.dirname(command_context.substs["JAVA"])
+                jdb_path = os.path.join(java_bin_path, "jdb")
                 jdb_process = subprocess.Popen(
-                    ["jdb", "-attach", "localhost:%d" % local_jdb_port],
+                    [jdb_path, "-attach", "localhost:%d" % local_jdb_port],
                     stdin=subprocess.PIPE,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
@@ -3373,26 +3375,6 @@ def package_l10n(command_context, verbose=False, locales=[]):
         print_directory=False,
         ensure_exit_code=True,
     )
-
-    if command_context.substs["MOZ_BUILD_APP"] == "mobile/android":
-        command_context.log(
-            logging.INFO,
-            "package-multi-locale",
-            {},
-            "Invoking `mach android assemble-app`",
-        )
-        command_context.run_process(
-            [
-                sys.executable,
-                mozpath.join(command_context.topsrcdir, "mach"),
-                "android",
-                "assemble-app",
-            ],
-            append_env=append_env,
-            pass_thru=True,
-            ensure_exit_code=True,
-            cwd=mozpath.join(command_context.topsrcdir),
-        )
 
     if command_context.substs["MOZ_BUILD_APP"] == "browser":
         command_context.log(
