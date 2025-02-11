@@ -3781,12 +3781,14 @@ static bool MaybeDropEventForModalWindow(NSEvent* aEvent, id aDelegate) {
   return self;
 
   NS_OBJC_END_TRY_BLOCK_RETURN(nil);
+
 }
 - (void)dealloc {
-  [mFullscreenTitlebarTracker removeObserver:self forKeyPath:@"revealAmount"];
-  [mFullscreenTitlebarTracker removeFromParentViewController];
-  [mFullscreenTitlebarTracker release];
-
+  if(@available(macOS 10.10, *)) {
+    [mFullscreenTitlebarTracker removeObserver:self forKeyPath:@"revealAmount"];
+    [mFullscreenTitlebarTracker removeFromParentViewController];
+    [mFullscreenTitlebarTracker release];
+  }
   [super dealloc];
 }
 
