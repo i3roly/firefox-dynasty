@@ -410,13 +410,17 @@ ChromeUtils.defineLazyGetter(this, "ReferrerInfo", () =>
 
 // High priority notification bars shown at the top of the window.
 ChromeUtils.defineLazyGetter(this, "gNotificationBox", () => {
+  let securityDelayMS = Services.prefs.getIntPref(
+    "security.notification_enable_delay"
+  );
+
   return new MozElements.NotificationBox(element => {
     element.classList.add("global-notificationbox");
     element.setAttribute("notificationside", "top");
     element.setAttribute("prepend-notifications", true);
     // We want this before the tab notifications.
     document.getElementById("notifications-toolbar").prepend(element);
-  });
+  }, securityDelayMS);
 });
 
 ChromeUtils.defineLazyGetter(this, "InlineSpellCheckerUI", () => {
@@ -7240,6 +7244,13 @@ var gDialogBox = {
     window.focus();
 
     try {
+      // Prevent URL bar from showing on top of modal
+      gURLBar.incrementBreakoutBlockerCount();
+    } catch (ex) {
+      console.error(ex);
+    }
+
+    try {
       await this._open(uri, args);
     } catch (ex) {
       console.error(ex);
@@ -7262,6 +7273,8 @@ var gDialogBox = {
       this._updateMenuAndCommandState(true /* to enable */);
       this._dialog = null;
       UpdatePopupNotificationsVisibility();
+      // Restores URL bar breakout if needed
+      gURLBar.decrementBreakoutBlockerCount();
     }
     if (this._queued.length) {
       setTimeout(() => this._openNextDialog(), 0);
