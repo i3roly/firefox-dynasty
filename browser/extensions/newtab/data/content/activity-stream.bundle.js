@@ -171,6 +171,8 @@ for (const type of [
   "HIDE_PRIVACY_INFO",
   "HIDE_TOAST_MESSAGE",
   "INIT",
+  "INLINE_SELECTION_CLICK",
+  "INLINE_SELECTION_IMPRESSION",
   "NEW_TAB_INIT",
   "NEW_TAB_INITIAL_STATE",
   "NEW_TAB_LOAD",
@@ -1344,10 +1346,11 @@ class DSImage extends (external_React_default()).PureComponent {
     }
   }
   reformatImageURL(url, width, height) {
+    const smart = this.props.smartCrop ? "smart/" : "";
     // Change the image URL to request a size tailored for the parent container width
     // Also: force JPEG, quality 60, no upscaling, no EXIF data
     // Uses Thumbor: https://thumbor.readthedocs.io/en/latest/usage.html
-    return `https://img-getpocket.cdn.mozilla.net/${width}x${height}/filters:format(jpeg):quality(60):no_upscale():strip_exif()/${encodeURIComponent(url)}`;
+    return `https://img-getpocket.cdn.mozilla.net/${width}x${height}/${smart}filters:format(jpeg):quality(60):no_upscale():strip_exif()/${encodeURIComponent(url)}`;
   }
   componentDidMount() {
     this.idleCallbackId = this.props.windowObj.requestIdleCallback(this.onIdleCallback.bind(this));
@@ -2294,7 +2297,7 @@ class DSLinkMenu extends (external_React_default()).PureComponent {
     if (!this.props.isRecentSave) {
       // Show Pocket context menu options if applicable.
       // Additionally, show these menu options for all section cards.
-      if (this.props.pocket_button_enabled && this.props.saveToPocketCard || this.props.isSectionsCard) {
+      if (this.props.pocket_button_enabled && (this.props.saveToPocketCard || this.props.isSectionsCard)) {
         pocketMenuOptions = ["CheckSavedToPocket"];
       }
       TOP_STORIES_CONTEXT_MENU_OPTIONS = ["CheckBookmark", "CheckArchiveFromPocket", ...pocketMenuOptions, "Separator", "OpenInNewWindow", "OpenInPrivateWindow", "Separator", "BlockUrl", ...(this.props.showPrivacyInfo ? ["ShowPrivacyInfo"] : [])];
@@ -3259,6 +3262,11 @@ class _DSCard extends (external_React_default()).PureComponent {
       width: 202,
       height: 101
     }];
+    this.simpleCardImageSizes = [{
+      mediaMatcher: "default",
+      width: 265,
+      height: 265
+    }];
     this.largeCardImageSizes = [{
       mediaMatcher: "(min-width: 1122px)",
       width: 220,
@@ -3555,6 +3563,7 @@ class _DSCard extends (external_React_default()).PureComponent {
     const {
       isRecentSave,
       DiscoveryStream,
+      Prefs,
       saveToPocketCard,
       isListCard,
       isFakespot,
@@ -3594,6 +3603,11 @@ class _DSCard extends (external_React_default()).PureComponent {
       descLines = 3,
       readTime: displayReadTime
     } = DiscoveryStream;
+    const layoutsVariantAEnabled = Prefs.values["newtabLayouts.variant-a"];
+    const layoutsVariantBEnabled = Prefs.values["newtabLayouts.variant-b"];
+    const sectionsEnabled = Prefs.values["discoverystream.sections.enabled"];
+    const layoutsVariantAorB = layoutsVariantAEnabled || layoutsVariantBEnabled;
+    const smartCrop = Prefs.values["images.smart"];
     const excerpt = !hideDescriptions ? this.props.excerpt : "";
     let timeToRead;
     if (displayReadTime) {
@@ -3617,7 +3631,13 @@ class _DSCard extends (external_React_default()).PureComponent {
     const spocFormatClassName = isMediumRectangle ? `ds-spoc-rectangle` : ``;
     let sizes = [];
     if (!isMediumRectangle) {
-      sizes = isListCard ? this.listCardImageSizes : this.dsImageSizes;
+      sizes = this.dsImageSizes;
+      if (sectionsEnabled || layoutsVariantAorB) {
+        sizes = this.simpleCardImageSizes;
+      }
+      if (isListCard) {
+        sizes = this.listCardImageSizes;
+      }
     }
 
     // TODO: Add logic to assign this.largeCardImageSizes
@@ -3648,7 +3668,8 @@ class _DSCard extends (external_React_default()).PureComponent {
       url: this.props.url,
       title: this.props.title,
       isRecentSave: isRecentSave,
-      alt_text: alt_text
+      alt_text: alt_text,
+      smartCrop: smartCrop
     })), /*#__PURE__*/external_React_default().createElement(ImpressionStats_ImpressionStats, {
       flightId: this.props.flightId,
       rows: [{
@@ -3756,7 +3777,8 @@ _DSCard.defaultProps = {
 };
 const DSCard = (0,external_ReactRedux_namespaceObject.connect)(state => ({
   App: state.App,
-  DiscoveryStream: state.DiscoveryStream
+  DiscoveryStream: state.DiscoveryStream,
+  Prefs: state.Prefs
 }))(_DSCard);
 const PlaceholderDSCard = () => /*#__PURE__*/external_React_default().createElement(DSCard, {
   placeholder: true
@@ -10027,7 +10049,9 @@ function SectionContextMenu({
 
 
 
+
 const PREF_FOLLOWED_SECTIONS = "discoverystream.sections.following";
+const PREF_TOPIC_SELECTION_POSITION = "discoverystream.sections.topicSelection.position";
 
 /**
  * Shows a list of recommended topics with visual indication whether
@@ -10075,10 +10099,19 @@ function InlineTopicSelection() {
     label: "Entertainment",
     id: "arts"
   }];
+  const handleIntersection = (0,external_React_namespaceObject.useCallback)(() => {
+    dispatch(actionCreators.AlsoToMain({
+      type: actionTypes.INLINE_SELECTION_IMPRESSION,
+      data: {
+        position: prefs[PREF_TOPIC_SELECTION_POSITION]
+      }
+    }));
+  }, [dispatch, prefs]);
+  const ref = useIntersectionObserver(handleIntersection);
 
   // Updates user preferences as they follow or unfollow topics
   // by selecting them from the list
-  function handleChange(e) {
+  function handleChange(e, index) {
     const {
       name: topic,
       checked
@@ -10089,15 +10122,27 @@ function InlineTopicSelection() {
     } else {
       updatedTopics = updatedTopics.filter(t => t !== topic);
     }
+    dispatch(actionCreators.OnlyToMain({
+      type: actionTypes.INLINE_SELECTION_CLICK,
+      data: {
+        topic,
+        is_followed: checked,
+        topic_position: index,
+        position: prefs[PREF_TOPIC_SELECTION_POSITION]
+      }
+    }));
     dispatch(actionCreators.SetPref(PREF_FOLLOWED_SECTIONS, updatedTopics.join(", ")));
   }
   return /*#__PURE__*/external_React_default().createElement("section", {
-    className: "inline-selection-wrapper"
+    className: "inline-selection-wrapper",
+    ref: el => {
+      ref.current = [el];
+    }
   }, /*#__PURE__*/external_React_default().createElement("h2", null, "Follow topics to personalize your feed"), /*#__PURE__*/external_React_default().createElement("p", {
     className: "inline-selection-copy"
   }, "We will bring you personalized content, all while respecting your privacy. You'll have powerful control over what content you see and what you don't."), /*#__PURE__*/external_React_default().createElement("ul", {
     className: "topic-list"
-  }, topics.map(topic => {
+  }, topics.map((topic, index) => {
     const checked = following.includes(topic.id);
     return /*#__PURE__*/external_React_default().createElement("li", {
       key: topic.id
@@ -10107,7 +10152,7 @@ function InlineTopicSelection() {
       name: topic.id,
       checked: checked,
       "aria-checked": checked,
-      onChange: handleChange,
+      onChange: e => handleChange(e, index),
       tabIndex: -1
     }), /*#__PURE__*/external_React_default().createElement("span", {
       className: "topic-item-label"
@@ -10145,7 +10190,7 @@ const PREF_BLOCKED_SECTIONS = "discoverystream.sections.blocked";
 const CardSections_PREF_TOPICS_AVAILABLE = "discoverystream.topicSelection.topics";
 const CardSections_PREF_THUMBS_UP_DOWN_ENABLED = "discoverystream.thumbsUpDown.enabled";
 const PREF_TOPIC_SELECTION_ENABLED = "discoverystream.sections.topicSelection.enabled";
-const PREF_TOPIC_SELECTION_POSITION = "discoverystream.sections.topicSelection.position";
+const CardSections_PREF_TOPIC_SELECTION_POSITION = "discoverystream.sections.topicSelection.position";
 function getLayoutData(responsiveLayouts, index) {
   let layoutData = {
     classNames: []
@@ -10393,7 +10438,7 @@ function CardSections({
   const prefs = (0,external_ReactRedux_namespaceObject.useSelector)(state => state.Prefs.values);
   const personalizationEnabled = prefs[PREF_SECTIONS_PERSONALIZATION_ENABLED];
   const topicSelectionEnabled = prefs[PREF_TOPIC_SELECTION_ENABLED];
-  const topicSelectionPosition = prefs[PREF_TOPIC_SELECTION_POSITION];
+  const topicSelectionPosition = prefs[CardSections_PREF_TOPIC_SELECTION_POSITION];
 
   // Handle a render before feed has been fetched by displaying nothing
   if (!data) {

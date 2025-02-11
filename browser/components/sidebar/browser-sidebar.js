@@ -995,10 +995,19 @@ var SidebarController = {
     ]);
   },
 
+  async _waitForOngoingAnimations() {
+    // Wait for any ongoing animations to finish
+    return new Promise(resolve => {
+      if (!this._ongoingAnimations.length) {
+        resolve();
+      }
+    });
+  },
+
   async _animateSidebarMain() {
     let tabbox = document.getElementById("tabbrowser-tabbox");
     let animatingElements = [this.sidebarContainer, this._box, this._splitter];
-    if (!this.sidebarRevampVisibility === "expand-on-hover") {
+    if (this.sidebarRevampVisibility !== "expand-on-hover") {
       animatingElements.push(tabbox);
     }
     let resetElements = () => {
@@ -1128,6 +1137,7 @@ var SidebarController = {
   },
 
   async handleToolbarButtonClick() {
+    let initialExpandedValue = this._state.launcherExpanded;
     if (this.inPopup || this.uninitializing) {
       return;
     }
@@ -1135,6 +1145,9 @@ var SidebarController = {
       this._animateSidebarMain();
     }
     this._state.updateVisibility(!this._state.launcherVisible, true);
+    if (this.sidebarRevampVisibility === "expand-on-hover") {
+      this.toggleExpandOnHover(initialExpandedValue);
+    }
   },
 
   /**
@@ -1873,6 +1886,8 @@ var SidebarController = {
         this._state = new this.SidebarState(this);
       }
 
+      await this.sidebarMain.updateComplete;
+      await this._waitForOngoingAnimations();
       await this.setLauncherInlineMargin();
 
       this.sidebarMain.addEventListener("mouseover", this.onMouseOver, {

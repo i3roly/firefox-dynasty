@@ -37,7 +37,6 @@ XPCOMUtils.defineLazyServiceGetter(
 
 const COLLECTION_ID_PREF = "messaging-system.rsexperimentloader.collection_id";
 const COLLECTION_ID_FALLBACK = "nimbus-desktop-experiments";
-const ENABLED_PREF = "messaging-system.rsexperimentloader.enabled";
 const TARGETING_CONTEXT_TELEMETRY_ENABLED_PREF =
   "nimbus.telemetry.targetingContextEnabled";
 
@@ -114,7 +113,7 @@ export const RecipeStatus = Object.freeze({
 export class _RemoteSettingsExperimentLoader {
   constructor() {
     // Has the timer been set?
-    this._initialized = false;
+    this._enabled = false;
     // Are we in the middle of updating recipes already?
     this._updating = false;
     // Have we updated recipes at least once?
@@ -145,14 +144,6 @@ export class _RemoteSettingsExperimentLoader {
 
     XPCOMUtils.defineLazyPreferenceGetter(
       this,
-      "enabled",
-      ENABLED_PREF,
-      false,
-      this.onEnabledPrefChange.bind(this)
-    );
-
-    XPCOMUtils.defineLazyPreferenceGetter(
-      this,
       "intervalInSeconds",
       RUN_INTERVAL_PREF,
       21600,
@@ -180,26 +171,26 @@ export class _RemoteSettingsExperimentLoader {
    * @return {Promise}                  which resolves after initialization and recipes
    *                                    are updated.
    */
-  async init(options = {}) {
+  async enable(options = {}) {
     const { forceSync = false } = options;
 
-    if (this._initialized || !this.enabled || !this.studiesEnabled) {
+    if (this._enabled || !this.studiesEnabled) {
       return;
     }
 
     this.setTimer();
-    lazy.CleanupManager.addCleanupHandler(() => this.uninit());
-    this._initialized = true;
+    lazy.CleanupManager.addCleanupHandler(() => this.disable());
+    this._enabled = true;
 
-    await this.updateRecipes(undefined, { forceSync });
+    await this.updateRecipes("enabled", { forceSync });
   }
 
-  uninit() {
-    if (!this._initialized) {
+  disable() {
+    if (!this._enabled) {
       return;
     }
     lazy.timerManager.unregisterTimer(TIMER_NAME);
-    this._initialized = false;
+    this._enabled = false;
     this._updating = false;
     this._hasUpdatedOnce = false;
   }
@@ -213,7 +204,7 @@ export class _RemoteSettingsExperimentLoader {
    *                                     collection before updating recipes.
    */
   async updateRecipes(trigger, { forceSync = false } = {}) {
-    if (this._updating || !this._initialized) {
+    if (this._updating || !this._enabled) {
       return;
     }
 
@@ -484,18 +475,19 @@ export class _RemoteSettingsExperimentLoader {
   }
 
   /**
-   * Handles feature status based on feature pref and STUDIES_OPT_OUT_PREF.
-   * Changing any of them to false will turn off any recipe fetching and
+   * Handles feature status based on STUDIES_OPT_OUT_PREF.
+   *
+   * Changing this pref to false will turn off any recipe fetching and
    * processing.
    */
   onEnabledPrefChange() {
-    if (this._initialized && !(this.enabled && this.studiesEnabled)) {
-      this.uninit();
-    } else if (!this._initialized && this.enabled && this.studiesEnabled) {
+    if (this._enabled && !this.studiesEnabled) {
+      this.disable();
+    } else if (!this._enabled && this.studiesEnabled) {
       // If the feature pref is turned on then turn on recipe processing.
       // If the opt in pref is turned on then turn on recipe processing only if
       // the feature pref is also enabled.
-      this.init();
+      this.enable();
     }
   }
 
@@ -509,8 +501,13 @@ export class _RemoteSettingsExperimentLoader {
    * Sets a timer to update recipes every this.intervalInSeconds
    */
   setTimer() {
+    if (!this._enabled) {
+      // Don't enable the timer if we're disabled and the interval pref changes.
+      return;
+    }
     if (this.intervalInSeconds === 0) {
       // Used in tests where we want to turn this mechanism off
+      lazy.timerManager.unregisterTimer(TIMER_NAME);
       return;
     }
     // The callbacks will be called soon after the timer is registered

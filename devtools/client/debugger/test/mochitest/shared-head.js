@@ -875,7 +875,7 @@ async function triggerSourceTreeContextMenu(
   const onHidden = new Promise(resolve => {
     menupopup.addEventListener("popuphidden", resolve, { once: true });
   });
-  selectContextMenuItem(dbg, contextMenuItem);
+  selectDebuggerContextMenuItem(dbg, contextMenuItem);
   await onHidden;
 }
 
@@ -2122,7 +2122,7 @@ function findContextMenu(dbg, selector) {
 }
 
 // Waits for the context menu to exist and to fully open. Once this function
-// completes, selectContextMenuItem can be called.
+// completes, selectDebuggerContextMenuItem can be called.
 // waitForContextMenu must be called after menu opening has been triggered, e.g.
 // after synthesizing a right click / contextmenu event.
 async function waitForContextMenu(dbg) {
@@ -2163,7 +2163,7 @@ async function closeContextMenu(dbg, popup) {
   return onHidden;
 }
 
-function selectContextMenuItem(dbg, selector) {
+function selectDebuggerContextMenuItem(dbg, selector) {
   const item = findContextMenu(dbg, selector);
   item.closest("menupopup").activateItem(item);
 }
@@ -2189,12 +2189,16 @@ async function assertContextMenuLabel(dbg, selector, expectedLabel) {
 }
 
 async function typeInPanel(dbg, text, inLogPanel = false) {
-  await waitForElement(
-    dbg,
-    inLogPanel ? "logPanelInput" : "conditionalPanelInput"
-  );
+  const panelName = inLogPanel ? "logPanelInput" : "conditionalPanelInput";
+  await waitForElement(dbg, panelName);
+
+  // Wait a bit for panel's codemirror document to complete any updates
+  // so the  input does not lose focus after the it has been opened
+  await waitForInPanelDocumentLoadComplete(dbg, panelName);
+
   // Position cursor reliably at the end of the text.
   pressKey(dbg, "End");
+
   type(dbg, text);
   // Wait for any possible CM6 scroll actions in the conditional panel editor
   // to complete
@@ -2303,11 +2307,24 @@ function waitForSearchState(dbg) {
 }
 
 /**
- * Wait for CodeMirror Document to completely load (for CM6 only)
+ * Wait for the document of the main debugger editor codemirror instance
+ * to completely load (for CM6 only)
  */
 function waitForDocumentLoadComplete(dbg) {
   return waitFor(() =>
     isCm6Enabled ? getCMEditor(dbg).codeMirror.isDocumentLoadComplete : true
+  );
+}
+
+/**
+ * Wait for the document of the conditional/log point panel's codemirror instance
+ * to completely load (for CM6 only)
+ */
+function waitForInPanelDocumentLoadComplete(dbg, panelName) {
+  return waitFor(() =>
+    isCm6Enabled
+      ? getCodeMirrorInstance(dbg, panelName).isDocumentLoadComplete
+      : true
   );
 }
 
@@ -2317,6 +2334,27 @@ function waitForDocumentLoadComplete(dbg) {
  */
 function getEditorContent(dbg) {
   return getCMEditor(dbg).getEditorContent();
+}
+
+/**
+ * Retrieve the codemirror instance for the provided debugger instance.
+ * Optionally provide a panel name such as "logPanelInput" or
+ * "conditionalPanelInput" to retrieve the codemirror instances specific to
+ * those panels.
+ *
+ * @param {Object} dbg
+ * @param {string} panelName
+ * @returns {CodeMirror}
+ *     The codemirror instance corresponding to the provided debugger and panel name.
+ */
+function getCodeMirrorInstance(dbg, panelName = null) {
+  if (panelName !== null) {
+    const panel = findElement(dbg, panelName);
+    return dbg.win.codeMirrorSourceEditorTestInstance.CodeMirror.findFromDOM(
+      panel
+    );
+  }
+  return dbg.win.codeMirrorSourceEditorTestInstance.codeMirror;
 }
 
 /**
@@ -3334,15 +3372,21 @@ async function clickOnSourceMapMenuItem(dbg, className) {
 }
 
 async function setLogPoint(dbg, index, value) {
+  // Wait a bit for CM6 to complete any updates so the log panel
+  // does not lose focus after the it has been opened
+  await waitForDocumentLoadComplete(dbg);
   rightClickElement(dbg, "gutterElement", index);
   await waitForContextMenu(dbg);
-  selectContextMenuItem(
+  selectDebuggerContextMenuItem(
     dbg,
     `${selectors.addLogItem},${selectors.editLogItem}`
   );
-  const onBreakpointSet = waitForDispatch(dbg.store, "SET_BREAKPOINT");
-  await typeInPanel(dbg, value, true);
-  await onBreakpointSet;
+  await waitForConditionalPanelFocus(dbg);
+  if (value) {
+    const onBreakpointSet = waitForDispatch(dbg.store, "SET_BREAKPOINT");
+    await typeInPanel(dbg, value, true);
+    await onBreakpointSet;
+  }
 }
 /**
  * Opens the project search panel
@@ -3457,7 +3501,7 @@ async function selectBlackBoxContextMenuItem(dbg, itemName) {
   }
 
   info(`Select the ${itemName} context menu item`);
-  selectContextMenuItem(dbg, `#node-menu-${itemName}`);
+  selectDebuggerContextMenuItem(dbg, `#node-menu-${itemName}`);
   return wait;
 }
 
@@ -3523,6 +3567,6 @@ async function toggleJsTracerMenuItem(dbg, selector) {
   );
   const popup = await waitForContextMenu(dbg);
   const onHidden = BrowserTestUtils.waitForEvent(popup, "popuphidden");
-  selectContextMenuItem(dbg, selector);
+  selectDebuggerContextMenuItem(dbg, selector);
   await onHidden;
 }

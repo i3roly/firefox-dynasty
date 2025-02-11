@@ -80,6 +80,14 @@ class _QuickSuggest {
   }
 
   /**
+   * @returns {Promise}
+   *   Resolved when Suggest initialization finishes.
+   */
+  get initPromise() {
+    return this.#initResolvers.promise;
+  }
+
+  /**
    * @returns {Array}
    *   Enabled Suggest backends.
    */
@@ -155,11 +163,14 @@ class _QuickSuggest {
   /**
    * Initializes Suggest. It's safe to call more than once.
    */
-  init() {
-    if (this.#featuresByName.size) {
-      // Already initialized.
+  async init() {
+    if (this.#initStarted) {
+      await this.initPromise;
       return;
     }
+    this.#initStarted = true;
+
+    await lazy.UrlbarPrefs.updateFirefoxSuggestScenario();
 
     // Create an instance of each feature and keep it in `#featuresByName`.
     for (let [name, uri] of Object.entries(FEATURES)) {
@@ -196,6 +207,8 @@ class _QuickSuggest {
     this.#updateAll();
     lazy.NimbusFeatures.urlbar.onUpdate(() => this.#updateAll());
     lazy.UrlbarPrefs.addObserver(this);
+
+    this.#initResolvers.resolve();
   }
 
   /**
@@ -453,6 +466,9 @@ class _QuickSuggest {
       feature.update();
     }
   }
+
+  #initStarted = false;
+  #initResolvers = Promise.withResolvers();
 
   // Maps from Suggest feature class names to feature instances.
   #featuresByName = new Map();

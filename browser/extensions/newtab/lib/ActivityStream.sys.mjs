@@ -306,7 +306,7 @@ export const PREFS_CONFIG = new Map([
     "weather.temperatureUnits",
     {
       title: "Switch the temperature between Celsius and Fahrenheit",
-      getValue: args => (args.locale === "en-US" ? "f" : "c"),
+      getValue: ({ geo }) => (geo === "US" ? "f" : "c"),
     },
   ],
   [
@@ -315,6 +315,13 @@ export const PREFS_CONFIG = new Map([
       title:
         "Toggle the weather widget to include a text summary of the current conditions",
       value: "simple",
+    },
+  ],
+  [
+    "images.smart",
+    {
+      title: "Smart crop images on newtab",
+      value: false,
     },
   ],
   [

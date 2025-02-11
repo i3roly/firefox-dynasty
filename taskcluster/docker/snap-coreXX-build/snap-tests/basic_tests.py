@@ -65,8 +65,6 @@ class SnapTestsBase:
         options.add_argument("-profile")
         options.add_argument(snap_profile_path)
         self._driver = webdriver.Firefox(service=driver_service, options=options)
-        self._driver.set_window_position(0, 0)
-        self._driver.set_window_size(1280, 1024)
 
         self._logger = structuredlog.StructuredLogger(self.__class__.__name__)
         self._logger.add_handler(
@@ -94,6 +92,8 @@ class SnapTestsBase:
         else:
             self._logger.info("Running against a OPT build")
 
+        self._driver.maximize_window()
+
         self._wait = WebDriverWait(self._driver, self.get_timeout())
         self._longwait = WebDriverWait(self._driver, 60)
 
@@ -103,10 +103,9 @@ class SnapTestsBase:
         rv = False
         first_tab = self._driver.window_handles[0]
         channel = self.update_channel()
-        if self.is_esr_115():
-            channel = "esr-115"
         if self.is_esr_128():
             channel = "esr-128"
+
         for m in object_methods:
             self._logger.test_start(m)
             expectations = (
@@ -234,9 +233,6 @@ class SnapTestsBase:
             self._logger.info("Version major: {}".format(self._version_major))
             self._driver.set_context("content")
         return self._version_major
-
-    def is_esr_115(self):
-        return self.update_channel() == "esr" and self.version_major() == "115"
 
     def is_esr_128(self):
         return self.update_channel() == "esr" and self.version_major() == "128"
@@ -446,35 +442,32 @@ class SnapTests(SnapTestsBase):
             "Services.prefs.setBoolPref('media.gmp-manager.updateEnabled', true);"
         )
 
-        if self.is_esr_115():
-            rv = False
-        else:
-            enable_drm_button = self._wait.until(
-                EC.visibility_of_element_located(
-                    (By.CSS_SELECTOR, ".notification-button[label='Enable DRM']")
-                )
+        enable_drm_button = self._wait.until(
+            EC.visibility_of_element_located(
+                (By.CSS_SELECTOR, ".notification-button[label='Enable DRM']")
             )
-            self._logger.info("Enabling DRMs")
-            enable_drm_button.click()
-            self._wait.until(
-                EC.invisibility_of_element_located(
-                    (By.CSS_SELECTOR, ".notification-button[label='Enable DRM']")
-                )
+        )
+        self._logger.info("Enabling DRMs")
+        enable_drm_button.click()
+        self._wait.until(
+            EC.invisibility_of_element_located(
+                (By.CSS_SELECTOR, ".notification-button[label='Enable DRM']")
             )
+        )
 
-            self._logger.info("Installing DRMs")
-            self._wait.until(
-                EC.visibility_of_element_located(
-                    (By.CSS_SELECTOR, ".infobar[value='drmContentCDMInstalling']")
-                )
+        self._logger.info("Installing DRMs")
+        self._wait.until(
+            EC.visibility_of_element_located(
+                (By.CSS_SELECTOR, ".infobar[value='drmContentCDMInstalling']")
             )
+        )
 
-            self._logger.info("Waiting for DRMs installation to complete")
-            self._longwait.until(
-                EC.invisibility_of_element_located(
-                    (By.CSS_SELECTOR, ".infobar[value='drmContentCDMInstalling']")
-                )
+        self._logger.info("Waiting for DRMs installation to complete")
+        self._longwait.until(
+            EC.invisibility_of_element_located(
+                (By.CSS_SELECTOR, ".infobar[value='drmContentCDMInstalling']")
             )
+        )
 
         self._driver.set_context("content")
         return rv

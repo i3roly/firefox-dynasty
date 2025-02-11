@@ -867,10 +867,9 @@ add_task(async function test_forceEnroll() {
   sinon
     .stub(loader.remoteSettingsClients.experiments, "get")
     .resolves([experiment1, experiment2, rollout1, rollout2]);
-  sinon.stub(loader, "setTimer");
 
   await manager.onStartup();
-  await loader.init();
+  await loader.enable();
 
   for (const { enroll, expected } of TEST_CASES) {
     for (const recipe of enroll) {
