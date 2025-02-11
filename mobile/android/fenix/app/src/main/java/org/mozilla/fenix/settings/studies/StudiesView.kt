@@ -21,7 +21,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import mozilla.components.service.nimbus.NimbusApi
 import mozilla.components.support.base.log.logger.Logger
-import mozilla.telemetry.glean.private.NoExtras
 import org.mozilla.experiments.nimbus.internal.EnrolledExperiment
 import org.mozilla.fenix.GleanMetrics.Preferences
 import org.mozilla.fenix.R
@@ -53,7 +52,9 @@ class StudiesView(
         provideStudiesSwitch().isChecked = settings.isExperimentationEnabled
         provideStudiesSwitch().setOnClickListener {
             val isChecked = provideStudiesSwitch().isChecked
-            Preferences.studiesPreferenceEnabled.record(NoExtras())
+            Preferences.studiesPreferenceEnabled.record(
+                Preferences.StudiesPreferenceEnabledExtra(isChecked),
+            )
             provideStudiesTitle().text = getSwitchCheckedTitle()
 
             settings.isExperimentationEnabled = isChecked
@@ -91,8 +92,7 @@ class StudiesView(
     @VisibleForTesting
     internal fun bindDescription() {
         val sumoUrl = SupportUtils.getGenericSumoURLForTopic(OPT_OUT_STUDIES)
-        val appName = context.getString(R.string.app_name)
-        val description = context.getString(R.string.studies_description_2, appName)
+        val description = context.getString(R.string.studies_description_3)
         val learnMore = context.getString(R.string.studies_learn_more)
         val rawText = "$description <a href=\"$sumoUrl\">$learnMore</a>"
         val text = HtmlCompat.fromHtml(rawText, HtmlCompat.FROM_HTML_MODE_COMPACT)
