@@ -586,15 +586,23 @@ impl WindowRenderer {
             // Don't release windows when closed: we retain windows at the top-level.
             nswindow.setReleasedWhenClosed_(runtime::NO);
 
-            if let Some(close) = close {
-                let nswindow = nswindow.weak();
-                close.subscribe(move |&()| {
-                    if let Some(nswindow) = nswindow.lock() {
-                        nswindow.close();
-                    }
-                });
+            if macos_kernel_major_version() > Ok(MACOS_KERNEL_MAJOR_VERSION_LION) {
+                if let Some(close) = close {
+                    let nswindow = nswindow.weak();
+                    close.subscribe(move |&()| {
+                        if let Some(nswindow) = nswindow.lock() {
+                            nswindow.close();
+                        }
+                    });
+                }
+            } else {
+                if let Some(close) = close {
+                    let nswindow = nswindow.clone();
+                    close.subscribe(move |&()| {
+                            nswindow.close();
+                    });
+                }
             }
-
             if let Some(e) = content {
                 // Use an NSBox as a container view so that the window's content can easily have
                 // constraints set up relative to the parent (they can't be set relative to the
@@ -966,7 +974,9 @@ fn render_element(
              } else {
                 let parent: cocoa::NSSplitView = parent.try_into().unwrap();
                 unsafe {
-                    if macos_kernel_major_version() >= Ok(MACOS_KERNEL_MAJOR_VERSION_LION) {
+                    // it's uglier with subtreeifneeded on lion because textcontainer setSize
+                    // isn't valid, so we only call it on 10.8 for now
+                    if macos_kernel_major_version() > Ok(MACOS_KERNEL_MAJOR_VERSION_LION) {
                         parent.layoutSubtreeIfNeeded();
                     }
                     parent.addSubview_(child)
@@ -1020,7 +1030,9 @@ fn render_element(
              } else {
                 let parent: cocoa::NSSplitView = parent.try_into().unwrap();
                 unsafe {
-                    if macos_kernel_major_version() >= Ok(MACOS_KERNEL_MAJOR_VERSION_LION) {
+                    // it's uglier with subtreeifneeded on lion because textcontainer setSize
+                    // isn't valid, so we only call it on 10.8 for now
+                    if macos_kernel_major_version() > Ok(MACOS_KERNEL_MAJOR_VERSION_LION) {
                         parent.layoutSubtreeIfNeeded();
                     }
                     parent.addSubview_(child)
@@ -1150,10 +1162,12 @@ fn render_element(
                 }
                 {
                     let container = tv.textContainer();
-                    container.setSize_(cocoa::NSSize {
-                        width: f64::MAX,
-                        height: f64::MAX,
-                    });
+                        if macos_kernel_major_version() > Ok(MACOS_KERNEL_MAJOR_VERSION_LION) {
+                        container.setSize_(cocoa::NSSize {
+                            width: f64::MAX,
+                            height: f64::MAX,
+                        });
+                    }
                     container.setWidthTracksTextView_(runtime::YES);
                 }
                 if let Some(placeholder) = placeholder {
