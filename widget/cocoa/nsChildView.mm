@@ -2343,7 +2343,7 @@ NSEvent* gLastDragMouseDownEvent = nil;  // [strong]
 {
   NSView* frameView = [[[self window] contentView] superview];
   if (!frameView || ![frameView respondsToSelector:@selector(roundedCornerRadius)])
-    return 4.0f;
+    return 6.0f;
   return [frameView roundedCornerRadius];
 }
 
@@ -2417,7 +2417,7 @@ NSEvent* gLastDragMouseDownEvent = nil;  // [strong]
   //this call will ensure the GL context
   //will round our corners as we want, but at a cost
   //see comments about superview in nscocoawindow
-  mPixelHostingView.layer.cornerRadius=4.0f;
+  mPixelHostingView.layer.cornerRadius=6.0f;
   mPixelHostingView.layer.masksToBounds=YES;
   if (mUsingOMTCompositor) {
     // Make sure the window's "drawRect" buffer does not interfere with our
