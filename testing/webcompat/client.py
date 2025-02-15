@@ -339,7 +339,37 @@ class Client:
     def await_script(self, script, *args, **kwargs):
         return self.run_script(script, *args, **kwargs, await_promise=True)
 
+    def await_interventions_started(self):
+        with self.using_context("chrome"):
+            interventionsOn = self.request.node.get_closest_marker("with_interventions")
+            shimsOn = self.request.node.get_closest_marker("with_shims")
+
+            if not interventionsOn and not shimsOn:
+                print("Not waiting for interventions/shims")
+                return
+
+            expectedMsg = (
+                "WebCompatTests:InterventionsStatus"
+                if interventionsOn
+                else "WebCompatTests:ShimsStatus"
+            )
+
+            print("Waiting for", expectedMsg, 'to be "active"')
+            self.execute_async_script(
+                """
+                const [expectedMsg, done] = arguments;
+                const timer = setInterval(() => {
+                  if (Services.ppmm.sharedData.get(expectedMsg) === "active") {
+                    clearInterval(timer);
+                    done();
+                  }
+                }, 100);
+            """,
+                expectedMsg,
+            )
+
     async def navigate(self, url, timeout=90, no_skip=False, **kwargs):
+        self.await_interventions_started()
         try:
             return await asyncio.wait_for(
                 asyncio.ensure_future(self._navigate(url, **kwargs)), timeout=timeout
@@ -687,6 +717,21 @@ class Client:
 
     async def disable_window_alert(self):
         return await self.make_preload_script("window.alert = () => {}")
+
+    async def set_prompt_responses(self, responses, timeout=10):
+        if type(responses) is not list:
+            responses = [responses]
+        if not hasattr(self, "prompts_preload_script"):
+            self.prompts_preload_script = await self.make_preload_script(
+                f"""
+                    const responses = {responses};
+                    window.wrappedJSObject.prompt = function() {{
+                        return responses.shift();
+                    }}
+                """,
+                "prompt_detector",
+            )
+        return self.prompts_preload_script
 
     async def await_alert(self, texts, timeout=10):
         if type(texts) is not list:

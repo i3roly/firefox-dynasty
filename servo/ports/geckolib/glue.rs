@@ -16,7 +16,6 @@ use selectors::matching::{ElementSelectorFlags, MatchingForInvalidation, Selecto
 use selectors::{Element, OpaqueElement};
 use servo_arc::{Arc, ArcBorrow};
 use smallvec::SmallVec;
-use style::values::generics::length::AnchorResolutionResult;
 use std::collections::BTreeSet;
 use std::fmt::Write;
 use std::iter;
@@ -152,11 +151,13 @@ use style::values::computed::font::{
     FamilyName, FontFamily, FontFamilyList, FontStretch, FontStyle, FontWeight, GenericFontFamily,
 };
 use style::values::computed::length::AnchorSizeFunction;
+use style::values::computed::length_percentage::CalcAnchorFunctionResolutionInfo;
 use style::values::computed::position::AnchorFunction;
 use style::values::computed::{self, Context, PositionProperty, ToComputedValue};
 use style::values::distance::ComputeSquaredDistance;
 use style::values::generics::color::ColorMixFlags;
 use style::values::generics::easing::BeforeFlag;
+use style::values::generics::length::AnchorResolutionResult;
 use style::values::resolved;
 use style::values::specified::gecko::IntersectionObserverRootMargin;
 use style::values::specified::source_size_list::SourceSizeList;
@@ -170,6 +171,11 @@ use to_shmem::SharedMemoryBuilder;
 trait ClosureHelper {
     fn invoke(&self, property_id: Option<NonCustomPropertyId>);
 }
+
+const NO_MUTATION_CLOSURE : DeclarationBlockMutationClosure = DeclarationBlockMutationClosure {
+    data: std::ptr::null_mut(),
+    function: None,
+};
 
 impl ClosureHelper for DeclarationBlockMutationClosure {
     #[inline]
@@ -5598,7 +5604,7 @@ pub extern "C" fn Servo_DeclarationBlock_SetLengthValue(
     property: nsCSSPropertyID,
     value: f32,
     unit: structs::nsCSSUnit,
-) {
+) -> bool {
     use style::properties::PropertyDeclaration;
     use style::values::generics::length::{LengthPercentageOrAuto, Size};
     use style::values::generics::NonNegative;
@@ -5659,7 +5665,7 @@ pub extern "C" fn Servo_DeclarationBlock_SetLengthValue(
         _ => unreachable!("Unknown unit passed to SetLengthValue"),
     };
 
-    let prop = match_wrap_declared! { long,
+    let mut source_declarations = SourcePropertyDeclaration::with_one(match_wrap_declared! { long,
         Width => Size::LengthPercentage(NonNegative(LengthPercentage::Length(nocalc))),
         Height => Size::LengthPercentage(NonNegative(LengthPercentage::Length(nocalc))),
         X =>  LengthPercentage::Length(nocalc),
@@ -5670,10 +5676,14 @@ pub extern "C" fn Servo_DeclarationBlock_SetLengthValue(
         Rx => LengthPercentageOrAuto::LengthPercentage(NonNegative(LengthPercentage::Length(nocalc))),
         Ry => LengthPercentageOrAuto::LengthPercentage(NonNegative(LengthPercentage::Length(nocalc))),
         FontSize => FontSize::Length(LengthPercentage::Length(nocalc)),
-    };
-    write_locked_arc(declarations, |decls: &mut PropertyDeclarationBlock| {
-        decls.push(prop, Importance::Normal);
-    })
+    });
+    set_property_to_declarations(
+        Some(long.into()),
+        declarations,
+        &mut source_declarations,
+        NO_MUTATION_CLOSURE,
+        Importance::Normal,
+    )
 }
 
 #[no_mangle]
@@ -5681,7 +5691,7 @@ pub extern "C" fn Servo_DeclarationBlock_SetTransform(
     declarations: &LockedDeclarationBlock,
     property: nsCSSPropertyID,
     ops: &nsTArray<computed::TransformOperation>,
-) {
+) -> bool {
     use style::values::generics::transform::GenericTransform;
     use style::properties::PropertyDeclaration;
     let long = get_longhand_from_id!(property);
@@ -5689,9 +5699,14 @@ pub extern "C" fn Servo_DeclarationBlock_SetTransform(
     let prop = match_wrap_declared! { long,
         Transform => v,
     };
-    write_locked_arc(declarations, |decls: &mut PropertyDeclarationBlock| {
-        decls.push(prop, Importance::Normal);
-    })
+    let mut source_declarations = SourcePropertyDeclaration::with_one(prop);
+    set_property_to_declarations(
+        Some(long.into()),
+        declarations,
+        &mut source_declarations,
+        NO_MUTATION_CLOSURE,
+        Importance::Normal,
+    )
 }
 
 #[no_mangle]
@@ -8359,7 +8374,38 @@ pub extern "C" fn Servo_ResolveCalcLengthPercentage(
     calc: &computed::length_percentage::CalcLengthPercentage,
     basis: f32,
 ) -> f32 {
-    calc.resolve(computed::Length::new(basis)).px()
+    calc.resolve(computed::Length::new(basis), None)
+        .unwrap()
+        .result
+        .px()
+}
+
+#[no_mangle]
+pub extern "C" fn Servo_ResolveCalcLengthPercentageWithAnchorFunctions(
+    calc: &computed::length_percentage::CalcLengthPercentage,
+    basis: f32,
+    side: PhysicalSide,
+    position_property: PositionProperty,
+    result: &mut f32,
+    percentage_used: &mut bool,
+) -> bool {
+    let resolved = calc.resolve(
+        computed::Length::new(basis),
+        Some(CalcAnchorFunctionResolutionInfo {
+            side,
+            position_property,
+        }),
+    );
+
+    let resolved = match resolved {
+        None => return false,
+        Some(v) => v,
+    };
+
+    *result = resolved.result.px();
+    *percentage_used = resolved.percentage_used;
+
+    true
 }
 
 #[no_mangle]
@@ -9779,30 +9825,4 @@ pub extern "C" fn Servo_ResolveAnchorSizeFunction(
     out: &mut AnchorPositioningFunctionResolution,
 ) {
     *out = AnchorPositioningFunctionResolution::new(func.resolve(prop));
-}
-
-/// Result of resolving a math function node potentially containing
-/// anchor positioning function.
-#[repr(u8)]
-pub enum CalcAnchorPositioningFunctionResolution {
-    /// Anchor positioning function is used, but at least one of them
-    /// did not resolve to a valid reference - Property using this
-    /// expression is now invalid at computed time.
-    Invalid,
-    /// Anchor positioning function is used, and all of them resolved
-    /// to valid references, or specified a fallback.
-    Valid(computed::LengthPercentage),
-}
-
-#[no_mangle]
-pub extern "C" fn Servo_ResolveAnchorPositioningFunctionInCalc(
-    calc: &computed::length_percentage::CalcLengthPercentage,
-    side: PhysicalSide,
-    prop: PositionProperty,
-    out: &mut CalcAnchorPositioningFunctionResolution,
-) {
-    *out = match calc.resolve_anchor_functions(side, prop) {
-        Ok(l) => CalcAnchorPositioningFunctionResolution::Valid(l.into()),
-        Err(_) => CalcAnchorPositioningFunctionResolution::Invalid,
-    };
 }

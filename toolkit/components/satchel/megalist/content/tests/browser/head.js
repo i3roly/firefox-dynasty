@@ -127,7 +127,7 @@ async function addBreach() {
 
 async function openPasswordsSidebar() {
   info("Open Passwords sidebar");
-  await SidebarController.show("viewMegalistSidebar");
+  await SidebarController.show("viewCPMSidebar");
   const sidebar = document.getElementById("sidebar");
   const megalist =
     sidebar.contentDocument.querySelector("megalist-alpha").shadowRoot;
@@ -220,4 +220,24 @@ function waitForSnapshots() {
     () => megalistComponent.header,
     "Megalist header loaded."
   );
+}
+
+async function checkEmptyState(selector, megalist) {
+  return await BrowserTestUtils.waitForCondition(() => {
+    const emptyStateCard = megalist.querySelector(".empty-state-card");
+    return !!emptyStateCard?.querySelector(selector);
+  }, "Empty state card failed to render");
+}
+
+function assertCPMGleanEvent(actualEvent, expectedEvent) {
+  info("Asserting CPM Glean event");
+
+  for (let key of Object.keys(expectedEvent)) {
+    Assert.equal(
+      actualEvent.extra[key],
+      expectedEvent[key],
+      `${actualEvent.extra[key]} is the recorded ${key}.
+        Expected: '${expectedEvent[key]}'.`
+    );
+  }
 }

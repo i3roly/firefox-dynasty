@@ -72,514 +72,7 @@ add_task(async function test_merino() {
   });
 });
 
-add_task(async function test_scenario_offline() {
-  await doBasicScenarioTest("offline", {
-    urlbarPrefs: {
-      // prefs
-      "quicksuggest.scenario": "offline",
-      "quicksuggest.enabled": true,
-      "quicksuggest.dataCollection.enabled": false,
-      "suggest.quicksuggest.nonsponsored": true,
-      "suggest.quicksuggest.sponsored": true,
-
-      // Nimbus variables
-      quickSuggestScenario: "offline",
-      quickSuggestEnabled: true,
-    },
-    defaults: [
-      {
-        name: "browser.urlbar.quicksuggest.enabled",
-        value: true,
-      },
-      {
-        name: "browser.urlbar.quicksuggest.dataCollection.enabled",
-        value: false,
-      },
-      {
-        name: "browser.urlbar.suggest.quicksuggest.nonsponsored",
-        value: true,
-      },
-      {
-        name: "browser.urlbar.suggest.quicksuggest.sponsored",
-        value: true,
-      },
-    ],
-  });
-});
-
-add_task(async function test_scenario_history() {
-  await doBasicScenarioTest("history", {
-    urlbarPrefs: {
-      // prefs
-      "quicksuggest.scenario": "history",
-      "quicksuggest.enabled": false,
-
-      // Nimbus variables
-      quickSuggestScenario: "history",
-      quickSuggestEnabled: false,
-    },
-    defaults: [
-      {
-        name: "browser.urlbar.quicksuggest.enabled",
-        value: false,
-      },
-    ],
-  });
-});
-
-async function doBasicScenarioTest(scenario, expectedPrefs) {
-  await QuickSuggestTestUtils.withExperiment({
-    valueOverrides: {
-      quickSuggestScenario: scenario,
-    },
-    callback: () => {
-      // Pref updates should always settle down by the time enrollment is done.
-      Assert.ok(
-        !UrlbarPrefs.updatingFirefoxSuggestScenario,
-        "updatingFirefoxSuggestScenario is false"
-      );
-
-      assertScenarioPrefs(expectedPrefs);
-    },
-  });
-
-  // Similarly, pref updates should always settle down by the time unenrollment
-  // is done.
-  Assert.ok(
-    !UrlbarPrefs.updatingFirefoxSuggestScenario,
-    "updatingFirefoxSuggestScenario is false"
-  );
-
-  assertDefaultScenarioPrefs();
-}
-
-function assertScenarioPrefs({ urlbarPrefs, defaults }) {
-  for (let [name, value] of Object.entries(urlbarPrefs)) {
-    Assert.equal(UrlbarPrefs.get(name), value, `UrlbarPrefs.get("${name}")`);
-  }
-
-  let prefs = Services.prefs.getDefaultBranch("");
-  for (let { name, getter, value } of defaults) {
-    Assert.equal(
-      prefs[getter || "getBoolPref"](name),
-      value,
-      `Default branch pref: ${name}`
-    );
-  }
-}
-
-function assertDefaultScenarioPrefs() {
-  assertScenarioPrefs({
-    urlbarPrefs: {
-      "quicksuggest.scenario": "offline",
-      "quicksuggest.enabled": true,
-      "quicksuggest.dataCollection.enabled": false,
-      "suggest.quicksuggest.nonsponsored": true,
-      "suggest.quicksuggest.sponsored": true,
-
-      // No Nimbus variables since they're only available when an experiment is
-      // installed.
-    },
-    defaults: [
-      {
-        name: "browser.urlbar.quicksuggest.enabled",
-        value: true,
-      },
-      {
-        name: "browser.urlbar.quicksuggest.dataCollection.enabled",
-        value: false,
-      },
-      {
-        name: "browser.urlbar.suggest.quicksuggest.nonsponsored",
-        value: true,
-      },
-      {
-        name: "browser.urlbar.suggest.quicksuggest.sponsored",
-        value: true,
-      },
-    ],
-  });
-}
-
-function clearOnboardingPrefs() {
-  UrlbarPrefs.clear("suggest.quicksuggest.nonsponsored");
-  UrlbarPrefs.clear("suggest.quicksuggest.sponsored");
-  UrlbarPrefs.clear("quicksuggest.dataCollection.enabled");
-  UrlbarPrefs.clear("quicksuggest.showedOnboardingDialog");
-  UrlbarPrefs.clear("quicksuggest.seenRestarts");
-}
-
 // The following tasks test Nimbus enrollments
-
-// Initial state:
-// * History (quick suggest feature disabled)
-//
-// Enrollment:
-// * History
-//
-// Expected:
-// * All history prefs set on the default branch
-add_task(async function () {
-  await checkEnrollments({
-    initialPrefsToSet: {
-      defaultBranch: QuickSuggest.DEFAULT_PREFS.history,
-    },
-    valueOverrides: {
-      quickSuggestScenario: "history",
-    },
-    expectedPrefs: {
-      defaultBranch: QuickSuggest.DEFAULT_PREFS.history,
-    },
-  });
-});
-
-// Initial state:
-// * History (quick suggest feature disabled)
-//
-// Enrollment:
-// * Offline
-//
-// Expected:
-// * All offline prefs set on the default branch
-add_task(async function () {
-  await checkEnrollments({
-    initialPrefsToSet: {
-      defaultBranch: QuickSuggest.DEFAULT_PREFS.history,
-    },
-    valueOverrides: {
-      quickSuggestScenario: "offline",
-    },
-    expectedPrefs: {
-      defaultBranch: QuickSuggest.DEFAULT_PREFS.offline,
-    },
-  });
-});
-
-// The following tasks test OFFLINE TO OFFLINE
-
-// Initial state:
-// * Offline (suggestions on and data collection off by default)
-// * User did not override any defaults
-//
-// Enrollment:
-// * Offline
-//
-// Expected:
-// * All offline prefs set on the default branch
-add_task(async function () {
-  await checkEnrollments({
-    initialPrefsToSet: {
-      defaultBranch: QuickSuggest.DEFAULT_PREFS.offline,
-    },
-    valueOverrides: {
-      quickSuggestScenario: "offline",
-    },
-    expectedPrefs: {
-      defaultBranch: QuickSuggest.DEFAULT_PREFS.offline,
-    },
-  });
-});
-
-// Initial state:
-// * Offline (suggestions on and data collection off by default)
-// * Non-sponsored suggestions: user left on
-// * Sponsored suggestions: user turned off
-// * Data collection: user left off
-//
-// Enrollment:
-// * Offline
-//
-// Expected:
-// * Non-sponsored suggestions: remain on
-// * Sponsored suggestions: remain off
-// * Data collection: remains off
-add_task(async function () {
-  await checkEnrollments({
-    initialPrefsToSet: {
-      defaultBranch: QuickSuggest.DEFAULT_PREFS.offline,
-      userBranch: {
-        "suggest.quicksuggest.sponsored": false,
-      },
-    },
-    valueOverrides: {
-      quickSuggestScenario: "offline",
-    },
-    expectedPrefs: {
-      defaultBranch: QuickSuggest.DEFAULT_PREFS.offline,
-      userBranch: {
-        "suggest.quicksuggest.sponsored": false,
-      },
-    },
-  });
-});
-
-// Initial state:
-// * Offline (suggestions on and data collection off by default)
-// * Non-sponsored suggestions: user turned off
-// * Sponsored suggestions: user left on
-// * Data collection: user left off
-//
-// Enrollment:
-// * Offline
-//
-// Expected:
-// * Non-sponsored suggestions: remain off
-// * Sponsored suggestions: remain on
-// * Data collection: remains off
-add_task(async function () {
-  await checkEnrollments({
-    initialPrefsToSet: {
-      defaultBranch: QuickSuggest.DEFAULT_PREFS.offline,
-      userBranch: {
-        "suggest.quicksuggest.nonsponsored": false,
-      },
-    },
-    valueOverrides: {
-      quickSuggestScenario: "offline",
-    },
-    expectedPrefs: {
-      defaultBranch: QuickSuggest.DEFAULT_PREFS.offline,
-      userBranch: {
-        "suggest.quicksuggest.nonsponsored": false,
-      },
-    },
-  });
-});
-
-// Initial state:
-// * Offline (suggestions on and data collection off by default)
-// * Non-sponsored suggestions: user turned off
-// * Sponsored suggestions: user turned off
-// * Data collection: user left off
-//
-// Enrollment:
-// * Offline
-//
-// Expected:
-// * Non-sponsored suggestions: remain off
-// * Sponsored suggestions: remain off
-// * Data collection: remains off
-add_task(async function () {
-  await checkEnrollments({
-    initialPrefsToSet: {
-      defaultBranch: QuickSuggest.DEFAULT_PREFS.offline,
-      userBranch: {
-        "suggest.quicksuggest.nonsponsored": false,
-        "suggest.quicksuggest.sponsored": false,
-      },
-    },
-    valueOverrides: {
-      quickSuggestScenario: "offline",
-    },
-    expectedPrefs: {
-      defaultBranch: QuickSuggest.DEFAULT_PREFS.offline,
-      userBranch: {
-        "suggest.quicksuggest.nonsponsored": false,
-        "suggest.quicksuggest.sponsored": false,
-      },
-    },
-  });
-});
-
-// Initial state:
-// * Offline (suggestions on and data collection off by default)
-// * Non-sponsored suggestions: user left on
-// * Sponsored suggestions: user left on
-// * Data collection: user turned on
-//
-// Enrollment:
-// * Offline
-//
-// Expected:
-// * Non-sponsored suggestions: remain on
-// * Sponsored suggestions: remain on
-// * Data collection: remains on
-add_task(async function () {
-  await checkEnrollments({
-    initialPrefsToSet: {
-      defaultBranch: QuickSuggest.DEFAULT_PREFS.offline,
-      userBranch: {
-        "quicksuggest.dataCollection.enabled": true,
-      },
-    },
-    valueOverrides: {
-      quickSuggestScenario: "offline",
-    },
-    expectedPrefs: {
-      defaultBranch: QuickSuggest.DEFAULT_PREFS.offline,
-      userBranch: {
-        "quicksuggest.dataCollection.enabled": true,
-      },
-    },
-  });
-});
-
-// Initial state:
-// * Offline (suggestions on and data collection off by default)
-// * Non-sponsored suggestions: user turned off
-// * Sponsored suggestions: user turned off
-// * Data collection: user turned on
-//
-// Enrollment:
-// * Offline
-//
-// Expected:
-// * Non-sponsored suggestions: remain off
-// * Sponsored suggestions: remain off
-// * Data collection: remains on
-add_task(async function () {
-  await checkEnrollments({
-    initialPrefsToSet: {
-      defaultBranch: QuickSuggest.DEFAULT_PREFS.offline,
-      userBranch: {
-        "suggest.quicksuggest.nonsponsored": false,
-        "suggest.quicksuggest.sponsored": false,
-        "quicksuggest.dataCollection.enabled": true,
-      },
-    },
-    valueOverrides: {
-      quickSuggestScenario: "offline",
-    },
-    expectedPrefs: {
-      defaultBranch: QuickSuggest.DEFAULT_PREFS.offline,
-      userBranch: {
-        "suggest.quicksuggest.nonsponsored": false,
-        "suggest.quicksuggest.sponsored": false,
-        "quicksuggest.dataCollection.enabled": true,
-      },
-    },
-  });
-});
-
-// The following tasks test scenarios in conjunction with individual Nimbus
-// variables
-
-// Initial state:
-// * Offline (suggestions on and data collection off by default)
-// * User did not override any defaults
-//
-// Enrollment:
-// * Offline
-// * Sponsored suggestions individually forced on
-//
-// Expected:
-// * Sponsored suggestions: on
-add_task(async function () {
-  await checkEnrollments({
-    initialPrefsToSet: {
-      defaultBranch: QuickSuggest.DEFAULT_PREFS.offline,
-    },
-    valueOverrides: {
-      quickSuggestScenario: "offline",
-      quickSuggestSponsoredEnabled: true,
-    },
-    expectedPrefs: {
-      defaultBranch: {
-        ...QuickSuggest.DEFAULT_PREFS.offline,
-        "suggest.quicksuggest.sponsored": true,
-      },
-    },
-  });
-});
-
-// Initial state:
-// * Offline (suggestions on and data collection off by default)
-// * Sponsored suggestions: user turned off
-//
-// Enrollment:
-// * Offline
-// * Sponsored suggestions individually forced on
-//
-// Expected:
-// * Sponsored suggestions: remain off
-add_task(async function () {
-  await checkEnrollments({
-    initialPrefsToSet: {
-      defaultBranch: QuickSuggest.DEFAULT_PREFS.offline,
-      userBranch: {
-        "suggest.quicksuggest.sponsored": false,
-      },
-    },
-    valueOverrides: {
-      quickSuggestScenario: "offline",
-      quickSuggestSponsoredEnabled: true,
-    },
-    expectedPrefs: {
-      defaultBranch: {
-        ...QuickSuggest.DEFAULT_PREFS.offline,
-        "suggest.quicksuggest.sponsored": true,
-      },
-      userBranch: {
-        "suggest.quicksuggest.sponsored": false,
-      },
-    },
-  });
-});
-
-// Initial state:
-// * Offline (suggestions on and data collection off by default)
-// * User did not override any defaults
-//
-// Enrollment:
-// * Offline
-// * Data collection individually forced on
-//
-// Expected:
-// * Data collection: on
-add_task(async function () {
-  await checkEnrollments({
-    initialPrefsToSet: {
-      defaultBranch: QuickSuggest.DEFAULT_PREFS.offline,
-    },
-    valueOverrides: {
-      quickSuggestScenario: "offline",
-      quickSuggestDataCollectionEnabled: true,
-    },
-    expectedPrefs: {
-      defaultBranch: {
-        ...QuickSuggest.DEFAULT_PREFS.offline,
-        "quicksuggest.dataCollection.enabled": true,
-      },
-    },
-  });
-});
-
-// Initial state:
-// * Offline (suggestions on and data collection off by default)
-// * Data collection: user turned off (it's off by default, so this simulates
-//   when the user toggled it on and then back off)
-//
-// Enrollment:
-// * Offline
-// * Data collection individually forced on
-//
-// Expected:
-// * Data collection: remains off
-add_task(async function () {
-  await checkEnrollments({
-    initialPrefsToSet: {
-      defaultBranch: QuickSuggest.DEFAULT_PREFS.offline,
-      userBranch: {
-        "quicksuggest.dataCollection.enabled": false,
-      },
-    },
-    valueOverrides: {
-      quickSuggestScenario: "offline",
-      quickSuggestDataCollectionEnabled: true,
-    },
-    expectedPrefs: {
-      defaultBranch: {
-        ...QuickSuggest.DEFAULT_PREFS.offline,
-        "quicksuggest.dataCollection.enabled": true,
-      },
-      userBranch: {
-        "quicksuggest.dataCollection.enabled": false,
-      },
-    },
-  });
-});
-
-// The following tasks test individual Nimbus variables without scenarios
 
 // Initial state:
 // * Suggestions on by default and user left them on
@@ -995,7 +488,6 @@ async function checkEnrollments(options) {
     let { initialPrefsToSet, valueOverrides, expectedPrefs } = enrollments[i];
 
     // Set initial prefs.
-    QuickSuggest._updatingFirefoxSuggestScenario = true;
     let { defaultBranch: initialDefaultBranch, userBranch: initialUserBranch } =
       initialPrefsToSet;
     initialDefaultBranch = initialDefaultBranch || {};
@@ -1013,7 +505,6 @@ async function checkEnrollments(options) {
         branch.setBoolPref(name, value);
       }
     }
-    QuickSuggest._updatingFirefoxSuggestScenario = false;
 
     let {
       defaultBranch: expectedDefaultBranch,
@@ -1078,12 +569,17 @@ async function checkEnrollments(options) {
     // Check expected effective values after unenrollment. The expected
     // effective value for a pref at this point is the value on the user branch,
     // or if there's not a user value, the original value on the default branch
-    // before enrollment. This assumes the default values reflect the offline
-    // scenario (the case for the U.S. region).
-    let effectivePrefs = Object.assign({}, QuickSuggest.DEFAULT_PREFS.offline);
+    // before enrollment. (This assumes Suggest is enabled by default during
+    // tests.)
+    let effectivePrefs = { ...QuickSuggest.DEFAULT_PREFS };
     for (let [name, value] of Object.entries(expectedUserBranch)) {
       effectivePrefs[name] = value;
     }
+    Assert.greater(
+      Object.entries(effectivePrefs).length,
+      0,
+      "Sanity check: effectivePrefs should not be empty"
+    );
     for (let [name, value] of Object.entries(effectivePrefs)) {
       Assert.equal(
         UrlbarPrefs.get(name),
@@ -1093,11 +589,9 @@ async function checkEnrollments(options) {
     }
 
     // Clean up.
-    QuickSuggest._updatingFirefoxSuggestScenario = true;
     for (let name of Object.keys(expectedUserBranch)) {
       UrlbarPrefs.clear(name);
     }
-    QuickSuggest._updatingFirefoxSuggestScenario = false;
   }
 }
 
@@ -1293,7 +787,7 @@ async function doPolicyTest({
 
   gDefaultBranch.unlockPref(pref);
   gUserBranch.clearUserPref(pref);
-  await QuickSuggestTestUtils.setScenario(null);
+  await QuickSuggest._test_reinit();
 
   Assert.ok(
     !gDefaultBranch.prefIsLocked(pref),

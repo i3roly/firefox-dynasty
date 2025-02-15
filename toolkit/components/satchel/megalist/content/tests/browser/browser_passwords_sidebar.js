@@ -56,9 +56,48 @@ async function waitForPasswordConceal(passwordLine) {
     {
       attributeFilter: ["inputtype"],
     },
-    () => passwordLine.loginLine.getAttribute("inputtype") === "password"
+    () => passwordLine.getAttribute("inputtype") === "password"
   );
   return concealedPromise;
+}
+
+// Select the button within the <panel-item> element, as that is the target we want to click.
+// Triggering a click event directly on the <panel-item> would fail a11y tests because
+// <panel-item>  has a default role="presentation," which cannot be overridden.
+const getShadowBtn = (menu, selector) =>
+  menu.querySelector(selector).shadowRoot.querySelector("button");
+
+async function testImportFromBrowser(
+  passwordsSidebar,
+  isFromMenuDropdown = true
+) {
+  const wizardReadyPromise = waitForMigrationWizard();
+
+  info("Click on import browser button");
+  if (isFromMenuDropdown) {
+    const menu = passwordsSidebar.querySelector("panel-list");
+    const menuButton = passwordsSidebar.querySelector(
+      "#more-options-menubutton"
+    );
+    menuButton.click();
+    await BrowserTestUtils.waitForEvent(menu, "shown");
+    getShadowBtn(menu, "[action='import-from-browser']").click();
+  } else {
+    const importBrowserButton = passwordsSidebar.querySelector(
+      ".empty-state-import-from-browser"
+    );
+    importBrowserButton.click();
+  }
+
+  info("Confirm migration wizard opened");
+  const wizard = await wizardReadyPromise;
+  ok(wizard, "migration wizard opened");
+
+  let events = Glean.contextualManager.toolbarAction.testGetValue();
+  assertCPMGleanEvent(events[0], {
+    trigger: isFromMenuDropdown ? "toolbar" : "empty_state_card",
+    option_name: "import_browser",
+  });
 }
 
 add_setup(async function () {
@@ -84,15 +123,13 @@ add_task(async function test_passwords_sidebar() {
   SidebarController.hide();
 });
 
-// Select the button within the <panel-item> element, as that is the target we want to click.
-// Triggering a click event directly on the <panel-item> would fail a11y tests because
-// <panel-item>  has a default role="presentation," which cannot be overridden.
-const getShadowBtn = (menu, selector) =>
-  menu.querySelector(selector).shadowRoot.querySelector("button");
-
 add_task(async function test_login_line_commands() {
+  Services.fog.testResetFOG();
+  await Services.fog.testFlushAllChildren();
+
   await addLocalOriginLogin();
   const passwordsSidebar = await openPasswordsSidebar();
+  await checkAllLoginsRendered(passwordsSidebar);
   const list = passwordsSidebar.querySelector(".passwords-list");
   const card = list.querySelector("password-card");
   const expectedPasswordCard = {
@@ -112,6 +149,10 @@ add_task(async function test_login_line_commands() {
       );
       info(`click on ${selector}`);
       loginLineInput.click();
+      let events = Glean.contextualManager.recordsInteraction.testGetValue();
+      assertCPMGleanEvent(events[0], {
+        interaction_type: "url_navigate",
+      });
       await browserLoadedPromise;
       ok(true, "origin url loaded");
     } else if (selector === "usernameLine") {
@@ -120,6 +161,11 @@ add_task(async function test_login_line_commands() {
         () => {
           info(`click on ${selector}`);
           loginLineInput.click();
+          let events =
+            Glean.contextualManager.recordsInteraction.testGetValue();
+          assertCPMGleanEvent(events[1], {
+            interaction_type: "copy_username",
+          });
         }
       );
     } else if (
@@ -134,6 +180,11 @@ add_task(async function test_login_line_commands() {
           () => {
             info(`click on ${selector}`);
             loginLineInput.click();
+            let events =
+              Glean.contextualManager.recordsInteraction.testGetValue();
+            assertCPMGleanEvent(events[2], {
+              interaction_type: "copy_password",
+            });
           }
         );
       });
@@ -148,12 +199,28 @@ add_task(async function test_login_line_commands() {
       );
       info("click on reveal button");
       revealBtn.click();
+
+      let events = Glean.contextualManager.recordsInteraction.testGetValue();
+      assertCPMGleanEvent(events[3], {
+        interaction_type: "view_password",
+      });
+
       await revealBtnPromise;
       is(
         loginLineInput.value,
         expectedPasswordCard[selector].value,
         "password revealed"
       );
+
+      info("click on button again to conceal the password");
+      revealBtn.click();
+      await waitForPasswordConceal(loginLine);
+      ok(true, "Password is hidden.");
+
+      events = Glean.contextualManager.recordsInteraction.testGetValue();
+      assertCPMGleanEvent(events[4], {
+        interaction_type: "hide_password",
+      });
     }
   }
 
@@ -164,6 +231,9 @@ add_task(async function test_login_line_commands() {
 });
 
 add_task(async function test_passwords_menu_external_links() {
+  Services.fog.testResetFOG();
+  await Services.fog.testFlushAllChildren();
+
   const passwordsSidebar = await openPasswordsSidebar();
   await waitForSnapshots();
   const menu = passwordsSidebar.querySelector("panel-list");
@@ -178,6 +248,13 @@ add_task(async function test_passwords_menu_external_links() {
   );
 
   getShadowBtn(menu, "[action='open-preferences']").click();
+
+  let events = Glean.contextualManager.toolbarAction.testGetValue();
+  assertCPMGleanEvent(events[0], {
+    trigger: "toolbar",
+    option_name: "preferences",
+  });
+
   await preferencesTabPromise;
   ok(true, "passwords settings in preferences opened.");
 
@@ -186,6 +263,11 @@ add_task(async function test_passwords_menu_external_links() {
   const helpTabPromise = BrowserTestUtils.waitForNewTab(gBrowser, SUPPORT_URL);
 
   getShadowBtn(menu, "[action='open-help']").click();
+  events = Glean.contextualManager.toolbarAction.testGetValue();
+  assertCPMGleanEvent(events[1], {
+    trigger: "toolbar",
+    option_name: "help",
+  });
   const helpTab = await helpTabPromise;
   ok(true, "support link opened.");
 
@@ -211,18 +293,26 @@ async function waitForMigrationWizard() {
 }
 
 add_task(async function test_passwords_menu_import_from_browser() {
+  Services.fog.testResetFOG();
+  await Services.fog.testFlushAllChildren();
+
   const passwordsSidebar = await openPasswordsSidebar();
   await waitForSnapshots();
-  const menu = passwordsSidebar.querySelector("panel-list");
-  const menuButton = passwordsSidebar.querySelector("#more-options-menubutton");
+  await testImportFromBrowser(passwordsSidebar);
 
-  menuButton.click();
-  await BrowserTestUtils.waitForEvent(menu, "shown");
+  BrowserTestUtils.addTab(gBrowser, "about:blank");
+  BrowserTestUtils.removeTab(gBrowser.selectedTab);
+  SidebarController.hide();
+});
 
-  const wizardReadyPromise = waitForMigrationWizard();
-  getShadowBtn(menu, "[action='import-from-browser']").click();
-  const wizard = await wizardReadyPromise;
-  ok(wizard, "migration wizard opened");
+add_task(async function test_passwords_menu_import_from_browser_empty_state() {
+  Services.fog.testResetFOG();
+  await Services.fog.testFlushAllChildren();
+
+  const passwordsSidebar = await openPasswordsSidebar();
+  await waitForSnapshots();
+  await testImportFromBrowser(passwordsSidebar, false);
+
   BrowserTestUtils.addTab(gBrowser, "about:blank");
   BrowserTestUtils.removeTab(gBrowser.selectedTab);
   SidebarController.hide();
@@ -256,7 +346,7 @@ add_task(async function test_passwords_visibility_when_view_shown() {
   megalist = await openPasswordsSidebar();
   await checkAllLoginsRendered(megalist);
   passwordCard = megalist.querySelector("password-card");
-  await waitForPasswordConceal(passwordCard.passwordLine);
+  await waitForPasswordConceal(passwordCard.passwordLine.loginLine);
   ok(true, "Password is hidden.");
 
   info(
@@ -266,7 +356,7 @@ add_task(async function test_passwords_visibility_when_view_shown() {
   megalist = await openPasswordsSidebar();
   await checkAllLoginsRendered(megalist);
   passwordCard = megalist.querySelector("password-card");
-  await waitForPasswordConceal(passwordCard.passwordLine);
+  await waitForPasswordConceal(passwordCard.passwordLine.loginLine);
   ok(true, "Password is hidden.");
 
   SidebarController.hide();

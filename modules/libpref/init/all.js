@@ -3287,8 +3287,6 @@ pref("network.trr.confirmationNS", "example.com");
 // Comma separated list of domains that we should not use TRR for
 pref("network.trr.excluded-domains", "");
 pref("network.trr.builtin-excluded-domains", "localhost,local");
-// Whether the checkbox to display a fallback warning error page is visible in about:preferences#privacy
-pref("network.trr_ui.show_fallback_warning_option", false);
 
 pref("captivedetect.canonicalURL", "http://detectportal.firefox.com/canonical.html");
 pref("captivedetect.canonicalContent", "<meta http-equiv=\"refresh\" content=\"0;url=https://support.mozilla.org/kb/captive-portal\"/>");
@@ -3590,11 +3588,8 @@ pref("webextensions.tests", false);
 // 16MB default non-parseable upload limit for requestBody.raw.bytes
 pref("webextensions.webRequest.requestBodyMaxRawBytes", 16777216);
 
-#ifdef NIGHTLY_BUILD
-  pref("webextensions.storage.session.enforceQuota", true);
-#else
-  pref("webextensions.storage.session.enforceQuota", false);
-#endif
+// Enforce a 10MB quota in the storage.session extension API.
+pref("webextensions.storage.session.enforceQuota", true);
 
 // Should we use the old kinto-based implementation of storage.sync? To be removed in bug 1637465.
 pref("webextensions.storage.sync.kinto", false);
@@ -4116,3 +4111,10 @@ pref("privacy.query_stripping.strip_on_share.canDisable", true);
 // Captcha Detection
 pref("captchadetection.loglevel", "Warn");
 pref("captchadetection.actor.enabled", true);
+
+// Enable adding a signature in the PDF viewer.
+#ifdef EARLY_BETA_OR_EARLIER
+  pref("pdfjs.enableSignatureEditor", true);
+#else
+  pref("pdfjs.enableSignatureEditor", false);
+#endif

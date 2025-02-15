@@ -511,9 +511,15 @@ class FeatureTest {
     return shadow(this, "isImageDecoderSupported", typeof ImageDecoder !== "undefined");
   }
   static get platform() {
+    const {
+      platform,
+      userAgent
+    } = navigator;
     return shadow(this, "platform", {
-      isMac: navigator.platform.includes("Mac"),
-      isWindows: navigator.platform.includes("Win"),
+      isAndroid: userAgent.includes("Android"),
+      isLinux: platform.includes("Linux"),
+      isMac: platform.includes("Mac"),
+      isWindows: platform.includes("Win"),
       isFirefox: true
     });
   }
@@ -4587,7 +4593,8 @@ class JpxImage {
         if (this.#wasmUrl !== null) {
           this.#buffer = await fetchBinaryData(`${this.#wasmUrl}${filename}`);
         } else {
-          this.#buffer = await this.#handler.sendWithPromise("FetchWasm", {
+          this.#buffer = await this.#handler.sendWithPromise("FetchBinaryData", {
+            type: "wasmFactory",
             filename
           });
         }
@@ -7670,9 +7677,7 @@ function decodeTextRegion(huffman, refinement, width, height, defaultPixelValue,
   for (i = 0; i < height; i++) {
     row = new Uint8Array(width);
     if (defaultPixelValue) {
-      for (let j = 0; j < width; j++) {
-        row[j] = defaultPixelValue;
-      }
+      row.fill(defaultPixelValue);
     }
     bitmap.push(row);
   }
@@ -7825,9 +7830,7 @@ function decodeHalftoneRegion(mmr, patterns, template, regionWidth, regionHeight
   for (i = 0; i < regionHeight; i++) {
     row = new Uint8Array(regionWidth);
     if (defaultPixelValue) {
-      for (j = 0; j < regionWidth; j++) {
-        row[j] = defaultPixelValue;
-      }
+      row.fill(defaultPixelValue);
     }
     regionBitmap.push(row);
   }
@@ -26045,22 +26048,27 @@ class MeshStreamReader {
     return true;
   }
   readBits(n) {
-    let buffer = this.buffer;
-    let bufferLength = this.bufferLength;
+    const {
+      stream
+    } = this;
+    let {
+      buffer,
+      bufferLength
+    } = this;
     if (n === 32) {
       if (bufferLength === 0) {
-        return (this.stream.getByte() << 24 | this.stream.getByte() << 16 | this.stream.getByte() << 8 | this.stream.getByte()) >>> 0;
+        return stream.getInt32() >>> 0;
       }
-      buffer = buffer << 24 | this.stream.getByte() << 16 | this.stream.getByte() << 8 | this.stream.getByte();
-      const nextByte = this.stream.getByte();
+      buffer = buffer << 24 | stream.getByte() << 16 | stream.getByte() << 8 | stream.getByte();
+      const nextByte = stream.getByte();
       this.buffer = nextByte & (1 << bufferLength) - 1;
       return (buffer << 8 - bufferLength | (nextByte & 0xff) >> bufferLength) >>> 0;
     }
     if (n === 8 && bufferLength === 0) {
-      return this.stream.getByte();
+      return stream.getByte();
     }
     while (bufferLength < n) {
-      buffer = buffer << 8 | this.stream.getByte();
+      buffer = buffer << 8 | stream.getByte();
       bufferLength += 8;
     }
     bufferLength -= n;
@@ -27582,12 +27590,9 @@ class PDFFunction {
     const samples = this.getSampleArray(size, outputSize, bps, fn);
     return function constructSampledFn(src, srcOffset, dest, destOffset) {
       const cubeVertices = 1 << inputSize;
-      const cubeN = new Float64Array(cubeVertices);
+      const cubeN = new Float64Array(cubeVertices).fill(1);
       const cubeVertex = new Uint32Array(cubeVertices);
       let i, j;
-      for (j = 0; j < cubeVertices; j++) {
-        cubeN[j] = 1;
-      }
       let k = outputSize,
         pos = 1;
       for (i = 0; i < inputSize; ++i) {
@@ -30571,13 +30576,13 @@ class PartialEvaluator {
     }
     let data;
     if (this.options.cMapUrl !== null) {
-      const cMapData = await fetchBinaryData(`${this.options.cMapUrl}${name}.bcmap`);
       data = {
-        cMapData,
+        cMapData: await fetchBinaryData(`${this.options.cMapUrl}${name}.bcmap`),
         isCompressed: true
       };
     } else {
-      data = await this.handler.sendWithPromise("FetchBuiltInCMap", {
+      data = await this.handler.sendWithPromise("FetchBinaryData", {
+        type: "cMapReaderFactory",
         name
       });
     }
@@ -30599,7 +30604,8 @@ class PartialEvaluator {
       if (this.options.standardFontDataUrl !== null) {
         data = await fetchBinaryData(`${this.options.standardFontDataUrl}${filename}`);
       } else {
-        data = await this.handler.sendWithPromise("FetchStandardFontData", {
+        data = await this.handler.sendWithPromise("FetchBinaryData", {
+          type: "standardFontDataFactory",
           filename
         });
       }
@@ -36773,53 +36779,56 @@ class Catalog {
     return this.hasActualNumPages ? this._actualNumPages : this._pagesCount;
   }
   get destinations() {
-    const obj = this._readDests(),
+    const rawDests = this.#readDests(),
       dests = Object.create(null);
-    if (obj instanceof NameTree) {
-      for (const [key, value] of obj.getAll()) {
-        const dest = fetchDest(value);
-        if (dest) {
-          dests[stringToPDFString(key)] = dest;
+    for (const obj of rawDests) {
+      if (obj instanceof NameTree) {
+        for (const [key, value] of obj.getAll()) {
+          const dest = fetchDest(value);
+          if (dest) {
+            dests[stringToPDFString(key)] = dest;
+          }
         }
-      }
-    } else if (obj instanceof Dict) {
-      for (const [key, value] of obj) {
-        const dest = fetchDest(value);
-        if (dest) {
-          dests[key] = dest;
+      } else if (obj instanceof Dict) {
+        for (const [key, value] of obj) {
+          const dest = fetchDest(value);
+          if (dest) {
+            dests[key] ||= dest;
+          }
         }
       }
     }
     return shadow(this, "destinations", dests);
   }
   getDestination(id) {
-    const obj = this._readDests();
-    if (obj instanceof NameTree) {
-      const dest = fetchDest(obj.get(id));
-      if (dest) {
-        return dest;
+    const rawDests = this.#readDests();
+    for (const obj of rawDests) {
+      if (obj instanceof NameTree || obj instanceof Dict) {
+        const dest = fetchDest(obj.get(id));
+        if (dest) {
+          return dest;
+        }
       }
-      const allDest = this.destinations[id];
-      if (allDest) {
+    }
+    if (rawDests[0] instanceof NameTree) {
+      const dest = this.destinations[id];
+      if (dest) {
         warn(`Found "${id}" at an incorrect position in the NameTree.`);
-        return allDest;
-      }
-    } else if (obj instanceof Dict) {
-      const dest = fetchDest(obj.get(id));
-      if (dest) {
         return dest;
       }
     }
     return null;
   }
-  _readDests() {
+  #readDests() {
     const obj = this._catDict.get("Names");
+    const rawDests = [];
     if (obj?.has("Dests")) {
-      return new NameTree(obj.getRaw("Dests"), this.xref);
-    } else if (this._catDict.has("Dests")) {
-      return this._catDict.get("Dests");
+      rawDests.push(new NameTree(obj.getRaw("Dests"), this.xref));
     }
-    return undefined;
+    if (this._catDict.has("Dests")) {
+      rawDests.push(this._catDict.get("Dests"));
+    }
+    return rawDests;
   }
   get pageLabels() {
     let obj = null;
@@ -41242,7 +41251,7 @@ class ChoiceList extends XFAObject {
     const field = ui[$getParent]();
     const fontSize = field.font?.size || 10;
     const optionStyle = {
-      fontSize: `calc(${fontSize}px * var(--scale-factor))`
+      fontSize: `calc(${fontSize}px * var(--total-scale-factor))`
     };
     const children = [];
     if (field.items.children.length > 0) {
@@ -47625,7 +47634,7 @@ function mapStyle(styleStr, node, richText) {
     style.verticalAlign = measureToString(Math.sign(getMeasurement(style.verticalAlign)) * fontSize * VERTICAL_FACTOR);
   }
   if (richText && style.fontSize) {
-    style.fontSize = `calc(${style.fontSize} * var(--scale-factor))`;
+    style.fontSize = `calc(${style.fontSize} * var(--total-scale-factor))`;
   }
   fixTextIndent(style);
   return style;
@@ -48686,6 +48695,9 @@ class AnnotationFactory {
             image
           }));
           break;
+        case AnnotationEditorType.SIGNATURE:
+          promises.push(StampAnnotation.createNewAnnotation(xref, annotation, changes, {}));
+          break;
       }
     }
     return {
@@ -48744,6 +48756,11 @@ class AnnotationFactory {
           }
           promises.push(StampAnnotation.createNewPrintAnnotation(annotationGlobals, xref, annotation, {
             image,
+            evaluatorOptions: options
+          }));
+          break;
+        case AnnotationEditorType.SIGNATURE:
+          promises.push(StampAnnotation.createNewPrintAnnotation(annotationGlobals, xref, annotation, {
             evaluatorOptions: options
           }));
           break;
@@ -51387,7 +51404,7 @@ class InkAnnotation extends MarkupAnnotation {
     const bs = new Dict(xref);
     ink.set("BS", bs);
     bs.set("W", thickness);
-    ink.set("C", Array.from(color, c => c / 255));
+    ink.set("C", getPdfColorArray(color));
     ink.set("CA", opacity);
     const n = new Dict(xref);
     ink.set("AP", n);
@@ -51550,7 +51567,7 @@ class HighlightAnnotation extends MarkupAnnotation {
     highlight.set("Border", [0, 0, 0]);
     highlight.set("Rotate", rotation);
     highlight.set("QuadPoints", quadPoints);
-    highlight.set("C", Array.from(color, c => c / 255));
+    highlight.set("C", getPdfColorArray(color));
     highlight.set("CA", opacity);
     if (user) {
       highlight.set("T", stringToAsciiOrUTF16BE(user));
@@ -51817,9 +51834,47 @@ class StampAnnotation extends MarkupAnnotation {
     }
     return stamp;
   }
+  static async #createNewAppearanceStreamForDrawing(annotation, xref) {
+    const {
+      areContours,
+      color,
+      rect,
+      lines,
+      thickness
+    } = annotation;
+    const appearanceBuffer = [`${thickness} w 1 J 1 j`, `${getPdfColor(color, areContours)}`];
+    for (const line of lines) {
+      appearanceBuffer.push(`${numberToString(line[4])} ${numberToString(line[5])} m`);
+      for (let i = 6, ii = line.length; i < ii; i += 6) {
+        if (isNaN(line[i])) {
+          appearanceBuffer.push(`${numberToString(line[i + 4])} ${numberToString(line[i + 5])} l`);
+        } else {
+          const [c1x, c1y, c2x, c2y, x, y] = line.slice(i, i + 6);
+          appearanceBuffer.push([c1x, c1y, c2x, c2y, x, y].map(numberToString).join(" ") + " c");
+        }
+      }
+      if (line.length === 6) {
+        appearanceBuffer.push(`${numberToString(line[4])} ${numberToString(line[5])} l`);
+      }
+    }
+    appearanceBuffer.push(areContours ? "F" : "S");
+    const appearance = appearanceBuffer.join("\n");
+    const appearanceStreamDict = new Dict(xref);
+    appearanceStreamDict.set("FormType", 1);
+    appearanceStreamDict.set("Subtype", Name.get("Form"));
+    appearanceStreamDict.set("Type", Name.get("XObject"));
+    appearanceStreamDict.set("BBox", rect);
+    appearanceStreamDict.set("Length", appearance.length);
+    const ap = new StringStream(appearance);
+    ap.dict = appearanceStreamDict;
+    return ap;
+  }
   static async createNewAppearanceStream(annotation, xref, params) {
     if (annotation.oldAnnotation) {
       return null;
+    }
+    if (annotation.isSignature) {
+      return this.#createNewAppearanceStreamForDrawing(annotation, xref);
     }
     const {
       rotation
@@ -52876,13 +52931,7 @@ class CipherTransform {
       const pad = 16 - strLen % 16;
       s += String.fromCharCode(pad).repeat(pad);
       const iv = new Uint8Array(16);
-      if (typeof crypto !== "undefined") {
-        crypto.getRandomValues(iv);
-      } else {
-        for (let i = 0; i < 16; i++) {
-          iv[i] = Math.floor(256 * Math.random());
-        }
-      }
+      crypto.getRandomValues(iv);
       let data = stringToBytes(s);
       data = cipher.encrypt(data, iv);
       const buf = new Uint8Array(16 + data.length);
@@ -56490,7 +56539,7 @@ class WorkerMessageHandler {
       docId,
       apiVersion
     } = docParams;
-    const workerVersion = "5.0.98";
+    const workerVersion = "5.0.158";
     if (apiVersion !== workerVersion) {
       throw new Error(`The API version "${apiVersion}" does not match ` + `the Worker version "${workerVersion}".`);
     }
@@ -57022,8 +57071,8 @@ class WorkerMessageHandler {
 
 ;// ./src/pdf.worker.js
 
-const pdfjsVersion = "5.0.98";
-const pdfjsBuild = "16155fd80";
+const pdfjsVersion = "5.0.158";
+const pdfjsBuild = "144e5fe19";
 
 var __webpack_exports__WorkerMessageHandler = __webpack_exports__.WorkerMessageHandler;
 export { __webpack_exports__WorkerMessageHandler as WorkerMessageHandler };

@@ -1945,13 +1945,14 @@ extensions.apis.dnr:
       - 1803363
       - 1850890
       - 1881406
+      - 1946276
     description: >
       Counters for startup cache data hits or misses on initializating
       DNR rules for extensions loaded on application startup.
       The expected keys are 'hit' and 'miss'.
       This probe is mirrored from a Glean metric with the same name.
     keyed: true
-    expires: '138'
+    expires: '145'
     kind: uint
     notification_emails:
       - addons-dev-internal@mozilla.com
@@ -1964,9 +1965,10 @@ extensions.apis.dnr:
       - 1803363
       - 1850890
       - 1881406
+      - 1946276
     description: >
       Max amount of DNR rules being evaluated.
-    expires: '138'
+    expires: '145'
     kind: uint
     notification_emails:
       - addons-dev-internal@mozilla.com
@@ -5933,25 +5935,6 @@ urlbar.trending:
       - main
 
 urlbar:
-  abandonment:
-    bug_numbers:
-      - 1752953
-    description: >
-      A uint recording the number of abandoned engagements in the urlbar. An
-      abandonment occurs when the user begins using the urlbar but stops before
-      completing the engagement. This can happen when the user clicks outside
-      the urlbar to focus a different part of the window. It can also happen
-      when the user switches to another window while the urlbar is focused.
-    expires: never
-    kind: uint
-    notification_emails:
-      - fx-search-telemetry@mozilla.com
-      - adw@mozilla.com
-    release_channel_collection: opt-out
-    products:
-      - 'firefox'
-    record_in_processes:
-      - main
   autofill_deletion:
     bug_numbers:
       - 1815342
@@ -5963,24 +5946,6 @@ urlbar:
     kind: uint
     notification_emails:
       - fx-search-telemetry@mozilla.com
-    release_channel_collection: opt-out
-    products:
-      - 'firefox'
-    record_in_processes:
-      - main
-  engagement:
-    bug_numbers:
-      - 1752953
-    description: >
-      A uint recording the number of engagements the user completes in the
-      urlbar.  An engagement occurs when the user navigates to a page using the
-      urlbar, for example by picking a result in the urlbar panel or typing a
-      search term or URL in the urlbar and pressing the enter key.
-    expires: never
-    kind: uint
-    notification_emails:
-      - fx-search-telemetry@mozilla.com
-      - adw@mozilla.com
     release_channel_collection: opt-out
     products:
       - 'firefox'

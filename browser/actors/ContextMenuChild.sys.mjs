@@ -275,6 +275,37 @@ export class ContextMenuChild extends JSWindowActorChild {
           imageName: null,
         });
       }
+
+      case "ContextMenu:GetTextDirective": {
+        if (this.contentWindow?.getSelection().rangeCount) {
+          const textDirectives = [];
+          for (
+            let rangeIndex = 0;
+            rangeIndex < this.contentWindow.getSelection().rangeCount;
+            rangeIndex++
+          ) {
+            textDirectives.push(
+              this.contentWindow.document?.fragmentDirective.createTextDirective(
+                this.contentWindow.getSelection().getRangeAt(rangeIndex)
+              )
+            );
+          }
+          return Promise.all(textDirectives).then(directives => {
+            const validDirectives = directives.filter(d => d);
+            const textFragment = validDirectives.join("&");
+            if (textFragment) {
+              let url = URL.parse(this.contentWindow.location);
+              url.hash += `:~:${textFragment}`;
+              return url.href;
+            }
+            return null;
+          });
+        }
+        return null;
+      }
+      case "ContextMenu:RemoveAllTextFragments": {
+        this.contentWindow?.document?.fragmentDirective.removeAllTextDirectives();
+      }
     }
 
     return undefined;
@@ -856,6 +887,9 @@ export class ContextMenuChild extends JSWindowActorChild {
     context.onTextInput = false;
     context.onVideo = false;
     context.inPDFEditor = false;
+    context.hasTextFragments =
+      !!this.contentWindow?.document?.fragmentDirective.getTextDirectiveRanges()
+        .length;
 
     // Remember the node and its owner document that was clicked
     // This may be modifed before sending to nsContextMenu

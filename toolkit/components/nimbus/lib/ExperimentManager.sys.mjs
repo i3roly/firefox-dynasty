@@ -12,13 +12,12 @@ const lazy = {};
 ChromeUtils.defineESModuleGetters(lazy, {
   ClientEnvironment: "resource://normandy/lib/ClientEnvironment.sys.mjs",
   ClientID: "resource://gre/modules/ClientID.sys.mjs",
+  ExperimentAPI: "resource://nimbus/ExperimentAPI.sys.mjs",
   ExperimentStore: "resource://nimbus/lib/ExperimentStore.sys.mjs",
   FirstStartup: "resource://gre/modules/FirstStartup.sys.mjs",
   NimbusFeatures: "resource://nimbus/ExperimentAPI.sys.mjs",
   NormandyUtils: "resource://normandy/lib/NormandyUtils.sys.mjs",
   PrefUtils: "resource://normandy/lib/PrefUtils.sys.mjs",
-  RemoteSettingsExperimentLoader:
-    "resource://nimbus/lib/RemoteSettingsExperimentLoader.sys.mjs",
   EnrollmentsContext:
     "resource://nimbus/lib/RemoteSettingsExperimentLoader.sys.mjs",
   Sampling: "resource://gre/modules/components-utils/Sampling.sys.mjs",
@@ -479,23 +478,25 @@ export class _ExperimentManager {
 
     // RemoteSettingsExperimentLoader could be in a middle of updating recipes
     // so let's wait for the update to finish and this promise to resolve.
-    await lazy.RemoteSettingsExperimentLoader.updatingRecipes();
+    await lazy.ExperimentAPI._rsLoader.finishedUpdating();
 
-    // At this point in the execution of this function,
-    // RemoteSettingsExperimentLoader should've finished updating recipes at least once.
-    const optInRecipesWithTargetingMatch = [];
+    // RemoteSettingsExperimentLoader should have finished updating at least
+    // once. Prevent concurrent updates while we filter through the list of
+    // available opt-in recipes.
+    return lazy.ExperimentAPI._rsLoader.withUpdateLock(async () => {
+      const filtered = [];
 
-    for (const recipe of this.optInRecipes) {
-      // check if the opt in recipe matches targeting and bucketing.
-      if (
-        (await enrollmentsCtx.checkTargeting(recipe)) &&
-        (await this.isInBucketAllocation(recipe.bucketConfig))
-      ) {
-        optInRecipesWithTargetingMatch.push(recipe);
+      for (const recipe of this.optInRecipes) {
+        if (
+          (await enrollmentsCtx.checkTargeting(recipe)) &&
+          (await this.isInBucketAllocation(recipe.bucketConfig))
+        ) {
+          filtered.push(recipe);
+        }
       }
-    }
 
-    return optInRecipesWithTargetingMatch;
+      return filtered;
+    });
   }
 
   /**
@@ -510,8 +511,9 @@ export class _ExperimentManager {
 
     // RemoteSettingsExperimentLoader could be in a middle of updating recipes
     // so let's wait for the update to finish and this promise to resolve.
-    await lazy.RemoteSettingsExperimentLoader.updatingRecipes();
+    await lazy.ExperimentAPI._rsLoader.finishedUpdating();
 
+    // We don't need to hold the RSEL lock here because we are not doing any async work.
     return this.optInRecipes.find(recipe => recipe.slug === slug);
   }
 
@@ -558,13 +560,24 @@ export class _ExperimentManager {
   /**
    * Start a new experiment by enrolling the users
    *
-   * @param {RecipeArgs} recipe
+   * @param {object} recipe
+   *                 The recipe to enroll in.
    * @param {string} source
+   *                 The source of the experiment (e.g., "rs-loader" for recipes
+   *                 from Remote Settings).
    * @param {object} options
-   * @param {boolean} options.reenroll - Allow re-enrollment. Only allowed for rollouts.
-   * @returns {Promise<Enrollment>} The experiment object stored in the data store
-   * @rejects {Error}
-   * @memberof _ExperimentManager
+   * @param {boolean} options.reenroll
+   *                  Allow re-enrollment. Only supported for rollouts.
+   * @param {string} options.optInRecipeBranchSlug
+   *                 If enrolling in a Firefox Labs opt-in experiment, this
+   *                 option is required and will dictate which branch to enroll
+   *                 in.
+   *
+   * @returns {Promise<Enrollment>}
+   *          The experiment object stored in the data store.
+   *
+   * @throws {Error} If a recipe already exists in the store with the same slug
+   *                 as `recipe` and re-enrollment is prevented.
    */
   async enroll(
     recipe,
@@ -577,7 +590,8 @@ export class _ExperimentManager {
 
     if (
       enrollment &&
-      (enrollment.active || !enrollment.isRollout || !reenroll)
+      (enrollment.active ||
+        (!isFirefoxLabsOptIn && (!enrollment.isRollout || !reenroll)))
     ) {
       this.sendFailureTelemetry("enrollFailed", slug, "name-conflict");
       throw new Error(`An experiment with the slug "${slug}" already exists.`);
@@ -802,15 +816,11 @@ export class _ExperimentManager {
         return false;
       } else if (
         !enrollment.active &&
-        enrollment.unenrollReason !== "individual-opt-out"
+        enrollment.unenrollReason !== "individual-opt-out" &&
+        !enrollment.isFirefoxLabsOptIn
       ) {
         lazy.log.debug(`Re-enrolling in rollout "${recipe.slug}`);
-        const options = { reenroll: true };
-        if (recipe.isFirefoxLabsOptIn) {
-          // Opt-In rollouts only have a single branch.
-          options.optInRecipeBranchSlug = recipe.branches[0].slug;
-        }
-        return !!(await this.enroll(recipe, source, options));
+        return !!(await this.enroll(recipe, source, { reenroll: true }));
       }
     }
 

@@ -168,6 +168,12 @@ preferences-data-migration-button =
     .label = Import Data
     .accesskey = m
 
+preferences-profiles-header = Profiles
+preferences-manage-profiles-description = Each profile has separate browsing data and settings, including history, passwords, and more.
+preferences-manage-profiles-learn-more = Learn more
+preferences-manage-profiles-button =
+  .label = Manage Profiles
+
 tabs-group-header = Tabs
 
 ctrl-tab-recently-used-order =
@@ -1626,10 +1632,6 @@ preferences-doh-setting-off =
   .label = Off
   .accesskey = O
 preferences-doh-off-desc = Use your default DNS resolver
-
-preferences-doh-checkbox-warn =
-    .label = Warn if a third party actively prevents secure DNS
-    .accesskey = W
 
 preferences-doh-select-resolver = Choose provider:
 

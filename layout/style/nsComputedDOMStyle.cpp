@@ -1911,23 +1911,24 @@ already_AddRefed<CSSValue> nsComputedDOMStyle::GetNonStaticPositionOffset(
   const nsStylePosition* positionData = StylePosition();
   int32_t sign = 1;
   const auto positionProperty = StyleDisplay()->mPosition;
-  auto coord = positionData->GetAnchorResolvedInset(aSide, positionProperty);
+  auto side = aSide;
+  auto coord = positionData->GetAnchorResolvedInset(side, positionProperty);
 
-  if (coord.IsAuto()) {
+  if (coord->IsAuto()) {
     if (!aResolveAuto) {
       auto val = MakeRefPtr<nsROCSSPrimitiveValue>();
       val->SetString("auto");
       return val.forget();
     }
-    coord = positionData->GetAnchorResolvedInset(NS_OPPOSITE_SIDE(aSide),
-                                                 positionProperty);
+    side = NS_OPPOSITE_SIDE(side);
+    coord = positionData->GetAnchorResolvedInset(side, positionProperty);
     sign = -1;
   }
-  if (coord.IsAuto()) {
+  if (coord->IsAuto()) {
     return PixelsToCSSValue(0.0f);
   }
 
-  const auto& lp = coord.AsLengthPercentage();
+  const auto& lp = coord->AsLengthPercentage();
   if (lp.ConvertsToLength()) {
     return PixelsToCSSValue(sign * lp.ToLengthInCSSPixels());
   }
@@ -1939,7 +1940,12 @@ already_AddRefed<CSSValue> nsComputedDOMStyle::GetNonStaticPositionOffset(
   if (!(this->*baseGetter)(percentageBase)) {
     return PixelsToCSSValue(0.0f);
   }
-  nscoord result = lp.Resolve(percentageBase);
+
+  // TODO(dshin, bug 1947482): Anchor resolution only cares about the axis it's
+  // being resolved in, so we should be able to use `PhysicalAxis` and not worry
+  // about keeping track of `side`.
+  nscoord result = lp.ResolveWithAnchor(
+      percentageBase, ToStylePhysicalSide(side), positionProperty);
   return AppUnitsToCSSValue(sign * result);
 }
 
@@ -1951,7 +1957,7 @@ already_AddRefed<CSSValue> nsComputedDOMStyle::GetAbsoluteOffset(
   const auto oppositeCoord = StylePosition()->GetAnchorResolvedInset(
       NS_OPPOSITE_SIDE(aSide), positionProperty);
 
-  if (coord.IsAuto() || oppositeCoord.IsAuto()) {
+  if (coord->IsAuto() || oppositeCoord->IsAuto()) {
     return AppUnitsToCSSValue(GetUsedAbsoluteOffset(aSide));
   }
 
@@ -2029,10 +2035,12 @@ already_AddRefed<CSSValue> nsComputedDOMStyle::GetStaticOffset(
   auto val = MakeRefPtr<nsROCSSPrimitiveValue>();
   const auto resolved =
       StylePosition()->GetAnchorResolvedInset(aSide, StyleDisplay()->mPosition);
-  if (resolved.IsAuto()) {
+  if (resolved->IsAuto()) {
     val->SetString("auto");
   } else {
-    SetValueToLengthPercentage(val, resolved.AsLengthPercentage(), false);
+    // Any calc node containing anchor should have been resolved as invalid by
+    // this point.
+    SetValueToLengthPercentage(val, resolved->AsLengthPercentage(), false);
   }
   return val.forget();
 }

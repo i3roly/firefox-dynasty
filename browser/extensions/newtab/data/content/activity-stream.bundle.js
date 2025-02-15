@@ -1228,7 +1228,8 @@ class _ConfirmDialog extends (external_React_default()).PureComponent {
     }), /*#__PURE__*/external_React_default().createElement("button", {
       className: "done",
       onClick: this._handleConfirmBtn,
-      "data-l10n-id": this.props.data.confirm_button_string_id
+      "data-l10n-id": this.props.data.confirm_button_string_id,
+      "data-l10n-args": JSON.stringify(this.props.data.confirm_button_string_args)
     }))));
   }
 }
@@ -2044,7 +2045,7 @@ const LinkMenuOptions = {
       type: actionTypes.OPEN_ABOUT_FAKESPOT,
     }),
   }),
-  SectionBlock: ({ blockedSections, sectionKey, sectionPosition }) => ({
+  SectionBlock: ({ blockedSections, sectionKey, sectionPosition, title }) => ({
     id: "newtab-menu-section-block",
     icon: "delete",
     action: {
@@ -2079,10 +2080,11 @@ const LinkMenuOptions = {
         // Pass Fluent strings to ConfirmDialog component for the copy
         // of the prompt to block sections.
         body_string_id: [
-          "newtab-section-confirm-block-section-p1",
-          "newtab-section-confirm-block-section-p2",
+          "newtab-section-confirm-block-topic-p1",
+          "newtab-section-confirm-block-topic-p2",
         ],
-        confirm_button_string_id: "newtab-section-block-section-button",
+        confirm_button_string_id: "newtab-section-block-topic-button",
+        confirm_button_string_args: { topic: title },
         cancel_button_string_id: "newtab-section-cancel-button",
       },
     },
@@ -3262,23 +3264,10 @@ class _DSCard extends (external_React_default()).PureComponent {
       width: 202,
       height: 101
     }];
-    this.simpleCardImageSizes = [{
+    this.standardCardImageSizes = [{
       mediaMatcher: "default",
-      width: 265,
-      height: 265
-    }];
-    this.largeCardImageSizes = [{
-      mediaMatcher: "(min-width: 1122px)",
-      width: 220,
-      height: 220
-    }, {
-      mediaMatcher: "(min-width: 866px)",
-      width: 218,
-      height: 109
-    }, {
-      mediaMatcher: "(max-width: 610px)",
-      width: 202,
-      height: 101
+      width: 296,
+      height: 148
     }];
     this.listCardImageSizes = [{
       mediaMatcher: "(min-width: 1122px)",
@@ -3289,6 +3278,34 @@ class _DSCard extends (external_React_default()).PureComponent {
       width: 50,
       height: 50
     }];
+    this.sectionsCardImagesSizes = {
+      small: {
+        width: 100,
+        height: 120
+      },
+      medium: {
+        width: 300,
+        height: 150
+      },
+      large: {
+        width: 265,
+        height: 265
+      }
+    };
+    this.sectionsColumnMediaMatcher = {
+      1: "default",
+      2: "(min-width: 724px)",
+      3: "(min-width: 1122px)",
+      4: "(min-width: 1390px)"
+    };
+  }
+  getSectionImageSize(column, size) {
+    const cardImageSize = {
+      mediaMatcher: this.sectionsColumnMediaMatcher[column],
+      width: this.sectionsCardImagesSizes[size].width,
+      height: this.sectionsCardImagesSizes[size].height
+    };
+    return cardImageSize;
   }
   doesLinkTopicMatchSelectedTopic() {
     // Edge case for clicking on a card when topic selections have not be set
@@ -3625,6 +3642,7 @@ class _DSCard extends (external_React_default()).PureComponent {
     const listCardClassName = isListCard ? `list-feed-card` : ``;
     const fakespotClassName = isFakespot ? `fakespot` : ``;
     const sectionsCardsClassName = [mayHaveSectionsCards ? `sections-card-ui` : ``, this.props.sectionsClassNames].join(" ");
+    const sectionsCardsImageSizes = this.props.sectionsCardImageSizes;
     const titleLinesName = `ds-card-title-lines-${titleLines}`;
     const descLinesClassName = `ds-card-desc-lines-${descLines}`;
     const isMediumRectangle = format === "rectangle";
@@ -3632,16 +3650,15 @@ class _DSCard extends (external_React_default()).PureComponent {
     let sizes = [];
     if (!isMediumRectangle) {
       sizes = this.dsImageSizes;
-      if (sectionsEnabled || layoutsVariantAorB) {
-        sizes = this.simpleCardImageSizes;
+      if (sectionsEnabled) {
+        sizes = [this.getSectionImageSize("4", sectionsCardsImageSizes["4"]), this.getSectionImageSize("3", sectionsCardsImageSizes["3"]), this.getSectionImageSize("2", sectionsCardsImageSizes["2"]), this.getSectionImageSize("1", sectionsCardsImageSizes["1"])];
+      } else if (layoutsVariantAorB) {
+        sizes = this.standardCardImageSizes;
       }
       if (isListCard) {
         sizes = this.listCardImageSizes;
       }
     }
-
-    // TODO: Add logic to assign this.largeCardImageSizes
-
     return /*#__PURE__*/external_React_default().createElement("article", {
       className: `ds-card ${listCardClassName} ${fakespotClassName} ${sectionsCardsClassName} ${compactImagesClassName} ${imageGradientClassName} ${titleLinesName} ${descLinesClassName} ${spocFormatClassName} ${ctaButtonClassName} ${ctaButtonVariantClassName}`,
       ref: this.setContextMenuButtonHostRef,
@@ -4293,7 +4310,10 @@ const AdBanner = ({
       pos: row,
       recommended_at: spoc.recommended_at,
       received_rank: spoc.received_rank,
-      format: spoc.format
+      format: spoc.format,
+      ...(spoc.shim?.impression ? {
+        shim: spoc.shim.impression
+      } : {})
     }],
     dispatch: dispatch,
     firstVisibleTimestamp: firstVisibleTimestamp
@@ -10037,7 +10057,8 @@ function SectionContextMenu({
       followedSections,
       blockedSections,
       sectionKey,
-      sectionPosition
+      sectionPosition,
+      title
     }
   }));
 }
@@ -10226,13 +10247,15 @@ const PREF_TOPIC_SELECTION_ENABLED = "discoverystream.sections.topicSelection.en
 const CardSections_PREF_TOPIC_SELECTION_POSITION = "discoverystream.sections.topicSelection.position";
 function getLayoutData(responsiveLayouts, index) {
   let layoutData = {
-    classNames: []
+    classNames: [],
+    imageSizes: {}
   };
   responsiveLayouts.forEach(layout => {
     layout.tiles.forEach((tile, tileIndex) => {
       if (tile.position === index) {
         layoutData.classNames.push(`col-${layout.columnCount}-${tile.size}`);
         layoutData.classNames.push(`col-${layout.columnCount}-position-${tileIndex}`);
+        layoutData.imageSizes[layout.columnCount] = tile.size;
 
         // The API tells us whether the tile should show the excerpt or not.
         // Apply extra styles accordingly.
@@ -10400,7 +10423,8 @@ function CardSection({
     className: "ds-section-grid ds-card-grid"
   }, section.data.slice(0, maxTile).map((rec, index) => {
     const {
-      classNames
+      classNames,
+      imageSizes
     } = getLayoutData(responsiveLayouts, index);
     if (!rec || rec.placeholder) {
       return /*#__PURE__*/external_React_default().createElement(PlaceholderDSCard, {
@@ -10451,6 +10475,7 @@ function CardSection({
       ctaButtonVariant: ctaButtonVariant,
       spocMessageVariant: spocMessageVariant,
       sectionsClassNames: classNames.join(" "),
+      sectionsCardImageSizes: imageSizes,
       section: sectionKey,
       sectionPosition: sectionPosition,
       sectionFollowed: following
@@ -11054,7 +11079,7 @@ function SectionsMgmtPanel({
   });
   return /*#__PURE__*/external_React_default().createElement("div", null, /*#__PURE__*/external_React_default().createElement("moz-box-button", {
     onClick: togglePanel,
-    "data-l10n-id": "newtab-section-mangage-topics-button"
+    "data-l10n-id": "newtab-section-manage-topics-button-v2"
   }), /*#__PURE__*/external_React_default().createElement(external_ReactTransitionGroup_namespaceObject.CSSTransition, {
     in: showPanel,
     timeout: 300,
@@ -11068,14 +11093,14 @@ function SectionsMgmtPanel({
   }, /*#__PURE__*/external_React_default().createElement("h1", {
     "data-l10n-id": "newtab-section-mangage-topics-title"
   })), /*#__PURE__*/external_React_default().createElement("h3", {
-    "data-l10n-id": "newtab-section-mangage-topics-followed-topics-subtitle"
+    "data-l10n-id": "newtab-section-mangage-topics-followed-topics"
   }), followedSectionsData.length ? /*#__PURE__*/external_React_default().createElement("ul", {
     className: "topic-list"
   }, followedSectionsList) : /*#__PURE__*/external_React_default().createElement("span", {
     className: "topic-list-empty-state",
     "data-l10n-id": "newtab-section-mangage-topics-followed-topics-empty-state"
   }), /*#__PURE__*/external_React_default().createElement("h3", {
-    "data-l10n-id": "newtab-section-mangage-topics-blocked-topics-subtitle"
+    "data-l10n-id": "newtab-section-mangage-topics-blocked-topics"
   }), blockedSectionsData.length ? /*#__PURE__*/external_React_default().createElement("ul", {
     className: "topic-list"
   }, blockedSectionsList) : /*#__PURE__*/external_React_default().createElement("span", {
@@ -11212,10 +11237,13 @@ class _WallpaperCategories extends (external_React_default()).PureComponent {
     this.handleChange = this.handleChange.bind(this);
     this.handleReset = this.handleReset.bind(this);
     this.handleCategory = this.handleCategory.bind(this);
+    this.handleUpload = this.handleUpload.bind(this);
     this.handleBack = this.handleBack.bind(this);
     this.getRGBColors = this.getRGBColors.bind(this);
     this.prefersHighContrastQuery = null;
     this.prefersDarkQuery = null;
+    this.categoryRef = []; // store references for wallpaper category list
+    this.wallpaperRef = []; // store reference for wallpaper selection list
     this.state = {
       activeCategory: null,
       activeCategoryFluentID: null,
@@ -11249,6 +11277,69 @@ class _WallpaperCategories extends (external_React_default()).PureComponent {
       had_previous_wallpaper: !!this.props.activeWallpaper
     });
   }
+
+  // function implementing arrow navigation for wallpaper category selection
+  handleCategoryKeyDown(event, category) {
+    const getIndex = this.categoryRef.findIndex(cat => cat.id === category);
+    if (getIndex === -1) {
+      return; // prevents errors if wallpaper index isn't found when navigating with arrow keys
+    }
+    const isRTL = document.dir === "rtl"; // returns true is page language is right-to-left
+    let eventKey = event.key;
+    if (eventKey === "ArrowRight" || eventKey === "ArrowLeft") {
+      if (isRTL) {
+        eventKey = eventKey === "ArrowRight" ? "ArrowLeft" : "ArrowRight";
+      }
+    }
+    let nextIndex = getIndex;
+    if (eventKey === "ArrowRight") {
+      nextIndex = getIndex + 1 < this.categoryRef.length ? getIndex + 1 : getIndex;
+    } else if (eventKey === "ArrowLeft") {
+      nextIndex = getIndex - 1 >= 0 ? getIndex - 1 : getIndex;
+    }
+    this.categoryRef[nextIndex].focus();
+  }
+
+  // function implementing arrow navigation for wallpaper selection
+  handleWallpaperKeyDown(event, title) {
+    if (event.key === "Tab") {
+      if (event.shiftKey) {
+        event.preventDefault();
+        this.backToMenuButton?.focus();
+      } else {
+        event.preventDefault(); // prevent tabbing within wallpaper selection. We should only be using the Tab key to tab between groups
+      }
+      return;
+    }
+    const isRTL = document.dir === "rtl"; // returns true if page language is right-to-left
+    let eventKey = event.key;
+    if (eventKey === "ArrowRight" || eventKey === "ArrowLeft") {
+      if (isRTL) {
+        eventKey = eventKey === "ArrowRight" ? "ArrowLeft" : "ArrowRight";
+      }
+    }
+    const getIndex = this.wallpaperRef.findIndex(wallpaper => wallpaper.id === title);
+    if (getIndex === -1) {
+      return; // prevents errors if wallpaper index isn't found when navigating with arrow keys
+    }
+
+    // the set layout of columns per row for the wallpaper selection
+    const columnCount = 3;
+    let nextIndex = getIndex;
+    if (eventKey === "ArrowRight") {
+      nextIndex = getIndex + 1 < this.wallpaperRef.length ? getIndex + 1 : getIndex;
+    } else if (eventKey === "ArrowLeft") {
+      nextIndex = getIndex - 1 >= 0 ? getIndex - 1 : getIndex;
+    } else if (eventKey === "ArrowDown") {
+      nextIndex = getIndex + columnCount < this.wallpaperRef.length ? getIndex + columnCount : getIndex;
+    } else if (eventKey === "ArrowUp") {
+      nextIndex = getIndex - columnCount >= 0 ? getIndex - columnCount : getIndex;
+    }
+    this.wallpaperRef[nextIndex].tabIndex = 0;
+    this.wallpaperRef[getIndex].tabIndex = -1;
+    this.wallpaperRef[nextIndex].focus();
+    this.wallpaperRef[nextIndex].click();
+  }
   handleReset() {
     this.props.setPref("newtabWallpapers.wallpaper-light", "");
     this.props.setPref("newtabWallpapers.wallpaper-dark", "");
@@ -11266,11 +11357,14 @@ class _WallpaperCategories extends (external_React_default()).PureComponent {
     this.handleUserEvent(actionTypes.WALLPAPER_CATEGORY_CLICK, event.target.id);
     let fluent_id;
     switch (event.target.id) {
-      case "photographs":
-        fluent_id = "newtab-wallpaper-category-title-photographs";
-        break;
       case "abstracts":
         fluent_id = "newtab-wallpaper-category-title-abstract";
+        break;
+      case "celestial":
+        fluent_id = "newtab-wallpaper-category-title-celestial";
+        break;
+      case "photographs":
+        fluent_id = "newtab-wallpaper-category-title-photographs";
         break;
       case "solid-colors":
         fluent_id = "newtab-wallpaper-category-title-colors";
@@ -11279,10 +11373,16 @@ class _WallpaperCategories extends (external_React_default()).PureComponent {
       activeCategoryFluentID: fluent_id
     });
   };
+  handleUpload() {
+    // TODO: Bug 1947645: Add custom image upload functionality
+    // TODO: Bug 1943663: Add telemetry
+    // TODO: Bug 1947813: Add image upload error states/UI
+  }
   handleBack() {
     this.setState({
       activeCategory: null
     });
+    this.categoryRef[0]?.focus();
   }
 
   // Record user interaction when changing wallpaper and reseting wallpaper to default
@@ -11359,7 +11459,7 @@ class _WallpaperCategories extends (external_React_default()).PureComponent {
       // If nothing selected, default to Zilla Green
       ,
       value: wallpaperCustomSolidColorHex || "#00d230",
-      className: `wallpaper-input theme-solid-color-picker 
+      className: `wallpaper-input theme-solid-color-picker
               ${this.state.activeId === "solid-color-picker" ? "active" : ""}`
     }), /*#__PURE__*/external_React_default().createElement("label", {
       htmlFor: "solid-color-picker",
@@ -11375,19 +11475,28 @@ class _WallpaperCategories extends (external_React_default()).PureComponent {
       className: "wallpapers-reset",
       onClick: this.handleReset,
       "data-l10n-id": "newtab-wallpaper-reset"
-    })), /*#__PURE__*/external_React_default().createElement("fieldset", {
+    })), /*#__PURE__*/external_React_default().createElement("div", {
+      role: "grid",
+      "aria-label": "Wallpaper category selection. Use arrow keys to navigate."
+    }, /*#__PURE__*/external_React_default().createElement("fieldset", {
       className: "category-list"
-    }, categories.map(category => {
+    }, categories.map((category, index) => {
       const filteredList = wallpaperList.filter(wallpaper => wallpaper.category === category);
       const activeWallpaperObj = activeWallpaper && filteredList.find(wp => wp.title === activeWallpaper);
       const thumbnail = activeWallpaperObj || filteredList[0];
       let fluent_id;
       switch (category) {
-        case "photographs":
-          fluent_id = "newtab-wallpaper-category-title-photographs";
-          break;
         case "abstracts":
           fluent_id = "newtab-wallpaper-category-title-abstract";
+          break;
+        case "celestial":
+          fluent_id = "newtab-wallpaper-category-title-celestial";
+          break;
+        case "custom-wallpaper":
+          fluent_id = "newtab-wallpaper-upload-image";
+          break;
+        case "photographs":
+          fluent_id = "newtab-wallpaper-category-title-photographs";
           break;
         case "solid-colors":
           fluent_id = "newtab-wallpaper-category-title-colors";
@@ -11401,16 +11510,25 @@ class _WallpaperCategories extends (external_React_default()).PureComponent {
       return /*#__PURE__*/external_React_default().createElement("div", {
         key: category
       }, /*#__PURE__*/external_React_default().createElement("input", {
+        ref: el => {
+          if (el) {
+            this.categoryRef[index] = el;
+          }
+        },
         id: category,
         style: style,
         type: "radio",
-        onClick: this.handleCategory,
-        className: "wallpaper-input"
+        onKeyDown: e => this.handleCategoryKeyDown(e, category)
+        // Add overrides for custom wallpaper upload UI
+        ,
+        onClick: category !== "custom-wallpaper" ? this.handleCategory : this.handleUpload,
+        className: category !== "custom-wallpaper" ? `wallpaper-input` : `wallpaper-input theme-custom-wallpaper`,
+        tabIndex: index === 0 ? 0 : -1
       }), /*#__PURE__*/external_React_default().createElement("label", {
         htmlFor: category,
         "data-l10n-id": fluent_id
       }, fluent_id));
-    })), /*#__PURE__*/external_React_default().createElement(external_ReactTransitionGroup_namespaceObject.CSSTransition, {
+    }))), /*#__PURE__*/external_React_default().createElement(external_ReactTransitionGroup_namespaceObject.CSSTransition, {
       in: !!activeCategory,
       timeout: 300,
       classNames: "wallpaper-list",
@@ -11420,14 +11538,20 @@ class _WallpaperCategories extends (external_React_default()).PureComponent {
     }, /*#__PURE__*/external_React_default().createElement("button", {
       className: "arrow-button",
       "data-l10n-id": activeCategoryFluentID,
-      onClick: this.handleBack
-    }), /*#__PURE__*/external_React_default().createElement("fieldset", null, filteredWallpapers.map(({
+      onClick: this.handleBack,
+      ref: el => {
+        this.backToMenuButton = el;
+      }
+    }), /*#__PURE__*/external_React_default().createElement("div", {
+      role: "grid",
+      "aria-label": "Wallpaper selection. Use arrow keys to navigate."
+    }, /*#__PURE__*/external_React_default().createElement("fieldset", null, filteredWallpapers.map(({
       title,
       theme,
       fluent_id,
       solid_color,
       wallpaperUrl
-    }) => {
+    }, index) => {
       let style = {};
       if (wallpaperUrl) {
         style.backgroundImage = `url(${wallpaperUrl})`;
@@ -11435,7 +11559,13 @@ class _WallpaperCategories extends (external_React_default()).PureComponent {
         style.backgroundColor = solid_color || "";
       }
       return /*#__PURE__*/external_React_default().createElement((external_React_default()).Fragment, null, /*#__PURE__*/external_React_default().createElement("input", {
+        ref: el => {
+          if (el) {
+            this.wallpaperRef[index] = el;
+          }
+        },
         onChange: this.handleChange,
+        onKeyDown: e => this.handleWallpaperKeyDown(e, title),
         style: style,
         type: "radio",
         name: `wallpaper-${title}`,
@@ -11445,12 +11575,14 @@ class _WallpaperCategories extends (external_React_default()).PureComponent {
         "aria-checked": title === activeWallpaper,
         className: `wallpaper-input theme-${theme} ${this.state.activeId === title ? "active" : ""}`,
         onClick: () => this.setActiveId(title) //
+        ,
+        tabIndex: index === 0 ? 0 : -1 //the first wallpaper in the array will have a tabindex of 0 so we can tab into it. The rest will have a tabindex of -1
       }), /*#__PURE__*/external_React_default().createElement("label", {
         htmlFor: title,
         className: "sr-only",
         "data-l10n-id": fluent_id
       }, fluent_id));
-    }), colorPickerInput))));
+    }), colorPickerInput)))));
   }
 }
 const WallpaperCategories = (0,external_ReactRedux_namespaceObject.connect)(state => {
@@ -11573,11 +11705,14 @@ class ContentSection extends (external_React_default()).PureComponent {
     }, /*#__PURE__*/external_React_default().createElement(WallpapersSection, {
       setPref: setPref,
       activeWallpaper: activeWallpaper
-    })), wallpapersV2Enabled && /*#__PURE__*/external_React_default().createElement("div", {
+    })), wallpapersV2Enabled && /*#__PURE__*/external_React_default().createElement((external_React_default()).Fragment, null, /*#__PURE__*/external_React_default().createElement("div", {
       className: "wallpapers-section"
     }, /*#__PURE__*/external_React_default().createElement(WallpaperCategories, {
       setPref: setPref,
       activeWallpaper: activeWallpaper
+    })), /*#__PURE__*/external_React_default().createElement("span", {
+      className: "divider",
+      role: "separator"
     })), /*#__PURE__*/external_React_default().createElement("div", {
       className: "settings-toggles"
     }, /*#__PURE__*/external_React_default().createElement("div", {

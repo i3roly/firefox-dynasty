@@ -13,6 +13,7 @@ const defaultTools = {
   viewTabsSidebar: "syncedtabs",
   viewHistorySidebar: "history",
   viewBookmarksSidebar: "bookmarks",
+  viewCPMSidebar: "passwords",
 };
 
 var SidebarController = {
@@ -172,26 +173,26 @@ var SidebarController = {
       );
     }
 
-    if (!this.sidebarRevampEnabled) {
-      this.registerPrefSidebar(
-        "browser.contextual-password-manager.enabled",
-        "viewMegalistSidebar",
-        {
-          elementId: "sidebar-switcher-megalist",
-          url: "chrome://global/content/megalist/megalist.html",
-          menuId: "menu_megalistSidebar",
-          menuL10nId: "menu-view-megalist-sidebar",
-          revampL10nId: "sidebar-menu-megalist",
-        }
-      );
-    } else {
-      this._sidebars.set("viewCustomizeSidebar", {
-        url: "chrome://browser/content/sidebar/sidebar-customize.html",
-        revampL10nId: "sidebar-menu-customize-label",
-        iconUrl: "chrome://global/skin/icons/settings.svg",
-        gleanEvent: Glean.sidebarCustomize.panelToggle,
-      });
-    }
+    this.registerPrefSidebar(
+      "browser.contextual-password-manager.enabled",
+      "viewCPMSidebar",
+      {
+        elementId: "sidebar-switcher-megalist",
+        url: "chrome://global/content/megalist/megalist.html",
+        menuId: "menu_megalistSidebar",
+        menuL10nId: "menu-view-contextual-password-manager",
+        revampL10nId: "sidebar-menu-contextual-password-manager-label",
+        iconUrl: "chrome://browser/skin/login.svg",
+        gleanEvent: Glean.contextualManager.sidebarToggle,
+      }
+    );
+
+    this._sidebars.set("viewCustomizeSidebar", {
+      url: "chrome://browser/content/sidebar/sidebar-customize.html",
+      revampL10nId: "sidebar-menu-customize-label",
+      iconUrl: "chrome://global/skin/icons/settings.svg",
+      gleanEvent: Glean.sidebarCustomize.panelToggle,
+    });
 
     return this._sidebars;
   },
@@ -2007,7 +2008,11 @@ XPCOMUtils.defineLazyPreferenceGetter(
       SidebarController.toggleExpandOnHover(newValue === "expand-on-hover");
       SidebarController.recordVisibilitySetting(newValue);
       if (SidebarController._state) {
-        const isVerticalTabs = SidebarController.sidebarVerticalTabsEnabled;
+        // we need to use the pref rather than SidebarController's getter here
+        // as the getter might not have the new value yet
+        const isVerticalTabs = Services.prefs.getBoolPref(
+          "sidebar.verticalTabs"
+        );
         SidebarController._state.revampVisibility = newValue;
         if (
           SidebarController._animationEnabled &&
@@ -2016,11 +2021,12 @@ XPCOMUtils.defineLazyPreferenceGetter(
         ) {
           SidebarController._animateSidebarMain();
         }
+        const forceExpand = isVerticalTabs && newValue === "always-show";
         SidebarController._state.updateVisibility(
           (newValue != "hide-sidebar" && isVerticalTabs) || !isVerticalTabs,
           false,
           false,
-          newValue !== "expand-on-hover"
+          forceExpand
         );
       }
       SidebarController.updateToolbarButton();

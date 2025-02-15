@@ -1261,9 +1261,10 @@
   mirror: always
 
 # Time (secs) after which content analysis operations are considered timed-out
+# A non-positive value indicates a timeout of 25ms, which is used for testing.
 - name: browser.contentanalysis.agent_timeout
-  type: uint32_t
-  value: 30
+  type: int32_t
+  value: 300
   mirror: always
 
 # Should Firefox show a notification or dialog when content analysis blocks
@@ -1288,10 +1289,30 @@
   value: true
   mirror: always
 
+# Should Firefox only analyze plain text contents of the clipboard?
+# If this is false, all formats on the clipboard will be analyzed.
+# Note that regardless of this setting, files on the clipboard
+# will be analyzed.
+- name: browser.contentanalysis.interception_point.clipboard.plain_text_only
+  type: bool
+  value: true
+  mirror: always
+
 # Should Firefox use content analysis for drag and drop operations?
 # Note that this has no effect unless browser.contentanalysis.enabled
 # is true.
 - name: browser.contentanalysis.interception_point.drag_and_drop.enabled
+  type: bool
+  value: true
+  mirror: always
+
+# Should Firefox only analyze plain text contents for drag and drop
+# operations?
+# If this is false, all formats that are part of the drag and drop
+# operation will be analyzed.
+# Note that regardless of this setting, files that are dragged and dropped
+# will be analyzed.
+- name: browser.contentanalysis.interception_point.drag_and_drop.plain_text_only
   type: bool
   value: true
   mirror: always
@@ -1324,6 +1345,18 @@
 - name: browser.contentblocking.originlog.length
   type: uint32_t
   value: 32
+  mirror: always
+
+# Whether memorytesting is enabled when crash reporter client is launched
+- name: browser.crashReporter.memtest
+  type: RelaxedAtomicBool
+  value: false
+  mirror: always
+
+# Space-separated list of prioritized memory test kinds
+- name: browser.crashReporter.memtestKinds
+  type: DataMutexString
+  value: ""
   mirror: always
 
 # Min font device pixel size at which to turn on high quality.
@@ -8321,13 +8354,6 @@
   mirror: always
   set_spidermonkey_pref: startup
 
-# Support for weak references in JavaScript (WeakRef and FinalizationRegistry).
-- name: javascript.options.weakrefs
-  type: bool
-  value: true
-  mirror: always
-  set_spidermonkey_pref: startup
-
 # Whether to expose the FinalizationRegistry.prototype.cleanupSome method.
 - name: javascript.options.experimental.weakrefs.expose_cleanupSome
   type: bool
@@ -8444,12 +8470,6 @@
     mirror: always
     set_spidermonkey_pref: startup
 
-  # Experimental support for Import Assertions in JavaScript.
--   name: javascript.options.experimental.import_attributes
-    type: bool
-    value: false
-    mirror: always
-
   # Experimental support for Error.isError in JavaScript.
 -   name: javascript.options.experimental.error_iserror
     type: bool
@@ -8505,7 +8525,7 @@
   # Experimental support for Temporal in JavaScript.
 - name: javascript.options.experimental.temporal
   type: bool
-  value: false
+  value: @IS_NIGHTLY_BUILD@
   mirror: always
   set_spidermonkey_pref: startup
 #endif  // JS_HAS_TEMPORAL_API
@@ -8535,6 +8555,12 @@
 - name: javascript.options.experimental.dictionary_teleporting
   type: bool
   value: true
+  mirror: always
+  set_spidermonkey_pref: always
+
+- name: javascript.options.experimental.import_attributes
+  type: bool
+  value: false
   mirror: always
   set_spidermonkey_pref: always
 
@@ -8830,7 +8856,7 @@
   set_spidermonkey_pref: startup
 #endif
 
-#if !defined(JS_CODEGEN_MIPS32) && !defined(JS_CODEGEN_MIPS64) && !defined(JS_CODEGEN_LOONG64)
+#if !defined(JS_CODEGEN_MIPS64) && !defined(JS_CODEGEN_LOONG64)
   # Spectre security vulnerability mitigations for the JS JITs.
   #
   # NOTE: The MIPS and LoongArch backends do not support these mitigations (and generally
@@ -14223,18 +14249,6 @@
   value: "https://firefox-source-docs.mozilla.org/networking/dns/trr-skip-reasons.html#"
   mirror: never
 
-# If true, display a warning before fallback to native
-- name: network.trr.display_fallback_warning
-  type: RelaxedAtomicBool
-  value: false
-  mirror: always
-
-# Heuristics in this list will trigger the fallback to native warning
-- name: network.trr.fallback_warning_heuristic_list
-  type: String
-  value: "canary"
-  mirror: never
-
 # Use Oblivious HTTP when making TRR requests.
 - name: network.trr.use_ohttp
   type: RelaxedAtomicBool
@@ -14627,6 +14641,13 @@
   type: RelaxedAtomicBool
   value: false
   mirror: always
+
+# When network.http.http3.sni-slicing is set, TLS SNI slicing is enabled.
+- name: network.http.http3.sni-slicing
+  type: RelaxedAtomicBool
+  value: true
+  mirror: always
+  rust: true
 
 # When true, a http request will be upgraded to https when HTTPS RR is
 # available.
@@ -16440,16 +16461,11 @@
   mirror: always
 
 # The CRLite filter channel to which the user is subscribed.
-# - "all" => bloom-filter cascades that contain all revocations. Stash based delta updates.
-# - "experimental" => clubcards that contain all revocations. Stash based delta updates.
-# - "experimental+deltas" => clubcards that contain all revocations. Clubcard based delta updates.
+# - "default" => clubcards that contain all revocations
+# - "compat" => clubcards that contain priority revocations
 - name: security.pki.crlite_channel
   type: String
-#ifdef NIGHTLY_BUILD
-  value: "experimental+deltas"
-#else
-  value: "all"
-#endif
+  value: "default"
   mirror: never
 
 # The number of SCTs that must be "covered" by a CRLite filter before

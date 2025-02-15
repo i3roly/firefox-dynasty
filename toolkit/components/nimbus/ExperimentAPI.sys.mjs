@@ -102,14 +102,16 @@ export const ExperimentAPI = {
       }
 
       try {
-        await lazy.RemoteSettingsExperimentLoader.enable();
+        await this._rsLoader.enable();
       } catch (e) {
-        lazy.log.error(
-          "Failed to initialize RemoteSettingsExperimentLoader:",
-          e
-        );
+        lazy.log.error("Failed to enable RemoteSettingsExperimentLoader:", e);
       }
     }
+  },
+
+  _resetForTests() {
+    this._rsLoader.disable();
+    initialized = false;
   },
 
   /**
@@ -355,6 +357,48 @@ export const ExperimentAPI = {
     } catch (e) {
       console.error(
         `ExperimentAPI: failed to enroll in opt-in recipe ${slug} and branch ${optInRecipeBranchSlug}`,
+        e
+      );
+    }
+  },
+
+  /**
+   * Unenroll from a Firefox Labs opt-in experiment.
+   *
+   * @param {string} slug The slug of the recipe to unenroll.
+   */
+  unenrollFromFirefoxLabsOptIn(slug) {
+    if (!slug) {
+      throw new Error("slug is rquired");
+    }
+
+    const enrollment = this._manager.store.get(slug);
+    if (!enrollment) {
+      lazy.log.error(
+        `unenrollFromFirefoxLabsOptIn: No enrollment with slug ${slug}`
+      );
+      return;
+    }
+
+    if (!enrollment.active) {
+      lazy.log.error(
+        `unenrollFromFirefoxLabsOptIn: enrollment for slug ${slug} is not active`
+      );
+      return;
+    }
+
+    if (enrollment.isFirefoxLabsOptIn !== true) {
+      lazy.log.error(
+        `unenrollFromFirefoxLabsOptIn: enrollment for ${slug} is not a Firefox Labs opt-in`
+      );
+      return;
+    }
+
+    try {
+      this._manager.unenroll(slug, "labs-opt-out");
+    } catch (e) {
+      lazy.log.error(
+        `unenrollFromFirefoxLabsOptIn: failed to unenroll from ${slug}`,
         e
       );
     }
@@ -741,6 +785,10 @@ ChromeUtils.defineLazyGetter(ExperimentAPI, "_manager", function () {
 Object.defineProperty(ExperimentAPI, "_store", {
   configurable: true,
   get: () => ExperimentAPI._manager.store,
+});
+
+ChromeUtils.defineLazyGetter(ExperimentAPI, "_rsLoader", function () {
+  return lazy.RemoteSettingsExperimentLoader;
 });
 
 ChromeUtils.defineLazyGetter(

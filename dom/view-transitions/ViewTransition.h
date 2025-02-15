@@ -9,6 +9,7 @@
 #include "nsWrapperCache.h"
 #include "nsAtomHashKeys.h"
 #include "nsClassHashtable.h"
+#include "nsRefPtrHashtable.h"
 
 class nsIGlobalObject;
 class nsITimer;
@@ -16,6 +17,8 @@ class nsITimer;
 namespace mozilla {
 
 class ErrorResult;
+struct PseudoStyleRequest;
+struct StyleLockedDeclarationBlock;
 
 namespace gfx {
 class DataSourceSurface;
@@ -36,6 +39,7 @@ enum class SkipTransitionReason : uint8_t {
   UpdateCallbackRejected,
   DuplicateTransitionNameCapturingOldState,
   DuplicateTransitionNameCapturingNewState,
+  PseudoUpdateFailure,
   Resize,
 };
 
@@ -66,6 +70,10 @@ class ViewTransition final : public nsISupports, public nsWrapperCache {
   Element* GetRoot() const { return mViewTransitionRoot; }
   gfx::DataSourceSurface* GetOldSurface(nsAtom* aName) const;
 
+  Element* FindPseudo(const PseudoStyleRequest&) const;
+
+  const StyleLockedDeclarationBlock* GetDynamicRuleFor(const Element&) const;
+
   nsIGlobalObject* GetParentObject() const;
   JSObject* WrapObject(JSContext*, JS::Handle<JSObject*> aGivenProto) override;
 
@@ -83,6 +91,7 @@ class ViewTransition final : public nsISupports, public nsWrapperCache {
   [[nodiscard]] Maybe<SkipTransitionReason> CaptureOldState();
   [[nodiscard]] Maybe<SkipTransitionReason> CaptureNewState();
   void SetupTransitionPseudoElements();
+  [[nodiscard]] bool UpdatePseudoElementStyles(bool aNeedsInvalidation);
   void ClearNamedElements();
   void HandleFrame();
   bool CheckForActiveAnimations() const;

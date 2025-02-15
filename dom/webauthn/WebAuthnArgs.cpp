@@ -15,7 +15,7 @@ NS_IMPL_ISUPPORTS(WebAuthnRegisterArgs, nsIWebAuthnRegisterArgs)
 
 NS_IMETHODIMP
 WebAuthnRegisterArgs::GetOrigin(nsAString& aOrigin) {
-  aOrigin = mInfo.Origin();
+  aOrigin = NS_ConvertUTF8toUTF16(mOrigin);
   return NS_OK;
 }
 
@@ -27,13 +27,13 @@ WebAuthnRegisterArgs::GetChallenge(nsTArray<uint8_t>& aChallenge) {
 
 NS_IMETHODIMP
 WebAuthnRegisterArgs::GetClientDataJSON(nsACString& aClientDataJSON) {
-  aClientDataJSON = mInfo.ClientDataJSON();
+  aClientDataJSON = mClientDataJSON;
   return NS_OK;
 }
 
 NS_IMETHODIMP
 WebAuthnRegisterArgs::GetClientDataHash(nsTArray<uint8_t>& aClientDataHash) {
-  nsresult rv = HashCString(mInfo.ClientDataJSON(), aClientDataHash);
+  nsresult rv = HashCString(mClientDataJSON, aClientDataHash);
   if (NS_WARN_IF(NS_FAILED(rv))) {
     return NS_ERROR_FAILURE;
   }
@@ -210,11 +210,17 @@ WebAuthnRegisterArgs::GetAttestationConveyancePreference(
   return NS_OK;
 }
 
+NS_IMETHODIMP
+WebAuthnRegisterArgs::GetPrivateBrowsing(bool* aPrivateBrowsing) {
+  *aPrivateBrowsing = mPrivateBrowsing;
+  return NS_OK;
+}
+
 NS_IMPL_ISUPPORTS(WebAuthnSignArgs, nsIWebAuthnSignArgs)
 
 NS_IMETHODIMP
 WebAuthnSignArgs::GetOrigin(nsAString& aOrigin) {
-  aOrigin = mInfo.Origin();
+  aOrigin = NS_ConvertUTF8toUTF16(mOrigin);
   return NS_OK;
 }
 
@@ -232,13 +238,13 @@ WebAuthnSignArgs::GetChallenge(nsTArray<uint8_t>& aChallenge) {
 
 NS_IMETHODIMP
 WebAuthnSignArgs::GetClientDataJSON(nsACString& aClientDataJSON) {
-  aClientDataJSON = mInfo.ClientDataJSON();
+  aClientDataJSON = mClientDataJSON;
   return NS_OK;
 }
 
 NS_IMETHODIMP
 WebAuthnSignArgs::GetClientDataHash(nsTArray<uint8_t>& aClientDataHash) {
-  nsresult rv = HashCString(mInfo.ClientDataJSON(), aClientDataHash);
+  nsresult rv = HashCString(mClientDataJSON, aClientDataHash);
   if (NS_WARN_IF(NS_FAILED(rv))) {
     return NS_ERROR_FAILURE;
   }
@@ -422,6 +428,12 @@ WebAuthnSignArgs::GetTimeoutMS(uint32_t* aTimeoutMS) {
 NS_IMETHODIMP
 WebAuthnSignArgs::GetConditionallyMediated(bool* aConditionallyMediated) {
   *aConditionallyMediated = mInfo.ConditionallyMediated();
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+WebAuthnSignArgs::GetPrivateBrowsing(bool* aPrivateBrowsing) {
+  *aPrivateBrowsing = mPrivateBrowsing;
   return NS_OK;
 }
 

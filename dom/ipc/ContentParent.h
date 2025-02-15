@@ -1157,9 +1157,9 @@ class ContentParent final : public PContentParent,
   mozilla::ipc::IPCResult RecvNotifyPushSubscriptionModifiedObservers(
       const nsACString& aScope, nsIPrincipal* aPrincipal);
 
-  mozilla::ipc::IPCResult RecvGetFilesRequest(const nsID& aID,
-                                              const nsAString& aDirectoryPath,
-                                              const bool& aRecursiveFlag);
+  mozilla::ipc::IPCResult RecvGetFilesRequest(
+      const nsID& aID, nsTArray<nsString>&& aDirectoryPaths,
+      const bool& aRecursiveFlag);
 
   mozilla::ipc::IPCResult RecvDeleteGetFilesRequest(const nsID& aID);
 
@@ -1334,6 +1334,11 @@ class ContentParent final : public PContentParent,
   mozilla::ipc::IPCResult RecvGetLoadingSessionHistoryInfoFromParent(
       const MaybeDiscarded<BrowsingContext>& aContext,
       GetLoadingSessionHistoryInfoFromParentResolver&& aResolver);
+
+  mozilla::ipc::IPCResult RecvGetContiguousSessionHistoryInfos(
+      const MaybeDiscarded<BrowsingContext>& aContext,
+      SessionHistoryInfo&& aInfo,
+      GetContiguousSessionHistoryInfosResolver&& aResolver);
 
   mozilla::ipc::IPCResult RecvRemoveFromBFCache(
       const MaybeDiscarded<BrowsingContext>& aContext);
@@ -1546,7 +1551,7 @@ class ContentParent final : public PContentParent,
   UniquePtr<MemoryReportRequestHost> mMemoryReportRequest;
 
 #if defined(XP_LINUX) && defined(MOZ_SANDBOX)
-  mozilla::UniquePtr<SandboxBroker> mSandboxBroker;
+  RefPtr<SandboxBroker> mSandboxBroker;
   static mozilla::StaticAutoPtr<SandboxBrokerPolicyFactory>
       sSandboxBrokerPolicyFactory;
 #endif

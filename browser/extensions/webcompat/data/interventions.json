@@ -259,10 +259,6 @@
       "1728450": {
         "issue": "firefox-blocked-completely",
         "matches": ["*://*.directv.com/*"]
-      },
-      "1827706": {
-        "issue": "firefox-blocked-completely",
-        "matches": ["*://*.directv.com.ec/*"]
       }
     },
     "interventions": [
@@ -522,24 +518,6 @@
       {
         "platforms": ["android"],
         "ua_string": ["add_Chrome"]
-      }
-    ]
-  },
-  "1722955": {
-    "label": "frontgate.com",
-    "bugs": {
-      "1722955": {
-        "issue": "broken-layout",
-        "matches": ["*://*.frontgate.com/*"]
-      }
-    },
-    "interventions": [
-      {
-        "platforms": ["android"],
-        "content_scripts": {
-          "all_frames": true,
-          "js": ["lib/ua_helpers.js", "bug1722955-frontgate.com-ua-override.js"]
-        }
       }
     ]
   },
@@ -980,6 +958,36 @@
       }
     ]
   },
+  "1842767": {
+    "label": "passport.bilibili.com",
+    "bugs": {
+      "1842767": {
+        "issue": "desktop-layout-not-mobile",
+        "matches": ["*://*.passport.bilibili.com/*"]
+      }
+    },
+    "interventions": [
+      {
+        "platforms": ["android"],
+        "ua_string": ["add_Chrome"]
+      }
+    ]
+  },
+  "1813177": {
+    "label": "rbi.org",
+    "bugs": {
+      "1813177": {
+        "issue": "broken-redirect",
+        "matches": ["*://m.rbi.org.in/*"]
+      }
+    },
+    "interventions": [
+      {
+        "platforms": ["android"],
+        "ua_string": ["Chrome"]
+      }
+    ]
+  },
   "1815733": {
     "label": "Office 365 Outlook locations",
     "bugs": {
@@ -1086,7 +1094,7 @@
     "interventions": [
       {
         "platforms": ["android"],
-        "ua_string": ["add_Chrome"]
+        "ua_string": ["Chrome"]
       }
     ]
   },
@@ -1131,7 +1139,7 @@
     "interventions": [
       {
         "platforms": ["all"],
-        "ua_string": ["Chrome_with_FxQuantum", "add_Firefox_as_Gecko"]
+        "ua_string": ["Chrome"]
       }
     ]
   },
@@ -1278,6 +1286,26 @@
   "1830739": {
     "label": "Casino sites",
     "bugs": {
+      "1902446": {
+        "issue": "firefox-blocked-completely",
+        "matches": ["*://*.casinobrango.com/*"]
+      },
+      "1902452": {
+        "issue": "firefox-blocked-completely",
+        "matches": ["*://*.eternalslots.com/*"]
+      },
+      "1902453": {
+        "issue": "firefox-blocked-completely",
+        "matches": ["*://*.palaceofchance.com/*"]
+      },
+      "1902471": {
+        "issue": "firefox-blocked-completely",
+        "matches": ["*://*.springbokcasino.co.za/*"]
+      },
+      "1902493": {
+        "issue": "firefox-blocked-completely",
+        "matches": ["*://*.ozwincasino.com/*"]
+      },
       "1944317": {
         "issue": "firefox-blocked-completely",
         "matches": ["*://*.captainjackcasino.com/*"]
@@ -1327,23 +1355,6 @@
         "platforms": ["all"],
         "content_scripts": {
           "css": ["bug1830752-afisha.ru-slider-pointer-events.css"]
-        }
-      }
-    ]
-  },
-  "1830761": {
-    "label": "91mobiles.com",
-    "bugs": {
-      "1890794": {
-        "issue": "broken-layout",
-        "matches": ["*://*.91mobiles.com/*"]
-      }
-    },
-    "interventions": [
-      {
-        "platforms": ["all"],
-        "content_scripts": {
-          "css": ["bug1830761-91mobiles.com-content-height.css"]
         }
       }
     ]
@@ -1690,21 +1701,6 @@
       }
     ]
   },
-  "1850455": {
-    "label": "frontgate.com",
-    "bugs": {
-      "1722955": {
-        "issue": "desktop-layout-not-mobile",
-        "matches": ["*://*.frontgate.com/*"]
-      }
-    },
-    "interventions": [
-      {
-        "platforms": ["android"],
-        "ua_string": ["add_Chrome"]
-      }
-    ]
-  },
   "1855014": {
     "label": "eksiseyler.com",
     "bugs": {
@@ -1916,9 +1912,7 @@
     "interventions": [
       {
         "platforms": ["all"],
-        "content_scripts": {
-          "css": ["bug1875540-allstate.com-hide-unsupported-message.css"]
-        }
+        "ua_string": ["add_Chrome"]
       }
     ]
   },
@@ -2212,7 +2206,7 @@
     "interventions": [
       {
         "platforms": ["all"],
-        "ua_string": ["add_Chrome"]
+        "ua_string": ["Chrome"]
       }
     ]
   },
@@ -2490,6 +2484,51 @@
       }
     ]
   },
+  "1902506": {
+    "label": "mp3cut.net",
+    "bugs": {
+      "1909448": {
+        "issue": "blocked-content",
+        "matches": ["*://mp3cut.net/*"]
+      }
+    },
+    "interventions": [
+      {
+        "platforms": ["all"],
+        "ua_string": ["add_Chrome"]
+      }
+    ]
+  },
+  "1905607": {
+    "label": "10play.com.au",
+    "bugs": {
+      "1905607": {
+        "issue": "firefox-blocked-completely",
+        "matches": ["*://10play.com.au/*"]
+      }
+    },
+    "interventions": [
+      {
+        "platforms": ["android"],
+        "ua_string": ["Chrome", "add_Firefox_as_Gecko"]
+      }
+    ]
+  },
+  "1906630": {
+    "label": "watch.foxtel.com.au",
+    "bugs": {
+      "1906630": {
+        "issue": "firefox-blocked-completely",
+        "matches": ["*://watch.foxtel.com.au/app/*"]
+      }
+    },
+    "interventions": [
+      {
+        "platforms": ["desktop"],
+        "ua_string": ["add_Chrome"]
+      }
+    ]
+  },
   "1909448": {
     "label": "fire.honeywell.com",
     "bugs": {
@@ -2667,6 +2706,25 @@
       }
     ]
   },
+  "1931538": {
+    "label": "buzzfeed.com",
+    "bugs": {
+      "1931538": {
+        "issue": "broken-interactive-elements",
+        "matches": [
+          "*://www.buzzfeed.com/trendyelephant793/thanksgiving-foods-showdown-quiz*"
+        ]
+      }
+    },
+    "interventions": [
+      {
+        "platforms": ["all"],
+        "content_scripts": {
+          "css": ["bug1931538-buzzfeed.com-card-game-fix.css"]
+        }
+      }
+    ]
+  },
   "1933811": {
     "label": "indices.circana.com",
     "bugs": {
@@ -2678,6 +2736,21 @@
     "interventions": [
       {
         "platforms": ["all"],
+        "ua_string": ["add_Chrome"]
+      }
+    ]
+  },
+  "1934189": {
+    "label": "fdj.fr",
+    "bugs": {
+      "1934189": {
+        "issue": "firefox-blocked-completely",
+        "matches": ["*://*.fdj.fr/*"]
+      }
+    },
+    "interventions": [
+      {
+        "platforms": ["android"],
         "ua_string": ["add_Chrome"]
       }
     ]
@@ -2695,6 +2768,140 @@
         "platforms": ["android"],
         "content_scripts": {
           "css": ["bug1934567-www.port8.fi-scrolling-fix.css"]
+        }
+      }
+    ]
+  },
+  "1935968": {
+    "label": "cfspart-idp.impots.gouv.fr",
+    "bugs": {
+      "1935968": {
+        "issue": "firefox-blocked-completely",
+        "matches": ["*://cfspart-idp.impots.gouv.fr/*"]
+      }
+    },
+    "interventions": [
+      {
+        "platforms": ["android"],
+        "ua_string": ["Chrome", "add_Firefox_as_Gecko"]
+      }
+    ]
+  },
+  "1941530": {
+    "label": "climate.rutgers.edu",
+    "bugs": {
+      "1941530": {
+        "issue": "broken-images",
+        "matches": ["*://climate.rutgers.edu/snowcover/*"]
+      }
+    },
+    "interventions": [
+      {
+        "platforms": ["all"],
+        "content_scripts": {
+          "css": ["bug1941530-climate.rutgers.edu-fix-broken-images.css"]
+        }
+      }
+    ]
+  },
+  "1942292": {
+    "label": "beterbed.nl",
+    "bugs": {
+      "1942292": {
+        "issue": "extra-scrollbars",
+        "matches": ["*://www.beterbed.nl/*"]
+      }
+    },
+    "interventions": [
+      {
+        "platforms": ["desktop"],
+        "content_scripts": {
+          "css": ["bug1942292-beterbed.nl-scrollbar-fix.css"]
+        }
+      }
+    ]
+  },
+  "1943898": {
+    "label": "www.capital.gr",
+    "bugs": {
+      "1943898": {
+        "issue": "broken-redirect",
+        "matches": ["*://www.capital.gr/*"]
+      }
+    },
+    "interventions": [
+      {
+        "platforms": ["android"],
+        "content_scripts": {
+          "js": ["bug1943898-www.capital.gr-suppress-constant-reloading.js"]
+        }
+      }
+    ]
+  },
+  "1943993": {
+    "label": "arenti.net",
+    "bugs": {
+      "1943993": {
+        "issue": "firefox-blocked-completely",
+        "matches": ["*://*.arenti.net/*"]
+      }
+    },
+    "interventions": [
+      {
+        "platforms": ["all"],
+        "ua_string": ["Chrome", "add_Firefox_as_Gecko"]
+      }
+    ]
+  },
+  "1944727": {
+    "label": "linkedin.com",
+    "bugs": {
+      "1944727": {
+        "issue": "broken-layout",
+        "matches": ["*://*.linkedin.com/*"]
+      }
+    },
+    "interventions": [
+      {
+        "platforms": ["android"],
+        "content_scripts": {
+          "css": ["bug1944727-www.linkedin.com-fix-dark-overlay.css"]
+        }
+      }
+    ]
+  },
+  "1945019": {
+    "label": "order.mealkeyway.com",
+    "bugs": {
+      "1945019": {
+        "issue": "unsupported-warning",
+        "matches": ["https://order.mealkeyway.com/*"]
+      }
+    },
+    "interventions": [
+      {
+        "platforms": ["all"],
+        "content_scripts": {
+          "js": [
+            "bug1945019-order.mealkeyway.com-prevent-unsupported-message.js"
+          ]
+        }
+      }
+    ]
+  },
+  "1945830": {
+    "label": "aliexpress.com",
+    "bugs": {
+      "1945830": {
+        "issue": "broken-layout",
+        "matches": ["*://*.aliexpress.com/*"]
+      }
+    },
+    "interventions": [
+      {
+        "platforms": ["desktop"],
+        "content_scripts": {
+          "css": ["bug1945830-aliexpress.com-country-flags-fix.css"]
         }
       }
     ]

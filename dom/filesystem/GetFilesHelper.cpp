@@ -19,21 +19,20 @@
 
 namespace mozilla::dom {
 
-namespace {
-
 // This class is used in the DTOR of GetFilesHelper to release resources in the
 // correct thread.
-class ReleaseRunnable final : public Runnable {
+class GetFilesHelper::ReleaseRunnable final : public Runnable {
  public:
   static void MaybeReleaseOnMainThread(
       nsTArray<RefPtr<Promise>>&& aPromises,
+      nsTArray<GetFilesHelper::MozPromiseAndGlobal>&& aMozPromises,
       nsTArray<RefPtr<GetFilesCallback>>&& aCallbacks) {
     if (NS_IsMainThread()) {
       return;
     }
 
-    RefPtr<ReleaseRunnable> runnable =
-        new ReleaseRunnable(std::move(aPromises), std::move(aCallbacks));
+    RefPtr<ReleaseRunnable> runnable = new ReleaseRunnable(
+        std::move(aPromises), std::move(aMozPromises), std::move(aCallbacks));
     FileSystemUtils::DispatchRunnable(nullptr, runnable.forget());
   }
 
@@ -42,6 +41,7 @@ class ReleaseRunnable final : public Runnable {
     MOZ_ASSERT(NS_IsMainThread());
 
     mPromises.Clear();
+    mMozPromises.Clear();
     mCallbacks.Clear();
 
     return NS_OK;
@@ -49,16 +49,17 @@ class ReleaseRunnable final : public Runnable {
 
  private:
   ReleaseRunnable(nsTArray<RefPtr<Promise>>&& aPromises,
+                  nsTArray<GetFilesHelper::MozPromiseAndGlobal>&& aMozPromises,
                   nsTArray<RefPtr<GetFilesCallback>>&& aCallbacks)
       : Runnable("dom::ReleaseRunnable"),
         mPromises(std::move(aPromises)),
+        mMozPromises{std::move(aMozPromises)},
         mCallbacks(std::move(aCallbacks)) {}
 
   nsTArray<RefPtr<Promise>> mPromises;
+  nsTArray<GetFilesHelper::MozPromiseAndGlobal> mMozPromises;
   nsTArray<RefPtr<GetFilesCallback>> mCallbacks;
 };
-
-}  // namespace
 
 ///////////////////////////////////////////////////////////////////////////////
 // GetFilesHelper Base class
@@ -74,7 +75,8 @@ already_AddRefed<GetFilesHelper> GetFilesHelper::Create(
     helper = new GetFilesHelperChild(aRecursiveFlag);
   }
 
-  nsAutoString directoryPath;
+  // Most callers will have at most one directory
+  AutoTArray<nsString, 1> directoryPaths;
 
   for (uint32_t i = 0; i < aFilesOrDirectory.Length(); ++i) {
     const OwningFileOrDirectory& data = aFilesOrDirectory[i];
@@ -87,15 +89,12 @@ already_AddRefed<GetFilesHelper> GetFilesHelper::Create(
     } else {
       MOZ_ASSERT(data.IsDirectory());
 
-      // We support the upload of only 1 top-level directory from our
-      // directory picker. This means that we cannot have more than 1
-      // Directory object in aFilesOrDirectory array.
-      MOZ_ASSERT(directoryPath.IsEmpty());
-
       RefPtr<Directory> directory = data.GetAsDirectory();
       MOZ_ASSERT(directory);
 
+      nsString directoryPath;
       aRv = directory->GetFullRealPath(directoryPath);
+      directoryPaths.AppendElement(std::move(directoryPath));
       if (NS_WARN_IF(aRv.Failed())) {
         return nullptr;
       }
@@ -103,13 +102,13 @@ already_AddRefed<GetFilesHelper> GetFilesHelper::Create(
   }
 
   // No directories to explore.
-  if (directoryPath.IsEmpty()) {
+  if (directoryPaths.IsEmpty()) {
     helper->mListingCompleted = true;
     return helper.forget();
   }
 
   MOZ_ASSERT(helper->mTargetBlobImplArray.IsEmpty());
-  helper->SetDirectoryPath(directoryPath);
+  helper->SetDirectoryPaths(std::move(directoryPaths));
 
   helper->Work(aRv);
   if (NS_WARN_IF(aRv.Failed())) {
@@ -128,8 +127,8 @@ GetFilesHelper::GetFilesHelper(bool aRecursiveFlag)
       mCanceled(false) {}
 
 GetFilesHelper::~GetFilesHelper() {
-  ReleaseRunnable::MaybeReleaseOnMainThread(std::move(mPromises),
-                                            std::move(mCallbacks));
+  ReleaseRunnable::MaybeReleaseOnMainThread(
+      std::move(mPromises), std::move(mMozPromises), std::move(mCallbacks));
 }
 
 void GetFilesHelper::AddPromise(Promise* aPromise) {
@@ -143,6 +142,21 @@ void GetFilesHelper::AddPromise(Promise* aPromise) {
 
   MOZ_ASSERT(mPromises.IsEmpty());
   ResolveOrRejectPromise(aPromise);
+}
+
+void GetFilesHelper::AddMozPromise(MozPromiseType* aPromise,
+                                   nsIGlobalObject* aGlobal) {
+  MOZ_ASSERT(aPromise);
+  MOZ_ASSERT(aGlobal);
+
+  // Still working.
+  if (!mListingCompleted) {
+    mMozPromises.AppendElement(MozPromiseAndGlobal{aPromise, aGlobal});
+    return;
+  }
+
+  MOZ_ASSERT(mMozPromises.IsEmpty());
+  ResolveOrRejectMozPromise({aPromise, aGlobal});
 }
 
 void GetFilesHelper::AddCallback(GetFilesCallback* aCallback) {
@@ -160,6 +174,7 @@ void GetFilesHelper::AddCallback(GetFilesCallback* aCallback) {
 
 void GetFilesHelper::Unlink() {
   mPromises.Clear();
+  mMozPromises.Clear();
   mCallbacks.Clear();
 
   {
@@ -185,7 +200,7 @@ void GetFilesHelper::Work(ErrorResult& aRv) {
 
 NS_IMETHODIMP
 GetFilesHelper::Run() {
-  MOZ_ASSERT(!mDirectoryPath.IsEmpty());
+  MOZ_ASSERT(!mDirectoryPaths.IsEmpty());
   MOZ_ASSERT(!mListingCompleted);
 
   // First step is to retrieve the list of file paths.
@@ -218,10 +233,14 @@ void GetFilesHelper::OperationCompleted() {
   mListingCompleted = true;
 
   // Let's process the pending promises.
-  nsTArray<RefPtr<Promise>> promises = std::move(mPromises);
-
+  auto promises = std::move(mPromises);
   for (uint32_t i = 0; i < promises.Length(); ++i) {
     ResolveOrRejectPromise(promises[i]);
+  }
+
+  auto mozPromises = std::move(mMozPromises);
+  for (uint32_t i = 0; i < mozPromises.Length(); ++i) {
+    ResolveOrRejectMozPromise(mozPromises[i]);
   }
 
   // Let's process the pending callbacks.
@@ -234,26 +253,31 @@ void GetFilesHelper::OperationCompleted() {
 
 void GetFilesHelper::RunIO() {
   MOZ_ASSERT(!NS_IsMainThread());
-  MOZ_ASSERT(!mDirectoryPath.IsEmpty());
+  MOZ_ASSERT(!mDirectoryPaths.IsEmpty());
   MOZ_ASSERT(!mListingCompleted);
 
-  nsCOMPtr<nsIFile> file;
-  mErrorResult = NS_NewLocalFile(mDirectoryPath, getter_AddRefs(file));
-  if (NS_WARN_IF(NS_FAILED(mErrorResult))) {
-    return;
+  for (const auto& directoryPath : mDirectoryPaths) {
+    nsCOMPtr<nsIFile> file;
+    mErrorResult = NS_NewLocalFile(directoryPath, getter_AddRefs(file));
+    if (NS_WARN_IF(NS_FAILED(mErrorResult))) {
+      return;
+    }
+
+    nsAutoString leafName;
+    mErrorResult = file->GetLeafName(leafName);
+    if (NS_WARN_IF(NS_FAILED(mErrorResult))) {
+      return;
+    }
+
+    nsAutoString domPath;
+    domPath.AssignLiteral(FILESYSTEM_DOM_PATH_SEPARATOR_LITERAL);
+    domPath.Append(leafName);
+
+    mErrorResult = ExploreDirectory(domPath, file);
+    if (NS_FAILED(mErrorResult)) {
+      break;
+    }
   }
-
-  nsAutoString leafName;
-  mErrorResult = file->GetLeafName(leafName);
-  if (NS_WARN_IF(NS_FAILED(mErrorResult))) {
-    return;
-  }
-
-  nsAutoString domPath;
-  domPath.AssignLiteral(FILESYSTEM_DOM_PATH_SEPARATOR_LITERAL);
-  domPath.Append(leafName);
-
-  mErrorResult = ExploreDirectory(domPath, file);
 }
 
 nsresult GetFilesHelperBase::ExploreDirectory(const nsAString& aDOMPath,
@@ -369,6 +393,42 @@ void GetFilesHelper::ResolveOrRejectPromise(Promise* aPromise) {
   aPromise->MaybeResolve(files);
 }
 
+void GetFilesHelper::ResolveOrRejectMozPromise(
+    GetFilesHelper::MozPromiseAndGlobal aPromise) {
+  MOZ_ASSERT(NS_IsMainThread());
+  MOZ_ASSERT(mListingCompleted);
+  MOZ_ASSERT(aPromise.mMozPromise);
+  MOZ_ASSERT(aPromise.mGlobal);
+
+  nsTArray<RefPtr<File>> files;
+
+  if (NS_SUCCEEDED(mErrorResult)) {
+    for (uint32_t i = 0; i < mTargetBlobImplArray.Length(); ++i) {
+      RefPtr<File> domFile =
+          File::Create(aPromise.mGlobal, mTargetBlobImplArray[i]);
+      if (NS_WARN_IF(!domFile)) {
+        mErrorResult = NS_ERROR_FAILURE;
+        files.Clear();
+        break;
+      }
+
+      if (!files.AppendElement(domFile, fallible)) {
+        mErrorResult = NS_ERROR_OUT_OF_MEMORY;
+        files.Clear();
+        break;
+      }
+    }
+  }
+
+  // Error propagation.
+  if (NS_FAILED(mErrorResult)) {
+    aPromise.mMozPromise->Reject(mErrorResult, __func__);
+    return;
+  }
+
+  aPromise.mMozPromise->Resolve(std::move(files), __func__);
+}
+
 void GetFilesHelper::RunCallback(GetFilesCallback* aCallback) {
   MOZ_ASSERT(NS_IsMainThread());
   MOZ_ASSERT(mListingCompleted);
@@ -393,7 +453,8 @@ void GetFilesHelperChild::Work(ErrorResult& aRv) {
   }
 
   mPendingOperation = true;
-  cc->CreateGetFilesRequest(mDirectoryPath, mRecursiveFlag, mUUID, this);
+  cc->CreateGetFilesRequest(std::move(mDirectoryPaths), mRecursiveFlag, mUUID,
+                            this);
 }
 
 void GetFilesHelperChild::Cancel() {
@@ -483,13 +544,13 @@ GetFilesHelperParent::~GetFilesHelperParent() {
 
 /* static */
 already_AddRefed<GetFilesHelperParent> GetFilesHelperParent::Create(
-    const nsID& aUUID, const nsAString& aDirectoryPath, bool aRecursiveFlag,
-    ContentParent* aContentParent, ErrorResult& aRv) {
+    const nsID& aUUID, nsTArray<nsString>&& aDirectoryPaths,
+    bool aRecursiveFlag, ContentParent* aContentParent, ErrorResult& aRv) {
   MOZ_ASSERT(aContentParent);
 
   RefPtr<GetFilesHelperParent> helper =
       new GetFilesHelperParent(aUUID, aContentParent, aRecursiveFlag);
-  helper->SetDirectoryPath(aDirectoryPath);
+  helper->SetDirectoryPaths(std::move(aDirectoryPaths));
 
   helper->Work(aRv);
   if (NS_WARN_IF(aRv.Failed())) {

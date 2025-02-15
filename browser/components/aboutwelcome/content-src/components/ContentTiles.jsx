@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Localized } from "./MSLocalized";
 import { AddonsPicker } from "./AddonsPicker";
 import { SingleSelect } from "./SingleSelect";
@@ -39,6 +39,27 @@ export const ContentTiles = props => {
     return null;
   }
 
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  useEffect(() => {
+    // Run once when ContentTiles mounts to prefill activeMultiSelect
+    if (!props.activeMultiSelect) {
+      const newActiveMultiSelect = [];
+      const tilesArray = Array.isArray(tiles) ? tiles : [tiles];
+
+      tilesArray.forEach(tile => {
+        if (tile.type !== "multiselect" || !tile.data) {
+          return;
+        }
+        tile.data.forEach(({ id, defaultValue }) => {
+          if (defaultValue && id) {
+            newActiveMultiSelect.push(id);
+          }
+        });
+      });
+      props.setActiveMultiSelect(newActiveMultiSelect);
+    }
+  }, [tiles]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const toggleTile = (index, tile) => {
     const tileId = `${tile.type}${tile.id ? "_" : ""}${tile.id ?? ""}_header`;
     setExpandedTileIndex(prevIndex => (prevIndex === index ? null : index));
@@ -65,7 +86,7 @@ export const ContentTiles = props => {
       >
         {header?.title && (
           <button
-            className="tile-header"
+            className="tile-header secondary"
             onClick={() => toggleTile(index, tile)}
             aria-expanded={isExpanded}
             aria-controls={`tile-content-${index}`}
@@ -152,7 +173,7 @@ export const ContentTiles = props => {
     return (
       <React.Fragment>
         <button
-          className="content-tiles-header"
+          className="content-tiles-header secondary"
           onClick={toggleTiles}
           aria-expanded={tilesHeaderExpanded}
           aria-controls={`content-tiles-container`}

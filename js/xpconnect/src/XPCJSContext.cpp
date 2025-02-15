@@ -790,12 +790,9 @@ void xpc::SetPrefableRealmOptions(JS::RealmOptions& options) {
 }
 
 void xpc::SetPrefableCompileOptions(JS::PrefableCompileOptions& options) {
-  options
-      .setSourcePragmas(StaticPrefs::javascript_options_source_pragmas())
-#ifdef NIGHTLY_BUILD
+  options.setSourcePragmas(StaticPrefs::javascript_options_source_pragmas())
       .setImportAttributes(
           StaticPrefs::javascript_options_experimental_import_attributes())
-#endif
       .setAsmJS(StaticPrefs::javascript_options_asmjs())
       .setThrowOnAsmJSValidationFailure(
           StaticPrefs::javascript_options_throw_on_asmjs_validation_failure());
@@ -920,8 +917,8 @@ static void LoadStartupJSPrefs(XPCJSContext* xpccx) {
       StaticPrefs::javascript_options_jit_full_debug_checks_DoNotUseDirectly());
 #endif
 
-#if !defined(JS_CODEGEN_MIPS32) && !defined(JS_CODEGEN_MIPS64) && \
-    !defined(JS_CODEGEN_RISCV64) && !defined(JS_CODEGEN_LOONG64)
+#if !defined(JS_CODEGEN_MIPS64) && !defined(JS_CODEGEN_RISCV64) && \
+    !defined(JS_CODEGEN_LOONG64)
   JS_SetGlobalJitCompilerOption(
       cx, JSJITCOMPILER_SPECTRE_INDEX_MASKING,
       StaticPrefs::javascript_options_spectre_index_masking_DoNotUseDirectly());

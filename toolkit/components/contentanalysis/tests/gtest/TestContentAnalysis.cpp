@@ -100,6 +100,19 @@ class ContentAnalysisTest : public testing::Test {
         .forget();
   }
 
+  enum class CancelMechanism {
+    // Wait for the service to assign our request tokens, then cancel using
+    // that (deprecated)
+    eCancelByRequestToken,
+    // Wait for the service to assign our requests a user action ID, then cancel
+    // using that.
+    eCancelByUserActionId,
+  };
+
+  nsresult SendRequestsCancelAndExpectResponse(
+      RefPtr<ContentAnalysis> contentAnalysis,
+      const nsTArray<RefPtr<nsIContentAnalysisRequest>>& requests,
+      CancelMechanism aCancelMechanism, bool aExpectFailure);
   RefPtr<ContentAnalysis> mContentAnalysis;
   static nsString mPipeName;
   static MozAgentInfo mAgentInfo;
@@ -109,7 +122,11 @@ class ContentAnalysisTest : public testing::Test {
   // (FRIEND_TEST is another more verbose solution.)
   using UrlFilterResult = ContentAnalysis::UrlFilterResult;
   UrlFilterResult FilterByUrlLists(nsIContentAnalysisRequest* aReq) {
-    return mContentAnalysis->FilterByUrlLists(aReq);
+    // For testing, just pull the URI from the request.
+    nsCOMPtr<nsIURI> uri;
+    MOZ_ALWAYS_SUCCEEDS(aReq->GetUrl(getter_AddRefs(uri)));
+    MOZ_ASSERT(uri);
+    return mContentAnalysis->FilterByUrlLists(aReq, uri);
   }
 };
 MOZ_RUNINIT nsString ContentAnalysisTest::mPipeName;
@@ -196,6 +213,94 @@ struct BoolStruct {
   bool mValue = false;
 };
 
+nsresult ContentAnalysisTest::SendRequestsCancelAndExpectResponse(
+    RefPtr<ContentAnalysis> contentAnalysis,
+    const nsTArray<RefPtr<nsIContentAnalysisRequest>>& requests,
+    CancelMechanism aCancelMechanism, bool aExpectFailure) {
+  bool gotResponse = false;
+  // Make timedOut a RefPtr so if we get a response from content analysis
+  // after this function has finished we can safely check that (and don't
+  // start accessing stack values that don't exist anymore)
+  RefPtr timedOut = MakeRefPtr<media::Refcountable<BoolStruct>>();
+  auto callback = MakeRefPtr<ContentAnalysisCallback>(
+      [&, timedOut, aExpectFailure](nsIContentAnalysisResult* result) {
+        if (timedOut->mValue) {
+          return;
+        }
+        bool shouldAllow;
+        MOZ_ALWAYS_SUCCEEDS(result->GetShouldAllowContent(&shouldAllow));
+        EXPECT_EQ(false, shouldAllow);
+        EXPECT_EQ(false, aExpectFailure);
+        gotResponse = true;
+      },
+      [&gotResponse, timedOut, aExpectFailure](nsresult error) {
+        if (timedOut->mValue) {
+          return;
+        }
+        const char* errorName = mozilla::GetStaticErrorName(error);
+        errorName = errorName ? errorName : "";
+        printf("Got error response code %s(%x)\n", errorName, error);
+        // Errors should not have errorCode NS_OK
+        EXPECT_NE(NS_OK, error);
+        gotResponse = true;
+        EXPECT_EQ(true, aExpectFailure);
+      });
+
+  nsresult rv = contentAnalysis->AnalyzeContentRequestsCallback(
+      requests, true /* autoAcknowledge */, callback);
+  if (NS_FAILED(rv)) {
+    return rv;
+  }
+
+  RefPtr<CancelableRunnable> timer =
+      NS_NewCancelableRunnableFunction("Content Analysis timeout", [&] {
+        if (!gotResponse) {
+          timedOut->mValue = true;
+        }
+      });
+#if defined(MOZ_ASAN)
+  // This can be pretty slow on ASAN builds (bug 1895256)
+  constexpr uint32_t kCATimeout = 25000;
+#else
+  constexpr uint32_t kCATimeout = 10000;
+#endif
+  NS_DelayedDispatchToCurrentThread(do_AddRef(timer), kCATimeout);
+
+  // The user action ID should be set by now, whether we set it or not.
+  nsAutoCString userActionId;
+  MOZ_ALWAYS_SUCCEEDS(requests[0]->GetUserActionId(userActionId));
+  EXPECT_TRUE(!userActionId.IsEmpty());
+
+  bool hasCanceledRequest = false;
+  if (aCancelMechanism == CancelMechanism::eCancelByUserActionId) {
+    MOZ_ALWAYS_SUCCEEDS(
+        contentAnalysis->CancelRequestsByUserAction(userActionId));
+    hasCanceledRequest = true;
+  }
+
+  mozilla::SpinEventLoopUntil(
+      "Waiting for ContentAnalysis result"_ns, [&, timedOut]() {
+        if (!hasCanceledRequest) {
+          // Internally, GetFinalRequests expands the request list
+          // asynchronously.  We need to wait for that.
+          // (In the case of this test, nothing actually needs to be expanded.)
+          if (aCancelMechanism == CancelMechanism::eCancelByRequestToken) {
+            nsAutoCString requestToken;
+            MOZ_ALWAYS_SUCCEEDS(requests[0]->GetRequestToken(requestToken));
+            if (!requestToken.IsEmpty()) {
+              MOZ_ALWAYS_SUCCEEDS(
+                  contentAnalysis->CancelRequestsByRequestToken(requestToken));
+              hasCanceledRequest = true;
+            }
+          }
+        }
+        return gotResponse || timedOut->mValue;
+      });
+  timer->Cancel();
+  EXPECT_TRUE(gotResponse);
+  EXPECT_FALSE(timedOut->mValue);
+  return NS_OK;
+}
 void SendRequestAndExpectResponse(
     RefPtr<ContentAnalysis> contentAnalysis,
     const nsCOMPtr<nsIContentAnalysisRequest>& request,
@@ -208,10 +313,13 @@ void SendRequestAndExpectResponse(
   // start accessing stack values that don't exist anymore)
   RefPtr timedOut = MakeRefPtr<media::Refcountable<BoolStruct>>();
   auto callback = MakeRefPtr<ContentAnalysisCallback>(
-      [&, timedOut](nsIContentAnalysisResponse* response) {
+      [&, timedOut](nsIContentAnalysisResult* result) {
         if (timedOut->mValue) {
           return;
         }
+        nsCOMPtr<nsIContentAnalysisResponse> response =
+            do_QueryInterface(result);
+        EXPECT_TRUE(response);
         if (expectedShouldAllow.isSome()) {
           bool shouldAllow = false;
           MOZ_ALWAYS_SUCCEEDS(response->GetShouldAllowContent(&shouldAllow));
@@ -237,14 +345,18 @@ void SendRequestAndExpectResponse(
         if (timedOut->mValue) {
           return;
         }
-        EXPECT_EQ(NS_OK, error);
+        const char* errorName = mozilla::GetStaticErrorName(error);
+        errorName = errorName ? errorName : "";
+        printf("Got error response code %s(%x)\n", errorName, error);
+        // Errors should not have errorCode NS_OK
+        EXPECT_NE(NS_OK, error);
         gotResponse = true;
-        // Make sure that we didn't somehow get passed NS_OK
         FAIL() << "Got error response";
       });
 
-  MOZ_ALWAYS_SUCCEEDS(
-      contentAnalysis->AnalyzeContentRequestCallback(request, false, callback));
+  AutoTArray<RefPtr<nsIContentAnalysisRequest>, 1> requests{request.get()};
+  MOZ_ALWAYS_SUCCEEDS(contentAnalysis->AnalyzeContentRequestsCallback(
+      requests, false, callback));
   RefPtr<CancelableRunnable> timer =
       NS_NewCancelableRunnableFunction("Content Analysis timeout", [&] {
         if (!gotResponse.load()) {
@@ -445,4 +557,153 @@ TEST_F(ContentAnalysisTest, CheckTwoRequestsHaveDifferentUserActionId) {
 
   MOZ_ALWAYS_SUCCEEDS(
       obsServ->RemoveObserver(rawRequestObserver, "dlp-request-sent-raw"));
+}
+
+TEST_F(ContentAnalysisTest,
+       CheckRequestTokensCanCancelAndHaveSameUserActionId) {
+  nsCOMPtr<nsIURI> uri = GetExampleDotComURI();
+  nsString allow1(L"allowMe");
+  RefPtr<nsIContentAnalysisRequest> request1 = new ContentAnalysisRequest(
+      nsIContentAnalysisRequest::AnalysisType::eBulkDataEntry,
+      nsIContentAnalysisRequest::Reason::eClipboardPaste, std::move(allow1),
+      false, EmptyCString(), uri,
+      nsIContentAnalysisRequest::OperationType::eClipboard, nullptr);
+
+  // Use different text so the request doesn't match the cache
+  nsString allow2(L"allowMeAgain");
+  RefPtr<nsIContentAnalysisRequest> request2 = new ContentAnalysisRequest(
+      nsIContentAnalysisRequest::AnalysisType::eBulkDataEntry,
+      nsIContentAnalysisRequest::Reason::eClipboardPaste, std::move(allow2),
+      false, EmptyCString(), uri,
+      nsIContentAnalysisRequest::OperationType::eClipboard, nullptr);
+  nsTArray<RefPtr<nsIContentAnalysisRequest>> requests{request1, request2};
+  nsCOMPtr<nsIObserverService> obsServ =
+      mozilla::services::GetObserverService();
+  auto rawRequestObserver = MakeRefPtr<RawRequestObserver>();
+  MOZ_ALWAYS_SUCCEEDS(
+      obsServ->AddObserver(rawRequestObserver, "dlp-request-sent-raw", false));
+
+  nsresult rv = SendRequestsCancelAndExpectResponse(
+      mContentAnalysis, requests, CancelMechanism::eCancelByRequestToken,
+      false /* aExpectFailure */);
+  EXPECT_EQ(rv, NS_OK);
+
+  auto rawRequests = rawRequestObserver->GetRequests();
+  EXPECT_EQ(static_cast<size_t>(2), rawRequests.size());
+  EXPECT_EQ(rawRequests[0].user_action_id(), rawRequests[1].user_action_id());
+
+  MOZ_ALWAYS_SUCCEEDS(
+      obsServ->RemoveObserver(rawRequestObserver, "dlp-request-sent-raw"));
+}
+
+TEST_F(ContentAnalysisTest,
+       CheckAssignedUserActionIdCanCancelAndHaveSameUserActionId) {
+  nsCOMPtr<nsIURI> uri = GetExampleDotComURI();
+  nsString allow1(L"allowMe");
+  RefPtr<nsIContentAnalysisRequest> request1 = new ContentAnalysisRequest(
+      nsIContentAnalysisRequest::AnalysisType::eBulkDataEntry,
+      nsIContentAnalysisRequest::Reason::eClipboardPaste, std::move(allow1),
+      false, EmptyCString(), uri,
+      nsIContentAnalysisRequest::OperationType::eClipboard, nullptr);
+
+  // Use different text so the request doesn't match the cache
+  nsString allow2(L"allowMeAgain");
+  RefPtr<nsIContentAnalysisRequest> request2 = new ContentAnalysisRequest(
+      nsIContentAnalysisRequest::AnalysisType::eBulkDataEntry,
+      nsIContentAnalysisRequest::Reason::eClipboardPaste, std::move(allow2),
+      false, EmptyCString(), uri,
+      nsIContentAnalysisRequest::OperationType::eClipboard, nullptr);
+  nsTArray<RefPtr<nsIContentAnalysisRequest>> requests{request1, request2};
+  nsCOMPtr<nsIObserverService> obsServ =
+      mozilla::services::GetObserverService();
+  auto rawRequestObserver = MakeRefPtr<RawRequestObserver>();
+  MOZ_ALWAYS_SUCCEEDS(
+      obsServ->AddObserver(rawRequestObserver, "dlp-request-sent-raw", false));
+
+  nsresult rv = SendRequestsCancelAndExpectResponse(
+      mContentAnalysis, requests, CancelMechanism::eCancelByUserActionId,
+      false /* aExpectFailure */);
+  EXPECT_EQ(rv, NS_OK);
+
+  auto rawRequests = rawRequestObserver->GetRequests();
+  EXPECT_EQ(static_cast<size_t>(2), rawRequests.size());
+  EXPECT_EQ(rawRequests[0].user_action_id(), rawRequests[1].user_action_id());
+
+  MOZ_ALWAYS_SUCCEEDS(
+      obsServ->RemoveObserver(rawRequestObserver, "dlp-request-sent-raw"));
+}
+
+static nsCString GenerateUUID() {
+  nsID id = nsID::GenerateUUID();
+  return nsCString(id.ToString().get());
+}
+
+TEST_F(ContentAnalysisTest,
+       CheckGivenUserActionIdCanCancelAndHaveSameUserActionId) {
+  nsCString userActionId = GenerateUUID();
+  nsCOMPtr<nsIURI> uri = GetExampleDotComURI();
+
+  nsString allow1(L"allowMe");
+  RefPtr<nsIContentAnalysisRequest> request1 = new ContentAnalysisRequest(
+      nsIContentAnalysisRequest::AnalysisType::eBulkDataEntry,
+      nsIContentAnalysisRequest::Reason::eClipboardPaste, std::move(allow1),
+      false, EmptyCString(), uri,
+      nsIContentAnalysisRequest::OperationType::eClipboard, nullptr, nullptr,
+      nsCString(userActionId));
+
+  // Use different text so the request doesn't match the cache
+  nsString allow2(L"allowMeAgain");
+  RefPtr<nsIContentAnalysisRequest> request2 = new ContentAnalysisRequest(
+      nsIContentAnalysisRequest::AnalysisType::eBulkDataEntry,
+      nsIContentAnalysisRequest::Reason::eClipboardPaste, std::move(allow2),
+      false, EmptyCString(), uri,
+      nsIContentAnalysisRequest::OperationType::eClipboard, nullptr, nullptr,
+      nsCString(userActionId));
+  nsTArray<RefPtr<nsIContentAnalysisRequest>> requests{request1, request2};
+  nsCOMPtr<nsIObserverService> obsServ =
+      mozilla::services::GetObserverService();
+  auto rawRequestObserver = MakeRefPtr<RawRequestObserver>();
+  MOZ_ALWAYS_SUCCEEDS(
+      obsServ->AddObserver(rawRequestObserver, "dlp-request-sent-raw", false));
+  nsresult rv = SendRequestsCancelAndExpectResponse(
+      mContentAnalysis, requests, CancelMechanism::eCancelByUserActionId,
+      false /* aExpectFailure */);
+  EXPECT_EQ(rv, NS_OK);
+
+  auto rawRequests = rawRequestObserver->GetRequests();
+  EXPECT_EQ(static_cast<size_t>(2), rawRequests.size());
+  EXPECT_EQ(rawRequests[0].user_action_id(), rawRequests[1].user_action_id());
+  EXPECT_EQ(rawRequests[0].user_action_id(), userActionId.get());
+
+  MOZ_ALWAYS_SUCCEEDS(
+      obsServ->RemoveObserver(rawRequestObserver, "dlp-request-sent-raw"));
+}
+
+TEST_F(ContentAnalysisTest, CheckGivenUserActionIdsMustMatch) {
+  nsCString userActionId1 = GenerateUUID();
+  nsCString userActionId2 = GenerateUUID();
+  nsCOMPtr<nsIURI> uri = GetExampleDotComURI();
+
+  nsString allow1(L"allowMe");
+  RefPtr<nsIContentAnalysisRequest> request1 = new ContentAnalysisRequest(
+      nsIContentAnalysisRequest::AnalysisType::eBulkDataEntry,
+      nsIContentAnalysisRequest::Reason::eClipboardPaste, std::move(allow1),
+      false, EmptyCString(), uri,
+      nsIContentAnalysisRequest::OperationType::eClipboard, nullptr, nullptr,
+      nsCString(userActionId1));
+
+  // Use different text so the request doesn't match the cache
+  nsString allow2(L"allowMeAgain");
+  RefPtr<nsIContentAnalysisRequest> request2 = new ContentAnalysisRequest(
+      nsIContentAnalysisRequest::AnalysisType::eBulkDataEntry,
+      nsIContentAnalysisRequest::Reason::eClipboardPaste, std::move(allow2),
+      false, EmptyCString(), uri,
+      nsIContentAnalysisRequest::OperationType::eClipboard, nullptr, nullptr,
+      nsCString(userActionId2));
+  nsTArray<RefPtr<nsIContentAnalysisRequest>> requests{request1, request2};
+
+  nsresult rv = SendRequestsCancelAndExpectResponse(
+      mContentAnalysis, requests, CancelMechanism::eCancelByUserActionId,
+      true /* aExpectFailure */);
+  EXPECT_EQ(rv, NS_ERROR_INVALID_ARG);
 }

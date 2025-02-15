@@ -46,6 +46,7 @@ UNCOMMON_TRY_TASK_LABELS = [
     r"android-hw",
     # Windows tasks
     r"windows11-64-2009-hw-ref",
+    r"windows11-64-24h2-hw-ref",
     r"windows10-aarch64-qr",
     # Linux tasks
     r"linux-",  # hide all linux32 tasks by default - bug 1599197
@@ -156,6 +157,7 @@ def filter_release_tasks(task, parameters):
     if platform in (
         "linux",
         "linux64",
+        "linux64-aarch64",
         "macosx64",
         "win32",
         "win64",
@@ -761,6 +763,12 @@ def target_tasks_custom_car_perf_testing(full_task_graph, parameters, graph_conf
                     return True
                 # Bug 1898514: avoid tp6m or non-essential tp6 jobs in cron on non-a55 platform
                 if "tp6m" in try_name and "a55" not in platform:
+                    return False
+                # Bug 1945165 Disable ebay-kleinanzeigen on cstm-car-m because of permafail
+                if (
+                    "ebay-kleinanzeigen" in try_name
+                    and "ebay-kleinanzeigen-search" not in try_name
+                ):
                     return False
                 return True
         return False

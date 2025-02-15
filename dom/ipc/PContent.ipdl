@@ -1061,6 +1061,10 @@ parent:
     async GetLoadingSessionHistoryInfoFromParent(MaybeDiscardedBrowsingContext aContext)
         returns (LoadingSessionHistoryInfo? aLoadingInfo);
 
+    async GetContiguousSessionHistoryInfos(MaybeDiscardedBrowsingContext aContext,
+                                           SessionHistoryInfo aInfo)
+        returns (SessionHistoryInfo[] infos);
+
     async RemoveFromBFCache(MaybeDiscardedBrowsingContext aContext);
 
     async InitBackground(Endpoint<PBackgroundStarterParent> aEndpoint);
@@ -1540,7 +1544,7 @@ parent:
     async NotifyPushObserversWithData(nsCString scope, nullable nsIPrincipal principal,
                                       nsString messageId, uint8_t[] data);
 
-     async GetFilesRequest(nsID aID, nsString aDirectory, bool aRecursiveFlag);
+     async GetFilesRequest(nsID aID, nsString[] aDirectories, bool aRecursiveFlag);
      async DeleteGetFilesRequest(nsID aID);
 
      async StoreAndBroadcastBlobURLRegistration(nsCString url, IPCBlob blob,

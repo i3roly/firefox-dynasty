@@ -19,6 +19,9 @@ add_task(async function test_update_login_success() {
     return;
   }
 
+  Services.fog.testResetFOG();
+  await Services.fog.testFlushAllChildren();
+
   const login = TEST_LOGIN_1;
   await LoginTestUtils.addLogin(login);
 
@@ -27,6 +30,10 @@ add_task(async function test_update_login_success() {
 
   const passwordCard = megalist.querySelector("password-card");
   await waitForReauth(() => passwordCard.editBtn.click());
+  let events = Glean.contextualManager.recordsInteraction.testGetValue();
+  assertCPMGleanEvent(events[0], {
+    interaction_type: "edit",
+  });
   await BrowserTestUtils.waitForCondition(
     () => megalist.querySelector("login-form"),
     "Login form failed to render"
@@ -58,6 +65,12 @@ add_task(async function test_update_login_success() {
     () => updatedPasswordCard.passwordLine.value === newPassword,
     "Password not updated."
   );
+
+  let updateEvents = Glean.contextualManager.recordsUpdate.testGetValue();
+  Assert.equal(updateEvents.length, 1, "Recorded update password once.");
+  assertCPMGleanEvent(updateEvents[0], {
+    change_type: "edit",
+  });
   LoginTestUtils.clearData();
   SidebarController.hide();
 });
@@ -107,6 +120,9 @@ add_task(async function test_update_login_discard_changes() {
     ok(true, "Cannot test OSAuth.");
     return;
   }
+
+  Services.fog.testResetFOG();
+  await Services.fog.testFlushAllChildren();
 
   const login = TEST_LOGIN_1;
   await LoginTestUtils.addLogin(login);

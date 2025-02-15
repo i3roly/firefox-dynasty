@@ -93,6 +93,8 @@
   }
 
   window.Tabbrowser = class {
+    #stgManager; // Smart Tab Grouping Manager
+
     init() {
       this.tabContainer = document.getElementById("tabbrowser-tabs");
       this.tabGroupMenu = document.getElementById("tab-group-editor");
@@ -105,6 +107,7 @@
       ChromeUtils.defineESModuleGetters(this, {
         AsyncTabSwitcher: "resource:///modules/AsyncTabSwitcher.sys.mjs",
         PictureInPicture: "resource://gre/modules/PictureInPicture.sys.mjs",
+        SmartTabGroupingManager: "resource:///modules/SmartTabGrouping.sys.mjs",
         UrlbarProviderOpenTabs:
           "resource:///modules/UrlbarProviderOpenTabs.sys.mjs",
       });
@@ -1061,7 +1064,7 @@
       return browser.mIconURL;
     }
 
-    setPageInfo(aURL, aDescription, aPreviewImage) {
+    setPageInfo(tab, aURL, aDescription, aPreviewImage) {
       if (aURL) {
         let pageInfo = {
           url: aURL,
@@ -1069,6 +1072,9 @@
           previewImageURL: aPreviewImage,
         };
         PlacesUtils.history.update(pageInfo).catch(console.error);
+      }
+      if (tab) {
+        tab.description = aDescription;
       }
     }
 
@@ -2995,17 +3001,23 @@
       );
     }
 
+    /**
+     * @param {MozTabbrowserTabGroup} group
+     * @param {number} index
+     * @returns {MozTabbrowserTabGroup}
+     */
     adoptTabGroup(group, index) {
       if (group.ownerDocument == document) {
-        return;
+        return group;
       }
+      group.saveOnWindowClose = false;
 
       let newTabs = [];
       for (let tab of group.tabs) {
         newTabs.push(this.adoptTab(tab, index));
       }
 
-      this.addTabGroup(newTabs, {
+      return this.addTabGroup(newTabs, {
         id: group.id,
         label: group.label,
         color: group.color,
@@ -3013,14 +3025,18 @@
     }
 
     getAllTabGroups() {
-      return BrowserWindowTracker.orderedWindows.reduce(
-        (acc, window) => acc.concat(window.gBrowser.tabGroups),
+      return BrowserWindowTracker.getOrderedWindows({
+        private: PrivateBrowsingUtils.isWindowPrivate(window),
+      }).reduce(
+        (acc, thisWindow) => acc.concat(thisWindow.gBrowser.tabGroups),
         []
       );
     }
 
     getTabGroupById(id) {
-      for (const win of BrowserWindowTracker.orderedWindows) {
+      for (const win of BrowserWindowTracker.getOrderedWindows({
+        private: PrivateBrowsingUtils.isWindowPrivate(window),
+      })) {
         for (const group of win.gBrowser.tabGroups) {
           if (group.id === id) {
             return group;
@@ -3028,6 +3044,57 @@
         }
       }
       return null;
+    }
+
+    getSmartTabGroupingManager() {
+      if (!this.#stgManager) {
+        this.#stgManager = new this.SmartTabGroupingManager();
+      }
+      return this.#stgManager;
+    }
+
+    /**
+     * Groups all tabs in the current window (other than pinned tabs) into a
+     * set of tab groups. Each is given a name.
+     *
+     * Note that there is no immediate UX plan for this feature but it is
+     * being left in for now, as it can be used while testing in the console.
+     *
+     * Currently this implementation has automatic labeling of the group disabled.
+     *
+     * @returns {object []} List of tab groups
+     */
+    async smartTabGrouping() {
+      const groupManager = this.getSmartTabGroupingManager();
+      const clusters = await groupManager.generateClusters(
+        this.visibleTabs.filter(t => !t.pinned)
+      );
+      const clusterReps = clusters.clusterRepresentations;
+      const tabGroups = clusterReps.map(clusterRep =>
+        this.addTabGroup(clusterRep.tabs, {
+          label: clusterRep.predictedTopicLabel || "",
+        })
+      );
+      return tabGroups;
+    }
+
+    /**
+     * Get suggested title for tabs
+     * @param {object []} tabs One or more tabs in a list
+     * @returns {String} Suggested label for the tabs if creating a tab group, or empty string if no suggestion
+     */
+    async getGroupTitleForTabs(tabs) {
+      if (!tabs) {
+        return "";
+      }
+      const otherTabs = gBrowser.visibleTabs.filter(
+        t => !tabs.includes(t) && !t.pinned
+      );
+      const groupManager = this.getSmartTabGroupingManager();
+      const clusters = groupManager.createStaticCluster(tabs);
+      const otherClusters = groupManager.createStaticCluster(otherTabs);
+      await groupManager.generateGroupLabels(clusters, otherClusters);
+      return clusters.clusterRepresentations[0].predictedTopicLabel;
     }
 
     _determineURIToLoad(uriString, createLazyBrowser) {
@@ -5690,8 +5757,6 @@
         return;
       }
 
-      this._lastRelatedTabMap = new WeakMap();
-
       this._handleTabMove(aTab, () => {
         let neighbor = this.tabs[aIndex];
         if (forceStandaloneTab && neighbor.group) {
@@ -5760,6 +5825,8 @@
       // Clear tabs cache after moving nodes because the order of tabs may have
       // changed.
       this.tabContainer._invalidateCachedTabs();
+
+      this._lastRelatedTabMap = new WeakMap();
 
       this._updateTabsAfterInsert();
 
@@ -5855,7 +5922,7 @@
               nextTab.group.after(selectedTab);
             } else {
               // Enter first position of tab group.
-              nextTab.group.prepend(selectedTab);
+              nextTab.group.insertBefore(selectedTab, nextTab);
             }
           } else if (selectedTab.group != nextTab.group) {
             // Standalone tab after tab group.
@@ -5864,6 +5931,10 @@
             nextTab.after(selectedTab);
           }
         });
+      } else if (selectedTab.group) {
+        // selectedTab is the last tab and is grouped.
+        // remove it from its group.
+        selectedTab.group.after(selectedTab);
       }
     }
 
@@ -5892,6 +5963,10 @@
             previousTab.before(selectedTab);
           }
         });
+      } else if (selectedTab.group) {
+        // selectedTab is the first tab and is grouped.
+        // remove it from its group.
+        selectedTab.group.before(selectedTab);
       }
     }
 
@@ -7141,9 +7216,8 @@
         if (!tab) {
           return;
         }
-
         const { url, description, previewImageURL } = event.detail;
-        this.setPageInfo(url, description, previewImageURL);
+        this.setPageInfo(tab, url, description, previewImageURL);
       });
     }
 
@@ -8486,17 +8560,6 @@ var TabContextMenu = {
       gBrowser.tabContainer?.verticalMode
         ? "close-tabs-to-the-end-vertical"
         : "close-tabs-to-the-end"
-    );
-
-    // Update context menu item for "Turn (on/off) Vertical Tabs".
-    const toggleVerticalTabsItem = document.getElementById(
-      "context_toggleVerticalTabs"
-    );
-    document.l10n.setAttributes(
-      toggleVerticalTabsItem,
-      gBrowser.tabContainer?.verticalMode
-        ? "tab-context-disable-vertical-tabs"
-        : "tab-context-enable-vertical-tabs"
     );
 
     // Disable "Close Tabs to the Left/Right" if there are no tabs

@@ -211,6 +211,8 @@ var gProfiles = {
     newProfile.id = "menu_newProfile";
     newProfile.setAttribute("command", "Profiles:CreateProfile");
     newProfile.setAttribute("data-l10n-id", "menu-profiles-new-profile");
+    newProfile.style.listStyleImage =
+      "url(chrome://global/skin/icons/plus.svg)";
     menuPopup.appendChild(newProfile);
 
     let separator = document.createXULElement("menuseparator");
@@ -246,10 +248,9 @@ var gProfiles = {
     PanelUI.showSubView("PanelUI-profiles", target);
   },
 
-  async updateFxAView() {
+  async updateFxAView(target) {
     await this.populateSubView();
-    let fxaAnchor = document.getElementById("customizationui-widget-multiview");
-    PanelUI.showSubView("PanelUI-profiles", fxaAnchor);
+    PanelUI.showSubView("PanelUI-profiles", target);
   },
 
   launchProfile(aEvent) {
@@ -274,7 +275,7 @@ var gProfiles = {
       // deliberate fallthrough
       case "PanelUI-fxa-menu-profiles-button": {
         aEvent.stopPropagation();
-        this.updateFxAView();
+        this.updateFxAView(aEvent.target);
         break;
       }
       /* Subpanel events that may be triggered in FxA menu or app menu */

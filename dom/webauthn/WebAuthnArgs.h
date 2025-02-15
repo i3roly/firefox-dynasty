@@ -18,8 +18,14 @@ class WebAuthnRegisterArgs final : public nsIWebAuthnRegisterArgs {
   NS_DECL_THREADSAFE_ISUPPORTS
   NS_DECL_NSIWEBAUTHNREGISTERARGS
 
-  explicit WebAuthnRegisterArgs(const WebAuthnMakeCredentialInfo& aInfo)
-      : mInfo(aInfo),
+  explicit WebAuthnRegisterArgs(const nsCString& aOrigin,
+                                const nsCString& aClientDataJSON,
+                                const bool aPrivateBrowsing,
+                                const WebAuthnMakeCredentialInfo& aInfo)
+      : mOrigin(aOrigin),
+        mClientDataJSON(aClientDataJSON),
+        mPrivateBrowsing(aPrivateBrowsing),
+        mInfo(aInfo),
         mCredProps(false),
         mHmacCreateSecret(false),
         mMinPinLength(false),
@@ -51,6 +57,9 @@ class WebAuthnRegisterArgs final : public nsIWebAuthnRegisterArgs {
  private:
   ~WebAuthnRegisterArgs() = default;
 
+  const nsCString mOrigin;
+  const nsCString mClientDataJSON;
+  const bool mPrivateBrowsing;
   const WebAuthnMakeCredentialInfo mInfo;
 
   // Flags to indicate whether an extension is being requested.
@@ -65,8 +74,15 @@ class WebAuthnSignArgs final : public nsIWebAuthnSignArgs {
   NS_DECL_THREADSAFE_ISUPPORTS
   NS_DECL_NSIWEBAUTHNSIGNARGS
 
-  explicit WebAuthnSignArgs(const WebAuthnGetAssertionInfo& aInfo)
-      : mInfo(aInfo), mPrf(false) {
+  explicit WebAuthnSignArgs(const nsCString& aOrigin,
+                            const nsCString& aClientDataJSON,
+                            const bool aPrivateBrowsing,
+                            const WebAuthnGetAssertionInfo& aInfo)
+      : mOrigin(aOrigin),
+        mClientDataJSON(aClientDataJSON),
+        mPrivateBrowsing(aPrivateBrowsing),
+        mInfo(aInfo),
+        mPrf(false) {
     for (const WebAuthnExtension& ext : mInfo.Extensions()) {
       switch (ext.type()) {
         case WebAuthnExtension::TWebAuthnExtensionAppId:
@@ -91,7 +107,11 @@ class WebAuthnSignArgs final : public nsIWebAuthnSignArgs {
  private:
   ~WebAuthnSignArgs() = default;
 
+  const nsCString mOrigin;
+  const nsCString mClientDataJSON;
+  const bool mPrivateBrowsing;
   const WebAuthnGetAssertionInfo mInfo;
+
   Maybe<nsString> mAppId;
   bool mPrf;
 };

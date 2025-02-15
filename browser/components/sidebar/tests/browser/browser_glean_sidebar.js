@@ -47,14 +47,12 @@ add_task(async function test_metrics_initialized() {
 });
 
 add_task(async function test_sidebar_expand() {
+  await SidebarController.initializeUIState({ launcherExpanded: false });
   await SpecialPowers.pushPrefEnv({
     set: [[TAB_DIRECTION_PREF, true]],
   });
-  // Vertical tabs are expanded by default
-  await SidebarController.initializeUIState({ launcherExpanded: false });
 
-  info("Expand the sidebar.");
-  EventUtils.synthesizeMouseAtCenter(SidebarController.toolbarButton, {});
+  // Vertical tabs are expanded by default
   await TestUtils.waitForCondition(
     () => SidebarController.sidebarMain.expanded,
     "Sidebar is expanded."
@@ -65,6 +63,13 @@ add_task(async function test_sidebar_expand() {
   await TestUtils.waitForCondition(
     () => !SidebarController.sidebarMain.expanded,
     "Sidebar is collapsed."
+  );
+
+  info("Re-expand the sidebar.");
+  EventUtils.synthesizeMouseAtCenter(SidebarController.toolbarButton, {});
+  await TestUtils.waitForCondition(
+    () => SidebarController.sidebarMain.expanded,
+    "Sidebar is expanded."
   );
 
   const events = Glean.sidebar.expand.testGetValue();
@@ -226,6 +231,18 @@ add_task(async function test_review_checker_sidebar_toggle() {
       "Event has the correct sidebar version."
     );
   }
+});
+
+add_task(async function test_contextual_manager_toggle() {
+  await SpecialPowers.pushPrefEnv({
+    set: [
+      ["browser.contextual-password-manager.enabled", true],
+      ["sidebar.revamp", false],
+    ],
+  });
+  const gleanEvent = Glean.contextualManager.sidebarToggle;
+  await testSidebarToggle("viewCPMSidebar", gleanEvent);
+  await SpecialPowers.popPrefEnv();
 });
 
 add_task(async function test_customize_panel_toggle() {

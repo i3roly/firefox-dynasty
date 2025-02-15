@@ -27,11 +27,11 @@ object Versions {
     const val okio = "3.10.1"
     const val androidsvg = "1.4"
 
-    const val android_gradle_plugin = "8.8.0"
+    const val android_gradle_plugin = "8.8.1"
 
     // This has to be synced to the gradlew plugin version. See
     // http://googlesamples.github.io/android-custom-lint-rules/api-guide/example.md.html#example:samplelintcheckgithubproject/lintversion?
-    const val lint = "31.8.0-rc02"
+    const val lint = "31.8.1"
     const val detekt = "1.23.7"
     const val ktlint = "0.49.1"
 
@@ -58,7 +58,7 @@ object Versions {
         const val browser = "1.8.0"
         const val cardview = "1.0.0"
         const val collection = "1.4.5"
-        const val compose_bom = "2025.01.01"
+        const val compose_bom = "2025.02.00"
         const val concurrent = "1.2.0"
         const val constraintlayout = "2.2.0"
         const val constraintlayout_compose = "1.1.0"
@@ -67,12 +67,12 @@ object Versions {
         const val core_splashscreen = "1.0.1"
         const val datastore="1.1.2"
         const val drawerlayout = "1.2.0"
-        const val fragment = "1.8.5"
+        const val fragment = "1.8.6"
         const val lifecycle = "2.8.7"
         const val localbroadcastmanager = "1.0.0"
         const val media = "1.7.0"
-        const val navigation = "2.8.6"
-        const val paging = "3.3.5"
+        const val navigation = "2.8.7"
+        const val paging = "3.3.6"
         const val palette = "1.0.0"
         const val preferences = "1.2.1"
         const val profileinstaller = "1.4.0"
@@ -116,7 +116,7 @@ object Versions {
     }
 
     object ThirdParty {
-        const val sentry = "8.1.0"
+        const val sentry = "8.2.0"
     }
 }
 

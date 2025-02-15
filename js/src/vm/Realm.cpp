@@ -293,6 +293,7 @@ void Realm::traceRoots(JSTracer* trc,
   }
 
   objects_.trace(trc);
+  baselineCompileQueue_.trace(trc);
 }
 
 void ObjectRealm::finishRoots() {
@@ -368,6 +369,10 @@ void Realm::purgeForOfPicChain() {
       chain->freeAllStubs(runtime_->gcContext());
     }
   }
+}
+
+void Realm::removeFromCompileQueue(JSScript* script) {
+  baselineCompileQueue_.remove(script);
 }
 
 // Check to see if this individual realm is recording allocations. Debuggers or

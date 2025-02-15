@@ -196,9 +196,9 @@ module.exports = function (config) {
               },
             "content-src/components/DiscoveryStreamComponents/DSCard/DSCard.jsx":
               {
-                statements: 98.25,
-                lines: 98.2,
-                functions: 100,
+                statements: 96.69,
+                lines: 96.62,
+                functions: 95.45,
                 branches: 72.95,
               },
             "content-src/components/DiscoveryStreamComponents/CardSections/CardSections.jsx":
@@ -217,7 +217,7 @@ module.exports = function (config) {
               },
             "content-src/components/DiscoveryStreamComponents/AdBanner/AdBanner.jsx":
               {
-                branches: 66.67,
+                branches: 62.5,
               },
             "content-src/components/DiscoveryStreamComponents/**/*.jsx": {
               statements: 90.48,

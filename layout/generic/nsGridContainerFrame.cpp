@@ -8470,7 +8470,7 @@ nscoord nsGridContainerFrame::MasonryLayout(GridReflowInput& aGridRI,
              item->mFrame->StylePosition()
                  ->GetAnchorResolvedInset(
                      masonrySide, wm, item->mFrame->StyleDisplay()->mPosition)
-                 .IsAuto())) {
+                 ->IsAuto())) {
           sortedItems.AppendElement(item);
         } else {
           item = nullptr;
@@ -9078,7 +9078,6 @@ void nsGridContainerFrame::Reflow(nsPresContext* aPresContext,
   const nscoord computedBSize = aReflowInput.ComputedBSize();
   const nscoord computedISize = aReflowInput.ComputedISize();
   const WritingMode& wm = gridRI.mWM;
-  const LogicalSize computedSize(wm, computedISize, computedBSize);
 
   nscoord consumedBSize = 0;
   nscoord bSize = 0;
@@ -9086,7 +9085,7 @@ void nsGridContainerFrame::Reflow(nsPresContext* aPresContext,
     Grid grid;
     if (MOZ_LIKELY(!IsSubgrid())) {
       RepeatTrackSizingInput repeatSizing(aReflowInput.ComputedMinSize(),
-                                          computedSize,
+                                          aReflowInput.ComputedSize(),
                                           aReflowInput.ComputedMaxSize());
       grid.PlaceGridItems(gridRI, repeatSizing);
     } else {
@@ -9103,19 +9102,19 @@ void nsGridContainerFrame::Reflow(nsPresContext* aPresContext,
     // 1488878.
     const Maybe<nscoord> containBSize =
         aReflowInput.mFrame->ContainIntrinsicBSize();
-    const nscoord trackSizingBSize = [&] {
-      // This clamping only applies to auto sizes.
-      if (containBSize && computedBSize == NS_UNCONSTRAINEDSIZE) {
-        return aReflowInput.ApplyMinMaxBSize(*containBSize);
-      }
-      return computedBSize;
-    }();
-    const LogicalSize containSize(wm, computedISize, trackSizingBSize);
-    gridRI.CalculateTrackSizesForAxis(LogicalAxis::Inline, grid,
-                                      containSize.ISize(wm),
+
+    nscoord trackSizingBSize;
+    if (containBSize && computedBSize == NS_UNCONSTRAINEDSIZE) {
+      // This clamping only applies to unconstrained block-size.
+      trackSizingBSize = aReflowInput.ApplyMinMaxBSize(*containBSize);
+    } else {
+      trackSizingBSize = computedBSize;
+    }
+
+    gridRI.CalculateTrackSizesForAxis(LogicalAxis::Inline, grid, computedISize,
                                       SizingConstraint::NoConstraint);
     gridRI.CalculateTrackSizesForAxis(LogicalAxis::Block, grid,
-                                      containSize.BSize(wm),
+                                      trackSizingBSize,
                                       SizingConstraint::NoConstraint);
     if (containBSize) {
       bSize = *containBSize;

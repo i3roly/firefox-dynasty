@@ -6,7 +6,6 @@
 # into `third_party/rust` by `mach vendor rust`.
 members = [
   "browser/app/nmhproxy/",
-  "js/src/frontend/smoosh",
   "js/src/rust",
   "netwerk/base/idna_glue",
   "netwerk/test/http3server",
@@ -158,9 +157,6 @@ bindgen = { path = "third_party/rust/bindgen" }
 
 # Patch nix 0.26 to 0.29
 nix = { path = "build/rust/nix" }
-
-# Patch indexmap 2.0 to 1.0
-indexmap = { path = "build/rust/indexmap" }
 
 # Patch derive_more 0.99 to 1.0.0-beta
 derive_more = { path = "build/rust/derive_more" }

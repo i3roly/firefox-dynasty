@@ -143,7 +143,9 @@ class GlobalObjectData {
     AsyncIteratorHelperProto,
     SegmentsProto,
     SegmentIteratorProto,
-
+#ifdef NIGHTLY_BUILD
+    IteratorRangeProto,
+#endif
     Limit
   };
   using ProtoArray = mozilla::EnumeratedArray<ProtoKind, GCPtr<JSObject*>,
@@ -580,24 +582,6 @@ class GlobalObject : public NativeObject {
     return &global->getPrototype(JSProto_BigInt);
   }
 
-#ifdef ENABLE_RECORD_TUPLE
-  static JSObject* getOrCreateRecordPrototype(JSContext* cx,
-                                              Handle<GlobalObject*> global) {
-    if (!ensureConstructor(cx, global, JSProto_Record)) {
-      return nullptr;
-    }
-    return &global->getPrototype(JSProto_Record);
-  }
-
-  static JSObject* getOrCreateTuplePrototype(JSContext* cx,
-                                             Handle<GlobalObject*> global) {
-    if (!ensureConstructor(cx, global, JSProto_Tuple)) {
-      return nullptr;
-    }
-    return &global->getPrototype(JSProto_Tuple);
-  }
-#endif
-
   static JSObject* getOrCreatePromisePrototype(JSContext* cx,
                                                Handle<GlobalObject*> global) {
     if (!ensureConstructor(cx, global, JSProto_Promise)) {
@@ -776,6 +760,11 @@ class GlobalObject : public NativeObject {
 
   static JSObject* getOrCreateRegExpStringIteratorPrototype(
       JSContext* cx, Handle<GlobalObject*> global);
+
+#ifdef NIGHTLY_BUILD
+  static JSObject* getOrCreateIteratorRangePrototype(
+      JSContext* cx, Handle<GlobalObject*> global);
+#endif
 
   void setGeneratorObjectPrototype(JSObject* obj) {
     setBuiltinProto(ProtoKind::GeneratorObjectProto, obj);

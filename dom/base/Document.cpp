@@ -175,6 +175,7 @@
 #include "mozilla/dom/FeaturePolicyUtils.h"
 #include "mozilla/dom/FontFaceSet.h"
 #include "mozilla/dom/FragmentDirective.h"
+#include "mozilla/dom/NavigationBinding.h"
 #include "mozilla/dom/fragmentdirectives_ffi_generated.h"
 #include "mozilla/dom/FromParser.h"
 #include "mozilla/dom/HighlightRegistry.h"
@@ -10148,9 +10149,9 @@ Document* Document::Open(const Optional<nsAString>& /* unused */,
       return nullptr;
     }
     nsCOMPtr<nsIStructuredCloneContainer> stateContainer(mStateObjectContainer);
-    rv = shell->UpdateURLAndHistory(this, newURI, stateContainer, u""_ns,
-                                    /* aReplace = */ true, currentURI,
-                                    equalURIs);
+    rv = shell->UpdateURLAndHistory(this, newURI, stateContainer,
+                                    NavigationHistoryBehavior::Replace,
+                                    currentURI, equalURIs);
     if (NS_WARN_IF(NS_FAILED(rv))) {
       aError.Throw(rv);
       return nullptr;
@@ -10860,6 +10861,13 @@ nsViewportInfo Document::GetViewportInfo(const ScreenIntSize& aDisplaySize) {
   if (bc && bc->ForceDesktopViewport() && !IsAboutPage()) {
     CSSCoord viewportWidth =
         StaticPrefs::browser_viewport_desktopWidth() / fullZoom;
+    // Do not use a desktop viewport size less wide than the display.
+    CSSCoord displayWidth = (aDisplaySize / defaultScale).width;
+    MOZ_LOG(MobileViewportManager::gLog, LogLevel::Debug,
+            ("Desktop-mode viewport size: choosing the larger of display width "
+             "(%f) and desktop width (%f)",
+             displayWidth.value, viewportWidth.value));
+    viewportWidth = nsViewportInfo::Max(displayWidth, viewportWidth);
     CSSToScreenScale scaleToFit(aDisplaySize.width / viewportWidth);
     float aspectRatio = (float)aDisplaySize.height / aDisplaySize.width;
     CSSSize viewportSize(viewportWidth, viewportWidth * aspectRatio);
@@ -11016,6 +11024,10 @@ nsViewportInfo Document::GetViewportInfo(const ScreenIntSize& aDisplaySize) {
         // we would actually be _shrinking_ the viewport width to this value,
         // which we want to avoid because it constrains the viewport width
         // (and often results in a larger initial scale) unnecessarily.
+        MOZ_LOG(MobileViewportManager::gLog, LogLevel::Debug,
+                ("Fallback viewport size: choosing the larger of display width "
+                 "(%f) and desktop width (%f)",
+                 displaySize.width, maxWidth.value));
         maxWidth = nsViewportInfo::Max(displaySize.width, maxWidth);
 
         // We set minWidth to ExtendToZoom, which will cause our later width

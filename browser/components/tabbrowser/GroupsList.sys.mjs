@@ -33,7 +33,9 @@ export class GroupsPanel {
         }
         break;
       case "unload":
-        this.#removeObservers();
+        if (this.panelMultiView) {
+          this.#removeObservers();
+        }
         break;
       case "command":
         this.#handleCommand(event);
@@ -144,10 +146,7 @@ export class GroupsPanel {
       button.setAttribute("class", "subviewbutton subviewbutton-nav");
       button.setAttribute("closemenu", "none");
       button.setAttribute("flex", "1");
-      this.doc.l10n.setAttributes(
-        button,
-        "tabbrowser-manager-tab-groups-show-more"
-      );
+      this.doc.l10n.setAttributes(button, "all-tabs-menu-tab-groups-show-all");
       fragment.appendChild(button);
     }
 

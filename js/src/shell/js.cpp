@@ -81,9 +81,6 @@
 #include "builtin/TestingUtility.h"  // js::ParseCompileOptions, js::ParseDebugMetadata, js::CreateScriptPrivate
 #include "debugger/DebugAPI.h"
 #include "frontend/CompilationStencil.h"
-#ifdef JS_ENABLE_SMOOSH
-#  include "frontend/Frontend2.h"
-#endif
 #include "frontend/FrontendContext.h"  // AutoReportFrontendContext
 #include "frontend/ModuleSharedContext.h"
 #include "frontend/Parser.h"
@@ -97,9 +94,6 @@
 #ifdef JS_SIMULATOR_ARM
 #  include "jit/arm/Simulator-arm.h"
 #endif
-#ifdef JS_SIMULATOR_MIPS32
-#  include "jit/mips32/Simulator-mips32.h"
-#endif
 #ifdef JS_SIMULATOR_MIPS64
 #  include "jit/mips64/Simulator-mips64.h"
 #endif
@@ -109,6 +103,7 @@
 #ifdef JS_SIMULATOR_RISCV64
 #  include "jit/riscv64/Simulator-riscv64.h"
 #endif
+#include "jit/BaselineCompileQueue.h"
 #include "jit/CacheIRHealth.h"
 #include "jit/InlinableNatives.h"
 #include "jit/Ion.h"
@@ -6112,9 +6107,6 @@ static bool FrontendTest(JSContext* cx, unsigned argc, Value* vp,
   }
 
   frontend::ParseGoal goal = frontend::ParseGoal::Script;
-#ifdef JS_ENABLE_SMOOSH
-  bool smoosh = false;
-#endif
 
   CompileOptions options(cx);
   options.setIntroductionType("js shell parse")
@@ -6153,31 +6145,6 @@ static bool FrontendTest(JSContext* cx, unsigned argc, Value* vp,
       JS_ReportErrorASCII(cx, "Module cannot be compiled with lineNumber == 0");
       return false;
     }
-
-#ifdef JS_ENABLE_SMOOSH
-    bool found = false;
-    if (!JS_HasProperty(cx, objOptions, "rustFrontend", &found)) {
-      return false;
-    }
-    if (found) {
-      JS_ReportErrorASCII(cx, "'rustFrontend' option is renamed to 'smoosh'");
-      return false;
-    }
-
-    RootedValue optionSmoosh(cx);
-    if (!JS_GetProperty(cx, objOptions, "smoosh", &optionSmoosh)) {
-      return false;
-    }
-
-    if (optionSmoosh.isBoolean()) {
-      smoosh = optionSmoosh.toBoolean();
-    } else if (!optionSmoosh.isUndefined()) {
-      const char* typeName = InformalValueTypeName(optionSmoosh);
-      JS_ReportErrorASCII(cx, "option `smoosh` should be a boolean, got %s",
-                          typeName);
-      return false;
-    }
-#endif  // JS_ENABLE_SMOOSH
   }
 
   JSString* scriptContents = args[0].toString();
@@ -6207,30 +6174,6 @@ static bool FrontendTest(JSContext* cx, unsigned argc, Value* vp,
   }
 
   size_t length = scriptContents->length();
-#ifdef JS_ENABLE_SMOOSH
-  if (dumpType == DumpType::ParseNode) {
-    if (smoosh) {
-      if (isAscii) {
-        const Latin1Char* chars = stableChars.latin1Range().begin().get();
-
-        if (goal == frontend::ParseGoal::Script) {
-          if (!SmooshParseScript(cx, chars, length)) {
-            return false;
-          }
-        } else {
-          if (!SmooshParseModule(cx, chars, length)) {
-            return false;
-          }
-        }
-        args.rval().setUndefined();
-        return true;
-      }
-      JS_ReportErrorASCII(cx,
-                          "SmooshMonkey does not support non-ASCII chars yet");
-      return false;
-    }
-  }
-#endif  // JS_ENABLE_SMOOSH
 
   if (goal == frontend::ParseGoal::Module) {
     // See frontend::CompileModule.
@@ -6239,51 +6182,6 @@ static bool FrontendTest(JSContext* cx, unsigned argc, Value* vp,
   }
 
   if (dumpType == DumpType::Stencil) {
-#ifdef JS_ENABLE_SMOOSH
-    if (smoosh) {
-      if (isAscii) {
-        if (goal == frontend::ParseGoal::Script) {
-          const Latin1Char* latin1 = stableChars.latin1Range().begin().get();
-          auto utf8 = reinterpret_cast<const mozilla::Utf8Unit*>(latin1);
-          JS::SourceText<Utf8Unit> srcBuf;
-          if (!srcBuf.init(cx, utf8, length, JS::SourceOwnership::Borrowed)) {
-            return false;
-          }
-
-          AutoReportFrontendContext fc(cx);
-          Rooted<frontend::CompilationInput> input(
-              cx, frontend::CompilationInput(options));
-          UniquePtr<frontend::ExtensibleCompilationStencil> stencil;
-          if (!Smoosh::tryCompileGlobalScriptToExtensibleStencil(
-                  cx, &fc, input.get(), srcBuf, stencil)) {
-            return false;
-          }
-          if (!stencil) {
-            fc.clearAutoReport();
-            JS_ReportErrorASCII(cx, "SmooshMonkey failed to parse");
-            return false;
-          }
-
-#  ifdef DEBUG
-          {
-            frontend::BorrowingCompilationStencil borrowingStencil(*stencil);
-            borrowingStencil.dump();
-          }
-#  endif
-        } else {
-          JS_ReportErrorASCII(cx,
-                              "SmooshMonkey does not support module stencil");
-          return false;
-        }
-        args.rval().setUndefined();
-        return true;
-      }
-      JS_ReportErrorASCII(cx,
-                          "SmooshMonkey does not support non-ASCII chars yet");
-      return false;
-    }
-#endif  // JS_ENABLE_SMOOSH
-
     if (isAscii) {
       const Latin1Char* latin1 = stableChars.latin1Range().begin().get();
       auto utf8 = reinterpret_cast<const mozilla::Utf8Unit*>(latin1);
@@ -7672,7 +7570,7 @@ static void SingleStepCallback(void* arg, jit::Simulator* sim, void* pc) {
   state.lr = (void*)sim->get_lr();
   state.fp = (void*)sim->get_fp();
   state.tempFP = (void*)sim->xreg(11);
-#  elif defined(JS_SIMULATOR_MIPS64) || defined(JS_SIMULATOR_MIPS32)
+#  elif defined(JS_SIMULATOR_MIPS64)
   state.sp = (void*)sim->getRegister(jit::Simulator::sp);
   state.lr = (void*)sim->getRegister(jit::Simulator::ra);
   state.fp = (void*)sim->getRegister(jit::Simulator::fp);
@@ -9937,7 +9835,6 @@ static const JSFunctionSpecWithHelp shell_functions[] = {
 "  If present, |options| may have properties saying how the code should be\n"
 "  compiled:\n"
 "      module: if present and true, compile the source as module.\n"
-"      smoosh: if present and true, use SmooshMonkey.\n"
 "  CompileOptions-related properties of evaluate function's option can also\n"
 "  be used."),
 
@@ -9946,7 +9843,6 @@ static const JSFunctionSpecWithHelp shell_functions[] = {
 "  Parses a string, potentially throwing. If present, |options| may\n"
 "  have properties saying how the code should be compiled:\n"
 "      module: if present and true, compile the source as module.\n"
-"      smoosh: if present and true, use SmooshMonkey.\n"
 "  CompileOptions-related properties of evaluate function's option can also\n"
 "  be used. except forceFullParse. This function always use full parse."),
 
@@ -12531,7 +12427,6 @@ bool InitOptionParser(OptionParser& op) {
       !op.addBoolOption('\0', "less-debug-code",
                         "Emit less machine code for "
                         "checking assertions under DEBUG.") ||
-      !op.addBoolOption('\0', "disable-weak-refs", "Disable weak references") ||
       !op.addBoolOption('\0', "disable-tosource", "Disable toSource/uneval") ||
       !op.addBoolOption('\0', "disable-property-error-message-fix",
                         "Disable fix for the error message when accessing "
@@ -12663,6 +12558,9 @@ bool InitOptionParser(OptionParser& op) {
       !op.addStringOption(
           '\0', "baseline-offthread-compile", "on/off",
           "Compile baseline scripts offthread (default: off)") ||
+      !op.addStringOption(
+          '\0', "baseline-batching", "on/off",
+          "Batch baseline scripts before dispatching (default: off)") ||
       !op.addStringOption('\0', "ion-offthread-compile", "on/off",
                           "Compile Ion scripts offthread (default: on)") ||
       !op.addStringOption('\0', "ion-parallel-compile", "on/off",
@@ -12694,6 +12592,11 @@ bool InitOptionParser(OptionParser& op) {
           '\0', "baseline-warmup-threshold", "COUNT",
           "Wait for COUNT calls or iterations before baseline-compiling "
           "(default: 10)",
+          -1) ||
+      !op.addIntOption(
+          '\0', "baseline-queue-capacity", "CAPACITY",
+          "Wait for at most CAPACITY scripts to be added to baseline compile"
+          "queue before dispatching (default: 8)",
           -1) ||
       !op.addBoolOption('\0', "blinterp",
                         "Enable Baseline Interpreter (default)") ||
@@ -12860,13 +12763,6 @@ bool InitOptionParser(OptionParser& op) {
                                "Dynamically load LIBRARY") ||
       !op.addBoolOption('\0', "suppress-minidump",
                         "Suppress crash minidumps") ||
-#ifdef JS_ENABLE_SMOOSH
-      !op.addBoolOption('\0', "smoosh", "Use SmooshMonkey") ||
-      !op.addStringOption('\0', "not-implemented-watchfile", "[filename]",
-                          "Track NotImplemented errors in the new frontend") ||
-#else
-      !op.addBoolOption('\0', "smoosh", "No-op") ||
-#endif
       !op.addStringOption(
           '\0', "delazification-mode", "[option]",
           "Select one of the delazification mode for scripts given on the "
@@ -13036,9 +12932,6 @@ bool SetGlobalOptionsPreJSInit(const OptionParser& op) {
     JS::Prefs::set_experimental_json_parse_with_source(true);
   }
 
-  if (op.getBoolOption("disable-weak-refs")) {
-    JS::Prefs::setAtStartup_weakrefs(false);
-  }
   JS::Prefs::setAtStartup_experimental_weakrefs_expose_cleanupSome(true);
 
   if (op.getBoolOption("disable-destructuring-fuse")) {
@@ -13289,21 +13182,6 @@ bool SetContextOptions(JSContext* cx, const OptionParser& op) {
   enableDisassemblyDumps = op.getBoolOption('D');
   cx->runtime()->profilingScripts =
       enableCodeCoverage || enableDisassemblyDumps;
-
-#ifdef JS_ENABLE_SMOOSH
-  if (op.getBoolOption("smoosh")) {
-    JS::ContextOptionsRef(cx).setTrySmoosh(true);
-    js::frontend::InitSmoosh();
-  }
-
-  if (const char* filename = op.getStringOption("not-implemented-watchfile")) {
-    FILE* out = fopen(filename, "a");
-    MOZ_RELEASE_ASSERT(out);
-    setbuf(out, nullptr);  // Make unbuffered
-    cx->runtime()->parserWatcherFile.init(out);
-    JS::ContextOptionsRef(cx).setTrackNotImplemented(true);
-  }
-#endif
 
   if (const char* mode = op.getStringOption("delazification-mode")) {
     if (strcmp(mode, "on-demand") == 0) {
@@ -13780,6 +13658,26 @@ bool SetContextJITOptions(JSContext* cx, const OptionParser& op) {
   cx->runtime()->setOffthreadBaselineCompilationEnabled(
       offthreadBaselineCompilation);
 
+  if (const char* str = op.getStringOption("baseline-batching")) {
+    if (strcmp(str, "on") == 0) {
+      jit::JitOptions.baselineBatching = true;
+    } else if (strcmp(str, "off") == 0) {
+      jit::JitOptions.baselineBatching = false;
+    } else {
+      return OptionFailure("baseline-batching", str);
+    }
+  }
+
+  int32_t queueCapacity = op.getIntOption("baseline-queue-capacity");
+  if (queueCapacity == 0) {
+    fprintf(stderr, "baseline-queue-capacity must be positive\n");
+    return false;
+  }
+  if (queueCapacity > 0) {
+    jit::JitOptions.baselineQueueCapacity = std::min(
+        uint32_t(queueCapacity), js::jit::BaselineCompileQueue::MaxCapacity);
+  }
+
   offthreadIonCompilation = true;
   if (const char* str = op.getStringOption("ion-offthread-compile")) {
     if (strcmp(str, "off") == 0) {
@@ -13838,7 +13736,7 @@ bool SetContextJITOptions(JSContext* cx, const OptionParser& op) {
   if (stopAt >= 0) {
     jit::Simulator::StopSimAt = stopAt;
   }
-#elif defined(JS_SIMULATOR_MIPS32) || defined(JS_SIMULATOR_MIPS64)
+#elif defined(JS_SIMULATOR_MIPS64)
   if (op.getBoolOption("mips-sim-icache-checks")) {
     jit::SimulatorProcess::ICacheCheckingDisableCount = 0;
   }

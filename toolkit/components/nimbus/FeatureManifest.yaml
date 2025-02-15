@@ -445,13 +445,6 @@ urlbar:
         - default
         - interest
         - random
-    quickSuggestScenario:
-      # IMPORTANT: This should not have a fallbackPref. See UrlbarPrefs.sys.mjs.
-      type: string
-      description: The Firefox Suggest scenario in which the user is enrolled
-      enum:
-        - history
-        - offline
     quickSuggestScoreMap:
       type: json
       description: >-
@@ -502,6 +495,14 @@ urlbar:
         branch: default
         pref: browser.urlbar.recentsearches.maxResults
       description: The maximum number of recent searches to show.
+    suggestCalculator:
+      type: boolean
+      setPref:
+        branch: user
+        pref: browser.urlbar.suggest.calculator
+      description: >-
+        Whether or not to show calculator results when a user types a valid
+        calculation string into the urlbar.
     weatherFeatureGate:
       type: boolean
       fallbackPref: browser.urlbar.weather.featureGate
@@ -2257,18 +2258,12 @@ dohPrefs:
       setPref:
         branch: default
         pref: "doh-rollout.uri"
-    enableFallbackWarningPage:
-      description: Whether DoH fallback warning page will be displayed when DoH doesn't work in TRR first mode.
-      type: boolean
+    dohProviderList:
+      description: An override of the rollout provider-list json
+      type: string
       setPref:
         branch: default
-        pref: "network.trr.display_fallback_warning"
-    showFallbackCheckbox:
-      description: Whether the checkbox to enable the fallback warning page is displayed in the settings UI.
-      type: boolean
-      setPref:
-        branch: default
-        pref: "network.trr_ui.show_fallback_warning_option"
+        pref: "doh-rollout.provider-list"
     nativeHTTPSRecords:
       description: Whether we can perform native DNS HTTPS lookups
       type: boolean

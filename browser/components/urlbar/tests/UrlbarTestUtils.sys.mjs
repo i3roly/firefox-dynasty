@@ -1248,9 +1248,6 @@ export var UrlbarTestUtils = {
   /**
    * Enrolls in a mock Nimbus feature.
    *
-   * If you call QuickSuggest.updateFirefoxSuggestScenario() from an xpcshell
-   * test, you must call this first to intialize the Nimbus urlbar feature.
-   *
    * @param {object} value
    *   Define any desired Nimbus variables in this object.
    * @param {string} [feature]
@@ -1378,9 +1375,9 @@ export var UrlbarTestUtils = {
 
   async openSearchModeSwitcher(win) {
     let popup = this.searchModeSwitcherPopup(win);
-    let promiseMenuOpen = lazy.BrowserTestUtils.waitForEvent(
+    let promiseMenuOpen = lazy.BrowserTestUtils.waitForPopupEvent(
       popup,
-      "popupshown"
+      "shown"
     );
     let button = win.document.getElementById("urlbar-searchmode-switcher");
     this.Assert.ok(lazy.BrowserTestUtils.isVisible(button));
@@ -1391,10 +1388,29 @@ export var UrlbarTestUtils = {
   },
 
   searchModeSwitcherPopupClosed(win) {
-    return lazy.BrowserTestUtils.waitForEvent(
+    return lazy.BrowserTestUtils.waitForPopupEvent(
       this.searchModeSwitcherPopup(win),
-      "popuphidden"
+      "hidden"
     );
+  },
+
+  async selectMenuItem(menupopup, targetSelector) {
+    let target = menupopup.querySelector(targetSelector);
+    let selected;
+    for (let i = 0; i < menupopup.children.length; i++) {
+      this.EventUtils.synthesizeKey("KEY_ArrowDown", {}, menupopup.ownerGlobal);
+      await lazy.BrowserTestUtils.waitForCondition(() => {
+        let current = menupopup.querySelector("[_moz-menuactive]");
+        if (selected != current) {
+          selected = current;
+          return true;
+        }
+        return false;
+      });
+      if (selected == target) {
+        break;
+      }
+    }
   },
 };
 

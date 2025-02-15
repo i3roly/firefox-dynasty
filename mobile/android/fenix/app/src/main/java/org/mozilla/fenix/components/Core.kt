@@ -161,18 +161,6 @@ class Core(
             ),
             httpsOnlyMode = context.settings().getHttpsOnlyMode(),
             globalPrivacyControlEnabled = context.settings().shouldEnableGlobalPrivacyControl,
-            fingerprintingProtection =
-            if (FxNimbus.features.fingerprintingProtection.value().enabled) {
-                FxNimbus.features.fingerprintingProtection.value().enabledNormal
-            } else {
-                context.settings().blockSuspectedFingerprinters
-            },
-            fingerprintingProtectionPrivateBrowsing =
-            if (FxNimbus.features.fingerprintingProtection.value().enabled) {
-                FxNimbus.features.fingerprintingProtection.value().enabledPrivate
-            } else {
-                context.settings().blockSuspectedFingerprintersPrivateBrowsing
-            },
             fdlibmMathEnabled = FxNimbus.features.fingerprintingProtection.value().fdlibmMath,
             cookieBannerHandlingMode = context.settings().getCookieBannerHandling(),
             cookieBannerHandlingModePrivateBrowsing = context.settings().getCookieBannerHandlingPrivateMode(),
@@ -188,12 +176,23 @@ class Core(
             fetchPriorityEnabled = FxNimbus.features.networking.value().fetchPriorityEnabled,
             parallelMarkingEnabled = FxNimbus.features.javascript.value().parallelMarkingEnabled,
             certificateTransparencyMode = FxNimbus.features.pki.value().certificateTransparencyMode,
+            postQuantumKeyExchangeEnabled = FxNimbus.features.pqcrypto.value().postQuantumKeyExchangeEnabled,
         )
 
         // Apply fingerprinting protection overrides if the feature is enabled in Nimbus
         if (FxNimbus.features.fingerprintingProtection.value().enabled) {
             defaultSettings.fingerprintingProtectionOverrides =
                 FxNimbus.features.fingerprintingProtection.value().overrides
+        }
+
+        if (FxNimbus.features.fingerprintingProtection.value().enabled) {
+            defaultSettings.fingerprintingProtection =
+                FxNimbus.features.fingerprintingProtection.value().enabledNormal
+        }
+
+        if (FxNimbus.features.fingerprintingProtection.value().enabled) {
+            defaultSettings.fingerprintingProtectionPrivateBrowsing =
+                FxNimbus.features.fingerprintingProtection.value().enabledPrivate
         }
 
         // Apply third-party cookie blocking settings if the Nimbus feature is

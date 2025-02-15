@@ -1780,7 +1780,6 @@ void nsContentSecurityUtils::AssertChromePageHasCSP(Document* aDocument) {
       "chrome://browser/content/shopping/review-checker.xhtml"_ns,
       "chrome://browser/content/webext-panels.xhtml"_ns,
       "chrome://browser/content/webrtcIndicator.xhtml"_ns,
-      "chrome://devtools/content/accessibility/index.html"_ns,
       "chrome://devtools/content/debugger/index.html"_ns,
       "chrome://devtools/content/dom/index.html"_ns,
       "chrome://devtools/content/framework/browser-toolbox/window.html"_ns,
@@ -1837,6 +1836,7 @@ void nsContentSecurityUtils::AssertChromePageHasCSP(Document* aDocument) {
       // Test files
       "chrome://mochikit/"_ns,
       "chrome://mochitests/"_ns,
+      "chrome://pageloader/content/pageloader.xhtml"_ns,
       "chrome://reftest/"_ns,
       "chrome://remote/content/marionette/"_ns,
   };
