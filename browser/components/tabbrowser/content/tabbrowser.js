@@ -5683,8 +5683,6 @@
         return;
       }
 
-      this._lastRelatedTabMap = new WeakMap();
-
       this._handleTabMove(aTab, () => {
         let neighbor = this.tabs[aIndex];
         if (forceStandaloneTab && neighbor.group) {
@@ -5696,33 +5694,6 @@
           this.tabContainer.insertBefore(aTab, neighbor);
         }
       });
-    }
-
-    /**
-     * @param {MozTabbrowserTab} tab
-     * @param {MozTabbrowserTab|MozTabbrowserTabGroup} targetElement
-     * @param {boolean} dropBefore
-     */
-    dropTab(tab, targetElement, dropBefore) {
-      this._handleTabMove(tab, () => {
-        if (dropBefore) {
-          this.tabContainer.insertBefore(tab, targetElement);
-        } else {
-          targetElement.after(tab);
-        }
-      });
-    }
-
-    /**
-     * @param {MozTabbrowserTab[]} tabs
-     * @param {MozTabbrowserTab|MozTabbrowserTabGroup} targetElement
-     * @param {dropBefore} dropBefore
-     */
-    dropTabs(tabs, targetElement, dropBefore) {
-      this.dropTab(tabs[0], targetElement, dropBefore);
-      for (let i = 1; i < tabs.length; i++) {
-        this.dropTab(tabs[i], tabs[i - 1]);
-      }
     }
 
     moveTabToGroup(aTab, aGroup) {
@@ -5753,6 +5724,8 @@
       // Clear tabs cache after moving nodes because the order of tabs may have
       // changed.
       this.tabContainer._invalidateCachedTabs();
+
+      this._lastRelatedTabMap = new WeakMap();
 
       this._updateTabsAfterInsert();
 
@@ -8475,17 +8448,6 @@ var TabContextMenu = {
       gBrowser.tabContainer?.verticalMode
         ? "close-tabs-to-the-end-vertical"
         : "close-tabs-to-the-end"
-    );
-
-    // Update context menu item for "Turn (on/off) Vertical Tabs".
-    const toggleVerticalTabsItem = document.getElementById(
-      "context_toggleVerticalTabs"
-    );
-    document.l10n.setAttributes(
-      toggleVerticalTabsItem,
-      gBrowser.tabContainer?.verticalMode
-        ? "tab-context-disable-vertical-tabs"
-        : "tab-context-enable-vertical-tabs"
     );
 
     // Disable "Close Tabs to the Left/Right" if there are no tabs
