@@ -1454,6 +1454,26 @@ void nsNativeThemeCocoa::DrawDisclosureButton(CGContextRef cgContext,
   NS_OBJC_END_TRY_IGNORE_BLOCK;
 }
 
+void nsNativeThemeCocoa::DrawFocusOutline(CGContextRef cgContext, const HIRect& inBoxRect) {
+  NS_OBJC_BEGIN_TRY_ABORT_BLOCK;
+
+  HIThemeFrameDrawInfo fdi;
+  fdi.version = 0;
+  fdi.kind = kHIThemeFrameTextFieldSquare;
+  fdi.state = kThemeStateActive;
+  fdi.isFocused = TRUE;
+
+#if DRAW_IN_FRAME_DEBUG
+  CGContextSetRGBFillColor(cgContext, 0.0, 0.0, 0.5, 0.25);
+  CGContextFillRect(cgContext, inBoxRect);
+#endif
+
+  HIThemeDrawFrame(&inBoxRect, &fdi, cgContext, HITHEME_ORIENTATION);
+
+  NS_OBJC_END_TRY_ABORT_BLOCK;
+
+}
+
 typedef void (*RenderHIThemeControlFunction)(CGContextRef cgContext,
                                              const HIRect& aRenderRect,
                                              void* aData);
@@ -1772,6 +1792,94 @@ void nsNativeThemeCocoa::DrawSpinButton(CGContextRef cgContext,
   CGContextRestoreGState(cgContext);
 
   NS_OBJC_END_TRY_IGNORE_BLOCK;
+}
+
+static const CellRenderSettings spinnerSettings = {
+    {
+        NSMakeSize(11, 16),  // mini (width trimmed by 2px to reduce blank border)
+        NSMakeSize(15, 22),  // small
+        NSMakeSize(19, 27)   // regular
+    },
+    {
+        NSMakeSize(11, 16),  // mini (width trimmed by 2px to reduce blank border)
+        NSMakeSize(15, 22),  // small
+        NSMakeSize(19, 27)   // regular
+    },
+    {{
+         // Leopard
+         {0, 0, 0, 0},  // mini
+         {0, 0, 0, 0},  // small
+         {0, 0, 0, 0}   // regular
+     },
+     {
+         // Yosemite
+         {0, 0, 0, 0},  // mini
+         {0, 0, 0, 0},  // small
+         {0, 0, 0, 0}   // regular
+     }}};
+
+HIThemeButtonDrawInfo nsNativeThemeCocoa::SpinButtonDrawInfo(ThemeButtonKind aKind,
+                                                             const SpinButtonParams& aParams) {
+  HIThemeButtonDrawInfo bdi;
+  bdi.version = 0;
+  bdi.kind = aKind;
+  bdi.value = kThemeButtonOff;
+  bdi.adornment = kThemeAdornmentNone;
+
+  if (aParams.disabled) {
+    bdi.state = kThemeStateUnavailable;
+  } else if (aParams.insideActiveWindow && aParams.pressedButton) {
+    if (*aParams.pressedButton == SpinButton::eUp) {
+      bdi.state = kThemeStatePressedUp;
+    } else {
+      bdi.state = kThemeStatePressedDown;
+    }
+  } else {
+    bdi.state = kThemeStateActive;
+  }
+
+  return bdi;
+}
+
+void nsNativeThemeCocoa::DrawSpinButtons(CGContextRef cgContext, const HIRect& inBoxRect,
+                                         const SpinButtonParams& aParams) {
+  NS_OBJC_BEGIN_TRY_ABORT_BLOCK;
+
+  HIThemeButtonDrawInfo bdi = SpinButtonDrawInfo(kThemeIncDecButton, aParams);
+  HIThemeDrawButton(&inBoxRect, &bdi, cgContext, HITHEME_ORIENTATION, NULL);
+
+  NS_OBJC_END_TRY_ABORT_BLOCK;
+}
+
+void nsNativeThemeCocoa::DrawSpinButton(CGContextRef cgContext, const HIRect& inBoxRect,
+                                        SpinButton aDrawnButton, const SpinButtonParams& aParams) {
+  NS_OBJC_BEGIN_TRY_ABORT_BLOCK;
+
+  HIThemeButtonDrawInfo bdi = SpinButtonDrawInfo(kThemeIncDecButtonMini, aParams);
+
+  // Cocoa only allows kThemeIncDecButton to paint the up and down spin buttons
+  // together as a single unit (presumably because when one button is active,
+  // the appearance of both changes (in different ways)). Here we have to paint
+  // both buttons, using clip to hide the one we don't want to paint.
+  HIRect drawRect = inBoxRect;
+  drawRect.size.height *= 2;
+  if (aDrawnButton == SpinButton::eDown) {
+    drawRect.origin.y -= inBoxRect.size.height;
+  }
+
+  // Shift the drawing a little to the left, since cocoa paints with more
+  // blank space around the visual buttons than we'd like:
+  drawRect.origin.x -= 1;
+
+  CGContextSaveGState(cgContext);
+  CGContextClipToRect(cgContext, inBoxRect);
+
+  HIThemeDrawButton(&drawRect, &bdi, cgContext, HITHEME_ORIENTATION, NULL);
+
+  CGContextRestoreGState(cgContext);
+
+  NS_OBJC_END_TRY_ABORT_BLOCK;
+
 }
 
 MOZ_RUNINIT static const CellRenderSettings progressSettings[2][2] = {
@@ -2480,6 +2588,9 @@ Maybe<nsNativeThemeCocoa::WidgetInfo> nsNativeThemeCocoa::ComputeWidgetInfo(
           ButtonParams{ComputeControlParams(aFrame, elementState),
                        ButtonType::eRegularPushButton}));
 
+    case StyleAppearance::FocusOutline:
+      return Some(WidgetInfo::FocusOutline());
+
     case StyleAppearance::MozMacHelpButton:
       return Some(WidgetInfo::Button(
           ButtonParams{ComputeControlParams(aFrame, elementState),
@@ -2825,6 +2936,25 @@ void nsNativeThemeCocoa::RenderWidget(const WidgetInfo& aWidgetInfo,
           DrawSpinButton(cgContext, macRect, SpinButton::eDown, params);
           break;
         }
+        case Widget::eFocusOutline: {
+          DrawFocusOutline(cgContext, macRect);
+          break;
+        }
+        case Widget::eSpinButtons: {
+          SpinButtonParams params = aWidgetInfo.Params<SpinButtonParams>();
+          DrawSpinButtons(cgContext, macRect, params);
+          break;
+        }
+        case Widget::eSpinButtonUp: {
+          SpinButtonParams params = aWidgetInfo.Params<SpinButtonParams>();
+          DrawSpinButton(cgContext, macRect, SpinButton::eUp, params);
+          break;
+        }
+        case Widget::eSpinButtonDown: {
+          SpinButtonParams params = aWidgetInfo.Params<SpinButtonParams>();
+          DrawSpinButton(cgContext, macRect, SpinButton::eDown, params);
+          break;
+        }
         case Widget::eSegment: {
           SegmentParams params = aWidgetInfo.Params<SegmentParams>();
           DrawSegment(cgContext, macRect, params);
@@ -2986,6 +3116,7 @@ bool nsNativeThemeCocoa::CreateWebRenderCommandsForWidget(
     case StyleAppearance::Checkbox:
     case StyleAppearance::Radio:
     case StyleAppearance::Button:
+    case StyleAppearance::FocusOutline:
     case StyleAppearance::MozMacHelpButton:
     case StyleAppearance::MozMacDisclosureButtonOpen:
     case StyleAppearance::MozMacDisclosureButtonClosed:
@@ -3194,7 +3325,8 @@ bool nsNativeThemeCocoa::GetWidgetOverflow(nsDeviceContext* aContext,
     case StyleAppearance::MozMenulistArrowButton:
     case StyleAppearance::Checkbox:
     case StyleAppearance::Radio:
-    case StyleAppearance::Tab: {
+    case StyleAppearance::Tab:
+    case StyleAppearance::FocusOutline: {
       overflow.SizeTo(static_cast<int32_t>(kMaxFocusRingWidth),
                       static_cast<int32_t>(kMaxFocusRingWidth),
                       static_cast<int32_t>(kMaxFocusRingWidth),
@@ -3435,6 +3567,9 @@ bool nsNativeThemeCocoa::ThemeSupportsWidget(nsPresContext* aPresContext,
 
     case StyleAppearance::Range:
       return !IsWidgetStyled(aPresContext, aFrame, aAppearance);
+
+    case StyleAppearance::FocusOutline:
+      return true;
 
     case StyleAppearance::MozMacVibrancyLight:
     case StyleAppearance::MozMacVibrancyDark:
