@@ -184,7 +184,6 @@ class nsNativeThemeCocoa : public mozilla::widget::ThemeCocoa {
     eRadio,           // CheckboxOrRadioParams
     eButton,          // ButtonParams
     eDropdown,        // DropdownParams
-    eFocusOutline,
     eSpinButtons,     // SpinButtonParams
     eSpinButtonUp,    // SpinButtonParams
     eSpinButtonDown,  // SpinButtonParams
@@ -236,7 +235,6 @@ class nsNativeThemeCocoa : public mozilla::widget::ThemeCocoa {
     static WidgetInfo Dropdown(const DropdownParams& aParams) {
       return WidgetInfo(Widget::eDropdown, aParams);
     }
-    static WidgetInfo FocusOutline() { return WidgetInfo(Widget::eFocusOutline, false); }
     static WidgetInfo SpinButtons(const SpinButtonParams& aParams) {
       return WidgetInfo(Widget::eSpinButtons, aParams);
     }
@@ -420,7 +418,6 @@ class nsNativeThemeCocoa : public mozilla::widget::ThemeCocoa {
                          const ControlParams& aParams);
   void DrawButton(CGContextRef context, const HIRect& inBoxRect,
                   const ButtonParams& aParams);
-  void DrawFocusOutline(CGContextRef cgContext, const HIRect& inBoxRect);
   void DrawDropdown(CGContextRef context, const HIRect& inBoxRect,
                     const DropdownParams& aParams);
   HIThemeButtonDrawInfo SpinButtonDrawInfo(ThemeButtonKind aKind,

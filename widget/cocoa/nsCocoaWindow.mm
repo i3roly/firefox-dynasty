@@ -803,17 +803,6 @@ void nsCocoaWindow::Show(bool aState) {
     }
 
     if (mWindowType == WindowType::Popup) {
-      if (!nsCocoaFeatures::OnMojaveOrLater()) {
-        // If a popup window is shown after being hidden, it needs to be "reset"
-        // for it to receive any mouse events aside from mouse-moved events
-        // (because it was removed from the "window cache" when it was hidden
-        // -- see below).  Setting the window number to -1 and then back to its
-        // original value seems to accomplish this.  The idea was "borrowed"
-        // from the Java Embedding Plugin. This is fixed on macOS 10.14+.
-        NSInteger windowNumber = [mWindow windowNumber];
-        [mWindow _setWindowNumber:-1];
-        [mWindow _setWindowNumber:windowNumber];
-      }
       // For reasons that aren't yet clear, calls to [NSWindow orderFront:] or
       // [NSWindow makeKeyAndOrderFront:] can sometimes trigger "Error (1000)
       // creating CGSWindow", which in turn triggers an internal inconsistency
@@ -889,21 +878,6 @@ void nsCocoaWindow::Show(bool aState) {
       [nativeParentWindow removeChildWindow:mWindow];
     }
 
-    if (!nsCocoaFeatures::OnMojaveOrLater()) {
-        // Unless it's explicitly removed from NSApp's "window cache", a popup
-        // window will keep receiving mouse-moved events even after it's been
-        // "ordered out" (instead of the browser window that was underneath it,
-        // until you click on that window).  This is bmo bug 378645, but it's
-        // surely an Apple bug.  The "window cache" is an undocumented
-        // subsystem, all of whose methods are included in the NSWindowCache
-        // category of the NSApplication class (in header files generated using
-        // class-dump). This workaround was "borrowed" from the Java Embedding
-        // Plugin (which uses it for a different purpose). This is fixed on
-        // macOS 10.14+.
-        if (mWindowType == WindowType::Popup) {
-          [NSApp _removeWindowFromCache:mWindow];
-        }
-    }
     [mWindow orderOut:nil];
     // If our popup window is a non-native context menu, tell the OS (and
     // other programs) that a menu has closed.
