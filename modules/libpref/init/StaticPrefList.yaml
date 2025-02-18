@@ -1048,11 +1048,7 @@
 # Limit of recent metadata we keep in memory for faster access, in KB.
 - name: browser.cache.disk.metadata_memory_limit
   type: RelaxedAtomicUint32
-#ifdef NIGHTLY_BUILD
   value: 1024   # 1 MB
-#else
-  value: 250    # 0.25 MB
-#endif
   mirror: always
 
 # Does the user want smart-sizing?
@@ -2870,13 +2866,13 @@
 # The maximum number of pending fetch keepalive requests per browser instance
 - name: dom.fetchKeepalive.total_request_limit
   type: RelaxedAtomicUint32
-  value: 500
+  value: 2048
   mirror: always
 
 # The maximum number of pending fetch keepalive requests per origin
 - name: dom.fetchKeepalive.request_limit_per_origin
   type: RelaxedAtomicUint32
-  value: 250
+  value: 256
   mirror: always
 
 - name: dom.fetchObserver.enabled
@@ -3399,6 +3395,12 @@
 - name: dom.media.webcodecs.image-decoder.enabled
   type: RelaxedAtomicBool
   value: true
+  mirror: always
+
+# WebCodecs API - H265
+- name: dom.media.webcodecs.h265.enabled
+  type: RelaxedAtomicBool
+  value: @IS_NIGHTLY_BUILD@
   mirror: always
 
 # Number of seconds of very quiet or silent audio before considering the audio
