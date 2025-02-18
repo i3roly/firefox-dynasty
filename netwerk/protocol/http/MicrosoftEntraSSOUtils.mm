@@ -93,7 +93,7 @@ class API_AVAILABLE(macos(13.3)) MicrosoftEntraSSOUtils final {
   NSDictionary* headers = authenticatedResponse.allHeaderFields;
   NSMutableString* headersString = [NSMutableString string];
   for (NSString* key in headers) {
-    [headersString appendFormat:@"%@: %@\n", key, [headers objectforKey:key]];
+    [headersString appendFormat:@"%@: %@\n", key, [headers objectForKey:key]];
   }
   MOZ_LOG(gMacOSWebAuthnServiceLog, mozilla::LogLevel::Debug,
           ("SSORequestDelegate::didCompleteWithAuthorization: "
