@@ -383,6 +383,12 @@ nsresult nsAppShell::Init() {
       (XRE_GetProcessType() != GeckoProcessType_RDD) &&
       (XRE_GetProcessType() != GeckoProcessType_Socket);
 
+  //on 10.7 and probably lower, the RDD process is categorised as a[n] utility process
+  //so we have no choice but to add this until i find a better fix.
+  if (!nsCocoaFeatures::OnMountainLionOrLater()) {
+    isNSApplicationProcessType &= (XRE_GetProcessType() != GeckoProcessType_Utility);
+  }
+
   if (isNSApplicationProcessType) {
     if(@available(macOS 10.8, *)) {
       // This call initializes NSApplication unless:
@@ -394,15 +400,22 @@ nsresult nsAppShell::Init() {
                                     owner:[GeckoNSApplication sharedApplication]
                           topLevelObjects:nil];
     } else {
+      nsCOMPtr<nsIFile> nibFile;
+      nsresult rv = NS_GetSpecialDirectory(NS_GRE_DIR, getter_AddRefs(nibFile));
+      NS_ENSURE_SUCCESS(rv, rv);
+
+      nibFile->AppendNative("res"_ns);
+      nibFile->AppendNative("MainMenu.nib"_ns);
+
+      nsAutoCString nibPath;
+      rv = nibFile->GetNativePath(nibPath);
+      NS_ENSURE_SUCCESS(rv, rv);
       // Get the path of the nib file, which lives in the GRE location
-       [NSBundle loadNibFile:[[NSBundle mainBundle] pathForResource:@"res/MainMenu" ofType:@"nib"]
-        externalNameTable:[NSDictionary dictionaryWithObjectsAndKeys:[GeckoNSApplication sharedApplication], NSNibOwner, 
-                                                                    nil, NSNibTopLevelObjects, 
-                                                                    nil]
-                 withZone:nil];
-    //big thanks to the @uTox team for their example that helped me bridge the old fawx code to
-    //the proper form that uses mainBundle and topLevelObjects for loading on < 10.8:
-    //https://github.com/uTox/uTox/blob/8d5cd82e3554a3108f2aff9411bbe551e1e443b0/src/cocoa/main.m#L513
+      [NSBundle loadNibFile:[NSString stringWithUTF8String:(const char*)nibPath.get()]
+       externalNameTable:[NSDictionary dictionaryWithObjectsAndKeys:[GeckoNSApplication sharedApplication], NSNibOwner,
+                                                                   nil, NSNibTopLevelObjects,
+                                                                   nil]
+       withZone:nil];
    }
   }
 
