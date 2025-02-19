@@ -6,6 +6,8 @@
   --tabstrip-inner-border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
   --tabstrip-min-height: calc(var(--tab-min-height) + 2 * var(--tab-block-margin));
   --tab-min-height: 36px;
+  --tab-group-suggestions-loading-animation-color-1: color-mix(in srgb, currentColor 5%, transparent);
+  --tab-group-suggestions-loading-animation-color-2: color-mix(in srgb, currentColor 35%, transparent);
   &[uidensity=compact] {
     --tab-min-height: 29px;
   }
@@ -27,7 +29,6 @@
   --tab-border-radius: 4px;
   --tab-overflow-clip-margin: 2px;
   --tab-close-button-padding: 6px;
-  --tab-shadow-max-size: 6px;
   --tab-block-margin: 4px;
   --tab-icon-end-margin: 5.5px;
   --tab-label-line-height: 1.7;
@@ -42,7 +43,8 @@
   &[lwt-tab-selected="dark"] {
     --tab-selected-color-scheme: dark;
   }
-  --tab-selected-shadow: 0 0 4px rgba(0,0,0,.4);
+  --tab-selected-shadow-size: 4px;
+  --tab-selected-shadow: 0 0 var(--tab-selected-shadow-size) rgba(0,0,0,.4);
   --tab-outline: 1px solid var(--tab-outline-color);
   --tab-outline-color: transparent;
   --tab-outline-offset: -1px;
@@ -137,7 +139,7 @@
       /* Add padding to match the shadow's blur radius so the
          shadow doesn't get clipped when either the first or
          last tab is selected */
-      padding-inline: var(--tab-shadow-max-size);
+      padding-inline: var(--tab-selected-shadow-size);
     }
 
     /* Make it easier to drag tabs by expanding the drag area downwards. */
@@ -197,9 +199,12 @@
   &:not([pinned]) {
     flex: 100 100;
     max-width: 225px;
-    min-width: var(--tab-min-width-pref, var(--tab-min-width));
     transition: min-width 100ms ease-out,
                 max-width 100ms ease-out;
+
+    #tabbrowser-tabs[orient="horizontal"] & {
+      min-width: var(--tab-min-width-pref, var(--tab-min-width));
+    }
   }
 
   &:not([pinned], [fadein]) {
@@ -856,7 +861,7 @@
       display: block;
       position: absolute;
       inset-inline-start: var(--tab-group-line-thickness);
-      inset-block: 0;
+      inset-block: 0 var(--tab-selected-shadow-size);
       width: var(--tab-group-line-thickness);
       background-color: light-dark(var(--tab-group-color), var(--tab-group-color-invert));
       border-radius: 1px;
@@ -1689,4 +1694,113 @@ toolbar:not(#TabsToolbar) #firefox-view-button {
   -moz-context-properties: fill, stroke;
   fill: transparent;
   stroke: light-dark(var(--tab-group-color), var(--tab-group-color-invert));
+}
+
+.tab-group-suggestion-label {
+  --text-color-disabled: var(--panel-color);
+  --button-opacity-disabled: 1;
+}
+
+#tab-group-suggestions-heading,
+#tab-group-main {
+  flex-direction: column;
+}
+
+#tab-group-default-actions,
+#tab-group-suggestions-load-actions,
+#tab-group-suggestion-button,
+#tab-group-suggestions-message {
+  display: none;
+}
+
+#tab-group-suggestions-heading:not([hidden]),
+#tab-group-main:not([hidden]),
+#tab-group-suggestions-separator:not([hidden]),
+#tab-group-suggestions-load-actions:not([hidden]),
+#tab-group-suggestions-loading:not([hidden]),
+#tab-group-default-actions:not([hidden]),
+#tab-group-suggestion-button:not([hidden]),
+#tab-group-suggestions-message:not([hidden]) {
+  display: flex;
+}
+
+#tab-group-suggestions-container:not([hidden]) {
+  display: block;
+}
+
+#tab-group-suggestions-disclaimer > a {
+  display: inline;
+  color: inherit;
+}
+
+#tab-group-suggestions-disclaimer:not([hidden]) {
+  display: initial;
+}
+
+#tab-group-select-toggle {
+  position: relative;
+  margin-top: 0.5em;
+}
+
+#tab-group-suggestion-button {
+  color: var(--color-accent-primary);
+  --button-font-weight: var(--font-weight-normal);
+}
+
+#tab-group-suggestions-loading {
+  gap: 4px;
+  flex-direction: column;
+  margin: 0 8px 8px;
+}
+
+#tab-group-suggestions-message {
+  font-size: 0.85em;
+  --button-font-weight: var(--font-weight-normal);
+}
+
+.tab-group-suggestions-loading-header,
+#tab-group-suggestions-header {
+  margin: 8px 0;
+}
+
+@keyframes tab-group-loading-block-animation {
+  0% {
+    background-position: 200% 0;
+  }
+
+  50% {
+    background-position: 0 0;
+  }
+
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.tab-group-suggestions-loading-block:nth-of-type(2) {
+  animation-delay: 0.1s;
+}
+.tab-group-suggestions-loading-block:nth-of-type(3) {
+  animation-delay: 0.2s;
+}
+.tab-group-suggestions-loading-block:nth-of-type(4) {
+  animation-delay: 0.3s;
+}
+
+.tab-group-suggestions-loading-block {
+  animation: tab-group-loading-block-animation 3s infinite;
+  outline-color: var(--tab-group-suggestions-loading-animation-color-1);
+  border-color: var(--tab-group-suggestions-loading-animation-color-2);
+  background: linear-gradient(100deg,
+      color-mix(in srgb, var(--tab-group-suggestions-loading-animation-color-2), transparent 60%) 30%,
+        var(--tab-group-suggestions-loading-animation-color-1) 50%,
+        color-mix(in srgb, var(--tab-group-suggestions-loading-animation-color-2), transparent 60%) 70%);
+  background-size: 200% 100%;
+  border-radius: var(--border-radius-small);
+  height: 1.5em;
+  margin: 0;
+  margin-bottom: 0.5em;
+  padding: 0;
+  white-space: nowrap;
+  width: 100%;
 }

@@ -73,6 +73,9 @@ var gExceptionPaths = [
   // Page data schemas are referenced programmatically.
   "chrome://browser/content/pagedata/schemas/",
 
+  // The consumer of this API hasn't landed yet. See bug 1937147.
+  "resource://nimbus/FirefoxLabs.sys.mjs",
+
   // Nimbus schemas are referenced programmatically.
   "resource://nimbus/schemas/",
 
@@ -147,9 +150,6 @@ var allowlist = [
   {
     file: "resource://app/localization/en-US/browser/linuxDesktopEntry.ftl",
   },
-
-  // toolkit/content/aboutRights-unbranded.xhtml doesn't use aboutRights.css
-  { file: "chrome://global/skin/aboutRights.css", skipUnofficial: true },
 
   // devtools/client/inspector/bin/dev-server.js
   {

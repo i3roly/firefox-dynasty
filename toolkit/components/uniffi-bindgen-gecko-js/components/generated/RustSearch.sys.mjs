@@ -161,10 +161,10 @@ class ArrayBufferDataStream {
       return bytes
     }
 
-    writeBytes(uint8Array) {
-      this.writeUint32(uint8Array.length);
+    writeBytes(value) {
+      this.writeUint32(value.length);
       value.forEach((elt) => {
-        dataStream.writeUint8(elt);
+        this.writeUint8(elt);
       })
     }
 
@@ -246,6 +246,37 @@ class FfiConverterArrayBuffer extends FfiConverter {
         this.write(dataStream, value);
         return buf;
     }
+
+    /**
+     * Computes the size of the value.
+     *
+     * @param {*} _value
+     * @return {number}
+     */
+    static computeSize(_value) {
+        throw new UniFFIInternalError("computeSize() should be declared in the derived class");
+    }
+
+    /**
+     * Reads the type from a data stream.
+     *
+     * @param {ArrayBufferDataStream} _dataStream
+     * @returns {any}
+     */
+    static read(_dataStream) {
+        throw new UniFFIInternalError("read() should be declared in the derived class");
+    }
+
+    /**
+     * Writes the type to a data stream.
+     *
+     * @param {ArrayBufferDataStream} _dataStream
+     * @param {any} _value
+     */
+    static write(_dataStream, _value) {
+        throw new UniFFIInternalError("write() should be declared in the derived class");
+    }
+
 }
 
 // Symbols that are used to ensure that Object constructors
@@ -265,7 +296,7 @@ export class FfiConverterU8 extends FfiConverter {
             throw new UniFFITypeError(`${value} exceeds the U8 bounds`);
         }
     }
-    static computeSize() {
+    static computeSize(_value) {
         return 1;
     }
     static lift(value) {
@@ -284,7 +315,7 @@ export class FfiConverterU8 extends FfiConverter {
 
 // Export the FFIConverter object to make external types work.
 export class FfiConverterBool extends FfiConverter {
-    static computeSize() {
+    static computeSize(_value) {
         return 1;
     }
     static lift(value) {
@@ -351,7 +382,7 @@ export class SearchEngineSelector {
             throw new UniFFIError("Attempting to construct an object using the JavaScript constructor directly" +
             "Please use a UDL defined constructor, or the init function for the primary constructor")
         }
-        if (!opts[constructUniffiObject] instanceof UniFFIPointer) {
+        if (!(opts[constructUniffiObject] instanceof UniFFIPointer)) {
             throw new UniFFIError("Attempting to create a UniFFI object with a pointer that is not an instance of UniFFIPointer")
         }
         this[uniffiObjectPtr] = opts[constructUniffiObject];
@@ -2177,7 +2208,7 @@ export class FfiConverterOptionalu8 extends FfiConverterArrayBuffer {
             case 1:
                 return FfiConverterU8.read(dataStream)
             default:
-                throw UniFFIError(`Unexpected code: ${code}`);
+                throw new UniFFIError(`Unexpected code: ${code}`);
         }
     }
 
@@ -2214,7 +2245,7 @@ export class FfiConverterOptionalstring extends FfiConverterArrayBuffer {
             case 1:
                 return FfiConverterString.read(dataStream)
             default:
-                throw UniFFIError(`Unexpected code: ${code}`);
+                throw new UniFFIError(`Unexpected code: ${code}`);
         }
     }
 
@@ -2251,7 +2282,7 @@ export class FfiConverterOptionalTypeJsonEngineUrl extends FfiConverterArrayBuff
             case 1:
                 return FfiConverterTypeJsonEngineUrl.read(dataStream)
             default:
-                throw UniFFIError(`Unexpected code: ${code}`);
+                throw new UniFFIError(`Unexpected code: ${code}`);
         }
     }
 
@@ -2288,7 +2319,7 @@ export class FfiConverterOptionalTypeSearchEngineUrl extends FfiConverterArrayBu
             case 1:
                 return FfiConverterTypeSearchEngineUrl.read(dataStream)
             default:
-                throw UniFFIError(`Unexpected code: ${code}`);
+                throw new UniFFIError(`Unexpected code: ${code}`);
         }
     }
 
@@ -2325,7 +2356,7 @@ export class FfiConverterOptionalTypeJsonEngineMethod extends FfiConverterArrayB
             case 1:
                 return FfiConverterTypeJsonEngineMethod.read(dataStream)
             default:
-                throw UniFFIError(`Unexpected code: ${code}`);
+                throw new UniFFIError(`Unexpected code: ${code}`);
         }
     }
 
@@ -2362,7 +2393,7 @@ export class FfiConverterOptionalSequenceTypeSearchUrlParam extends FfiConverter
             case 1:
                 return FfiConverterSequenceTypeSearchUrlParam.read(dataStream)
             default:
-                throw UniFFIError(`Unexpected code: ${code}`);
+                throw new UniFFIError(`Unexpected code: ${code}`);
         }
     }
 
