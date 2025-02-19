@@ -170,7 +170,7 @@ xorigin:
 conditioned_profile:
     description: "{description} with conditioned profile"
     component: "Testing::General"
-    expiration: "2025-03-01"
+    expiration: "2025-09-01"
     suffix: "condprof"
     mozinfo: "condprof"
     when:
@@ -569,3 +569,18 @@ inc-origin-init:
                 MOZHARNESS_TEST_TAG:
                     - "inc-origin-init"
                 MOZ_ENABLE_INC_ORIGIN_INIT: "1"
+
+privatebrowsing:
+    description: "{description} limited to tests identified as being applicable to also run in private browsing mode"
+    component: "Core::Storage: Quota Manager"
+    expiration: "never"
+    suffix: "pb"
+    mozinfo: "privateBrowsing"
+    merge:
+        worker:
+            env:
+                MOZHARNESS_TEST_TAG:
+                    - "privatebrowsing"
+        mozharness:
+            extra-options:
+                - "--setpref=browser.privatebrowsing.autostart=true"

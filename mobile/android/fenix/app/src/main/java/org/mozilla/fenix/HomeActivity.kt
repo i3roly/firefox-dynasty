@@ -75,6 +75,7 @@ import mozilla.components.support.ktx.android.arch.lifecycle.addObservers
 import mozilla.components.support.ktx.android.content.call
 import mozilla.components.support.ktx.android.content.email
 import mozilla.components.support.ktx.android.content.share
+import mozilla.components.support.ktx.android.view.setupPersistentInsets
 import mozilla.components.support.ktx.kotlin.isUrl
 import mozilla.components.support.ktx.kotlin.toNormalizedUrl
 import mozilla.components.support.locale.LocaleAwareAppCompatActivity
@@ -101,6 +102,7 @@ import org.mozilla.fenix.components.appstate.AppAction
 import org.mozilla.fenix.components.appstate.OrientationMode
 import org.mozilla.fenix.components.metrics.BreadcrumbsRecorder
 import org.mozilla.fenix.components.metrics.GrowthDataWorker
+import org.mozilla.fenix.components.metrics.MarketingAttributionService
 import org.mozilla.fenix.components.metrics.fonts.FontEnumerationWorker
 import org.mozilla.fenix.crashes.CrashReporterBinding
 import org.mozilla.fenix.crashes.UnsubmittedCrashDialog
@@ -343,6 +345,7 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity {
         // Changing a language on the Language screen restarts the activity, but the activity keeps
         // the old layout direction. We have to update the direction manually.
         window.decorView.layoutDirection = TextUtils.getLayoutDirectionFromLocale(Locale.getDefault())
+        window.setupPersistentInsets()
 
         binding = ActivityHomeBinding.inflate(layoutInflater)
 
@@ -350,6 +353,13 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity {
             hasUserBeenOnboarded = components.fenixOnboarding.userHasBeenOnboarded(),
             isLauncherIntent = intent.toSafeIntent().isLauncherIntent,
         )
+
+        // This is a temporary solution to determine if we should show the marketing onboarding card.
+        if (shouldShowOnboarding) {
+            lifecycleScope.launch(IO) {
+                MarketingAttributionService(applicationContext).start()
+            }
+        }
 
         SplashScreenManager(
             splashScreenOperation = if (FxNimbus.features.splashScreen.value().offTrainOnboarding) {
@@ -768,6 +778,7 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity {
         components.core.pocketStoriesService.stopPeriodicSponsoredContentsRefresh()
         privateNotificationObserver?.stop()
         components.notificationsDelegate.unBindActivity(this)
+        MarketingAttributionService(applicationContext).stop()
 
         val activityStartedWithLink = startupPathProvider.startupPathForActivity == StartupPathProvider.StartupPath.VIEW
         if (this !is ExternalAppBrowserActivity && !activityStartedWithLink) {
