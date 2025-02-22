@@ -414,6 +414,13 @@ static NSString* GetRealFamilyName(NSFont* aFont) {
   // Eventually we should move to using CTFontUIFontType constants to identify
   // system fonts, and eliminate the need to instantiate them (indirectly) from
   // their postscript names.
+
+  // mavericks is the worst
+  // ty QTboiz https://bugreports.qt-project.org/browse/QTBUG-32789
+  if(!strcmp([psName UTF8String], ".LucidaGrandeUI")) {
+        psName = @"LucidaGrande";
+  }
+
   AutoCFRelease<CGFontRef> cgFont =
       CGFontCreateWithFontName(CFStringRef(psName));
   if (!cgFont) {
