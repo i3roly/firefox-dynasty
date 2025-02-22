@@ -525,8 +525,7 @@ pref("browser.urlbar.suggest.quicksuggest.sponsored", false, sticky);
 // with their various default-branch values, the user is enrolled in over time.
 pref("browser.urlbar.quicksuggest.dataCollection.enabled", false, sticky);
 
-// Whether the Firefox Suggest contextual opt-in result is enabled. If true,
-// this implicitly disables shouldShowOnboardingDialog.
+// Whether the Firefox Suggest contextual opt-in result is enabled.
 pref("browser.urlbar.quicksuggest.contextualOptIn", false);
 
 // Number that the user dismissed the Firefox Suggest contextual opt-in result.
@@ -544,9 +543,6 @@ pref("browser.urlbar.quicksuggest.contextualOptIn.thirdReshowAfterPeriodDays", 6
 // Whether the quick suggest feature in the urlbar is enabled.
 pref("browser.urlbar.quicksuggest.enabled", false);
 
-// Whether Suggest should be hidden in the settings UI even when enabled.
-pref("browser.urlbar.quicksuggest.hideSettingsUI", false);
-
 // Ranking mode of QuickSuggest. Currently used for relevance ranking
 // experimentation. It can be any of "default", "interest", and "random".
 pref("browser.urlbar.quicksuggest.rankingMode", "default");
@@ -554,12 +550,6 @@ pref("browser.urlbar.quicksuggest.rankingMode", "default");
 // Whether Firefox Suggest will use the new Rust backend instead of the original
 // JS backend.
 pref("browser.urlbar.quicksuggest.rustEnabled", true);
-
-// Whether to show the QuickSuggest onboarding dialog.
-pref("browser.urlbar.quicksuggest.shouldShowOnboardingDialog", false);
-
-// Show QuickSuggest onboarding dialog on the nth browser restarts.
-pref("browser.urlbar.quicksuggest.showOnboardingDialogAfterNRestarts", 0);
 
 // The index of sponsored Firefox Suggest results within the Firefox Suggest
 // section when "Show search suggestions ahead of browsing history in address bar
@@ -1968,6 +1958,11 @@ pref("browser.newtabpage.activity-stream.discoverystream.sections.locale-content
 pref("browser.newtabpage.activity-stream.discoverystream.sections.region-content-config", "");
 
 pref("browser.newtabpage.activity-stream.discoverystream.sections.cards.enabled", true);
+pref("browser.newtabpage.activity-stream.discoverystream.sections.personalization.inferred.enabled", false);
+
+pref("browser.newtabpage.activity-stream.discoverystream.sections.interestPicker.enabled", false);
+pref("browser.newtabpage.activity-stream.discoverystream.sections.interestPicker.visibleSections", "");
+
 
 
 pref("browser.newtabpage.activity-stream.discoverystream.merino-provider.endpoint", "merino.services.mozilla.com");

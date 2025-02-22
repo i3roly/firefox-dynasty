@@ -2090,18 +2090,18 @@ mozilla::ipc::IPCResult ContentChild::RecvRegisterChromeItem(
   return IPC_OK();
 }
 mozilla::ipc::IPCResult ContentChild::RecvClearStyleSheetCache(
-    const Maybe<RefPtr<nsIPrincipal>>& aPrincipal,
+    const Maybe<bool>& aChrome, const Maybe<RefPtr<nsIPrincipal>>& aPrincipal,
     const Maybe<nsCString>& aSchemelessSite,
     const Maybe<OriginAttributesPattern>& aPattern) {
-  SharedStyleSheetCache::Clear(aPrincipal, aSchemelessSite, aPattern);
+  SharedStyleSheetCache::Clear(aChrome, aPrincipal, aSchemelessSite, aPattern);
   return IPC_OK();
 }
 
 mozilla::ipc::IPCResult ContentChild::RecvClearScriptCache(
-    const Maybe<RefPtr<nsIPrincipal>>& aPrincipal,
+    const Maybe<bool>& aChrome, const Maybe<RefPtr<nsIPrincipal>>& aPrincipal,
     const Maybe<nsCString>& aSchemelessSite,
     const Maybe<OriginAttributesPattern>& aPattern) {
-  SharedScriptCache::Clear(aPrincipal, aSchemelessSite, aPattern);
+  SharedScriptCache::Clear(aChrome, aPrincipal, aSchemelessSite, aPattern);
   return IPC_OK();
 }
 
@@ -2129,7 +2129,7 @@ mozilla::ipc::IPCResult ContentChild::RecvClearImageCacheFromSite(
 }
 
 mozilla::ipc::IPCResult ContentChild::RecvClearImageCache(
-    const bool& privateLoader, const bool& chrome) {
+    const bool& privateLoader, const mozilla::Maybe<bool>& chrome) {
   imgLoader* loader = privateLoader ? imgLoader::PrivateBrowsingLoader()
                                     : imgLoader::NormalLoader();
 
@@ -3309,6 +3309,20 @@ PURLClassifierLocalChild* ContentChild::AllocPURLClassifierLocalChild(
 
 bool ContentChild::DeallocPURLClassifierLocalChild(
     PURLClassifierLocalChild* aActor) {
+  MOZ_ASSERT(aActor);
+  delete aActor;
+  return true;
+}
+
+PURLClassifierLocalByNameChild*
+ContentChild::AllocPURLClassifierLocalByNameChild(
+    nsIURI* aUri, Span<const nsCString> aFeatures,
+    const nsIUrlClassifierFeature::listType& aListType) {
+  return new URLClassifierLocalByNameChild();
+}
+
+bool ContentChild::DeallocPURLClassifierLocalByNameChild(
+    PURLClassifierLocalByNameChild* aActor) {
   MOZ_ASSERT(aActor);
   delete aActor;
   return true;

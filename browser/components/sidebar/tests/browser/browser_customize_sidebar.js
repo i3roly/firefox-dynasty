@@ -196,6 +196,7 @@ add_task(async function test_customize_position_setting() {
     {},
     win.SidebarController.browser.contentWindow
   );
+  await panel.updateComplete;
   ok(panel.positionInput.checked, "Sidebar is positioned on the right");
 
   const newWin = await BrowserTestUtils.openNewBrowserWindow();
@@ -222,6 +223,8 @@ add_task(async function test_customize_visibility_setting() {
   await SpecialPowers.pushPrefEnv({
     set: [[TAB_DIRECTION_PREF, true]],
   });
+  await waitForTabstripOrientation("vertical");
+
   const deferredPrefChange = Promise.withResolvers();
   const prefObserver = () => deferredPrefChange.resolve();
   Services.prefs.addObserver(SIDEBAR_VISIBILITY_PREF, prefObserver);
@@ -241,6 +244,7 @@ add_task(async function test_customize_visibility_setting() {
     {},
     win.SidebarController.browser.contentWindow
   );
+  await panel.updateComplete;
   ok(panel.visibilityInput.checked, "Hide sidebar is enabled.");
   ok(
     win.SidebarController.sidebarContainer.hidden,
@@ -266,14 +270,8 @@ add_task(async function test_customize_visibility_setting() {
 });
 
 add_task(async function test_vertical_tabs_setting() {
-  const deferredPrefChange = Promise.withResolvers();
-  const prefObserver = () => deferredPrefChange.resolve();
-  Services.prefs.addObserver(TAB_DIRECTION_PREF, prefObserver);
-  registerCleanupFunction(() =>
-    Services.prefs.removeObserver(TAB_DIRECTION_PREF, prefObserver)
-  );
-
   const win = await BrowserTestUtils.openNewBrowserWindow();
+  await waitForTabstripOrientation("horizontal", win);
   const panel = await showCustomizePanel(win);
   ok(
     !panel.verticalTabsInput.checked,
@@ -284,12 +282,15 @@ add_task(async function test_vertical_tabs_setting() {
     {},
     win.SidebarController.browser.contentWindow
   );
+  await panel.updateComplete;
   ok(panel.verticalTabsInput.checked, "Vertical tabs is enabled.");
-  await deferredPrefChange.promise;
+  await waitForTabstripOrientation("vertical", win);
+
   const newPrefValue = Services.prefs.getBoolPref(TAB_DIRECTION_PREF);
   is(newPrefValue, true, "Vertical tabs pref updated.");
 
   const newWin = await BrowserTestUtils.openNewBrowserWindow();
+  await waitForTabstripOrientation("vertical", newWin);
   const newPanel = await showCustomizePanel(newWin);
   ok(newPanel.verticalTabsInput.checked, "Vertical tabs setting persists.");
 
@@ -313,6 +314,8 @@ add_task(async function test_keyboard_navigation_away_from_settings_link() {
     "Settings link is focused"
   );
   EventUtils.synthesizeKey("KEY_Tab", { shiftKey: true }, win);
+  await panel.updateComplete;
+
   Assert.notEqual(
     panel.shadowRoot.activeElement,
     manageSettingsLink,

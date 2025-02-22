@@ -245,12 +245,12 @@ class ContentChild final : public PContentChild,
       const ChromeRegistryItem& item);
 
   mozilla::ipc::IPCResult RecvClearStyleSheetCache(
-      const Maybe<RefPtr<nsIPrincipal>>& aPrincipal,
+      const Maybe<bool>& aChrome, const Maybe<RefPtr<nsIPrincipal>>& aPrincipal,
       const Maybe<nsCString>& aSchemelessSite,
       const Maybe<OriginAttributesPattern>& aPattern);
 
   mozilla::ipc::IPCResult RecvClearScriptCache(
-      const Maybe<RefPtr<nsIPrincipal>>& aPrincipal,
+      const Maybe<bool>& aChrome, const Maybe<RefPtr<nsIPrincipal>>& aPrincipal,
       const Maybe<nsCString>& aSchemelessSite,
       const Maybe<OriginAttributesPattern>& aPattern);
 
@@ -260,7 +260,7 @@ class ContentChild final : public PContentChild,
       const nsCString& aSchemelessSite,
       const OriginAttributesPattern& aPattern);
   mozilla::ipc::IPCResult RecvClearImageCache(const bool& privateLoader,
-                                              const bool& chrome);
+                                              const Maybe<bool>& chrome);
 
   PRemoteSpellcheckEngineChild* AllocPRemoteSpellcheckEngineChild();
 
@@ -548,6 +548,13 @@ class ContentChild final : public PContentChild,
   PURLClassifierLocalChild* AllocPURLClassifierLocalChild(
       nsIURI* aUri, Span<const IPCURLClassifierFeature> aFeatures);
   bool DeallocPURLClassifierLocalChild(PURLClassifierLocalChild* aActor);
+
+  // PURLClassifierLocalByNameByNameParentChild
+  PURLClassifierLocalByNameChild* AllocPURLClassifierLocalByNameChild(
+      nsIURI* aUri, Span<const nsCString> aFeatures,
+      const nsIUrlClassifierFeature::listType& aListType);
+  bool DeallocPURLClassifierLocalByNameChild(
+      PURLClassifierLocalByNameChild* aActor);
 
   PSessionStorageObserverChild* AllocPSessionStorageObserverChild();
 

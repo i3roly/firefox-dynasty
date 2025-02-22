@@ -1236,6 +1236,18 @@
   value: 0
   mirror: always
 
+# What content analysis should return if the agent takes too long to respond
+# to a request. (see DefaultResponse enum in ContentAnalysis.h)
+# Make sure these stay in sync with the out-of-range check in Policies.sys.mjs.
+#
+#   0: Block all requests
+#   1: Warn on all requests (which lets the user decide)
+#   2: Allow all requests
+- name: browser.contentanalysis.timeout_result
+  type: uint32_t
+  value: 0
+  mirror: always
+
 # Is the IPC pipe to the DLP tool specific to the user or to the system?
 - name: browser.contentanalysis.is_per_user
   type: bool
@@ -1775,6 +1787,12 @@
 - name: browser.safebrowsing.prefixset_max_array_size
   type: RelaxedAtomicUint32
   value: 512*1024
+  mirror: always
+
+# Whether to only classify top-level channels for safe browsing.
+- name: browser.safebrowsing.only_top_level
+  type: bool
+  value: false
   mirror: always
 
 # SessionStore prefs
@@ -5315,7 +5333,7 @@
 
 - name: dom.webnotifications.requireinteraction.enabled
   type: RelaxedAtomicBool
-#if defined(XP_WIN)
+#if defined(XP_WIN) || defined(XP_LINUX)
   value: true
 #else
   value: @IS_NIGHTLY_BUILD@
@@ -7669,6 +7687,13 @@
   value: false
   mirror: always
 
+#if defined(MOZ_WAYLAND)
+- name: gfx.wayland.hdr
+  type: bool
+  value: false
+  mirror: once
+#endif
+
 #---------------------------------------------------------------------------
 # Prefs starting with "gl." (OpenGL)
 #---------------------------------------------------------------------------
@@ -8477,6 +8502,13 @@
   mirror: always
   set_spidermonkey_pref: startup
 
+  # Experimental support for Math.sumPrecise in JavaScript.
+- name: javascript.options.experimental.math_sumprecise
+  type: bool
+  value: true
+  mirror: always
+  set_spidermonkey_pref: startup
+
 #ifdef NIGHTLY_BUILD
   # Experimental support for Async Iterator Helpers in JavaScript.
 -   name: javascript.options.experimental.async_iterator_helpers
@@ -8498,13 +8530,6 @@
     value: false
     mirror: always
     set_spidermonkey_pref: always
-
-  # Experimental support for Math.sumPrecise in JavaScript.
--   name: javascript.options.experimental.math_sumprecise
-    type: bool
-    value: false
-    mirror: always
-    set_spidermonkey_pref: startup
 
   # Experimental support for Iterator.range in JavaScript.
 -   name: javascript.options.experimental.iterator_range
@@ -9674,7 +9699,11 @@
 # Is support for CSS masonry layout enabled?
 - name: layout.css.grid-template-masonry-value.enabled
   type: RelaxedAtomicBool
-  value: @IS_NIGHTLY_BUILD@
+#if defined(NIGHTLY_BUILD) || defined(MOZ_THUNDERBIRD)
+  value: true
+#else
+  value: false
+#endif
   mirror: always
   rust: true
 
@@ -10462,7 +10491,7 @@
 # Is matching video-dynamic-range: high allowed?
 - name: layout.css.video-dynamic-range.allows-high
   type: RelaxedAtomicBool
-#if defined(XP_MACOSX)
+#if defined(XP_MACOSX) || defined(MOZ_WAYLAND)
   value: true
 #else
   value: false
@@ -11041,7 +11070,11 @@
 
 - name: media.ffvpx-hw.enabled
   type: RelaxedAtomicBool
+#if defined(MOZ_WIDGET_GTK)
+  value: true
+#else
   value: false
+#endif
   mirror: always
 
 # The codecs in the vendored ffmpeg copy are usually prefered to the other
@@ -11372,6 +11405,14 @@
     value: 35 # An empirical value for better quality of the video output
     mirror: always
 
+# Set the FFmpeg encoder's cpu-used option, only for the AV1 encoder in quality
+# mode currently. While values from 6 to 9 are generally used for real-time
+# encoding in libaom, we opt to prioritize speed over quality in this case.
+-   name: media.ffmpeg.encoder.cpu-used
+    type: RelaxedAtomicInt32
+    value: 7
+    mirror: always
+
 # Allow using openh264 decoding with ffmpeg
 -   name: media.ffmpeg.allow-openh264
     type: RelaxedAtomicBool
@@ -11379,12 +11420,6 @@
     mirror: always
 
 #ifdef MOZ_WIDGET_GTK
-# Use VA-API for ffmpeg video playback on Linux
-- name: media.ffmpeg.vaapi.enabled
-  type: bool
-  value: false
-  mirror: once
-
 # Force to copy dmabuf video frames
 # Used for debugging/troubleshooting only
 # 0 - force disable
@@ -11555,11 +11590,7 @@
 # 0 : disabled, 1 : enabled allowed list, 2 : enabled blocked list
 -   name: media.eme.mfcdm.origin-filter.enabled
     type: RelaxedAtomicUint32
-#if defined(NIGHTLY_BUILD)
     value: 2
-#else
-    value: 1
-#endif
     mirror: always
 
 #endif  # MOZ_WMF
@@ -12542,6 +12573,12 @@
   value: 5
   mirror: always
 
+# If lazy purge is enabled, the minimum time we wait with purge after some
+# memory was reused (tracked per arena).
+- name: memory.lazypurge.reuse_grace_period
+  type: uint32_t
+  value: 500
+  mirror: always
 
 #---------------------------------------------------------------------------
 # Prefs starting with "middlemouse."
@@ -18407,19 +18444,17 @@
   value: 2
   mirror: always
 
-# Whether to apply a very old hack (reposting and reprocessing scroll-wheel
-# messages under custom message IDs) originally intended to work around
-# plugin-process deadlocks. (See bug 658194.)
-- name: widget.windows.old-scrollwheel-message-hack
-  type: bool
-  value: false
-  mirror: always
-
 # Whether we use the mica backdrop. Off by default for now.
 - name: widget.windows.mica
   type: bool
   value: false
-  mirror: once
+  mirror: always
+
+# Whether we use the mica backdrop for popups. Off by default for now.
+- name: widget.windows.mica.popups
+  type: bool
+  value: false
+  mirror: always
 #endif
 
 # Whether to disable SwipeTracker (e.g. swipe-to-nav).

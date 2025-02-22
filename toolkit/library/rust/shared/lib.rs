@@ -85,10 +85,14 @@ extern crate fluent_fallback;
 extern crate l10nregistry_ffi;
 extern crate localization_ffi;
 
+extern crate ipcclientcerts;
+extern crate trust_anchors;
+
 #[cfg(any(
     target_os = "macos",
     target_os = "ios",
-    all(target_os = "windows", not(target_arch = "aarch64"))))]
+    all(target_os = "windows", not(target_arch = "aarch64"))
+))]
 extern crate osclientcerts;
 
 #[cfg(not(target_os = "android"))]

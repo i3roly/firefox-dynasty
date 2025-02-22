@@ -151,6 +151,7 @@ static const char sIntPrefs[][45] = {
     "ui.chosenMenuItemsShouldBlink",
     "ui.windowsAccentColorInTitlebar",
     "ui.windowsMica",
+    "ui.windowsMicaPopups",
     "ui.macGraphiteTheme",
     "ui.macLionTheme",
     "ui.macYosemiteTheme",

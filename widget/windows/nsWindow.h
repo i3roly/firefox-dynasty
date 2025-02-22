@@ -341,6 +341,8 @@ class nsWindow final : public nsBaseWidget {
   void SetSmallIconNoData();
   void SetBigIconNoData();
 
+  void UpdateMicaBackdrop(bool aForce = false);
+
   static void SetIsRestoringSession(const bool aIsRestoringSession) {
     sIsRestoringSession = aIsRestoringSession;
   }
@@ -875,6 +877,9 @@ class nsWindow final : public nsBaseWidget {
 
   // Whether we're a PIP window.
   bool mPIPWindow : 1;
+
+  // Whether we are asked to render a mica backdrop.
+  bool mMicaBackdrop : 1;
 
   int32_t mCachedHitTestResult = 0;
 

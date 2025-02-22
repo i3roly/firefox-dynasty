@@ -65,7 +65,10 @@ module.exports = {
     "plugin:json/recommended-with-comments-legacy",
     "prettier",
   ],
-  plugins: ["mozilla", "html", "import", "json", "promise"],
+  plugins: ["mozilla", "html", "import", "json", "promise", "lit"],
+  rules: {
+    "lit/quoted-expressions": ["error", "never"],
+  },
   overrides: [
     {
       files: ["*.*"],

@@ -32,10 +32,6 @@ struct WebAuthnScopedCredential {
   uint8_t transports;
 };
 
-struct WebAuthnExtensionAppId {
-  nsString appIdentifier;
-};
-
 struct WebAuthnExtensionCredProps {
   bool credProps;
 };
@@ -66,7 +62,6 @@ struct WebAuthnExtensionPrfEvalByCredentialEntry {
 };
 
 union WebAuthnExtension {
-  WebAuthnExtensionAppId;
   WebAuthnExtensionCredProps;
   WebAuthnExtensionHmacSecret;
   WebAuthnExtensionMinPinLength;
@@ -112,7 +107,7 @@ struct CoseAlg {
 };
 
 struct WebAuthnMakeCredentialInfo {
-  nsString RpId;
+  nsCString RpId;
   uint8_t[] Challenge;
   uint32_t TimeoutMS;
   WebAuthnScopedCredential[] ExcludeList;
@@ -139,7 +134,8 @@ union WebAuthnMakeCredentialResponse {
 };
 
 struct WebAuthnGetAssertionInfo {
-  nsString RpId;
+  nsCString RpId;
+  nsCString? AppId;
   uint8_t[] Challenge;
   uint32_t TimeoutMS;
   WebAuthnScopedCredential[] AllowList;

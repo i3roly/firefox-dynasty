@@ -68,7 +68,7 @@ a11y-checks:
 aab:
     description: "{description} with aab test_runner"
     component: "GeckoView::General"
-    expiration: "2025-03-01"
+    expiration: "2025-09-01"
     when: &gv_e10s_filter
         $eval: '"android" in task["test-platform"]'
     suffix: "aab"
@@ -90,7 +90,7 @@ aab:
 geckoview-no-fission:
     description: "{description} without fission enabled"
     component: "GeckoView::General"
-    expiration: "2025-03-01"
+    expiration: "2025-09-01"
     when:
         <<: *gv_e10s_filter
     suffix: "nofis"
@@ -103,7 +103,7 @@ geckoview-no-fission:
 geckoview-fission:
     description: "{description} with fission enabled and default isolation strategy"
     component: "GeckoView::General"
-    expiration: "2025-03-01"
+    expiration: "2025-09-01"
     when:
         <<: *gv_e10s_filter
     suffix: "fis"
@@ -112,7 +112,7 @@ geckoview-fission:
 geckoview-fission-isolate-high-value:
     description: "{description} with fission enabled and isolation strategy isolateHighValue"
     component: "GeckoView::General"
-    expiration: "2025-03-01"
+    expiration: "2025-09-01"
     when:
         <<: *gv_e10s_filter
     suffix: "fis-hv"
@@ -125,7 +125,7 @@ geckoview-fission-isolate-high-value:
 no-fission:
     description: "{description} without fission enabled"
     component: "Core::DOM: Content Processes"
-    expiration: "2025-03-01"
+    expiration: "2025-09-01"
     suffix: "nofis"
     mozinfo: "fission"
     when:
@@ -141,7 +141,7 @@ no-fission:
 geckoview-no-fission-ship:
     description: "{description} with fission disabled and ship enabled"
     component: "GeckoView::General"
-    expiration: "2025-03-01"
+    expiration: "2025-09-01"
     suffix: "nofis-ship"
     when:
         <<: *gv_e10s_filter
@@ -257,7 +257,7 @@ socketprocess_networking:
 webrender-dcomp-disabled:
     description: "{description} with dcomp disabled"
     component: "Core::Graphics: WebRender"
-    expiration: "2025-03-01"
+    expiration: "2025-09-01"
     suffix: "wr-dc0"
     when:
         $eval: '"windows1" in task["test-platform"]'
@@ -273,7 +273,7 @@ webrender-dcomp-disabled:
 webrender-dcomp-present:  # Default variant ends up like this.
     description: "{description} with dcomp present but not overlays"
     component: "Core::Graphics: WebRender"
-    expiration: "2025-03-01"
+    expiration: "2025-09-01"
     suffix: "wr-dc1-p"
     when:
         $eval: '"windows1" in task["test-platform"]'
@@ -289,7 +289,7 @@ webrender-dcomp-present:  # Default variant ends up like this.
 webrender-dcomp-overlays:
     description: "{description} with dcomp overlays but not compositing"
     component: "Core::Graphics: WebRender"
-    expiration: "2025-03-01"
+    expiration: "2025-09-01"
     suffix: "wr-dc2-o"
     when:
         $eval: '"windows1" in task["test-platform"]'
@@ -305,7 +305,7 @@ webrender-dcomp-overlays:
 webrender-dcomp-compositing:
     description: "{description} with dcomp compositing"
     component: "Core::Graphics: WebRender"
-    expiration: "2025-03-01"
+    expiration: "2025-09-01"
     suffix: "wr-dc3-c"
     when:
         $eval: '"windows1" in task["test-platform"]'
@@ -581,6 +581,23 @@ privatebrowsing:
             env:
                 MOZHARNESS_TEST_TAG:
                     - "privatebrowsing"
+        mozharness:
+            extra-options:
+                - "--setpref=browser.privatebrowsing.autostart=true"
+
+privatebrowsing-inc-origin-init:
+    description: "{description} limited to tests identified as being applicable to also run in private browsing mode and with incremental origin initialization enabled"
+    component: "Core::Storage: Quota Manager"
+    expiration: "2025-07-01"
+    suffix: "pb-ioi"
+    replace:
+        tier: 3
+    merge:
+        worker:
+            env:
+                MOZHARNESS_TEST_TAG:
+                    - "privatebrowsing-inc-origin-init"
+                MOZ_ENABLE_INC_ORIGIN_INIT: "1"
         mozharness:
             extra-options:
                 - "--setpref=browser.privatebrowsing.autostart=true"

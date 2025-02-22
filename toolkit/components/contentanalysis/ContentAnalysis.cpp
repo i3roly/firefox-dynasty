@@ -10,6 +10,7 @@
 
 #include "base/process_util.h"
 #include "GMPUtils.h"  // ToHexString
+#include "MainThreadUtils.h"
 #include "mozilla/Array.h"
 #include "mozilla/Components.h"
 #include "mozilla/dom/BrowserParent.h"
@@ -40,6 +41,7 @@
 #include "nsIStorageStream.h"
 #include "nsISupportsPrimitives.h"
 #include "nsITransferable.h"
+#include "nsProxyRelease.h"
 #include "ScopedNSSTypes.h"
 #include "xpcpublic.h"
 
@@ -358,12 +360,31 @@ nsresult ContentAnalysis::CreateContentAnalysisClient(
       LOGE(
           "Got mismatched content analysis client signature! All content "
           "analysis operations will fail.");
-      mCaClientPromise->Reject(NS_ERROR_INVALID_SIGNATURE, __func__);
+      NS_DispatchToMainThread(
+          NS_NewRunnableFunction(__func__, [self = RefPtr{this}]() {
+            AssertIsOnMainThread();
+            self->mCaClientPromise->Reject(NS_ERROR_INVALID_SIGNATURE,
+                                           __func__);
+            self->mCreatingClient = false;
+          }));
+
       return NS_OK;
     }
   }
 #endif  // XP_WIN
-  mCaClientPromise->Resolve(client, __func__);
+  NS_DispatchToMainThread(NS_NewRunnableFunction(
+      __func__, [self = RefPtr{this}, client = std::move(client)]() {
+        AssertIsOnMainThread();
+        // Note that if mCaClientPromise has been resolved or rejected
+        // calling Resolve() or Reject() is a noop.
+        if (client) {
+          self->mHaveResolvedClientPromise = true;
+          self->mCaClientPromise->Resolve(client, __func__);
+        } else {
+          self->mCaClientPromise->Reject(NS_ERROR_CONNECTION_REFUSED, __func__);
+        }
+        self->mCreatingClient = false;
+      }));
 
   return NS_OK;
 }
@@ -988,12 +1009,15 @@ static bool ShouldAllowAction(
          aResponseCode == nsIContentAnalysisResponse::Action::eWarn;
 }
 
-static DefaultResult GetDefaultResultFromPref() {
-  uint32_t value = StaticPrefs::browser_contentanalysis_default_result();
+static DefaultResult GetDefaultResultFromPref(bool isTimeout) {
+  uint32_t value = isTimeout
+                       ? StaticPrefs::browser_contentanalysis_timeout_result()
+                       : StaticPrefs::browser_contentanalysis_default_result();
   if (value > static_cast<uint32_t>(DefaultResult::eLastValue)) {
     LOGE(
-        "Invalid value for browser.contentanalysis.default_result pref "
-        "value");
+        "Invalid value for browser.contentanalysis.%s pref "
+        "value",
+        isTimeout ? "default_timeout_result" : "default_result");
     return DefaultResult::eBlock;
   }
   return static_cast<DefaultResult>(value);
@@ -1014,7 +1038,10 @@ NS_IMETHODIMP ContentAnalysisActionResult::GetShouldAllowContent(
 
 NS_IMETHODIMP ContentAnalysisNoResult::GetShouldAllowContent(
     bool* aShouldAllowContent) {
-  if (GetDefaultResultFromPref() == DefaultResult::eAllow) {
+  // Make sure to use the non-timeout pref here, because timeouts won't
+  // go through this code path.
+  if (GetDefaultResultFromPref(/* isTimeout */ false) ==
+      DefaultResult::eAllow) {
     *aShouldAllowContent =
         mValue != NoContentAnalysisResult::DENY_DUE_TO_CANCELED;
   } else {
@@ -1164,21 +1191,63 @@ NS_IMPL_ISUPPORTS(ContentAnalysis, nsIContentAnalysis, ContentAnalysis);
 ContentAnalysis::ContentAnalysis()
     : mCaClientPromise(
           new ClientPromise::Private("ContentAnalysis::ContentAnalysis")),
-      mClientCreationAttempted(false),
       mSetByEnterprise(false) {}
 
 ContentAnalysis::~ContentAnalysis() {
-  // Accessing mClientCreationAttempted so need to be on the main thread
-  MOZ_ASSERT(NS_IsMainThread());
-  if (!mClientCreationAttempted) {
-    // Reject the promise to avoid assertions when it gets destroyed
-    mCaClientPromise->Reject(NS_ERROR_ILLEGAL_DURING_SHUTDOWN, __func__);
-  }
+  AssertIsOnMainThread();
+  // Reject the promise to avoid assertions when it gets destroyed
+  // Note that if the promise has already been resolved or rejected this is a
+  // noop
+  mCaClientPromise->Reject(NS_ERROR_ILLEGAL_DURING_SHUTDOWN, __func__);
 
   // Make sure that the MultipartRequestCallbacks in mUserActionMap don't
   // try to update the map while it is being cleared (destroyed).
   mIsShuttingDown = true;
   mUserActionMap.Clear();
+}
+
+nsresult ContentAnalysis::CreateClientIfNecessary(
+    bool aForceCreate /* = false */) {
+  AssertIsOnMainThread();
+  nsCString pipePathName;
+  nsresult rv = Preferences::GetCString(kPipePathNamePref, pipePathName);
+  if (NS_WARN_IF(NS_FAILED(rv))) {
+    mCaClientPromise->Reject(rv, __func__);
+    return rv;
+  }
+  if (mHaveResolvedClientPromise && !aForceCreate) {
+    return NS_OK;
+  }
+  // mCreatingClient is only accessed on the main thread
+  if (mCreatingClient) {
+    return NS_OK;
+  }
+  mCreatingClient = true;
+  mHaveResolvedClientPromise = false;
+  // Reject the promise to avoid assertions when it gets destroyed
+  // Note that if the promise has already been resolved or rejected this is a
+  // noop
+  mCaClientPromise->Reject(NS_ERROR_FAILURE, __func__);
+  mCaClientPromise =
+      new ClientPromise::Private("ContentAnalysis::ContentAnalysis");
+
+  bool isPerUser = StaticPrefs::browser_contentanalysis_is_per_user();
+  nsString clientSignature;
+  // It's OK if this fails, we will default to the empty string
+  Preferences::GetString(kClientSignature, clientSignature);
+  LOGD("Dispatching background task to create Content Analysis client");
+  rv = NS_DispatchBackgroundTask(NS_NewCancelableRunnableFunction(
+      "ContentAnalysis::CreateContentAnalysisClient",
+      [owner = RefPtr{this}, pipePathName = std::move(pipePathName),
+       clientSignature = std::move(clientSignature), isPerUser]() mutable {
+        owner->CreateContentAnalysisClient(
+            std::move(pipePathName), std::move(clientSignature), isPerUser);
+      }));
+  if (NS_WARN_IF(NS_FAILED(rv))) {
+    mCaClientPromise->Reject(rv, __func__);
+    return rv;
+  }
+  return NS_OK;
 }
 
 NS_IMETHODIMP
@@ -1188,9 +1257,9 @@ ContentAnalysis::GetIsActive(bool* aIsActive) {
     LOGD("Local DLP Content Analysis is not active");
     return NS_OK;
   }
-  // Accessing mClientCreationAttempted, mSetByEnterprise and non-static prefs
+  // Accessing mSetByEnterprise and non-static prefs
   // so need to be on the main thread
-  MOZ_ASSERT(NS_IsMainThread());
+  AssertIsOnMainThread();
   // gAllowContentAnalysisArgPresent is only set in the parent process
   MOZ_ASSERT(XRE_IsParentProcess());
   if (!gAllowContentAnalysisArgPresent && !mSetByEnterprise) {
@@ -1203,34 +1272,7 @@ ContentAnalysis::GetIsActive(bool* aIsActive) {
 
   *aIsActive = true;
   LOGD("Local DLP Content Analysis is active");
-  // On the main thread so no need for synchronization here.
-  if (!mClientCreationAttempted) {
-    mClientCreationAttempted = true;
-    LOGD("Dispatching background task to create Content Analysis client");
-
-    nsCString pipePathName;
-    nsresult rv = Preferences::GetCString(kPipePathNamePref, pipePathName);
-    if (NS_WARN_IF(NS_FAILED(rv))) {
-      mCaClientPromise->Reject(rv, __func__);
-      return rv;
-    }
-    bool isPerUser = StaticPrefs::browser_contentanalysis_is_per_user();
-    nsString clientSignature;
-    // It's OK if this fails, we will default to the empty string
-    Preferences::GetString(kClientSignature, clientSignature);
-    rv = NS_DispatchBackgroundTask(NS_NewCancelableRunnableFunction(
-        "ContentAnalysis::CreateContentAnalysisClient",
-        [owner = RefPtr{this}, pipePathName = std::move(pipePathName),
-         clientSignature = std::move(clientSignature), isPerUser]() mutable {
-          owner->CreateContentAnalysisClient(
-              std::move(pipePathName), std::move(clientSignature), isPerUser);
-        }));
-    if (NS_WARN_IF(NS_FAILED(rv))) {
-      mCaClientPromise->Reject(rv, __func__);
-      return rv;
-    }
-  }
-  return NS_OK;
+  return CreateClientIfNecessary();
 }
 
 NS_IMETHODIMP
@@ -1299,6 +1341,20 @@ void ContentAnalysis::CachedClipboardResponse::SetCachedResponse(
         "CachedClipboardResponse caching new URI for existing cached clipboard "
         "seqno");
   }
+
+  // Update the cached action for this URI if it already exists in the cache,
+  // otherwise add a new cache entry for this URI.
+  for (auto& entry : mData) {
+    bool uriEquals = false;
+    // URI will not be set for some chrome contexts
+    if ((!aURI && !entry.first) ||
+        (aURI && NS_SUCCEEDED(aURI->Equals(entry.first, &uriEquals)) &&
+         uriEquals)) {
+      entry.second = aAction;
+      return;
+    }
+  }
+
   mData.AppendElement(std::make_pair(aURI, aAction));
 }
 
@@ -1338,8 +1394,7 @@ void ContentAnalysis::CancelWithError(nsCString&& aUserActionId,
         }));
     return;
   }
-
-  SetLastResult(aResult);
+  AssertIsOnMainThread();
 
   // We clear the tokens array since we cancel all of them.
   nsTHashSet<nsCString> tokens;
@@ -1381,6 +1436,7 @@ void ContentAnalysis::CancelWithError(nsCString&& aUserActionId,
 
   bool isShutdown = aResult == NS_ERROR_ILLEGAL_DURING_SHUTDOWN;
   bool isCancel = aResult == NS_ERROR_ABORT;
+  bool isTimeout = aResult == NS_ERROR_DOM_TIMEOUT_ERR;
 
   // Propagate shutdown error to the callback as that same error.  All other
   // cases use the default response, except user cancel, which always uses
@@ -1392,7 +1448,7 @@ void ContentAnalysis::CancelWithError(nsCString&& aUserActionId,
   nsIContentAnalysisResponse::Action action =
       nsIContentAnalysisResponse::Action::eCanceled;
   if (!isShutdown && !isCancel) {
-    DefaultResult defaultResponse = GetDefaultResultFromPref();
+    DefaultResult defaultResponse = GetDefaultResultFromPref(isTimeout);
     switch (defaultResponse) {
       case DefaultResult::eAllow:
         action = nsIContentAnalysisResponse::Action::eAllow;
@@ -1413,6 +1469,7 @@ void ContentAnalysis::CancelWithError(nsCString&& aUserActionId,
   nsIContentAnalysisResponse::CancelError cancelError;
   switch (aResult) {
     case NS_ERROR_NOT_AVAILABLE:
+    case NS_ERROR_CONNECTION_REFUSED:
       cancelError = nsIContentAnalysisResponse::CancelError::eNoAgent;
       break;
     case NS_ERROR_INVALID_SIGNATURE:
@@ -1465,51 +1522,55 @@ void ContentAnalysis::CancelWithError(nsCString&& aUserActionId,
 
   RemoveFromUserActionMap(nsCString(aUserActionId));
 
-  mCaClientPromise->Then(
-      GetCurrentSerialEventTarget(), __func__,
-      [userActionId = std::move(aUserActionId)](
-          std::shared_ptr<content_analysis::sdk::Client> client) mutable {
+  // Re-get service in case the registered service is mocked for testing.
+  nsCOMPtr<nsIContentAnalysis> contentAnalysis =
+      mozilla::components::nsIContentAnalysis::Service();
+  if (contentAnalysis) {
+    contentAnalysis->SendCancelToAgent(aUserActionId);
+  } else {
+    LOGD(
+        "Content Analysis Service has been shut down.  Cancel will not be "
+        "sent to agent.");
+  }
+}
+
+NS_IMETHODIMP ContentAnalysis::SendCancelToAgent(
+    const nsACString& aUserActionId) {
+  CallClientWithRetry<std::nullptr_t>(
+      __func__,
+      [userActionId = nsCString(aUserActionId)](
+          std::shared_ptr<content_analysis::sdk::Client> client) mutable
+          -> Result<std::nullptr_t, nsresult> {
+        MOZ_ASSERT(!NS_IsMainThread());
         auto owner = GetContentAnalysisFromService();
         if (!owner) {
           // May be shutting down
-          return;
+          return nullptr;
         }
-        if (!client) {
-          LOGE("CancelWithError got a null client");
-          return;
+        content_analysis::sdk::ContentAnalysisCancelRequests cancelRequest;
+        cancelRequest.set_user_action_id(userActionId.get(),
+                                         userActionId.Length());
+        int err = client->CancelRequests(cancelRequest);
+        if (err != 0) {
+          LOGE(
+              "SendCancelToAgent got error %d for "
+              "user_action_id: %s",
+              err, userActionId.get());
+          return Err(NS_ERROR_FAILURE);
         }
-
-        NS_DispatchBackgroundTask(
-            NS_NewCancelableRunnableFunction(
-                __func__,
-                [userActionId = std::move(userActionId),
-                 client = std::move(client)]() {
-                  auto owner = GetContentAnalysisFromService();
-                  if (!owner) {
-                    // May be shutting down
-                    return;
-                  }
-
-                  content_analysis::sdk::ContentAnalysisCancelRequests
-                      cancelRequest;
-                  cancelRequest.set_user_action_id(userActionId.get(),
-                                                   userActionId.Length());
-                  int err = client->CancelRequests(cancelRequest);
-                  if (err != 0) {
-                    LOGE(
-                        "CancelWithError got error %d for "
-                        "user_action_id: %s",
-                        err, userActionId.get());
-                  } else {
-                    LOGD(
-                        "CancelWithError successfully sent CancelRequests to "
-                        "agent for user_action_id: %s",
-                        userActionId.get());
-                  }
-                }),
-            NS_DISPATCH_EVENT_MAY_BLOCK);
-      },
-      [](nsresult rv) { LOGE("CancelWithError failed to get the client"); });
+        LOGD(
+            "SendCancelToAgent successfully sent CancelRequests to "
+            "agent for user_action_id: %s",
+            userActionId.get());
+        return nullptr;
+      })
+      ->Then(
+          GetCurrentSerialEventTarget(), __func__, []() { /* nothing to do */ },
+          [](nsresult rv) {
+            LOGE("SendCancelToAgent failed to get the client with error %s",
+                 SafeGetStaticErrorName(rv));
+          });
+  return NS_OK;
 }
 
 RefPtr<ContentAnalysis> ContentAnalysis::GetContentAnalysisFromService() {
@@ -1539,10 +1600,88 @@ static bool ShouldCheckReason(nsIContentAnalysisRequest::Reason aReason) {
   }
 }
 
+template <typename T, typename U>
+RefPtr<MozPromise<T, nsresult, true>> ContentAnalysis::CallClientWithRetry(
+    StaticString aMethodName, U&& aClientCallFunc) {
+  AssertIsOnMainThread();
+  auto promise =
+      MakeRefPtr<typename MozPromise<T, nsresult, true>::Private>(aMethodName);
+  auto reconnectAndRetry = [aClientCallFunc, aMethodName,
+                            promise](nsresult rv) {
+    AssertIsOnMainThread();
+    LOGD("Failed to get client - trying to reconnect: %s",
+         SafeGetStaticErrorName(rv));
+    RefPtr<ContentAnalysis> owner = GetContentAnalysisFromService();
+    if (!owner) {
+      // May be shutting down
+      return;
+    }
+    // try to reconnect
+    rv = owner->CreateClientIfNecessary(/* aForceCreate */ true);
+    if (NS_FAILED(rv)) {
+      LOGD("Failed to reconnect to client: %s", SafeGetStaticErrorName(rv));
+      owner->mCaClientPromise->Reject(rv, aMethodName);
+      promise->Reject(rv, aMethodName);
+      return;
+    }
+    owner->mCaClientPromise->Then(
+        GetCurrentSerialEventTarget(), aMethodName,
+        [aMethodName, promise, clientCallFunc = std::move(aClientCallFunc)](
+            std::shared_ptr<content_analysis::sdk::Client> client) mutable {
+          NS_DispatchBackgroundTask(
+              NS_NewRunnableFunction(
+                  aMethodName,
+                  [aMethodName, promise,
+                   clientCallFunc = std::move(clientCallFunc),
+                   client = std::move(client)]() mutable {
+                    auto result = clientCallFunc(client);
+                    if (result.isOk()) {
+                      promise->Resolve(result.unwrap(), aMethodName);
+                    } else {
+                      promise->Reject(result.unwrapErr(), aMethodName);
+                    }
+                  }),
+              NS_DISPATCH_EVENT_MAY_BLOCK);
+        },
+        [aMethodName, promise](nsresult rv) {
+          LOGE("Failed to get client again for %s, error=%s", aMethodName.get(),
+               SafeGetStaticErrorName(rv));
+          promise->Reject(rv, aMethodName);
+        });
+  };
+
+  mCaClientPromise->Then(
+      GetCurrentSerialEventTarget(), aMethodName,
+      [aMethodName, promise, aClientCallFunc, reconnectAndRetry](
+          std::shared_ptr<content_analysis::sdk::Client> client) mutable {
+        NS_DispatchBackgroundTask(
+            NS_NewRunnableFunction(
+                aMethodName,
+                [aMethodName, promise, aClientCallFunc,
+                 reconnectAndRetry = std::move(reconnectAndRetry),
+                 client = std::move(client)]() mutable {
+                  auto result = aClientCallFunc(client);
+                  if (result.isOk()) {
+                    promise->Resolve(result.unwrap(), aMethodName);
+                    return;
+                  }
+                  nsresult rv = result.unwrapErr();
+                  NS_DispatchToMainThread(NS_NewRunnableFunction(
+                      "reconnect to Content Analysis client",
+                      [rv, reconnectAndRetry = std::move(reconnectAndRetry)]() {
+                        reconnectAndRetry(rv);
+                      }));
+                }),
+            NS_DISPATCH_EVENT_MAY_BLOCK);
+      },
+      [reconnectAndRetry](nsresult rv) mutable { reconnectAndRetry(rv); });
+  return promise.forget();
+}
+
 nsresult ContentAnalysis::RunAnalyzeRequestTask(
     const RefPtr<nsIContentAnalysisRequest>& aRequest, bool aAutoAcknowledge,
     const RefPtr<nsIContentAnalysisCallback>& aCallback) {
-  MOZ_ASSERT(NS_IsMainThread());
+  AssertIsOnMainThread();
 
   nsresult rv = NS_ERROR_FAILURE;
   // Set up the scope exit before checking the return
@@ -1584,37 +1723,59 @@ nsresult ContentAnalysis::RunAnalyzeRequestTask(
                              requestArray.Elements());
   }
 
-  mCaClientPromise->Then(
-      GetCurrentSerialEventTarget(), __func__,
-      [userActionId, pbRequest = std::move(pbRequest), aAutoAcknowledge](
+  CallClientWithRetry<
+      std::shared_ptr<content_analysis::sdk::ContentAnalysisResponse>>(
+      __func__,
+      [userActionId, pbRequest = std::move(pbRequest)](
           std::shared_ptr<content_analysis::sdk::Client> client) mutable {
-        // The content analysis call is synchronous so run in the background.
-        NS_DispatchBackgroundTask(
-            NS_NewCancelableRunnableFunction(
-                __func__,
-                [userActionId = std::move(userActionId),
-                 pbRequest = std::move(pbRequest), client = std::move(client),
-                 aAutoAcknowledge]() mutable {
-                  DoAnalyzeRequest(std::move(userActionId), aAutoAcknowledge,
-                                   std::move(pbRequest), client);
-                }),
-            NS_DISPATCH_EVENT_MAY_BLOCK);
-      },
-      [userActionId](nsresult rv) mutable {
-        LOGD("RunAnalyzeRequestTask failed to get client");
-        RefPtr<ContentAnalysis> owner = GetContentAnalysisFromService();
-        if (!owner) {
-          // May be shutting down
-          return;
-        }
-        owner->CancelWithError(std::move(userActionId), rv);
-      });
+        MOZ_ASSERT(!NS_IsMainThread());
+        return DoAnalyzeRequest(std::move(userActionId), std::move(pbRequest),
+                                client);
+      })
+      ->Then(
+          GetMainThreadSerialEventTarget(), __func__,
+          [userActionId, aAutoAcknowledge](
+              std::shared_ptr<content_analysis::sdk::ContentAnalysisResponse>
+                  aResponse) mutable {
+            AssertIsOnMainThread();
+            if (!aResponse) {
+              // There was an error and we don't want to retry.
+              return;
+            }
+            LogResponse(aResponse.get());
+            LOGD("RunAnalyzeRequestTask on main thread about to send response");
+            RefPtr<ContentAnalysis> owner = GetContentAnalysisFromService();
+            if (!owner) {
+              // May be shutting down
+              return;
+            }
 
-  return rv;
+            RefPtr<ContentAnalysisResponse> response =
+                ContentAnalysisResponse::FromProtobuf(std::move(*aResponse));
+            if (!response) {
+              LOGE("Content analysis got invalid response!");
+              return;
+            }
+            owner->NotifyObserversAndMaybeIssueResponse(
+                response, std::move(userActionId), aAutoAcknowledge);
+          },
+          [userActionId](nsresult rv) mutable {
+            LOGD("RunAnalyzeRequestTask failed to get client a second time");
+            RefPtr<ContentAnalysis> owner = GetContentAnalysisFromService();
+            if (!owner) {
+              // May be shutting down
+              return;
+            }
+            owner->CancelWithError(std::move(userActionId), rv);
+          });
+
+  return NS_OK;
 }
 
-void ContentAnalysis::DoAnalyzeRequest(
-    nsCString&& aUserActionId, bool aAutoAcknowledge,
+Result<std::shared_ptr<content_analysis::sdk::ContentAnalysisResponse>,
+       nsresult>
+ContentAnalysis::DoAnalyzeRequest(
+    nsCString&& aUserActionId,
     content_analysis::sdk::ContentAnalysisRequest&& aRequest,
     const std::shared_ptr<content_analysis::sdk::Client>& aClient) {
   MOZ_ASSERT(!NS_IsMainThread());
@@ -1622,12 +1783,9 @@ void ContentAnalysis::DoAnalyzeRequest(
       ContentAnalysis::GetContentAnalysisFromService();
   if (!owner) {
     // May be shutting down
-    return;
-  }
-
-  if (!aClient) {
-    owner->CancelWithError(std::move(aUserActionId), NS_ERROR_NOT_AVAILABLE);
-    return;
+    // Don't return an error because we don't want to retry
+    return std::shared_ptr<content_analysis::sdk::ContentAnalysisResponse>(
+        nullptr);
   }
 
   if (aRequest.has_file_path() && !aRequest.file_path().empty() &&
@@ -1641,7 +1799,9 @@ void ContentAnalysis::DoAnalyzeRequest(
     nsresult rv = ContentAnalysisRequest::GetFileDigest(filePath, digest);
     if (NS_FAILED(rv)) {
       owner->CancelWithError(std::move(aUserActionId), rv);
-      return;
+      // Don't return an error because we don't want to retry
+      return std::shared_ptr<content_analysis::sdk::ContentAnalysisResponse>(
+          nullptr);
     }
     if (!digest.IsEmpty()) {
       aRequest.mutable_request_data()->set_digest(digest.get());
@@ -1653,32 +1813,10 @@ void ContentAnalysis::DoAnalyzeRequest(
   content_analysis::sdk::ContentAnalysisResponse pbResponse;
   int err = aClient->Send(aRequest, &pbResponse);
   if (err != 0) {
-    LOGE("RunAnalyzeRequestTask client transaction failed");
-    owner->CancelWithError(std::move(aUserActionId), NS_ERROR_FAILURE);
-    return;
+    return Err(NS_ERROR_FAILURE);
   }
-  LOGD("Content analysis client transaction succeeded");
-  LogResponse(&pbResponse);
-  NS_DispatchToMainThread(NS_NewCancelableRunnableFunction(
-      "ContentAnalysis::RunAnalyzeRequestTask::HandleResponse",
-      [pbResponse = std::move(pbResponse),
-       aUserActionId = std::move(aUserActionId), aAutoAcknowledge]() mutable {
-        LOGD("RunAnalyzeRequestTask on main thread about to send response");
-        RefPtr<ContentAnalysis> owner = GetContentAnalysisFromService();
-        if (!owner) {
-          // May be shutting down
-          return;
-        }
-
-        RefPtr<ContentAnalysisResponse> response =
-            ContentAnalysisResponse::FromProtobuf(std::move(pbResponse));
-        if (!response) {
-          LOGE("Content analysis got invalid response!");
-          return;
-        }
-        owner->NotifyObserversAndMaybeIssueResponse(
-            response, std::move(aUserActionId), aAutoAcknowledge);
-      }));
+  return std::make_shared<content_analysis::sdk::ContentAnalysisResponse>(
+      pbResponse);
 }
 
 void ContentAnalysis::NotifyResponseObservers(
@@ -1692,6 +1830,17 @@ void ContentAnalysis::NotifyResponseObservers(
     // IssueResponse with the result.
     nsCString requestToken;
     MOZ_ALWAYS_SUCCEEDS(aResponse->GetRequestToken(requestToken));
+
+    // We have our response.  Cancelling the timeout timer is normally
+    // done when we issue the response but we don't care how long the user
+    // takes to respond to a warn dialog, so stop it now.
+    if (auto entry = mUserActionMap.Lookup(aUserActionId)) {
+      if (entry->mTimeoutRunnable && !entry->mIsHandlingTimeout) {
+        entry->mTimeoutRunnable->Cancel();
+        entry->mTimeoutRunnable = nullptr;
+      }
+    }
+
     mWarnResponseDataMap.InsertOrUpdate(
         requestToken, WarnResponseData{aResponse, std::move(aUserActionId),
                                        aAutoAcknowledge});
@@ -1771,9 +1920,6 @@ void ContentAnalysis::IssueResponse(ContentAnalysisResponse* aResponse,
 void ContentAnalysis::NotifyObserversAndMaybeIssueResponse(
     ContentAnalysisResponse* aResponse, nsCString&& aUserActionId,
     bool aAutoAcknowledge) {
-  // Successfully made a request to the agent, so mark that we succeeded
-  mLastResult = NS_OK;
-
   NotifyResponseObservers(aResponse, nsCString(aUserActionId),
                           aAutoAcknowledge);
 
@@ -3233,6 +3379,7 @@ nsresult ContentAnalysis::RunAcknowledgeTask(
   if (!isActive) {
     return NS_ERROR_NOT_AVAILABLE;
   }
+  AssertIsOnMainThread();
 
   content_analysis::sdk::ContentAnalysisAcknowledgement pbAck;
   rv = ConvertToProtobuf(aAcknowledgement, aRequestToken, &pbAck);
@@ -3260,74 +3407,84 @@ nsresult ContentAnalysis::RunAcknowledgeTask(
 
   // The content analysis connection is synchronous so run in the background.
   LOGD("RunAcknowledgeTask dispatching acknowledge task");
-  mCaClientPromise->Then(
-      GetCurrentSerialEventTarget(), __func__,
+  CallClientWithRetry<std::nullptr_t>(
+      __func__,
       [pbAck = std::move(pbAck)](
-          std::shared_ptr<content_analysis::sdk::Client> client) mutable {
-        NS_DispatchBackgroundTask(
-            NS_NewCancelableRunnableFunction(
-                __func__,
-                [pbAck = std::move(pbAck),
-                 client = std::move(client)]() mutable {
-                  RefPtr<ContentAnalysis> owner =
-                      GetContentAnalysisFromService();
-                  if (!owner) {
-                    // May be shutting down
-                    return;
-                  }
-                  if (!client) {
-                    return;
-                  }
+          std::shared_ptr<content_analysis::sdk::Client> client) mutable
+          -> Result<std::nullptr_t, nsresult> {
+        MOZ_ASSERT(!NS_IsMainThread());
+        RefPtr<ContentAnalysis> owner = GetContentAnalysisFromService();
+        if (!owner) {
+          // May be shutting down
+          return nullptr;
+        }
 
-                  int err = client->Acknowledge(pbAck);
-                  LOGD(
-                      "RunAcknowledgeTask sent transaction acknowledgement, "
-                      "err=%d",
-                      err);
-                  NS_ENSURE_TRUE_VOID(!err);
-                }),
-            NS_DISPATCH_EVENT_MAY_BLOCK);
-      },
-      [](nsresult rv) { LOGD("RunAcknowledgeTask failed to get the client"); });
-  return rv;
-}
-
-bool ContentAnalysis::LastRequestSucceeded() {
-  return mLastResult != NS_ERROR_NOT_AVAILABLE &&
-         mLastResult != NS_ERROR_INVALID_SIGNATURE &&
-         mLastResult != NS_ERROR_FAILURE;
+        int err = client->Acknowledge(pbAck);
+        LOGD(
+            "RunAcknowledgeTask sent transaction acknowledgement, "
+            "err=%d",
+            err);
+        if (err != 0) {
+          return Err(NS_ERROR_FAILURE);
+        }
+        return nullptr;
+      })
+      ->Then(
+          GetMainThreadSerialEventTarget(), __func__, []() { /* do nothing */ },
+          [](nsresult rv) {
+            LOGE("RunAcknowledgeTask failed to get the client");
+          });
+  return NS_OK;
 }
 
 NS_IMETHODIMP
-ContentAnalysis::GetDiagnosticInfo(JSContext* aCx,
-                                   mozilla::dom::Promise** aPromise) {
-  RefPtr<mozilla::dom::Promise> promise;
+ContentAnalysis::GetDiagnosticInfo(JSContext* aCx, dom::Promise** aPromise) {
+  RefPtr<dom::Promise> promise;
   nsresult rv = MakePromise(aCx, getter_AddRefs(promise));
+  nsMainThreadPtrHandle<dom::Promise> promiseHolder(
+      new nsMainThreadPtrHolder<dom::Promise>(
+          "ContentAnalysis::GetDiagnosticInfo promise", promise));
   NS_ENSURE_SUCCESS(rv, rv);
-  mCaClientPromise->Then(
-      GetCurrentSerialEventTarget(), __func__,
-      [promise](std::shared_ptr<content_analysis::sdk::Client> client) mutable {
-        if (!client) {
-          auto info = MakeRefPtr<ContentAnalysisDiagnosticInfo>(
-              false, EmptyString(), false, 0);
-          promise->MaybeResolve(info);
-          return;
-        }
-        RefPtr<ContentAnalysis> self = GetContentAnalysisFromService();
+  AssertIsOnMainThread();
+  CallClientWithRetry<std::nullptr_t>(
+      __func__,
+      [promiseHolder](
+          std::shared_ptr<content_analysis::sdk::Client> client) mutable
+          -> Result<std::nullptr_t, nsresult> {
+        MOZ_ASSERT(!NS_IsMainThread());
+        // I don't think this will be slow, but do it on the background thread
+        // just to be safe
         std::string agentPath = client->GetAgentInfo().binary_path;
-        nsString agentWidePath = NS_ConvertUTF8toUTF16(agentPath);
-        auto info = MakeRefPtr<ContentAnalysisDiagnosticInfo>(
-            self->LastRequestSucceeded(), std::move(agentWidePath), false,
-            self ? self->mRequestCount : 0);
-        promise->MaybeResolve(info);
-      },
-      [promise](nsresult rv) {
-        RefPtr<ContentAnalysis> self = GetContentAnalysisFromService();
-        auto info = MakeRefPtr<ContentAnalysisDiagnosticInfo>(
-            false, EmptyString(), rv == NS_ERROR_INVALID_SIGNATURE,
-            self ? self->mRequestCount : 0);
-        promise->MaybeResolve(info);
-      });
+        // Need to switch back to main thread to create the
+        // ContentAnalysisDiagnosticInfo and resolve the promise
+        NS_DispatchToMainThread(NS_NewRunnableFunction(
+            __func__, [promiseHolder = std::move(promiseHolder),
+                       agentPath = std::move(agentPath)]() {
+              RefPtr<ContentAnalysis> self = GetContentAnalysisFromService();
+              if (!self) {
+                // may be quitting
+                promiseHolder->MaybeReject(NS_ERROR_ILLEGAL_DURING_SHUTDOWN);
+                return;
+              }
+              nsString agentWidePath = NS_ConvertUTF8toUTF16(agentPath);
+              // Note that if we made it here, we have successfully connected to
+              // the agent.
+              auto info = MakeRefPtr<ContentAnalysisDiagnosticInfo>(
+                  /* mConnectedToAgent */ true, std::move(agentWidePath), false,
+                  self ? self->mRequestCount : 0);
+              promiseHolder->MaybeResolve(info);
+            }));
+        return nullptr;
+      })
+      ->Then(
+          GetMainThreadSerialEventTarget(), __func__, []() {},
+          [promiseHolder](nsresult rv) {
+            RefPtr<ContentAnalysis> self = GetContentAnalysisFromService();
+            auto info = MakeRefPtr<ContentAnalysisDiagnosticInfo>(
+                false, EmptyString(), rv == NS_ERROR_INVALID_SIGNATURE,
+                self ? self->mRequestCount : 0);
+            promiseHolder->MaybeResolve(info);
+          });
   promise.forget(aPromise);
   return NS_OK;
 }

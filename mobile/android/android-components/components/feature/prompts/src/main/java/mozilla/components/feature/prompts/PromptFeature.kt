@@ -19,6 +19,7 @@ import mozilla.components.browser.state.action.ContentAction
 import mozilla.components.browser.state.selector.findTabOrCustomTab
 import mozilla.components.browser.state.selector.findTabOrCustomTabOrSelectedTab
 import mozilla.components.browser.state.selector.selectedTab
+import mozilla.components.browser.state.state.ContentState
 import mozilla.components.browser.state.state.SessionState
 import mozilla.components.browser.state.store.BrowserStore
 import mozilla.components.concept.engine.prompt.Choice
@@ -130,7 +131,8 @@ internal const val FRAGMENT_TAG = "mozac_feature_prompt_dialog"
  * to [onActivityResult].
  *
  * This feature will subscribe to the currently selected session and display
- * a suitable native dialog based on [Session.Observer.onPromptRequested] events.
+ * a suitable native dialog based on the [SessionState.content] state
+ * [ContentState.promptRequests] events.
  * Once the dialog is closed or the user selects an item from the dialog
  * the related [PromptRequest] will be consumed.
  *
@@ -157,8 +159,6 @@ internal const val FRAGMENT_TAG = "mozac_feature_prompt_dialog"
  * the user does not want to see a save login dialog for.
  * @property loginDelegate Delegate for login picker.
  * @property suggestStrongPasswordDelegate Delegate for strong password generator.
- * @property isSuggestStrongPasswordEnabled Feature flag denoting whether the suggest strong password
- * feature is enabled or not. If this resolves to 'false', the feature will be hidden.
  * @property onSaveLoginWithStrongPassword A callback invoked to save a new login that uses the
  * generated strong password
  * @property shouldAutomaticallyShowSuggestedPassword A callback invoked to check whether the user
@@ -472,7 +472,7 @@ class PromptFeature private constructor(
                                 is MenuChoice,
                                 -> {
                                     (activePrompt?.get() as? ChoiceDialogFragment)?.let { dialog ->
-                                        if (dialog.isAdded) {
+                                        if (dialog.isStateSaved) {
                                             dialog.dismissAllowingStateLoss()
                                         } else {
                                             activePromptsToDismiss.remove(dialog)
@@ -489,7 +489,7 @@ class PromptFeature private constructor(
                             onPromptRequested(state)
                         } else if (!content.loading) {
                             promptAbuserDetector.resetJSAlertAbuseState()
-                        } else if (content.loading) {
+                        } else {
                             dismissSelectPrompts()
                         }
 
@@ -512,13 +512,21 @@ class PromptFeature private constructor(
 
                 store.consumeAllSessionPrompts(
                     sessionId = prompt?.sessionId,
-                    activePrompt,
+                    activePrompt = activePrompt,
                     predicate = { it.shouldDismissOnLoad && it !is File },
-                    consume = { prompt?.dismiss() },
+                    consume = {
+                        if (prompt?.isStateSaved == true) {
+                            prompt.dismiss()
+                        }
+                    },
                 )
 
-                // Let's make sure we do not leave anything behind..
-                activePromptsToDismiss.forEach { fragment -> fragment.dismiss() }
+                // Let's make sure we do not leave anything behind.
+                activePromptsToDismiss.forEach { fragment ->
+                    if (fragment.isStateSaved) {
+                        fragment.dismiss()
+                    }
+                }
             }
         }
 
@@ -806,7 +814,7 @@ class PromptFeature private constructor(
      */
     private fun reattachFragment(fragment: PromptDialogFragment) {
         val session = store.state.findTabOrCustomTab(fragment.sessionId)
-        if (session?.content?.promptRequests?.isEmpty() != false) {
+        if (session == null || session.content.promptRequests.isEmpty()) {
             fragmentManager.beginTransaction()
                 .remove(fragment)
                 .commitAllowingStateLoss()
@@ -1158,22 +1166,7 @@ class PromptFeature private constructor(
         dialog.feature = this
 
         if (canShowThisPrompt(promptRequest)) {
-            // If the ChoiceDialogFragment's choices data were updated,
-            // we need to dismiss the previous dialog
-            activePrompt?.get()?.let { promptDialog ->
-                // ChoiceDialogFragment could update their choices data,
-                // and we need to dismiss the previous UI dialog,
-                // without consuming the engine callbacks, and allow to create a new dialog with the
-                // updated data.
-                if (promptDialog is ChoiceDialogFragment &&
-                    !session.content.promptRequests.any { it.uid == promptDialog.promptRequestUID }
-                ) {
-                    // We want to avoid consuming the engine callbacks and allow a new dialog
-                    // to be created with the updated data.
-                    promptDialog.feature = null
-                    promptDialog.dismiss()
-                }
-            }
+            maybeDismissPreviousDialog(session)
 
             emitPromptDisplayedFact(promptName = dialog::class.simpleName.ifNullOrEmpty { "" })
             dialog.show(fragmentManager, FRAGMENT_TAG)
@@ -1186,6 +1179,29 @@ class PromptFeature private constructor(
             dismissDialogRequest(promptRequest, session)
         }
         promptAbuserDetector.updateJSDialogAbusedState()
+    }
+
+    /**
+     * If the ChoiceDialogFragment's choices data were updated, we need to dismiss the previous
+     * dialog.
+     */
+    private fun maybeDismissPreviousDialog(session: SessionState) {
+        activePrompt?.get()?.let { promptDialog ->
+            // ChoiceDialogFragment could update their choices data,
+            // and we need to dismiss the previous UI dialog,
+            // without consuming the engine callbacks, and allow to create a new dialog with the
+            // updated data.
+            if (promptDialog is ChoiceDialogFragment &&
+                !session.content.promptRequests.any { it.uid == promptDialog.promptRequestUID }
+            ) {
+                // We want to avoid consuming the engine callbacks and allow a new dialog
+                // to be created with the updated data.
+                promptDialog.feature = null
+                if (promptDialog.isStateSaved) {
+                    promptDialog.dismiss()
+                }
+            }
+        }
     }
 
     /**
@@ -1282,7 +1298,7 @@ class PromptFeature private constructor(
     /**
      * Handles the result received from the Android photo picker.
      *
-     * @param listOf An array of [Uri] objects representing the selected photos.
+     * @param uriList An array of [Uri] objects representing the selected photos.
      */
 
     fun onAndroidPhotoPickerResult(uriList: Array<Uri>) {
@@ -1299,7 +1315,7 @@ class PromptFeature private constructor(
  * Removes the [PromptRequest] indicated by [promptRequestUID] from the current Session if it it exists
  * and offers a [consume] callback for other optional side effects.
  *
- * @param sessionId Session id of the tab or custom tab in which to try consuming [PromptRequests].
+ * @param sessionId Session id of the tab or custom tab in which to try consuming [PromptRequest]s.
  * If the id is not provided or a tab with that id is not found the method will act on the current tab.
  * @param promptRequestUID Id of the [PromptRequest] to be consumed.
  * @param activePrompt The current active Prompt if known. If provided it will always be cleared,
@@ -1325,10 +1341,10 @@ internal fun BrowserStore.consumePromptFrom(
  * Removes the most recent [PromptRequest] of type [P] from the current Session if it it exists
  * and offers a [consume] callback for other optional side effects.
  *
- * @param sessionId Session id of the tab or custom tab in which to try consuming [PromptRequests].
+ * @param sessionId Session id of the tab or custom tab in which to try consuming [PromptRequest]s.
  * If the id is not provided or a tab with that id is not found the method will act on the current tab.
  * @param activePrompt The current active Prompt if known. If provided it will always be cleared,
- * irrespective of if [PromptRequest] indicated by [promptRequestUID] is found and removed or not.
+ * irrespective of if [PromptRequest] indicated by [PromptRequest.uid] is found and removed or not.
  * @param consume callback with the [PromptRequest] if found, before being removed from the Session.
  */
 internal inline fun <reified P : PromptRequest> BrowserStore.consumePromptFrom(
@@ -1349,10 +1365,10 @@ internal inline fun <reified P : PromptRequest> BrowserStore.consumePromptFrom(
  * Filters and removes all [PromptRequest]s from the current Session if it it exists
  * and offers a [consume] callback for other optional side effects on each filtered [PromptRequest].
  *
- * @param sessionId Session id of the tab or custom tab in which to try consuming [PromptRequests].
+ * @param sessionId Session id of the tab or custom tab in which to try consuming [PromptRequest]s.
  * If the id is not provided or a tab with that id is not found the method will act on the current tab.
  * @param activePrompt The current active Prompt if known. If provided it will always be cleared,
- * irrespective of if [PromptRequest] indicated by [promptRequestUID] is found and removed or not.
+ * irrespective of if [PromptRequest] indicated by [PromptRequest.uid] is found and removed or not.
  * @param predicate function allowing matching only specific [PromptRequest]s from all contained in the Session.
  * @param consume callback with the [PromptRequest] if found, before being removed from the Session.
  */

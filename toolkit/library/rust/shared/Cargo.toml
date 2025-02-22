@@ -43,6 +43,7 @@ cert_storage = { path = "../../../../security/manager/ssl/cert_storage" }
 crypto_hash = { path = "../../../../security/manager/ssl/crypto_hash" }
 data_storage = { path = "../../../../security/manager/ssl/data_storage" }
 ipcclientcerts = { path = "../../../../security/manager/ssl/ipcclientcerts" }
+trust-anchors = { path = "../../../../security/manager/ssl/trust_anchors" }
 bitsdownload = { path = "../../../components/bitsdownload", optional = true }
 storage = { path = "../../../../storage/rust" }
 bookmark_sync = { path = "../../../components/places/bookmark_sync", optional = true }
@@ -108,7 +109,7 @@ url = "2.5.0"
 # Since we're building with at least rustc 1.63, enable rust 1.57 features (use of try_reserve methods).
 fallible_collections = { version = "0.4", features = ["rust_1_57"] }
 
-libz-rs-sys = { git = "https://github.com/memorysafety/zlib-rs", rev = "4aa430ccb77537d0d60dab8db993ca51bb1194c5", features = ["custom-prefix"], optional = true }
+libz-rs-sys = { version = "0.4.1", features = ["custom-prefix"], optional = true }
 
 [target.'cfg(any(target_os = "macos",target_os = "ios", all(target_os = "windows", not(target_arch = "aarch64"))))'.dependencies]
 osclientcerts = { path = "../../../../security/manager/ssl/osclientcerts" }

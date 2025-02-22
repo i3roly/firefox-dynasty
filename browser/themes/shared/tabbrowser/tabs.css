@@ -1024,6 +1024,7 @@
      margin: 0;
      position: absolute;
      pointer-events: none;
+     top: -100px;
   }
 
   .tab-group-editor-swatch {
@@ -1323,7 +1324,7 @@
     padding-block: 3px 2px;
 
     /* prevent the shadow of the close button from being cutoff by the toolbar on the first tab */
-    &:nth-child(1 of :not([hidden])) {
+    &:nth-child(1 of :not([hidden], [pinned])) {
       padding-block-start: 5px;
     }
   }
