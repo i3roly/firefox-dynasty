@@ -11,7 +11,6 @@
 #include "CoreTextFontList.h"
 
 class gfxMacPlatformFontList final : public CoreTextFontList {
-using FontFamilyListEntry = mozilla::dom::SystemFontListEntry; 
 public:
   static gfxMacPlatformFontList* PlatformFontList() {
     return static_cast<gfxMacPlatformFontList*>(
