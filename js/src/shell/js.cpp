@@ -12554,8 +12554,6 @@ bool InitOptionParser(OptionParser& op) {
                         "Enable top-level await") ||
       !op.addBoolOption('\0', "enable-import-attributes",
                         "Enable import attributes") ||
-      !op.addBoolOption('\0', "disable-destructuring-fuse",
-                        "Disable Destructuring Fuse") ||
       !op.addStringOption('\0', "shared-memory", "on/off",
                           "SharedArrayBuffer and Atomics "
 #if SHARED_MEMORY_DEFAULT
@@ -12977,6 +12975,9 @@ bool SetGlobalOptionsPreJSInit(const OptionParser& op) {
   if (op.getBoolOption("enable-math-sumprecise")) {
     JS::Prefs::setAtStartup_experimental_math_sumprecise(true);
   }
+  if (op.getBoolOption("enable-atomics-pause")) {
+    JS::Prefs::setAtStartup_experimental_atomics_pause(true);
+  }
 #ifdef NIGHTLY_BUILD
   if (op.getBoolOption("enable-async-iterator-helpers")) {
     JS::Prefs::setAtStartup_experimental_async_iterator_helpers(true);
@@ -12995,9 +12996,6 @@ bool SetGlobalOptionsPreJSInit(const OptionParser& op) {
   }
   if (op.getBoolOption("enable-joint-iteration")) {
     JS::Prefs::setAtStartup_experimental_joint_iteration(true);
-  }
-  if (op.getBoolOption("enable-atomics-pause")) {
-    JS::Prefs::setAtStartup_experimental_atomics_pause(true);
   }
   if (op.getBoolOption("enable-upsert")) {
     JS::Prefs::setAtStartup_experimental_upsert(true);
@@ -13022,9 +13020,6 @@ bool SetGlobalOptionsPreJSInit(const OptionParser& op) {
 
   JS::Prefs::setAtStartup_experimental_weakrefs_expose_cleanupSome(true);
 
-  if (op.getBoolOption("disable-destructuring-fuse")) {
-    JS::Prefs::setAtStartup_destructuring_fuse(false);
-  }
   if (op.getBoolOption("disable-property-error-message-fix")) {
     JS::Prefs::setAtStartup_property_error_message_fix(false);
   }

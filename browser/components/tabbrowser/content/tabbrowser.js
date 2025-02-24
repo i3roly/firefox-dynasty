@@ -187,6 +187,7 @@
       window.addEventListener("activate", this);
       window.addEventListener("deactivate", this);
       window.addEventListener("TabGroupCreate", this);
+      window.addEventListener("MlLabelCreate", this);
 
       this.tabContainer.init();
       this._setupInitialBrowserAndTab();
@@ -821,7 +822,7 @@
 
       this.showTab(aTab);
       if (this.tabContainer.verticalMode) {
-        this._handleTabMove(aTab, () =>
+        this.#handleTabMove(aTab, () =>
           this.verticalPinnedTabsContainer.appendChild(aTab)
         );
       } else {
@@ -838,7 +839,7 @@
       }
 
       if (this.tabContainer.verticalMode) {
-        this._handleTabMove(aTab, () => {
+        this.#handleTabMove(aTab, () => {
           // we remove this attribute first, so that allTabs represents
           // the moving of a tab from the vertical pinned tabs container
           // and back into arrowscrollbox.
@@ -2959,6 +2960,12 @@
           group.label = newLabel;
           if (this.tabGroupMenu.panel.state !== "closed") {
             this.tabGroupNameField.value = newLabel;
+            group.dispatchEvent(
+              new CustomEvent("MlLabelCreate", {
+                bubbles: true,
+                detail: { mlLabel: newLabel },
+              })
+            );
           }
         });
       }
@@ -3011,7 +3018,7 @@
         return;
       }
 
-      this._handleTabMove(tab, () =>
+      this.#handleTabMove(tab, () =>
         gBrowser.tabContainer.insertBefore(tab, tab.group.nextElementSibling)
       );
     }
@@ -5772,7 +5779,7 @@
         return;
       }
 
-      this._handleTabMove(aTab, () => {
+      this.#handleTabMove(aTab, () => {
         let neighbor = this.tabs[aIndex];
         if (forceStandaloneTab && neighbor.group) {
           neighbor = neighbor.group;
@@ -5788,11 +5795,43 @@
     /**
      * @param {MozTabbrowserTab} tab
      * @param {MozTabbrowserTab|MozTabbrowserTabGroup} targetElement
-     * @param {boolean} dropBefore
      */
-    dropTab(tab, targetElement, dropBefore) {
-      this._handleTabMove(tab, () => {
-        if (dropBefore) {
+    moveTabBefore(tab, targetElement) {
+      this.#moveTabNextTo(tab, targetElement, true);
+    }
+
+    /**
+     * @param {MozTabbrowserTab[]} tabs
+     * @param {MozTabbrowserTab|MozTabbrowserTabGroup} targetElement
+     */
+    moveTabsBefore(tabs, targetElement) {
+      this.#moveTabsNextTo(tabs, targetElement, true);
+    }
+
+    /**
+     * @param {MozTabbrowserTab} tab
+     * @param {MozTabbrowserTab|MozTabbrowserTabGroup} targetElement
+     */
+    moveTabAfter(tab, targetElement) {
+      this.#moveTabNextTo(tab, targetElement, false);
+    }
+
+    /**
+     * @param {MozTabbrowserTab[]} tabs
+     * @param {MozTabbrowserTab|MozTabbrowserTabGroup} targetElement
+     */
+    moveTabsAfter(tabs, targetElement) {
+      this.#moveTabsNextTo(tabs, targetElement, false);
+    }
+
+    /**
+     * @param {MozTabbrowserTab} tab
+     * @param {MozTabbrowserTab|MozTabbrowserTabGroup} targetElement
+     * @param {boolean} moveBefore
+     */
+    #moveTabNextTo(tab, targetElement, moveBefore = false) {
+      this.#handleTabMove(tab, () => {
+        if (moveBefore) {
           this.tabContainer.insertBefore(tab, targetElement);
         } else if (targetElement) {
           targetElement.after(tab);
@@ -5805,12 +5844,12 @@
     /**
      * @param {MozTabbrowserTab[]} tabs
      * @param {MozTabbrowserTab|MozTabbrowserTabGroup} targetElement
-     * @param {dropBefore} dropBefore
+     * @param {boolean} moveBefore
      */
-    dropTabs(tabs, targetElement, dropBefore) {
-      this.dropTab(tabs[0], targetElement, dropBefore);
+    #moveTabsNextTo(tabs, targetElement, moveBefore = false) {
+      this.#moveTabNextTo(tabs[0], targetElement, moveBefore);
       for (let i = 1; i < tabs.length; i++) {
-        this.dropTab(tabs[i], tabs[i - 1]);
+        this.#moveTabNextTo(tabs[i], tabs[i - 1]);
       }
     }
 
@@ -5823,7 +5862,7 @@
       }
 
       aGroup.collapsed = false;
-      this._handleTabMove(aTab, () => aGroup.appendChild(aTab));
+      this.#handleTabMove(aTab, () => aGroup.appendChild(aTab));
       this.removeFromMultiSelectedTabs(aTab);
       this.tabContainer._notifyBackgroundTab(aTab);
     }
@@ -5833,7 +5872,7 @@
      * @param {function():void} moveActionCallback
      * @returns
      */
-    _handleTabMove(aTab, moveActionCallback) {
+    #handleTabMove(aTab, moveActionCallback) {
       let wasFocused = document.activeElement == this.selectedTab;
       let oldPosition = aTab._tPos;
 
@@ -5932,7 +5971,7 @@
         filter: tab => !tab.hidden && selectedTab.pinned == tab.pinned,
       });
       if (nextTab) {
-        this._handleTabMove(selectedTab, () => {
+        this.#handleTabMove(selectedTab, () => {
           if (!selectedTab.group && nextTab.group) {
             if (nextTab.group.collapsed) {
               // Skip over collapsed tab group.
@@ -5964,7 +6003,7 @@
       });
 
       if (previousTab) {
-        this._handleTabMove(selectedTab, () => {
+        this.#handleTabMove(selectedTab, () => {
           if (!selectedTab.group && previousTab.group) {
             if (previousTab.group.collapsed) {
               // Skip over collapsed tab group.
@@ -6659,6 +6698,11 @@
         case "TabGroupCreate":
           if (aEvent.detail.showCreateUI) {
             this.tabGroupMenu.openCreateModal(aEvent.target);
+          }
+          break;
+        case "MlLabelCreate":
+          if (aEvent.detail.mlLabel) {
+            this.tabGroupMenu.mlLabel = aEvent.detail.mlLabel;
           }
           break;
         case "activate":
@@ -8396,11 +8440,14 @@ var TabContextMenu = {
         groupableTabs.map(t => t.group).filter(g => g)
       ).size;
 
-      // Determine whether or not the "current" tab group should appear in the move context menu
       let availableGroupsToMoveTo = gBrowser
         .getAllTabGroups()
-        .sort((a, b) => a.createdDate - b.createdDate);
+        .sort(
+          (group1, group2) => group2.lastSeenActive - group1.lastSeenActive
+        );
 
+      // Determine whether or not the "current" tab group should appear in the
+      // "move tab to group" context menu.
       let groupToFilter;
       if (selectedGroupCount == 1) {
         groupToFilter = groupableTabs[0].group;

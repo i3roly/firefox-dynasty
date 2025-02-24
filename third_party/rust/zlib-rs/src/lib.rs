@@ -1,4 +1,5 @@
 #![doc = core::include_str!("../README.md")]
+#![feature(const_mut_refs)]
 #![cfg_attr(not(any(test, feature = "rust-allocator")), no_std)]
 
 #[cfg(any(feature = "rust-allocator", feature = "c-allocator"))]

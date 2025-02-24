@@ -67,9 +67,9 @@ TextDirectiveUtil::RangeContentAsFoldCase(nsRange* aRange) {
 }
 
 /* static */ RefPtr<nsRange> TextDirectiveUtil::FindStringInRange(
-    nsRange* aSearchRange, const nsAString& aQuery, bool aWordStartBounded,
-    bool aWordEndBounded) {
-  MOZ_ASSERT(aSearchRange);
+    const RangeBoundary& aSearchStart, const RangeBoundary& aSearchEnd,
+    const nsAString& aQuery, bool aWordStartBounded, bool aWordEndBounded,
+    nsContentUtils::NodeIndexCache* aCache) {
   TEXT_FRAGMENT_LOG("query='{}', wordStartBounded='{}', wordEndBounded='{}'.\n",
                     NS_ConvertUTF16toUTF8(aQuery), aWordStartBounded,
                     aWordEndBounded);
@@ -77,13 +77,9 @@ TextDirectiveUtil::RangeContentAsFoldCase(nsRange* aRange) {
   finder->SetWordStartBounded(aWordStartBounded);
   finder->SetWordEndBounded(aWordEndBounded);
   finder->SetCaseSensitive(false);
-  RefPtr<nsRange> searchRangeStart = nsRange::Create(
-      aSearchRange->StartRef(), aSearchRange->StartRef(), IgnoreErrors());
-  RefPtr<nsRange> searchRangeEnd = nsRange::Create(
-      aSearchRange->EndRef(), aSearchRange->EndRef(), IgnoreErrors());
-  RefPtr<nsRange> result;
-  Unused << finder->Find(aQuery, aSearchRange, searchRangeStart, searchRangeEnd,
-                         getter_AddRefs(result));
+  finder->SetNodeIndexCache(aCache);
+  RefPtr<nsRange> result =
+      finder->FindFromRangeBoundaries(aQuery, aSearchStart, aSearchEnd);
   if (!result || result->Collapsed()) {
     TEXT_FRAGMENT_LOG("Did not find query '{}'", NS_ConvertUTF16toUTF8(aQuery));
   } else {
@@ -428,8 +424,8 @@ TextDirectiveUtil::FindBlockBoundaryInRange(const nsRange& aRange,
 }
 
 /* static */ bool TextDirectiveUtil::NormalizedRangeBoundariesAreEqual(
-    const RangeBoundary& aRangeBoundary1,
-    const RangeBoundary& aRangeBoundary2) {
+    const RangeBoundary& aRangeBoundary1, const RangeBoundary& aRangeBoundary2,
+    nsContentUtils::NodeIndexCache* aCache /* = nullptr */) {
   MOZ_ASSERT(aRangeBoundary1.IsSetAndValid() &&
              aRangeBoundary2.IsSetAndValid());
   if (aRangeBoundary1 == aRangeBoundary2) {
@@ -471,7 +467,8 @@ TextDirectiveUtil::FindBlockBoundaryInRange(const nsRange& aRange,
 
   mozilla::UnsafePreContentIterator iter;
   // ContentIterator classes require boundaries to be in correct order.
-  auto comp = nsContentUtils::ComparePoints(aRangeBoundary1, aRangeBoundary2);
+  auto comp =
+      nsContentUtils::ComparePoints(aRangeBoundary1, aRangeBoundary2, aCache);
   if (!comp) {
     return false;
   }
@@ -482,7 +479,8 @@ TextDirectiveUtil::FindBlockBoundaryInRange(const nsRange& aRange,
       *comp == -1 ? std::tuple{&aRangeBoundary1, &aRangeBoundary2}
                   : std::tuple{&aRangeBoundary2, &aRangeBoundary1};
 
-  if (NS_FAILED(iter.Init(firstBoundary->AsRaw(), secondBoundary->AsRaw()))) {
+  if (NS_FAILED(iter.InitWithoutValidatingPoints(firstBoundary->AsRaw(),
+                                                 secondBoundary->AsRaw()))) {
     return false;
   }
 

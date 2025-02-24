@@ -2062,6 +2062,13 @@
   value: true
   mirror: always
 
+# Whether we block opening pickers from hidden extension pages in WebExtensions.
+# This includes background pages and devtools pages, but not background tabs.
+- name: browser.disable_pickers_in_hidden_extension_pages
+  type: RelaxedAtomicBool
+  value: @IS_NIGHTLY_BUILD@
+  mirror: always
+
 #---------------------------------------------------------------------------
 # Prefs starting with "channelclassifier."
 #---------------------------------------------------------------------------
@@ -4316,13 +4323,6 @@
 # pref controls `Sanitizer` API being exposed
 # https://wicg.github.io/sanitizer-api/
 - name: dom.security.sanitizer.enabled
-  type: bool
-  value: false
-  mirror: always
-
-# Pref that controls the Element.setHTML API idenpendetly of the sanitizer
-# API.
-- name: dom.security.setHTML.enabled
   type: bool
   value: false
   mirror: always
@@ -8369,13 +8369,6 @@
   mirror: always
   set_spidermonkey_pref: always
 
-# Enable fuse based destructuring
-- name: javascript.options.destructuring_fuse
-  type: bool
-  value: true
-  mirror: always
-  set_spidermonkey_pref: startup
-
 # The default amount of time to wait from the user being idle to starting a
 # shrinking GC. Measured in milliseconds.
 - name: javascript.options.compact_on_user_inactive_delay
@@ -8509,6 +8502,13 @@
   mirror: always
   set_spidermonkey_pref: startup
 
+  # Experimental support for Atomics.pause in JavaScript.
+-   name: javascript.options.experimental.atomics_pause
+    type: bool
+    value: true
+    mirror: always
+    set_spidermonkey_pref: startup
+
 #ifdef NIGHTLY_BUILD
   # Experimental support for Async Iterator Helpers in JavaScript.
 -   name: javascript.options.experimental.async_iterator_helpers
@@ -8540,13 +8540,6 @@
 
   # Experimental support for Joint Iteration in JavaScript.
 -   name: javascript.options.experimental.joint_iteration
-    type: bool
-    value: false
-    mirror: always
-    set_spidermonkey_pref: startup
-
-  # Experimental support for Atomics.pause in JavaScript.
--   name: javascript.options.experimental.atomics_pause
     type: bool
     value: false
     mirror: always
@@ -14711,6 +14704,12 @@
   value: true
   mirror: always
   rust: true
+
+# When true, skip alt-svc validation when the connection is made using HTTPS RR.
+- name: network.http.skip_alt_svc_validation_on_https_rr
+  type: RelaxedAtomicBool
+  value: true
+  mirror: always
 
 # When true, a http request will be upgraded to https when HTTPS RR is
 # available.

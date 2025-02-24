@@ -166,11 +166,10 @@ class nsUrlClassifierDBService::FeatureHolder final {
     // only look up at most 5 URLs per aSpec, even if aSpec has more than 5
     // components.
     nsTArray<nsCString> fragments;
-    nsresult rv = LookupCache::GetLookupFragments(aSpec, &fragments);
-    NS_ENSURE_SUCCESS(rv, rv);
+    LookupCache::GetLookupFragments(aSpec, &fragments);
 
     for (TableData* tableData : mTableData) {
-      rv = aWorker->DoSingleLocalLookupWithURIFragments(
+      nsresult rv = aWorker->DoSingleLocalLookupWithURIFragments(
           fragments, tableData->mTable, tableData->mResults);
       if (NS_WARN_IF(NS_FAILED(rv))) {
         return rv;
@@ -2567,10 +2566,26 @@ nsUrlClassifierDBService::AsyncClassifyLocalWithFeatureNames(
     nsIUrlClassifierFeature::listType aListType,
     nsIUrlClassifierFeatureCallback* aCallback) {
   MOZ_ASSERT(NS_IsMainThread());
-  MOZ_ASSERT(XRE_IsContentProcess());
 
   if (gShuttingDownThread) {
     return NS_ERROR_ABORT;
+  }
+
+  if (!XRE_IsContentProcess()) {
+    nsTArray<RefPtr<nsIUrlClassifierFeature>> features;
+    for (const nsCString& featureName : aFeatureNames) {
+      nsCOMPtr<nsIUrlClassifierFeature> feature =
+          mozilla::net::UrlClassifierFeatureFactory::GetFeatureByName(
+              featureName);
+      if (NS_WARN_IF(!feature)) {
+        continue;
+      }
+      features.AppendElement(feature);
+    }
+    MOZ_ASSERT(!features.IsEmpty(),
+               "At least one URL classifier feature must be present");
+    return AsyncClassifyLocalWithFeatures(aURI, features, aListType, aCallback,
+                                          true);
   }
 
   mozilla::dom::ContentChild* content =

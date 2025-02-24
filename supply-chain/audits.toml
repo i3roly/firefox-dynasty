@@ -1220,10 +1220,25 @@ criteria = "safe-to-deploy"
 delta = "0.9.3 -> 0.9.4"
 notes = "I've reviewed every source contribution that was neither authored nor reviewed by Mozilla."
 
+[[audits.core-foundation]]
+who = "Erich Gubler <erichdongubler@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.9.4 -> 0.10.0"
+
+[[audits.core-foundation-sys]]
+who = "Erich Gubler <erichdongubler@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.8.6 -> 0.8.7"
+
 [[audits.core-graphics]]
 who = "Teodor Tanasoaia <ttanasoaia@mozilla.com>"
 criteria = "safe-to-deploy"
 delta = "0.22.3 -> 0.23.1"
+
+[[audits.core-graphics]]
+who = "Erich Gubler <erichdongubler@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.23.1 -> 0.24.0"
 
 [[audits.core-graphics-types]]
 who = "Teodor Tanasoaia <ttanasoaia@mozilla.com>"
@@ -1235,6 +1250,11 @@ who = "Teodor Tanasoaia <ttanasoaia@mozilla.com>"
 criteria = "safe-to-deploy"
 delta = "0.1.2 -> 0.1.3"
 notes = "I've reviewed every source contribution that was neither authored nor reviewed by Mozilla."
+
+[[audits.core-graphics-types]]
+who = "Erich Gubler <erichdongubler@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.1.3 -> 0.2.0"
 
 [[audits.core-text]]
 who = "Teodor Tanasoaia <ttanasoaia@mozilla.com>"
@@ -1253,6 +1273,11 @@ the variants of CTFontCreateWithName and CTFontCreateWithFontDescriptor that acc
 parameter. These are directly parallel to the existing versions without CTFontOptions, and do not
 introduce any new forms of risk.
 """
+
+[[audits.core-text]]
+who = "Erich Gubler <erichdongubler@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "20.1.0 -> 21.0.0"
 
 [[audits.core_maths]]
 who = "Makoto Kato <m_kato@ga2.so-net.ne.jp>"
@@ -2913,6 +2938,18 @@ who = "Mike Hommey <mh+mozilla@glandium.org>"
 criteria = "safe-to-deploy"
 delta = "1.0.3 -> 1.0.5"
 
+[[audits.jexl-eval]]
+who = "Ben Dean-Kawamura <bdk@mozilla.com>"
+criteria = "safe-to-deploy"
+version = "0.3.0"
+notes = "This crate doesn't contain any unsafe code or IO usage."
+
+[[audits.jexl-parser]]
+who = "Ben Dean-Kawamura <bdk@mozilla.com>"
+criteria = "safe-to-deploy"
+version = "0.3.0"
+notes = "This crate doesn't contain any unsafe code or IO usage."
+
 [[audits.jobserver]]
 who = "Mike Hommey <mh+mozilla@glandium.org>"
 criteria = "safe-to-deploy"
@@ -2927,6 +2964,15 @@ delta = "0.1.2 -> 0.1.3"
 who = "Nicolas Silva <nical@fastmail.com>"
 criteria = "safe-to-deploy"
 delta = "4.1.0 -> 6.0.0"
+
+[[audits.lalrpop-util]]
+who = "Ben Dean-Kawamura <bdk@mozilla.com>"
+criteria = "safe-to-deploy"
+version = "0.19.12"
+notes = """
+This crate doesn't contain any unsafe code or IO usage.
+Also, it's written by Niko Matsakis.
+"""
 
 [[audits.leak]]
 who = "Sotaro Ikeda <sotaro.ikeda.g@gmail.com>"

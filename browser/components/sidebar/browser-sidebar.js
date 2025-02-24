@@ -7,6 +7,11 @@
  * dynamically adding menubar menu items for the View -> Sidebar menu,
  * and provides APIs for sidebar extensions, etc.
  */
+
+var { ShoppingUtils } = ChromeUtils.importESModule(
+  "resource:///modules/ShoppingUtils.sys.mjs"
+);
+
 const defaultTools = {
   viewGenaiChatSidebar: "aichat",
   viewReviewCheckerSidebar: "reviewchecker",
@@ -540,10 +545,9 @@ var SidebarController = {
       delete state.command;
     }
     await this.promiseInitialized;
+    await this.waitUntilStable(); // Finish currently scheduled tasks.
     this._state.loadInitialState(state);
-    if (this.revampComponentsLoaded) {
-      await this.sidebarMain.updateComplete;
-    }
+    await this.waitUntilStable(); // Finish newly scheduled tasks.
     this.updateToolbarButton();
     this.uiStateInitialized = true;
   },
@@ -1010,6 +1014,23 @@ var SidebarController = {
     });
   },
 
+  /**
+   * Wait for Lit updates and ongoing animations to complete.
+   *
+   * @returns {Promise}
+   */
+  async waitUntilStable() {
+    if (!this.sidebarRevampEnabled) {
+      // Legacy sidebar doesn't have animations, nothing to await.
+      return null;
+    }
+    const tasks = [
+      this.sidebarMain.updateComplete,
+      ...this._ongoingAnimations.map(animation => animation.finished),
+    ];
+    return Promise.allSettled(tasks);
+  },
+
   async _animateSidebarMain() {
     let tabbox = document.getElementById("tabbrowser-tabbox");
     let animatingElements = [this.sidebarContainer, this._box, this._splitter];
@@ -1150,11 +1171,23 @@ var SidebarController = {
     if (this._animationEnabled && !window.gReduceMotion) {
       this._animateSidebarMain();
     }
+
     this._state.updateVisibility(!this._state.launcherVisible, true);
     if (this.sidebarRevampVisibility === "expand-on-hover") {
       this.toggleExpandOnHover(initialExpandedValue);
     }
     this.updateToolbarButton();
+
+    if (this.lastOpenedId == "viewReviewCheckerSidebar") {
+      ShoppingUtils.sendTrigger({
+        browser: this.browser,
+        id: "sidebarButtonClicked",
+        context: {
+          isReviewCheckerInSidebarClosed: !this?.isOpen,
+          isSidebarVisible: this._state?.launcherVisible,
+        },
+      });
+    }
   },
 
   /**
@@ -1171,7 +1204,10 @@ var SidebarController = {
       let sidebarToggleKey = document.getElementById("toggleSidebarKb");
       const shortcut = ShortcutUtils.prettifyShortcut(sidebarToggleKey);
       toolbarButton.dataset.l10nArgs = JSON.stringify({ shortcut });
-      if (this.sidebarVerticalTabsEnabled) {
+      // we need to use the pref rather than SidebarController's getter here
+      // as the getter might not have the new value yet
+      const isVerticalTabs = Services.prefs.getBoolPref("sidebar.verticalTabs");
+      if (isVerticalTabs) {
         toolbarButton.toggleAttribute("expanded", this.sidebarMain.expanded);
       } else {
         toolbarButton.toggleAttribute("expanded", false);

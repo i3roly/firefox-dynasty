@@ -340,12 +340,7 @@ body {
   background-size: cover;
   background-position: center;
   background-attachment: fixed;
-  background-image: var(--newtab-wallpaper-light, ""), linear-gradient(to right, var(--newtab-wallpaper-color, ""), var(--newtab-wallpaper-color, ""));
-}
-@media (prefers-color-scheme: dark) {
-  body {
-    background-image: var(--newtab-wallpaper-dark, ""), linear-gradient(to right, var(--newtab-wallpaper-color, ""), var(--newtab-wallpaper-color, ""));
-  }
+  background-image: var(--newtab-wallpaper, ""), linear-gradient(to right, var(--newtab-wallpaper-color, ""), var(--newtab-wallpaper-color, ""));
 }
 
 .no-scroll {
@@ -6402,6 +6397,15 @@ main section {
 }
 .ds-card-grid.ad-sizing-variant-a .ds-card.ds-spoc-rectangle .card-stp-button-hover-background {
   border-radius: var(--border-radius-medium);
+}
+.ds-card-grid.ad-sizing-variant-a .ds-card.ds-spoc-rectangle.sections-card-ui .img-wrapper .ds-image img {
+  border-radius: var(--border-radius-large);
+}
+.ds-card-grid.ad-sizing-variant-a .ds-card.ds-spoc-rectangle.sections-card-ui:hover {
+  box-shadow: none;
+}
+.ds-card-grid.ad-sizing-variant-a .ds-card.ds-spoc-rectangle.sections-card-ui:hover .img-wrapper .ds-image img {
+  box-shadow: 0 2px 14px 0 var(--newtab-section-card-box-shadow-color);
 }
 .ds-card-grid.ad-sizing-variant-b .ds-card.ds-spoc-rectangle {
   border: var(--border-width) solid var(--border-color-deemphasized);

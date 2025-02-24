@@ -97,6 +97,7 @@ RefPtr<nsRange> TextDirectiveFinder::FindRangeForTextDirective(
   if (rv.Failed()) {
     return nullptr;
   }
+  nsContentUtils::NodeIndexCache nodeIndexCache;
   // 2. While searchRange is not collapsed:
   while (!searchRange->Collapsed()) {
     // 2.1. Let potentialMatch be null.
@@ -107,7 +108,8 @@ RefPtr<nsRange> TextDirectiveFinder::FindRangeForTextDirective(
       // in range steps with query parsedValues’s prefix, searchRange
       // searchRange, wordStartBounded true and wordEndBounded false.
       RefPtr<nsRange> prefixMatch = TextDirectiveUtil::FindStringInRange(
-          searchRange, aTextDirective.prefix, true, false);
+          searchRange->StartRef(), searchRange->EndRef(), aTextDirective.prefix,
+          true, false, &nodeIndexCache);
       // 2.2.2. If prefixMatch is null, return null.
       if (!prefixMatch) {
         TEXT_FRAGMENT_LOG(
@@ -174,7 +176,8 @@ RefPtr<nsRange> TextDirectiveFinder::FindRangeForTextDirective(
       // range steps with query parsedValues’s start, searchRange matchRange,
       // wordStartBounded false, and wordEndBounded mustEndAtWordBoundary.
       potentialMatch = TextDirectiveUtil::FindStringInRange(
-          matchRange, aTextDirective.start, false, mustEndAtWordBoundary);
+          matchRange->StartRef(), matchRange->EndRef(), aTextDirective.start,
+          false, mustEndAtWordBoundary);
       // 2.2.10. If potentialMatch is null, return null.
       // Note: Because the search range for start only goes to the next block
       // boundary, this statement is wrong. If potentialMatch is null, the loop
@@ -210,7 +213,8 @@ RefPtr<nsRange> TextDirectiveFinder::FindRangeForTextDirective(
       // range steps with query parsedValues’s start, searchRange searchRange,
       // wordStartBounded true, and wordEndBounded mustEndAtWordBoundary.
       potentialMatch = TextDirectiveUtil::FindStringInRange(
-          searchRange, aTextDirective.start, true, mustEndAtWordBoundary);
+          searchRange->StartRef(), searchRange->EndRef(), aTextDirective.start,
+          true, mustEndAtWordBoundary, &nodeIndexCache);
       // 2.3.3. If potentialMatch is null, return null.
       if (!potentialMatch) {
         TEXT_FRAGMENT_LOG(
@@ -254,8 +258,8 @@ RefPtr<nsRange> TextDirectiveFinder::FindRangeForTextDirective(
         // rangeEndSearchRange, wordStartBounded true, and wordEndBounded
         // mustEndAtWordBoundary.
         RefPtr<nsRange> endMatch = TextDirectiveUtil::FindStringInRange(
-            rangeEndSearchRange, aTextDirective.end, true,
-            mustEndAtWordBoundary);
+            rangeEndSearchRange->StartRef(), rangeEndSearchRange->EndRef(),
+            aTextDirective.end, true, mustEndAtWordBoundary, &nodeIndexCache);
         // 2.5.1.3. If endMatch is null then return null.
         if (!endMatch) {
           TEXT_FRAGMENT_LOG(
@@ -299,7 +303,8 @@ RefPtr<nsRange> TextDirectiveFinder::FindRangeForTextDirective(
       // steps with query parsedValue's suffix, searchRange suffixRange,
       // wordStartBounded false, and wordEndBounded true.
       RefPtr<nsRange> suffixMatch = TextDirectiveUtil::FindStringInRange(
-          suffixRange, aTextDirective.suffix, false, true);
+          suffixRange->StartRef(), suffixRange->EndRef(), aTextDirective.suffix,
+          false, true);
       // 2.5.7. If suffixMatch is null, return null.
       // (If the suffix doesn't appear in the remaining text of the document,
       // there's no possible way to make a match.)

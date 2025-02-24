@@ -3063,49 +3063,6 @@ JitCode* JitZone::generateRegExpExecMatchStub(JSContext* cx) {
                                        /* isExecMatch = */ true);
 }
 
-class OutOfLineRegExpMatcher : public OutOfLineCodeBase<CodeGenerator> {
-  LRegExpMatcher* lir_;
-
- public:
-  explicit OutOfLineRegExpMatcher(LRegExpMatcher* lir) : lir_(lir) {}
-
-  void accept(CodeGenerator* codegen) override {
-    codegen->visitOutOfLineRegExpMatcher(this);
-  }
-
-  LRegExpMatcher* lir() const { return lir_; }
-};
-
-void CodeGenerator::visitOutOfLineRegExpMatcher(OutOfLineRegExpMatcher* ool) {
-  LRegExpMatcher* lir = ool->lir();
-  Register lastIndex = ToRegister(lir->lastIndex());
-  Register input = ToRegister(lir->string());
-  Register regexp = ToRegister(lir->regexp());
-
-  AllocatableGeneralRegisterSet regs(GeneralRegisterSet::All());
-  regs.take(lastIndex);
-  regs.take(input);
-  regs.take(regexp);
-  Register temp = regs.takeAny();
-
-  masm.computeEffectiveAddress(
-      Address(masm.getStackPointer(), InputOutputDataSize), temp);
-
-  pushArg(temp);
-  pushArg(lastIndex);
-  pushArg(input);
-  pushArg(regexp);
-
-  // We are not using oolCallVM because we are in a Call, and that live
-  // registers are already saved by the the register allocator.
-  using Fn =
-      bool (*)(JSContext*, HandleObject regexp, HandleString input,
-               int32_t lastIndex, MatchPairs* pairs, MutableHandleValue output);
-  callVM<Fn, RegExpMatcherRaw>(lir);
-
-  masm.jump(ool->rejoin());
-}
-
 void CodeGenerator::visitRegExpMatcher(LRegExpMatcher* lir) {
   MOZ_ASSERT(ToRegister(lir->regexp()) == RegExpMatcherRegExpReg);
   MOZ_ASSERT(ToRegister(lir->string()) == RegExpMatcherStringReg);
@@ -3127,7 +3084,34 @@ void CodeGenerator::visitRegExpMatcher(LRegExpMatcher* lir) {
 
   masm.reserveStack(RegExpReservedStack);
 
-  OutOfLineRegExpMatcher* ool = new (alloc()) OutOfLineRegExpMatcher(lir);
+  auto* ool = new (alloc()) LambdaOutOfLineCode([=](OutOfLineCode& ool) {
+    Register lastIndex = ToRegister(lir->lastIndex());
+    Register input = ToRegister(lir->string());
+    Register regexp = ToRegister(lir->regexp());
+
+    AllocatableGeneralRegisterSet regs(GeneralRegisterSet::All());
+    regs.take(lastIndex);
+    regs.take(input);
+    regs.take(regexp);
+    Register temp = regs.takeAny();
+
+    masm.computeEffectiveAddress(
+        Address(masm.getStackPointer(), InputOutputDataSize), temp);
+
+    pushArg(temp);
+    pushArg(lastIndex);
+    pushArg(input);
+    pushArg(regexp);
+
+    // We are not using oolCallVM because we are in a Call, and that live
+    // registers are already saved by the the register allocator.
+    using Fn = bool (*)(JSContext*, HandleObject regexp, HandleString input,
+                        int32_t lastIndex, MatchPairs* pairs,
+                        MutableHandleValue output);
+    callVM<Fn, RegExpMatcherRaw>(lir);
+
+    masm.jump(ool.rejoin());
+  });
   addOutOfLineCode(ool, lir->mir());
 
   JitCode* regExpMatcherStub =
@@ -3137,46 +3121,6 @@ void CodeGenerator::visitRegExpMatcher(LRegExpMatcher* lir) {
   masm.bind(ool->rejoin());
 
   masm.freeStack(RegExpReservedStack);
-}
-
-class OutOfLineRegExpExecMatch : public OutOfLineCodeBase<CodeGenerator> {
-  LRegExpExecMatch* lir_;
-
- public:
-  explicit OutOfLineRegExpExecMatch(LRegExpExecMatch* lir) : lir_(lir) {}
-
-  void accept(CodeGenerator* codegen) override {
-    codegen->visitOutOfLineRegExpExecMatch(this);
-  }
-
-  LRegExpExecMatch* lir() const { return lir_; }
-};
-
-void CodeGenerator::visitOutOfLineRegExpExecMatch(
-    OutOfLineRegExpExecMatch* ool) {
-  LRegExpExecMatch* lir = ool->lir();
-  Register input = ToRegister(lir->string());
-  Register regexp = ToRegister(lir->regexp());
-
-  AllocatableGeneralRegisterSet regs(GeneralRegisterSet::All());
-  regs.take(input);
-  regs.take(regexp);
-  Register temp = regs.takeAny();
-
-  masm.computeEffectiveAddress(
-      Address(masm.getStackPointer(), InputOutputDataSize), temp);
-
-  pushArg(temp);
-  pushArg(input);
-  pushArg(regexp);
-
-  // We are not using oolCallVM because we are in a Call and live registers have
-  // already been saved by the register allocator.
-  using Fn =
-      bool (*)(JSContext*, Handle<RegExpObject*> regexp, HandleString input,
-               MatchPairs* pairs, MutableHandleValue output);
-  callVM<Fn, RegExpBuiltinExecMatchFromJit>(lir);
-  masm.jump(ool->rejoin());
 }
 
 void CodeGenerator::visitRegExpExecMatch(LRegExpExecMatch* lir) {
@@ -3196,7 +3140,30 @@ void CodeGenerator::visitRegExpExecMatch(LRegExpExecMatch* lir) {
 
   masm.reserveStack(RegExpReservedStack);
 
-  auto* ool = new (alloc()) OutOfLineRegExpExecMatch(lir);
+  auto* ool = new (alloc()) LambdaOutOfLineCode([=](OutOfLineCode& ool) {
+    Register input = ToRegister(lir->string());
+    Register regexp = ToRegister(lir->regexp());
+
+    AllocatableGeneralRegisterSet regs(GeneralRegisterSet::All());
+    regs.take(input);
+    regs.take(regexp);
+    Register temp = regs.takeAny();
+
+    masm.computeEffectiveAddress(
+        Address(masm.getStackPointer(), InputOutputDataSize), temp);
+
+    pushArg(temp);
+    pushArg(input);
+    pushArg(regexp);
+
+    // We are not using oolCallVM because we are in a Call and live registers
+    // have already been saved by the register allocator.
+    using Fn =
+        bool (*)(JSContext*, Handle<RegExpObject*> regexp, HandleString input,
+                 MatchPairs* pairs, MutableHandleValue output);
+    callVM<Fn, RegExpBuiltinExecMatchFromJit>(lir);
+    masm.jump(ool.rejoin());
+  });
   addOutOfLineCode(ool, lir->mir());
 
   JitCode* regExpExecMatchStub =
@@ -3331,48 +3298,6 @@ JitCode* JitZone::generateRegExpSearcherStub(JSContext* cx) {
   return code;
 }
 
-class OutOfLineRegExpSearcher : public OutOfLineCodeBase<CodeGenerator> {
-  LRegExpSearcher* lir_;
-
- public:
-  explicit OutOfLineRegExpSearcher(LRegExpSearcher* lir) : lir_(lir) {}
-
-  void accept(CodeGenerator* codegen) override {
-    codegen->visitOutOfLineRegExpSearcher(this);
-  }
-
-  LRegExpSearcher* lir() const { return lir_; }
-};
-
-void CodeGenerator::visitOutOfLineRegExpSearcher(OutOfLineRegExpSearcher* ool) {
-  LRegExpSearcher* lir = ool->lir();
-  Register lastIndex = ToRegister(lir->lastIndex());
-  Register input = ToRegister(lir->string());
-  Register regexp = ToRegister(lir->regexp());
-
-  AllocatableGeneralRegisterSet regs(GeneralRegisterSet::All());
-  regs.take(lastIndex);
-  regs.take(input);
-  regs.take(regexp);
-  Register temp = regs.takeAny();
-
-  masm.computeEffectiveAddress(
-      Address(masm.getStackPointer(), InputOutputDataSize), temp);
-
-  pushArg(temp);
-  pushArg(lastIndex);
-  pushArg(input);
-  pushArg(regexp);
-
-  // We are not using oolCallVM because we are in a Call, and that live
-  // registers are already saved by the the register allocator.
-  using Fn = bool (*)(JSContext* cx, HandleObject regexp, HandleString input,
-                      int32_t lastIndex, MatchPairs* pairs, int32_t* result);
-  callVM<Fn, RegExpSearcherRaw>(lir);
-
-  masm.jump(ool->rejoin());
-}
-
 void CodeGenerator::visitRegExpSearcher(LRegExpSearcher* lir) {
   MOZ_ASSERT(ToRegister(lir->regexp()) == RegExpSearcherRegExpReg);
   MOZ_ASSERT(ToRegister(lir->string()) == RegExpSearcherStringReg);
@@ -3385,7 +3310,33 @@ void CodeGenerator::visitRegExpSearcher(LRegExpSearcher* lir) {
 
   masm.reserveStack(RegExpReservedStack);
 
-  OutOfLineRegExpSearcher* ool = new (alloc()) OutOfLineRegExpSearcher(lir);
+  auto* ool = new (alloc()) LambdaOutOfLineCode([=](OutOfLineCode& ool) {
+    Register lastIndex = ToRegister(lir->lastIndex());
+    Register input = ToRegister(lir->string());
+    Register regexp = ToRegister(lir->regexp());
+
+    AllocatableGeneralRegisterSet regs(GeneralRegisterSet::All());
+    regs.take(lastIndex);
+    regs.take(input);
+    regs.take(regexp);
+    Register temp = regs.takeAny();
+
+    masm.computeEffectiveAddress(
+        Address(masm.getStackPointer(), InputOutputDataSize), temp);
+
+    pushArg(temp);
+    pushArg(lastIndex);
+    pushArg(input);
+    pushArg(regexp);
+
+    // We are not using oolCallVM because we are in a Call, and that live
+    // registers are already saved by the the register allocator.
+    using Fn = bool (*)(JSContext* cx, HandleObject regexp, HandleString input,
+                        int32_t lastIndex, MatchPairs* pairs, int32_t* result);
+    callVM<Fn, RegExpSearcherRaw>(lir);
+
+    masm.jump(ool.rejoin());
+  });
   addOutOfLineCode(ool, lir->mir());
 
   JitCode* regExpSearcherStub =
@@ -3519,36 +3470,6 @@ JitCode* JitZone::generateRegExpExecTestStub(JSContext* cx) {
   return code;
 }
 
-class OutOfLineRegExpExecTest : public OutOfLineCodeBase<CodeGenerator> {
-  LRegExpExecTest* lir_;
-
- public:
-  explicit OutOfLineRegExpExecTest(LRegExpExecTest* lir) : lir_(lir) {}
-
-  void accept(CodeGenerator* codegen) override {
-    codegen->visitOutOfLineRegExpExecTest(this);
-  }
-
-  LRegExpExecTest* lir() const { return lir_; }
-};
-
-void CodeGenerator::visitOutOfLineRegExpExecTest(OutOfLineRegExpExecTest* ool) {
-  LRegExpExecTest* lir = ool->lir();
-  Register input = ToRegister(lir->string());
-  Register regexp = ToRegister(lir->regexp());
-
-  pushArg(input);
-  pushArg(regexp);
-
-  // We are not using oolCallVM because we are in a Call and live registers have
-  // already been saved by the register allocator.
-  using Fn = bool (*)(JSContext* cx, Handle<RegExpObject*> regexp,
-                      HandleString input, bool* result);
-  callVM<Fn, RegExpBuiltinExecTestFromJit>(lir);
-
-  masm.jump(ool->rejoin());
-}
-
 void CodeGenerator::visitRegExpExecTest(LRegExpExecTest* lir) {
   MOZ_ASSERT(ToRegister(lir->regexp()) == RegExpExecTestRegExpReg);
   MOZ_ASSERT(ToRegister(lir->string()) == RegExpExecTestStringReg);
@@ -3557,7 +3478,21 @@ void CodeGenerator::visitRegExpExecTest(LRegExpExecTest* lir) {
   static_assert(RegExpExecTestRegExpReg != ReturnReg);
   static_assert(RegExpExecTestStringReg != ReturnReg);
 
-  auto* ool = new (alloc()) OutOfLineRegExpExecTest(lir);
+  auto* ool = new (alloc()) LambdaOutOfLineCode([=](OutOfLineCode& ool) {
+    Register input = ToRegister(lir->string());
+    Register regexp = ToRegister(lir->regexp());
+
+    pushArg(input);
+    pushArg(regexp);
+
+    // We are not using oolCallVM because we are in a Call and live registers
+    // have already been saved by the register allocator.
+    using Fn = bool (*)(JSContext* cx, Handle<RegExpObject*> regexp,
+                        HandleString input, bool* result);
+    callVM<Fn, RegExpBuiltinExecTestFromJit>(lir);
+
+    masm.jump(ool.rejoin());
+  });
   addOutOfLineCode(ool, lir->mir());
 
   JitCode* regExpExecTestStub =
@@ -3598,28 +3533,27 @@ void CodeGenerator::visitRegExpHasCaptureGroups(LRegExpHasCaptureGroups* ins) {
   masm.bind(ool->rejoin());
 }
 
-class OutOfLineRegExpPrototypeOptimizable
-    : public OutOfLineCodeBase<CodeGenerator> {
-  LRegExpPrototypeOptimizable* ins_;
-
- public:
-  explicit OutOfLineRegExpPrototypeOptimizable(LRegExpPrototypeOptimizable* ins)
-      : ins_(ins) {}
-
-  void accept(CodeGenerator* codegen) override {
-    codegen->visitOutOfLineRegExpPrototypeOptimizable(this);
-  }
-  LRegExpPrototypeOptimizable* ins() const { return ins_; }
-};
-
 void CodeGenerator::visitRegExpPrototypeOptimizable(
     LRegExpPrototypeOptimizable* ins) {
   Register object = ToRegister(ins->object());
   Register output = ToRegister(ins->output());
   Register temp = ToRegister(ins->temp0());
 
-  OutOfLineRegExpPrototypeOptimizable* ool =
-      new (alloc()) OutOfLineRegExpPrototypeOptimizable(ins);
+  auto* ool = new (alloc()) LambdaOutOfLineCode([=](OutOfLineCode& ool) {
+    saveVolatile(output);
+
+    using Fn = bool (*)(JSContext* cx, JSObject* proto);
+    masm.setupAlignedABICall();
+    masm.loadJSContext(output);
+    masm.passABIArg(output);
+    masm.passABIArg(object);
+    masm.callWithABI<Fn, RegExpPrototypeOptimizableRaw>();
+    masm.storeCallBoolResult(output);
+
+    restoreVolatile(output);
+
+    masm.jump(ool.rejoin());
+  });
   addOutOfLineCode(ool, ins->mir());
 
   const GlobalObject* global = gen->realm->maybeGlobal();
@@ -3631,49 +3565,29 @@ void CodeGenerator::visitRegExpPrototypeOptimizable(
   masm.bind(ool->rejoin());
 }
 
-void CodeGenerator::visitOutOfLineRegExpPrototypeOptimizable(
-    OutOfLineRegExpPrototypeOptimizable* ool) {
-  LRegExpPrototypeOptimizable* ins = ool->ins();
-  Register object = ToRegister(ins->object());
-  Register output = ToRegister(ins->output());
-
-  saveVolatile(output);
-
-  using Fn = bool (*)(JSContext* cx, JSObject* proto);
-  masm.setupAlignedABICall();
-  masm.loadJSContext(output);
-  masm.passABIArg(output);
-  masm.passABIArg(object);
-  masm.callWithABI<Fn, RegExpPrototypeOptimizableRaw>();
-  masm.storeCallBoolResult(output);
-
-  restoreVolatile(output);
-
-  masm.jump(ool->rejoin());
-}
-
-class OutOfLineRegExpInstanceOptimizable
-    : public OutOfLineCodeBase<CodeGenerator> {
-  LRegExpInstanceOptimizable* ins_;
-
- public:
-  explicit OutOfLineRegExpInstanceOptimizable(LRegExpInstanceOptimizable* ins)
-      : ins_(ins) {}
-
-  void accept(CodeGenerator* codegen) override {
-    codegen->visitOutOfLineRegExpInstanceOptimizable(this);
-  }
-  LRegExpInstanceOptimizable* ins() const { return ins_; }
-};
-
 void CodeGenerator::visitRegExpInstanceOptimizable(
     LRegExpInstanceOptimizable* ins) {
   Register object = ToRegister(ins->object());
+  Register proto = ToRegister(ins->proto());
   Register output = ToRegister(ins->output());
   Register temp = ToRegister(ins->temp0());
 
-  OutOfLineRegExpInstanceOptimizable* ool =
-      new (alloc()) OutOfLineRegExpInstanceOptimizable(ins);
+  auto* ool = new (alloc()) LambdaOutOfLineCode([=](OutOfLineCode& ool) {
+    saveVolatile(output);
+
+    using Fn = bool (*)(JSContext* cx, JSObject* obj, JSObject* proto);
+    masm.setupAlignedABICall();
+    masm.loadJSContext(output);
+    masm.passABIArg(output);
+    masm.passABIArg(object);
+    masm.passABIArg(proto);
+    masm.callWithABI<Fn, RegExpInstanceOptimizableRaw>();
+    masm.storeCallBoolResult(output);
+
+    restoreVolatile(output);
+
+    masm.jump(ool.rejoin());
+  });
   addOutOfLineCode(ool, ins->mir());
 
   const GlobalObject* global = gen->realm->maybeGlobal();
@@ -3682,29 +3596,6 @@ void CodeGenerator::visitRegExpInstanceOptimizable(
   masm.move32(Imm32(0x1), output);
 
   masm.bind(ool->rejoin());
-}
-
-void CodeGenerator::visitOutOfLineRegExpInstanceOptimizable(
-    OutOfLineRegExpInstanceOptimizable* ool) {
-  LRegExpInstanceOptimizable* ins = ool->ins();
-  Register object = ToRegister(ins->object());
-  Register proto = ToRegister(ins->proto());
-  Register output = ToRegister(ins->output());
-
-  saveVolatile(output);
-
-  using Fn = bool (*)(JSContext* cx, JSObject* obj, JSObject* proto);
-  masm.setupAlignedABICall();
-  masm.loadJSContext(output);
-  masm.passABIArg(output);
-  masm.passABIArg(object);
-  masm.passABIArg(proto);
-  masm.callWithABI<Fn, RegExpInstanceOptimizableRaw>();
-  masm.storeCallBoolResult(output);
-
-  restoreVolatile(output);
-
-  masm.jump(ool->rejoin());
 }
 
 static void FindFirstDollarIndex(MacroAssembler& masm, Register str,
@@ -5618,36 +5509,6 @@ static bool ValueNeedsPostBarrier(MDefinition* def) {
   return NeedsPostBarrier(def->type());
 }
 
-class OutOfLineElementPostWriteBarrier
-    : public OutOfLineCodeBase<CodeGenerator> {
-  LiveRegisterSet liveVolatileRegs_;
-  const LAllocation* index_;
-  int32_t indexDiff_;
-  Register obj_;
-  Register scratch_;
-
- public:
-  OutOfLineElementPostWriteBarrier(const LiveRegisterSet& liveVolatileRegs,
-                                   Register obj, const LAllocation* index,
-                                   Register scratch, int32_t indexDiff)
-      : liveVolatileRegs_(liveVolatileRegs),
-        index_(index),
-        indexDiff_(indexDiff),
-        obj_(obj),
-        scratch_(scratch) {}
-
-  void accept(CodeGenerator* codegen) override {
-    codegen->visitOutOfLineElementPostWriteBarrier(this);
-  }
-
-  const LiveRegisterSet& liveVolatileRegs() const { return liveVolatileRegs_; }
-  const LAllocation* index() const { return index_; }
-  int32_t indexDiff() const { return indexDiff_; }
-
-  Register object() const { return obj_; }
-  Register scratch() const { return scratch_; }
-};
-
 void CodeGenerator::emitElementPostWriteBarrier(
     MInstruction* mir, const LiveRegisterSet& liveVolatileRegs, Register obj,
     const LAllocation* index, Register scratch, const ConstantOrRegister& val,
@@ -5663,8 +5524,41 @@ void CodeGenerator::emitElementPostWriteBarrier(
     return;
   }
 
-  auto* ool = new (alloc()) OutOfLineElementPostWriteBarrier(
-      liveVolatileRegs, obj, index, scratch, indexDiff);
+  auto* ool = new (alloc()) LambdaOutOfLineCode([=](OutOfLineCode& ool) {
+    masm.PushRegsInMask(liveVolatileRegs);
+
+    AllocatableGeneralRegisterSet regs(GeneralRegisterSet::Volatile());
+    regs.takeUnchecked(obj);
+    regs.takeUnchecked(scratch);
+
+    Register indexReg;
+    if (index->isConstant()) {
+      indexReg = regs.takeAny();
+      masm.move32(Imm32(ToInt32(index) + indexDiff), indexReg);
+    } else {
+      indexReg = ToRegister(index);
+      regs.takeUnchecked(indexReg);
+      if (indexDiff != 0) {
+        masm.add32(Imm32(indexDiff), indexReg);
+      }
+    }
+
+    masm.setupUnalignedABICall(scratch);
+    masm.movePtr(ImmPtr(gen->runtime), scratch);
+    masm.passABIArg(scratch);
+    masm.passABIArg(obj);
+    masm.passABIArg(indexReg);
+    using Fn = void (*)(JSRuntime* rt, JSObject* obj, int32_t index);
+    masm.callWithABI<Fn, PostWriteElementBarrier>();
+
+    // We don't need a sub32 here because indexReg must be in liveVolatileRegs
+    // if indexDiff is not zero, so it will be restored below.
+    MOZ_ASSERT_IF(indexDiff != 0, liveVolatileRegs.has(indexReg));
+
+    masm.PopRegsInMask(liveVolatileRegs);
+
+    masm.jump(ool.rejoin());
+  });
   addOutOfLineCode(ool, mir);
 
   masm.branchPtrInNurseryChunk(Assembler::Equal, obj, scratch, ool->rejoin());
@@ -5678,48 +5572,6 @@ void CodeGenerator::emitElementPostWriteBarrier(
   }
 
   masm.bind(ool->rejoin());
-}
-
-void CodeGenerator::visitOutOfLineElementPostWriteBarrier(
-    OutOfLineElementPostWriteBarrier* ool) {
-  Register obj = ool->object();
-  Register scratch = ool->scratch();
-  const LAllocation* index = ool->index();
-  int32_t indexDiff = ool->indexDiff();
-
-  masm.PushRegsInMask(ool->liveVolatileRegs());
-
-  AllocatableGeneralRegisterSet regs(GeneralRegisterSet::Volatile());
-  regs.takeUnchecked(obj);
-  regs.takeUnchecked(scratch);
-
-  Register indexReg;
-  if (index->isConstant()) {
-    indexReg = regs.takeAny();
-    masm.move32(Imm32(ToInt32(index) + indexDiff), indexReg);
-  } else {
-    indexReg = ToRegister(index);
-    regs.takeUnchecked(indexReg);
-    if (indexDiff != 0) {
-      masm.add32(Imm32(indexDiff), indexReg);
-    }
-  }
-
-  masm.setupUnalignedABICall(scratch);
-  masm.movePtr(ImmPtr(gen->runtime), scratch);
-  masm.passABIArg(scratch);
-  masm.passABIArg(obj);
-  masm.passABIArg(indexReg);
-  using Fn = void (*)(JSRuntime* rt, JSObject* obj, int32_t index);
-  masm.callWithABI<Fn, PostWriteElementBarrier>();
-
-  // We don't need a sub32 here because indexReg must be in liveVolatileRegs
-  // if indexDiff is not zero, so it will be restored below.
-  MOZ_ASSERT_IF(indexDiff != 0, ool->liveVolatileRegs().has(indexReg));
-
-  masm.PopRegsInMask(ool->liveVolatileRegs());
-
-  masm.jump(ool->rejoin());
 }
 
 void CodeGenerator::emitPostWriteBarrier(Register objreg) {
@@ -7695,20 +7547,6 @@ void CodeGenerator::visitUnreachableResultT(LUnreachableResultT* lir) {
   masm.assumeUnreachable("must be unreachable");
 }
 
-// Out-of-line path to report over-recursed error and fail.
-class CheckOverRecursedFailure : public OutOfLineCodeBase<CodeGenerator> {
-  LInstruction* lir_;
-
- public:
-  explicit CheckOverRecursedFailure(LInstruction* lir) : lir_(lir) {}
-
-  void accept(CodeGenerator* codegen) override {
-    codegen->visitCheckOverRecursedFailure(this);
-  }
-
-  LInstruction* lir() const { return lir_; }
-};
-
 void CodeGenerator::visitCheckOverRecursed(LCheckOverRecursed* lir) {
   // If we don't push anything on the stack, skip the check.
   if (omitOverRecursedCheck()) {
@@ -7727,7 +7565,21 @@ void CodeGenerator::visitCheckOverRecursed(LCheckOverRecursed* lir) {
   // Since Ion frames exist on the C stack, the stack limit may be
   // dynamically set by JS_SetThreadStackLimit() and JS_SetNativeStackQuota().
 
-  CheckOverRecursedFailure* ool = new (alloc()) CheckOverRecursedFailure(lir);
+  auto* ool = new (alloc()) LambdaOutOfLineCode([=](OutOfLineCode& ool) {
+    // The OOL path is hit if the recursion depth has been exceeded.
+    // Throw an InternalError for over-recursion.
+
+    // LFunctionEnvironment can appear before LCheckOverRecursed, so we have
+    // to save all live registers to avoid crashes if CheckOverRecursed triggers
+    // a GC.
+    saveLive(lir);
+
+    using Fn = bool (*)(JSContext*);
+    callVM<Fn, CheckOverRecursed>(lir);
+
+    restoreLive(lir);
+    masm.jump(ool.rejoin());
+  });
   addOutOfLineCode(ool, lir->mir());
 
   // Conditional forward (unlikely) branch to failure.
@@ -7735,23 +7587,6 @@ void CodeGenerator::visitCheckOverRecursed(LCheckOverRecursed* lir) {
   masm.branchStackPtrRhs(Assembler::AboveOrEqual, AbsoluteAddress(limitAddr),
                          ool->entry());
   masm.bind(ool->rejoin());
-}
-
-void CodeGenerator::visitCheckOverRecursedFailure(
-    CheckOverRecursedFailure* ool) {
-  // The OOL path is hit if the recursion depth has been exceeded.
-  // Throw an InternalError for over-recursion.
-
-  // LFunctionEnvironment can appear before LCheckOverRecursed, so we have
-  // to save all live registers to avoid crashes if CheckOverRecursed triggers
-  // a GC.
-  saveLive(ool->lir());
-
-  using Fn = bool (*)(JSContext*);
-  callVM<Fn, CheckOverRecursed>(ool->lir());
-
-  restoreLive(ool->lir());
-  masm.jump(ool->rejoin());
 }
 
 IonScriptCounts* CodeGenerator::maybeCreateScriptCounts() {
@@ -8190,20 +8025,6 @@ bool CodeGenerator::generateBody() {
   return true;
 }
 
-// Out-of-line object allocation for LNewArray.
-class OutOfLineNewArray : public OutOfLineCodeBase<CodeGenerator> {
-  LNewArray* lir_;
-
- public:
-  explicit OutOfLineNewArray(LNewArray* lir) : lir_(lir) {}
-
-  void accept(CodeGenerator* codegen) override {
-    codegen->visitOutOfLineNewArray(this);
-  }
-
-  LNewArray* lir() const { return lir_; }
-};
-
 void CodeGenerator::visitNewArrayCallVM(LNewArray* lir) {
   Register objReg = ToRegister(lir->output());
 
@@ -8287,7 +8108,10 @@ void CodeGenerator::visitNewArray(LNewArray* lir) {
     return;
   }
 
-  OutOfLineNewArray* ool = new (alloc()) OutOfLineNewArray(lir);
+  auto* ool = new (alloc()) LambdaOutOfLineCode([=](OutOfLineCode& ool) {
+    visitNewArrayCallVM(lir);
+    masm.jump(ool.rejoin());
+  });
   addOutOfLineCode(ool, lir->mir());
   TemplateObject templateObject(lir->mir()->templateObject());
 #ifdef DEBUG
@@ -8300,11 +8124,6 @@ void CodeGenerator::visitNewArray(LNewArray* lir) {
                       lir->mir()->initialHeap(), ool->entry());
 
   masm.bind(ool->rejoin());
-}
-
-void CodeGenerator::visitOutOfLineNewArray(OutOfLineNewArray* ool) {
-  visitNewArrayCallVM(ool->lir());
-  masm.jump(ool->rejoin());
 }
 
 void CodeGenerator::visitNewArrayDynamicLength(LNewArrayDynamicLength* lir) {
@@ -8524,20 +8343,6 @@ void CodeGenerator::visitNewBoundFunction(LNewBoundFunction* lir) {
   masm.bind(ool->rejoin());
 }
 
-// Out-of-line object allocation for JSOp::NewObject.
-class OutOfLineNewObject : public OutOfLineCodeBase<CodeGenerator> {
-  LNewObject* lir_;
-
- public:
-  explicit OutOfLineNewObject(LNewObject* lir) : lir_(lir) {}
-
-  void accept(CodeGenerator* codegen) override {
-    codegen->visitOutOfLineNewObject(this);
-  }
-
-  LNewObject* lir() const { return lir_; }
-};
-
 void CodeGenerator::visitNewObjectVMCall(LNewObject* lir) {
   Register objReg = ToRegister(lir->output());
 
@@ -8676,7 +8481,10 @@ void CodeGenerator::visitNewObject(LNewObject* lir) {
     return;
   }
 
-  OutOfLineNewObject* ool = new (alloc()) OutOfLineNewObject(lir);
+  auto* ool = new (alloc()) LambdaOutOfLineCode([=](OutOfLineCode& ool) {
+    visitNewObjectVMCall(lir);
+    masm.jump(ool.rejoin());
+  });
   addOutOfLineCode(ool, lir->mir());
 
   TemplateObject templateObject(lir->mir()->templateObject());
@@ -8685,11 +8493,6 @@ void CodeGenerator::visitNewObject(LNewObject* lir) {
                       lir->mir()->initialHeap(), ool->entry());
 
   masm.bind(ool->rejoin());
-}
-
-void CodeGenerator::visitOutOfLineNewObject(OutOfLineNewObject* ool) {
-  visitNewObjectVMCall(ool->lir());
-  masm.jump(ool->rejoin());
 }
 
 void CodeGenerator::visitNewPlainObject(LNewPlainObject* lir) {
@@ -9325,6 +9128,16 @@ void CodeGenerator::visitGuardArgumentsObjectFlags(
   bailoutFrom(&bail, lir->snapshot());
 }
 
+void CodeGenerator::visitGuardObjectHasSameRealm(
+    LGuardObjectHasSameRealm* lir) {
+  Register obj = ToRegister(lir->object());
+  Register temp = ToRegister(lir->temp0());
+
+  Label bail;
+  masm.guardObjectHasSameRealm(obj, temp, &bail);
+  bailoutFrom(&bail, lir->snapshot());
+}
+
 void CodeGenerator::visitBoundFunctionNumArgs(LBoundFunctionNumArgs* lir) {
   Register obj = ToRegister(lir->object());
   Register output = ToRegister(lir->output());
@@ -9368,59 +9181,40 @@ void CodeGenerator::visitReturnFromCtor(LReturnFromCtor* lir) {
   masm.bind(&end);
 }
 
-class OutOfLineBoxNonStrictThis : public OutOfLineCodeBase<CodeGenerator> {
-  LBoxNonStrictThis* ins_;
-
- public:
-  explicit OutOfLineBoxNonStrictThis(LBoxNonStrictThis* ins) : ins_(ins) {}
-  void accept(CodeGenerator* codegen) override {
-    codegen->visitOutOfLineBoxNonStrictThis(this);
-  }
-  LBoxNonStrictThis* ins() const { return ins_; }
-};
-
 void CodeGenerator::visitBoxNonStrictThis(LBoxNonStrictThis* lir) {
   ValueOperand value = ToValue(lir->value());
   Register output = ToRegister(lir->output());
 
-  auto* ool = new (alloc()) OutOfLineBoxNonStrictThis(lir);
+  auto* ool = new (alloc()) LambdaOutOfLineCode([=](OutOfLineCode& ool) {
+    Label notNullOrUndefined;
+    {
+      Label isNullOrUndefined;
+      ScratchTagScope tag(masm, value);
+      masm.splitTagForTest(value, tag);
+      masm.branchTestUndefined(Assembler::Equal, tag, &isNullOrUndefined);
+      masm.branchTestNull(Assembler::NotEqual, tag, &notNullOrUndefined);
+      masm.bind(&isNullOrUndefined);
+      masm.movePtr(ImmGCPtr(lir->mir()->globalThis()), output);
+      masm.jump(ool.rejoin());
+    }
+
+    masm.bind(&notNullOrUndefined);
+
+    saveLive(lir);
+
+    pushArg(value);
+    using Fn = JSObject* (*)(JSContext*, HandleValue);
+    callVM<Fn, BoxNonStrictThis>(lir);
+
+    StoreRegisterTo(output).generate(this);
+    restoreLiveIgnore(lir, StoreRegisterTo(output).clobbered());
+
+    masm.jump(ool.rejoin());
+  });
   addOutOfLineCode(ool, lir->mir());
 
   masm.fallibleUnboxObject(value, output, ool->entry());
   masm.bind(ool->rejoin());
-}
-
-void CodeGenerator::visitOutOfLineBoxNonStrictThis(
-    OutOfLineBoxNonStrictThis* ool) {
-  LBoxNonStrictThis* lir = ool->ins();
-
-  ValueOperand value = ToValue(lir->value());
-  Register output = ToRegister(lir->output());
-
-  Label notNullOrUndefined;
-  {
-    Label isNullOrUndefined;
-    ScratchTagScope tag(masm, value);
-    masm.splitTagForTest(value, tag);
-    masm.branchTestUndefined(Assembler::Equal, tag, &isNullOrUndefined);
-    masm.branchTestNull(Assembler::NotEqual, tag, &notNullOrUndefined);
-    masm.bind(&isNullOrUndefined);
-    masm.movePtr(ImmGCPtr(lir->mir()->globalThis()), output);
-    masm.jump(ool->rejoin());
-  }
-
-  masm.bind(&notNullOrUndefined);
-
-  saveLive(lir);
-
-  pushArg(value);
-  using Fn = JSObject* (*)(JSContext*, HandleValue);
-  callVM<Fn, BoxNonStrictThis>(lir);
-
-  StoreRegisterTo(output).generate(this);
-  restoreLiveIgnore(lir, StoreRegisterTo(output).clobbered());
-
-  masm.jump(ool->rejoin());
 }
 
 void CodeGenerator::visitImplicitThis(LImplicitThis* lir) {
@@ -9800,9 +9594,9 @@ void CodeGenerator::visitWasmCall(LWasmCall* lir) {
     case wasm::CalleeDesc::WasmTable: {
       Label* boundsCheckFailed = nullptr;
       if (lir->needsBoundsCheck()) {
-        OutOfLineAbortingWasmTrap* ool =
-            new (alloc()) OutOfLineAbortingWasmTrap(desc.toTrapSiteDesc(),
-                                                    wasm::Trap::OutOfBounds);
+        auto* ool = new (alloc()) LambdaOutOfLineCode([=](OutOfLineCode& ool) {
+          masm.wasmTrap(wasm::Trap::OutOfBounds, desc.toTrapSiteDesc());
+        });
         if (lir->isCatchable()) {
           addOutOfLineCode(ool, lir->mirCatchable());
         } else if (isReturnCall) {
@@ -9815,9 +9609,9 @@ void CodeGenerator::visitWasmCall(LWasmCall* lir) {
       Label* nullCheckFailed = nullptr;
 #ifndef WASM_HAS_HEAPREG
       {
-        OutOfLineAbortingWasmTrap* ool =
-            new (alloc()) OutOfLineAbortingWasmTrap(
-                desc.toTrapSiteDesc(), wasm::Trap::IndirectCallToNull);
+        auto* ool = new (alloc()) LambdaOutOfLineCode([=](OutOfLineCode& ool) {
+          masm.wasmTrap(wasm::Trap::IndirectCallToNull, desc.toTrapSiteDesc());
+        });
         if (lir->isCatchable()) {
           addOutOfLineCode(ool, lir->mirCatchable());
         } else if (isReturnCall) {
@@ -10805,58 +10599,6 @@ void CodeGenerator::visitWasmStoreElementRef(LWasmStoreElementRef* ins) {
   // The postbarrier is handled separately.
 }
 
-// Out-of-line path to update the store buffer for wasm references.
-class OutOfLineWasmCallPostWriteBarrierImmediate
-    : public OutOfLineCodeBase<CodeGenerator> {
-  LInstruction* lir_;
-  Register valueBase_;
-  Register temp_;
-  uint32_t valueOffset_;
-
- public:
-  OutOfLineWasmCallPostWriteBarrierImmediate(LInstruction* lir,
-                                             Register valueBase, Register temp,
-                                             uint32_t valueOffset)
-      : lir_(lir),
-        valueBase_(valueBase),
-        temp_(temp),
-        valueOffset_(valueOffset) {}
-
-  void accept(CodeGenerator* codegen) override {
-    codegen->visitOutOfLineWasmCallPostWriteBarrierImmediate(this);
-  }
-
-  LInstruction* lir() const { return lir_; }
-  Register valueBase() const { return valueBase_; }
-  Register temp() const { return temp_; }
-  uint32_t valueOffset() const { return valueOffset_; }
-};
-
-void CodeGenerator::visitOutOfLineWasmCallPostWriteBarrierImmediate(
-    OutOfLineWasmCallPostWriteBarrierImmediate* ool) {
-  saveLiveVolatile(ool->lir());
-  masm.Push(InstanceReg);
-  int32_t framePushedAfterInstance = masm.framePushed();
-
-  // Fold the value offset into the value base
-  Register valueAddr = ool->valueBase();
-  Register temp = ool->temp();
-  masm.computeEffectiveAddress(Address(valueAddr, ool->valueOffset()), temp);
-
-  // Call Instance::postBarrier
-  masm.setupWasmABICall();
-  masm.passABIArg(InstanceReg);
-  masm.passABIArg(temp);
-  int32_t instanceOffset = masm.framePushed() - framePushedAfterInstance;
-  masm.callWithABI(wasm::BytecodeOffset(0), wasm::SymbolicAddress::PostBarrier,
-                   mozilla::Some(instanceOffset), ABIType::General);
-
-  masm.Pop(InstanceReg);
-  restoreLiveVolatile(ool->lir());
-
-  masm.jump(ool->rejoin());
-}
-
 void CodeGenerator::visitWasmPostWriteBarrierImmediate(
     LWasmPostWriteBarrierImmediate* lir) {
   Register object = ToRegister(lir->object());
@@ -10864,78 +10606,35 @@ void CodeGenerator::visitWasmPostWriteBarrierImmediate(
   Register valueBase = ToRegister(lir->valueBase());
   Register temp = ToRegister(lir->temp0());
   MOZ_ASSERT(ToRegister(lir->instance()) == InstanceReg);
-  auto* ool = new (alloc()) OutOfLineWasmCallPostWriteBarrierImmediate(
-      lir, valueBase, temp, lir->valueOffset());
+  auto* ool = new (alloc()) LambdaOutOfLineCode([=](OutOfLineCode& ool) {
+    saveLiveVolatile(lir);
+    masm.Push(InstanceReg);
+    int32_t framePushedAfterInstance = masm.framePushed();
+
+    // Fold the value offset into the value base
+    Register valueAddr = valueBase;
+    masm.computeEffectiveAddress(Address(valueAddr, lir->valueOffset()), temp);
+
+    // Call Instance::postBarrier
+    masm.setupWasmABICall();
+    masm.passABIArg(InstanceReg);
+    masm.passABIArg(temp);
+    int32_t instanceOffset = masm.framePushed() - framePushedAfterInstance;
+    masm.callWithABI(wasm::BytecodeOffset(0),
+                     wasm::SymbolicAddress::PostBarrier,
+                     mozilla::Some(instanceOffset), ABIType::General);
+
+    masm.Pop(InstanceReg);
+    restoreLiveVolatile(lir);
+
+    masm.jump(ool.rejoin());
+  });
   addOutOfLineCode(ool, lir->mir());
 
   wasm::EmitWasmPostBarrierGuard(masm, mozilla::Some(object), temp, value,
                                  ool->rejoin());
   masm.jump(ool->entry());
   masm.bind(ool->rejoin());
-}
-
-// Out-of-line path to update the store buffer for wasm references.
-class OutOfLineWasmCallPostWriteBarrierIndex
-    : public OutOfLineCodeBase<CodeGenerator> {
-  LInstruction* lir_;
-  Register valueBase_;
-  Register index_;
-  Register temp_;
-  uint32_t elemSize_;
-
- public:
-  OutOfLineWasmCallPostWriteBarrierIndex(LInstruction* lir, Register valueBase,
-                                         Register index, Register temp,
-                                         uint32_t elemSize)
-      : lir_(lir),
-        valueBase_(valueBase),
-        index_(index),
-        temp_(temp),
-        elemSize_(elemSize) {
-    MOZ_ASSERT(elemSize == 1 || elemSize == 2 || elemSize == 4 ||
-               elemSize == 8 || elemSize == 16);
-  }
-
-  void accept(CodeGenerator* codegen) override {
-    codegen->visitOutOfLineWasmCallPostWriteBarrierIndex(this);
-  }
-
-  LInstruction* lir() const { return lir_; }
-  Register valueBase() const { return valueBase_; }
-  Register index() const { return index_; }
-  Register temp() const { return temp_; }
-  uint32_t elemSize() const { return elemSize_; }
-};
-
-void CodeGenerator::visitOutOfLineWasmCallPostWriteBarrierIndex(
-    OutOfLineWasmCallPostWriteBarrierIndex* ool) {
-  saveLiveVolatile(ool->lir());
-  masm.Push(InstanceReg);
-  int32_t framePushedAfterInstance = masm.framePushed();
-
-  // Fold the value offset into the value base
-  Register temp = ool->temp();
-  if (ool->elemSize() == 16) {
-    masm.lshiftPtr(Imm32(4), ool->index(), temp);
-    masm.addPtr(ool->valueBase(), temp);
-  } else {
-    masm.computeEffectiveAddress(BaseIndex(ool->valueBase(), ool->index(),
-                                           ScaleFromElemWidth(ool->elemSize())),
-                                 temp);
-  }
-
-  // Call Instance::postBarrier
-  masm.setupWasmABICall();
-  masm.passABIArg(InstanceReg);
-  masm.passABIArg(temp);
-  int32_t instanceOffset = masm.framePushed() - framePushedAfterInstance;
-  masm.callWithABI(wasm::BytecodeOffset(0), wasm::SymbolicAddress::PostBarrier,
-                   mozilla::Some(instanceOffset), ABIType::General);
-
-  masm.Pop(InstanceReg);
-  restoreLiveVolatile(ool->lir());
-
-  masm.jump(ool->rejoin());
 }
 
 void CodeGenerator::visitWasmPostWriteBarrierIndex(
@@ -10946,8 +10645,35 @@ void CodeGenerator::visitWasmPostWriteBarrierIndex(
   Register index = ToRegister(lir->index());
   Register temp = ToRegister(lir->temp0());
   MOZ_ASSERT(ToRegister(lir->instance()) == InstanceReg);
-  auto* ool = new (alloc()) OutOfLineWasmCallPostWriteBarrierIndex(
-      lir, valueBase, index, temp, lir->elemSize());
+  auto* ool = new (alloc()) LambdaOutOfLineCode([=](OutOfLineCode& ool) {
+    saveLiveVolatile(lir);
+    masm.Push(InstanceReg);
+    int32_t framePushedAfterInstance = masm.framePushed();
+
+    // Fold the value offset into the value base
+    if (lir->elemSize() == 16) {
+      masm.lshiftPtr(Imm32(4), index, temp);
+      masm.addPtr(valueBase, temp);
+    } else {
+      masm.computeEffectiveAddress(
+          BaseIndex(valueBase, index, ScaleFromElemWidth(lir->elemSize())),
+          temp);
+    }
+
+    // Call Instance::postBarrier
+    masm.setupWasmABICall();
+    masm.passABIArg(InstanceReg);
+    masm.passABIArg(temp);
+    int32_t instanceOffset = masm.framePushed() - framePushedAfterInstance;
+    masm.callWithABI(wasm::BytecodeOffset(0),
+                     wasm::SymbolicAddress::PostBarrier,
+                     mozilla::Some(instanceOffset), ABIType::General);
+
+    masm.Pop(InstanceReg);
+    restoreLiveVolatile(lir);
+
+    masm.jump(ool.rejoin());
+  });
   addOutOfLineCode(ool, lir->mir());
 
   wasm::EmitWasmPostBarrierGuard(masm, mozilla::Some(object), temp, value,
@@ -11148,20 +10874,6 @@ void CodeGenerator::visitGuardHasAttachedArrayBuffer(
   bailoutFrom(&bail, lir->snapshot());
 }
 
-class OutOfLineGuardNumberToIntPtrIndex
-    : public OutOfLineCodeBase<CodeGenerator> {
-  LGuardNumberToIntPtrIndex* lir_;
-
- public:
-  explicit OutOfLineGuardNumberToIntPtrIndex(LGuardNumberToIntPtrIndex* lir)
-      : lir_(lir) {}
-
-  void accept(CodeGenerator* codegen) override {
-    codegen->visitOutOfLineGuardNumberToIntPtrIndex(this);
-  }
-  LGuardNumberToIntPtrIndex* lir() const { return lir_; }
-};
-
 void CodeGenerator::visitGuardNumberToIntPtrIndex(
     LGuardNumberToIntPtrIndex* lir) {
   FloatRegister input = ToFloatRegister(lir->input());
@@ -11174,18 +10886,15 @@ void CodeGenerator::visitGuardNumberToIntPtrIndex(
     return;
   }
 
-  auto* ool = new (alloc()) OutOfLineGuardNumberToIntPtrIndex(lir);
+  auto* ool = new (alloc()) LambdaOutOfLineCode([=](OutOfLineCode& ool) {
+    // Substitute the invalid index with an arbitrary out-of-bounds index.
+    masm.movePtr(ImmWord(-1), output);
+    masm.jump(ool.rejoin());
+  });
   addOutOfLineCode(ool, lir->mir());
 
   masm.convertDoubleToPtr(input, output, ool->entry(), false);
   masm.bind(ool->rejoin());
-}
-
-void CodeGenerator::visitOutOfLineGuardNumberToIntPtrIndex(
-    OutOfLineGuardNumberToIntPtrIndex* ool) {
-  // Substitute the invalid index with an arbitrary out-of-bounds index.
-  masm.movePtr(ImmWord(-1), ToRegister(ool->lir()->output()));
-  masm.jump(ool->rejoin());
 }
 
 void CodeGenerator::visitStringLength(LStringLength* lir) {
@@ -15170,25 +14879,6 @@ void CodeGenerator::visitSpectreMaskIndex(LSpectreMaskIndex* lir) {
   }
 }
 
-class OutOfLineStoreElementHole : public OutOfLineCodeBase<CodeGenerator> {
-  LInstruction* ins_;
-
- public:
-  explicit OutOfLineStoreElementHole(LInstruction* ins) : ins_(ins) {
-    MOZ_ASSERT(ins->isStoreElementHoleV() || ins->isStoreElementHoleT());
-  }
-
-  void accept(CodeGenerator* codegen) override {
-    codegen->visitOutOfLineStoreElementHole(this);
-  }
-
-  MStoreElementHole* mir() const {
-    return ins_->isStoreElementHoleV() ? ins_->toStoreElementHoleV()->mir()
-                                       : ins_->toStoreElementHoleT()->mir();
-  }
-  LInstruction* ins() const { return ins_; }
-};
-
 void CodeGenerator::emitStoreHoleCheck(Register elements,
                                        const LAllocation* index,
                                        LSnapshot* snapshot) {
@@ -15266,73 +14956,20 @@ void CodeGenerator::visitStoreHoleValueElement(LStoreHoleValueElement* lir) {
   masm.storeValue(MagicValue(JS_ELEMENTS_HOLE), element);
 }
 
-void CodeGenerator::visitStoreElementHoleT(LStoreElementHoleT* lir) {
-  auto* ool = new (alloc()) OutOfLineStoreElementHole(lir);
-  addOutOfLineCode(ool, lir->mir());
-
-  Register obj = ToRegister(lir->object());
-  Register elements = ToRegister(lir->elements());
-  Register index = ToRegister(lir->index());
-  Register temp = ToRegister(lir->temp0());
-
-  Address initLength(elements, ObjectElements::offsetOfInitializedLength());
-  masm.spectreBoundsCheck32(index, initLength, temp, ool->entry());
-
-  emitPreBarrier(elements, lir->index());
-
-  masm.bind(ool->rejoin());
-  emitStoreElementTyped(lir->value(), lir->mir()->value()->type(), elements,
-                        lir->index());
-
-  if (ValueNeedsPostBarrier(lir->mir()->value())) {
-    LiveRegisterSet regs = liveVolatileRegs(lir);
-    ConstantOrRegister val =
-        ToConstantOrRegister(lir->value(), lir->mir()->value()->type());
-    emitElementPostWriteBarrier(lir->mir(), regs, obj, lir->index(), temp, val);
-  }
-}
-
-void CodeGenerator::visitStoreElementHoleV(LStoreElementHoleV* lir) {
-  auto* ool = new (alloc()) OutOfLineStoreElementHole(lir);
-  addOutOfLineCode(ool, lir->mir());
-
-  Register obj = ToRegister(lir->object());
-  Register elements = ToRegister(lir->elements());
-  Register index = ToRegister(lir->index());
-  ValueOperand value = ToValue(lir->value());
-  Register temp = ToRegister(lir->temp0());
-
-  Address initLength(elements, ObjectElements::offsetOfInitializedLength());
-  masm.spectreBoundsCheck32(index, initLength, temp, ool->entry());
-
-  emitPreBarrier(elements, lir->index());
-
-  masm.bind(ool->rejoin());
-  masm.storeValue(value, BaseObjectElementIndex(elements, index));
-
-  if (ValueNeedsPostBarrier(lir->mir()->value())) {
-    LiveRegisterSet regs = liveVolatileRegs(lir);
-    emitElementPostWriteBarrier(lir->mir(), regs, obj, lir->index(), temp,
-                                ConstantOrRegister(value));
-  }
-}
-
-void CodeGenerator::visitOutOfLineStoreElementHole(
-    OutOfLineStoreElementHole* ool) {
+void CodeGenerator::emitStoreElementHoleOOL(LInstruction* lir) {
   Register object, elements, index;
-  LInstruction* ins = ool->ins();
   mozilla::Maybe<ConstantOrRegister> value;
   Register temp;
 
-  if (ins->isStoreElementHoleV()) {
-    LStoreElementHoleV* store = ins->toStoreElementHoleV();
+  if (lir->isStoreElementHoleV()) {
+    LStoreElementHoleV* store = lir->toStoreElementHoleV();
     object = ToRegister(store->object());
     elements = ToRegister(store->elements());
     index = ToRegister(store->index());
     value.emplace(TypedOrValueRegister(ToValue(store->value())));
     temp = ToRegister(store->temp0());
   } else {
-    LStoreElementHoleT* store = ins->toStoreElementHoleT();
+    LStoreElementHoleT* store = lir->toStoreElementHoleT();
     object = ToRegister(store->object());
     elements = ToRegister(store->elements());
     index = ToRegister(store->index());
@@ -15360,7 +14997,7 @@ void CodeGenerator::visitOutOfLineStoreElementHole(
   // Had to reimplement for MIPS because there are no flags.
   bailoutCmp32(Assembler::NotEqual, initLength, index, ins->snapshot());
 #else
-  bailoutIf(Assembler::NotEqual, ins->snapshot());
+  bailoutIf(Assembler::NotEqual, lir->snapshot());
 #endif
 
   // If index < capacity, we can add a dense element inline. If not, we need
@@ -15373,7 +15010,7 @@ void CodeGenerator::visitOutOfLineStoreElementHole(
   masm.bind(&allocElement);
 
   // Save all live volatile registers, except |temp|.
-  LiveRegisterSet liveRegs = liveVolatileRegs(ins);
+  LiveRegisterSet liveRegs = liveVolatileRegs(lir);
   liveRegs.takeUnchecked(temp);
   masm.PushRegsInMask(liveRegs);
 
@@ -15387,7 +15024,7 @@ void CodeGenerator::visitOutOfLineStoreElementHole(
   masm.storeCallPointerResult(temp);
 
   masm.PopRegsInMask(liveRegs);
-  bailoutIfFalseBool(temp, ins->snapshot());
+  bailoutIfFalseBool(temp, lir->snapshot());
 
   // Load the reallocated elements pointer.
   masm.loadPtr(Address(object, NativeObject::offsetOfElements()), elements);
@@ -15403,10 +15040,69 @@ void CodeGenerator::visitOutOfLineStoreElementHole(
   masm.branch32(Assembler::Above, length, index, &skipIncrementLength);
   masm.add32(Imm32(1), length);
   masm.bind(&skipIncrementLength);
+}
 
-  // Jump to the inline path where we will store the value.
-  // We rejoin after the prebarrier, because the memory is uninitialized.
-  masm.jump(ool->rejoin());
+void CodeGenerator::visitStoreElementHoleT(LStoreElementHoleT* lir) {
+  auto* ool = new (alloc()) LambdaOutOfLineCode([=](OutOfLineCode& ool) {
+    emitStoreElementHoleOOL(lir);
+
+    // Jump to the inline path where we will store the value.
+    // We rejoin after the prebarrier, because the memory is uninitialized.
+    masm.jump(ool.rejoin());
+  });
+  addOutOfLineCode(ool, lir->mir());
+
+  Register obj = ToRegister(lir->object());
+  Register elements = ToRegister(lir->elements());
+  Register index = ToRegister(lir->index());
+  Register temp = ToRegister(lir->temp0());
+
+  Address initLength(elements, ObjectElements::offsetOfInitializedLength());
+  masm.spectreBoundsCheck32(index, initLength, temp, ool->entry());
+
+  emitPreBarrier(elements, lir->index());
+
+  masm.bind(ool->rejoin());
+  emitStoreElementTyped(lir->value(), lir->mir()->value()->type(), elements,
+                        lir->index());
+
+  if (ValueNeedsPostBarrier(lir->mir()->value())) {
+    LiveRegisterSet regs = liveVolatileRegs(lir);
+    ConstantOrRegister val =
+        ToConstantOrRegister(lir->value(), lir->mir()->value()->type());
+    emitElementPostWriteBarrier(lir->mir(), regs, obj, lir->index(), temp, val);
+  }
+}
+
+void CodeGenerator::visitStoreElementHoleV(LStoreElementHoleV* lir) {
+  auto* ool = new (alloc()) LambdaOutOfLineCode([=](OutOfLineCode& ool) {
+    emitStoreElementHoleOOL(lir);
+
+    // Jump to the inline path where we will store the value.
+    // We rejoin after the prebarrier, because the memory is uninitialized.
+    masm.jump(ool.rejoin());
+  });
+  addOutOfLineCode(ool, lir->mir());
+
+  Register obj = ToRegister(lir->object());
+  Register elements = ToRegister(lir->elements());
+  Register index = ToRegister(lir->index());
+  ValueOperand value = ToValue(lir->value());
+  Register temp = ToRegister(lir->temp0());
+
+  Address initLength(elements, ObjectElements::offsetOfInitializedLength());
+  masm.spectreBoundsCheck32(index, initLength, temp, ool->entry());
+
+  emitPreBarrier(elements, lir->index());
+
+  masm.bind(ool->rejoin());
+  masm.storeValue(value, BaseObjectElementIndex(elements, index));
+
+  if (ValueNeedsPostBarrier(lir->mir()->value())) {
+    LiveRegisterSet regs = liveVolatileRegs(lir);
+    emitElementPostWriteBarrier(lir->mir(), regs, obj, lir->index(), temp,
+                                ConstantOrRegister(value));
+  }
 }
 
 void CodeGenerator::visitArrayPopShift(LArrayPopShift* lir) {
@@ -15426,19 +15122,6 @@ void CodeGenerator::visitArrayPopShift(LArrayPopShift* lir) {
   bailoutFrom(&bail, lir->snapshot());
 }
 
-class OutOfLineArrayPush : public OutOfLineCodeBase<CodeGenerator> {
-  LArrayPush* ins_;
-
- public:
-  explicit OutOfLineArrayPush(LArrayPush* ins) : ins_(ins) {}
-
-  void accept(CodeGenerator* codegen) override {
-    codegen->visitOutOfLineArrayPush(this);
-  }
-
-  LArrayPush* ins() const { return ins_; }
-};
-
 void CodeGenerator::visitArrayPush(LArrayPush* lir) {
   Register obj = ToRegister(lir->object());
   Register elementsTemp = ToRegister(lir->temp0());
@@ -15446,7 +15129,33 @@ void CodeGenerator::visitArrayPush(LArrayPush* lir) {
   ValueOperand value = ToValue(lir->value());
   Register spectreTemp = ToTempRegisterOrInvalid(lir->temp1());
 
-  auto* ool = new (alloc()) OutOfLineArrayPush(lir);
+  auto* ool = new (alloc()) LambdaOutOfLineCode([=](OutOfLineCode& ool) {
+    Register temp = ToRegister(lir->temp0());
+
+    LiveRegisterSet liveRegs = liveVolatileRegs(lir);
+    liveRegs.takeUnchecked(temp);
+    liveRegs.addUnchecked(ToRegister(lir->output()));
+    liveRegs.addUnchecked(ToValue(lir->value()));
+
+    masm.PushRegsInMask(liveRegs);
+
+    masm.setupAlignedABICall();
+    masm.loadJSContext(temp);
+    masm.passABIArg(temp);
+    masm.passABIArg(obj);
+
+    using Fn = bool (*)(JSContext*, NativeObject* obj);
+    masm.callWithABI<Fn, NativeObject::addDenseElementPure>();
+    masm.storeCallPointerResult(temp);
+
+    masm.PopRegsInMask(liveRegs);
+    bailoutIfFalseBool(temp, lir->snapshot());
+
+    // Load the reallocated elements pointer.
+    masm.loadPtr(Address(obj, NativeObject::offsetOfElements()), temp);
+
+    masm.jump(ool.rejoin());
+  });
   addOutOfLineCode(ool, lir->mir());
 
   // Load obj->elements in elementsTemp.
@@ -15482,37 +15191,6 @@ void CodeGenerator::visitArrayPush(LArrayPush* lir) {
                                 elementsTemp, ConstantOrRegister(value),
                                 /* indexDiff = */ -1);
   }
-}
-
-void CodeGenerator::visitOutOfLineArrayPush(OutOfLineArrayPush* ool) {
-  LArrayPush* ins = ool->ins();
-
-  Register object = ToRegister(ins->object());
-  Register temp = ToRegister(ins->temp0());
-
-  LiveRegisterSet liveRegs = liveVolatileRegs(ins);
-  liveRegs.takeUnchecked(temp);
-  liveRegs.addUnchecked(ToRegister(ins->output()));
-  liveRegs.addUnchecked(ToValue(ins->value()));
-
-  masm.PushRegsInMask(liveRegs);
-
-  masm.setupAlignedABICall();
-  masm.loadJSContext(temp);
-  masm.passABIArg(temp);
-  masm.passABIArg(object);
-
-  using Fn = bool (*)(JSContext*, NativeObject* obj);
-  masm.callWithABI<Fn, NativeObject::addDenseElementPure>();
-  masm.storeCallPointerResult(temp);
-
-  masm.PopRegsInMask(liveRegs);
-  bailoutIfFalseBool(temp, ins->snapshot());
-
-  // Load the reallocated elements pointer.
-  masm.loadPtr(Address(object, NativeObject::offsetOfElements()), temp);
-
-  masm.jump(ool->rejoin());
 }
 
 void CodeGenerator::visitArraySlice(LArraySlice* lir) {
@@ -17104,52 +16782,30 @@ bool CodeGenerator::link(JSContext* cx) {
   return true;
 }
 
-// An out-of-line path to convert a boxed int32 to double.
-class OutOfLineUnboxFloatingPoint : public OutOfLineCodeBase<CodeGenerator> {
-  LUnboxFloatingPoint* unboxFloatingPoint_;
-
- public:
-  explicit OutOfLineUnboxFloatingPoint(LUnboxFloatingPoint* unboxFloatingPoint)
-      : unboxFloatingPoint_(unboxFloatingPoint) {}
-
-  void accept(CodeGenerator* codegen) override {
-    codegen->visitOutOfLineUnboxFloatingPoint(this);
-  }
-
-  LUnboxFloatingPoint* unboxFloatingPoint() const {
-    return unboxFloatingPoint_;
-  }
-};
-
 void CodeGenerator::visitUnboxFloatingPoint(LUnboxFloatingPoint* lir) {
   ValueOperand box = ToValue(lir->input());
   const LDefinition* result = lir->output();
 
   // Out-of-line path to convert int32 to double or bailout
   // if this instruction is fallible.
-  OutOfLineUnboxFloatingPoint* ool =
-      new (alloc()) OutOfLineUnboxFloatingPoint(lir);
+  auto* ool = new (alloc()) LambdaOutOfLineCode([=](OutOfLineCode& ool) {
+    ValueOperand value = ToValue(lir->input());
+
+    if (lir->mir()->fallible()) {
+      Label bail;
+      masm.branchTestInt32(Assembler::NotEqual, value, &bail);
+      bailoutFrom(&bail, lir->snapshot());
+    }
+    masm.convertInt32ToDouble(value.payloadOrValueReg(),
+                              ToFloatRegister(lir->output()));
+    masm.jump(ool.rejoin());
+  });
   addOutOfLineCode(ool, lir->mir());
 
   FloatRegister resultReg = ToFloatRegister(result);
   masm.branchTestDouble(Assembler::NotEqual, box, ool->entry());
   masm.unboxDouble(box, resultReg);
   masm.bind(ool->rejoin());
-}
-
-void CodeGenerator::visitOutOfLineUnboxFloatingPoint(
-    OutOfLineUnboxFloatingPoint* ool) {
-  LUnboxFloatingPoint* ins = ool->unboxFloatingPoint();
-  ValueOperand value = ToValue(ins->input());
-
-  if (ins->mir()->fallible()) {
-    Label bail;
-    masm.branchTestInt32(Assembler::NotEqual, value, &bail);
-    bailoutFrom(&bail, ins->snapshot());
-  }
-  masm.convertInt32ToDouble(value.payloadOrValueReg(),
-                            ToFloatRegister(ins->output()));
-  masm.jump(ool->rejoin());
 }
 
 void CodeGenerator::visitCallBindVar(LCallBindVar* lir) {
@@ -17396,82 +17052,55 @@ void CodeGenerator::visitLoadElementAndUnbox(LLoadElementAndUnbox* ins) {
   }
 }
 
-class OutOfLineAtomizeSlot : public OutOfLineCodeBase<CodeGenerator> {
-  LInstruction* lir_;
-  Register stringReg_;
-  Address slotAddr_;
-  TypedOrValueRegister dest_;
-
- public:
-  OutOfLineAtomizeSlot(LInstruction* lir, Register stringReg, Address slotAddr,
-                       TypedOrValueRegister dest)
-      : lir_(lir), stringReg_(stringReg), slotAddr_(slotAddr), dest_(dest) {}
-
-  void accept(CodeGenerator* codegen) final {
-    codegen->visitOutOfLineAtomizeSlot(this);
-  }
-  LInstruction* lir() const { return lir_; }
-  Register stringReg() const { return stringReg_; }
-  Address slotAddr() const { return slotAddr_; }
-  TypedOrValueRegister dest() const { return dest_; }
-};
-
-void CodeGenerator::visitOutOfLineAtomizeSlot(OutOfLineAtomizeSlot* ool) {
-  LInstruction* lir = ool->lir();
-  Register stringReg = ool->stringReg();
-  Address slotAddr = ool->slotAddr();
-  TypedOrValueRegister dest = ool->dest();
-
-  // This code is called with a non-atomic string in |stringReg|.
-  // When it returns, |stringReg| contains an unboxed pointer to an
-  // atomized version of that string, and |slotAddr| contains a
-  // StringValue pointing to that atom. If |dest| is a ValueOperand,
-  // it contains the same StringValue; otherwise we assert that |dest|
-  // is |stringReg|.
-
-  saveLive(lir);
-  pushArg(stringReg);
-
-  using Fn = JSAtom* (*)(JSContext*, JSString*);
-  callVM<Fn, js::AtomizeString>(lir);
-  StoreRegisterTo(stringReg).generate(this);
-  restoreLiveIgnore(lir, StoreRegisterTo(stringReg).clobbered());
-
-  if (dest.hasValue()) {
-    masm.moveValue(
-        TypedOrValueRegister(MIRType::String, AnyRegister(stringReg)),
-        dest.valueReg());
-  } else {
-    MOZ_ASSERT(dest.typedReg().gpr() == stringReg);
-  }
-
-  emitPreBarrier(slotAddr);
-  masm.storeTypedOrValue(dest, slotAddr);
-
-  // We don't need a post-barrier because atoms aren't nursery-allocated.
-#ifdef DEBUG
-  // We need a temp register for the nursery check. Spill something.
-  AllocatableGeneralRegisterSet allRegs(GeneralRegisterSet::All());
-  allRegs.take(stringReg);
-  Register temp = allRegs.takeAny();
-  masm.push(temp);
-
-  Label tenured;
-  masm.branchPtrInNurseryChunk(Assembler::NotEqual, stringReg, temp, &tenured);
-  masm.assumeUnreachable("AtomizeString returned a nursery pointer");
-  masm.bind(&tenured);
-
-  masm.pop(temp);
-#endif
-
-  masm.jump(ool->rejoin());
-}
-
 void CodeGenerator::emitMaybeAtomizeSlot(LInstruction* ins, Register stringReg,
                                          Address slotAddr,
                                          TypedOrValueRegister dest) {
-  OutOfLineAtomizeSlot* ool =
-      new (alloc()) OutOfLineAtomizeSlot(ins, stringReg, slotAddr, dest);
+  auto* ool = new (alloc()) LambdaOutOfLineCode([=](OutOfLineCode& ool) {
+    // This code is called with a non-atomic string in |stringReg|.
+    // When it returns, |stringReg| contains an unboxed pointer to an
+    // atomized version of that string, and |slotAddr| contains a
+    // StringValue pointing to that atom. If |dest| is a ValueOperand,
+    // it contains the same StringValue; otherwise we assert that |dest|
+    // is |stringReg|.
+
+    saveLive(ins);
+    pushArg(stringReg);
+
+    using Fn = JSAtom* (*)(JSContext*, JSString*);
+    callVM<Fn, js::AtomizeString>(ins);
+    StoreRegisterTo(stringReg).generate(this);
+    restoreLiveIgnore(ins, StoreRegisterTo(stringReg).clobbered());
+
+    if (dest.hasValue()) {
+      masm.moveValue(
+          TypedOrValueRegister(MIRType::String, AnyRegister(stringReg)),
+          dest.valueReg());
+    } else {
+      MOZ_ASSERT(dest.typedReg().gpr() == stringReg);
+    }
+
+    emitPreBarrier(slotAddr);
+    masm.storeTypedOrValue(dest, slotAddr);
+
+    // We don't need a post-barrier because atoms aren't nursery-allocated.
+#ifdef DEBUG
+    // We need a temp register for the nursery check. Spill something.
+    AllocatableGeneralRegisterSet allRegs(GeneralRegisterSet::All());
+    allRegs.take(stringReg);
+    Register temp = allRegs.takeAny();
+    masm.push(temp);
+
+    Label tenured;
+    masm.branchPtrInNurseryChunk(Assembler::NotEqual, stringReg, temp,
+                                 &tenured);
+    masm.assumeUnreachable("AtomizeString returned a nursery pointer");
+    masm.bind(&tenured);
+
+    masm.pop(temp);
+#endif
+
+    masm.jump(ool.rejoin());
+  });
   addOutOfLineCode(ool, ins->mirRaw()->toInstruction());
   masm.branchTest32(Assembler::NonZero,
                     Address(stringReg, JSString::offsetOfFlags()),
@@ -18078,18 +17707,6 @@ void CodeGenerator::visitThrowWithStack(LThrowWithStack* lir) {
   callVM<Fn, js::ThrowWithStackOperation>(lir);
 }
 
-class OutOfLineTypeOfV : public OutOfLineCodeBase<CodeGenerator> {
-  LTypeOfV* ins_;
-
- public:
-  explicit OutOfLineTypeOfV(LTypeOfV* ins) : ins_(ins) {}
-
-  void accept(CodeGenerator* codegen) override {
-    codegen->visitOutOfLineTypeOfV(this);
-  }
-  LTypeOfV* ins() const { return ins_; }
-};
-
 void CodeGenerator::emitTypeOfJSType(JSValueType type, Register output) {
   switch (type) {
     case JSVAL_TYPE_OBJECT:
@@ -18153,7 +17770,15 @@ void CodeGenerator::visitTypeOfV(LTypeOfV* lir) {
 
   Label done;
 
-  auto* ool = new (alloc()) OutOfLineTypeOfV(lir);
+  auto* ool = new (alloc()) LambdaOutOfLineCode([=](OutOfLineCode& ool) {
+    ValueOperand input = ToValue(lir->input());
+    Register temp = ToTempUnboxRegister(lir->temp0());
+    Register output = ToRegister(lir->output());
+
+    Register obj = masm.extractObject(input, temp);
+    emitTypeOfObject(obj, output, ool.rejoin());
+    masm.jump(ool.rejoin());
+  });
   addOutOfLineCode(ool, lir->mir());
 
   const std::initializer_list<JSValueType> defaultOrder = {
@@ -18233,18 +17858,6 @@ void CodeGenerator::emitTypeOfObject(Register obj, Register output,
   restoreVolatile(output);
 }
 
-void CodeGenerator::visitOutOfLineTypeOfV(OutOfLineTypeOfV* ool) {
-  LTypeOfV* ins = ool->ins();
-
-  ValueOperand input = ToValue(ins->input());
-  Register temp = ToTempUnboxRegister(ins->temp0());
-  Register output = ToRegister(ins->output());
-
-  Register obj = masm.extractObject(input, temp);
-  emitTypeOfObject(obj, output, ool->rejoin());
-  masm.jump(ool->rejoin());
-}
-
 void CodeGenerator::visitTypeOfO(LTypeOfO* lir) {
   Register obj = ToRegister(lir->object());
   Register output = ToRegister(lir->output());
@@ -18271,32 +17884,6 @@ void CodeGenerator::visitTypeOfName(LTypeOfName* lir) {
   masm.loadPtr(BaseIndex(output, input, ScalePointer), output);
 }
 
-class OutOfLineTypeOfIsNonPrimitiveV : public OutOfLineCodeBase<CodeGenerator> {
-  LTypeOfIsNonPrimitiveV* ins_;
-
- public:
-  explicit OutOfLineTypeOfIsNonPrimitiveV(LTypeOfIsNonPrimitiveV* ins)
-      : ins_(ins) {}
-
-  void accept(CodeGenerator* codegen) override {
-    codegen->visitOutOfLineTypeOfIsNonPrimitiveV(this);
-  }
-  auto* ins() const { return ins_; }
-};
-
-class OutOfLineTypeOfIsNonPrimitiveO : public OutOfLineCodeBase<CodeGenerator> {
-  LTypeOfIsNonPrimitiveO* ins_;
-
- public:
-  explicit OutOfLineTypeOfIsNonPrimitiveO(LTypeOfIsNonPrimitiveO* ins)
-      : ins_(ins) {}
-
-  void accept(CodeGenerator* codegen) override {
-    codegen->visitOutOfLineTypeOfIsNonPrimitiveO(this);
-  }
-  auto* ins() const { return ins_; }
-};
-
 void CodeGenerator::emitTypeOfIsObjectOOL(MTypeOfIs* mir, Register obj,
                                           Register output) {
   saveVolatile(output);
@@ -18309,31 +17896,6 @@ void CodeGenerator::emitTypeOfIsObjectOOL(MTypeOfIs* mir, Register obj,
 
   auto cond = JSOpToCondition(mir->jsop(), /* isSigned = */ false);
   masm.cmp32Set(cond, output, Imm32(mir->jstype()), output);
-}
-
-void CodeGenerator::visitOutOfLineTypeOfIsNonPrimitiveV(
-    OutOfLineTypeOfIsNonPrimitiveV* ool) {
-  auto* ins = ool->ins();
-  ValueOperand input = ToValue(ins->input());
-  Register output = ToRegister(ins->output());
-  Register temp = ToTempUnboxRegister(ins->temp0());
-
-  Register obj = masm.extractObject(input, temp);
-
-  emitTypeOfIsObjectOOL(ins->mir(), obj, output);
-
-  masm.jump(ool->rejoin());
-}
-
-void CodeGenerator::visitOutOfLineTypeOfIsNonPrimitiveO(
-    OutOfLineTypeOfIsNonPrimitiveO* ool) {
-  auto* ins = ool->ins();
-  Register input = ToRegister(ins->input());
-  Register output = ToRegister(ins->output());
-
-  emitTypeOfIsObjectOOL(ins->mir(), input, output);
-
-  masm.jump(ool->rejoin());
 }
 
 void CodeGenerator::emitTypeOfIsObject(MTypeOfIs* mir, Register obj,
@@ -18385,7 +17947,17 @@ void CodeGenerator::visitTypeOfIsNonPrimitiveV(LTypeOfIsNonPrimitiveV* lir) {
 
   auto* mir = lir->mir();
 
-  auto* ool = new (alloc()) OutOfLineTypeOfIsNonPrimitiveV(lir);
+  auto* ool = new (alloc()) LambdaOutOfLineCode([=](OutOfLineCode& ool) {
+    ValueOperand input = ToValue(lir->input());
+    Register output = ToRegister(lir->output());
+    Register temp = ToTempUnboxRegister(lir->temp0());
+
+    Register obj = masm.extractObject(input, temp);
+
+    emitTypeOfIsObjectOOL(lir->mir(), obj, output);
+
+    masm.jump(ool.rejoin());
+  });
   addOutOfLineCode(ool, mir);
 
   Label success, fail;
@@ -18436,7 +18008,14 @@ void CodeGenerator::visitTypeOfIsNonPrimitiveO(LTypeOfIsNonPrimitiveO* lir) {
 
   auto* mir = lir->mir();
 
-  auto* ool = new (alloc()) OutOfLineTypeOfIsNonPrimitiveO(lir);
+  auto* ool = new (alloc()) LambdaOutOfLineCode([=](OutOfLineCode& ool) {
+    Register input = ToRegister(lir->input());
+    Register output = ToRegister(lir->output());
+
+    emitTypeOfIsObjectOOL(lir->mir(), input, output);
+
+    masm.jump(ool.rejoin());
+  });
   addOutOfLineCode(ool, mir);
 
   Label success, fail;
@@ -19683,26 +19262,24 @@ void CodeGenerator::visitGuardDOMExpandoMissingOrGuardShape(
   masm.bind(&done);
 }
 
-class OutOfLineIsCallable : public OutOfLineCodeBase<CodeGenerator> {
-  Register object_;
-  Register output_;
-
- public:
-  OutOfLineIsCallable(Register object, Register output)
-      : object_(object), output_(output) {}
-
-  void accept(CodeGenerator* codegen) override {
-    codegen->visitOutOfLineIsCallable(this);
-  }
-  Register object() const { return object_; }
-  Register output() const { return output_; }
-};
+void CodeGenerator::emitIsCallableOOL(Register object, Register output) {
+  saveVolatile(output);
+  using Fn = bool (*)(JSObject* obj);
+  masm.setupAlignedABICall();
+  masm.passABIArg(object);
+  masm.callWithABI<Fn, ObjectIsCallable>();
+  masm.storeCallBoolResult(output);
+  restoreVolatile(output);
+}
 
 void CodeGenerator::visitIsCallableO(LIsCallableO* ins) {
   Register object = ToRegister(ins->object());
   Register output = ToRegister(ins->output());
 
-  OutOfLineIsCallable* ool = new (alloc()) OutOfLineIsCallable(object, output);
+  auto* ool = new (alloc()) LambdaOutOfLineCode([=](OutOfLineCode& ool) {
+    emitIsCallableOOL(object, output);
+    masm.jump(ool.rejoin());
+  });
   addOutOfLineCode(ool, ins->mir());
 
   masm.isCallable(object, output, ool->entry());
@@ -19718,7 +19295,10 @@ void CodeGenerator::visitIsCallableV(LIsCallableV* ins) {
   Label notObject;
   masm.fallibleUnboxObject(val, temp, &notObject);
 
-  OutOfLineIsCallable* ool = new (alloc()) OutOfLineIsCallable(temp, output);
+  auto* ool = new (alloc()) LambdaOutOfLineCode([=](OutOfLineCode& ool) {
+    emitIsCallableOOL(temp, output);
+    masm.jump(ool.rejoin());
+  });
   addOutOfLineCode(ool, ins->mir());
 
   masm.isCallable(temp, output, ool->entry());
@@ -19730,57 +19310,25 @@ void CodeGenerator::visitIsCallableV(LIsCallableV* ins) {
   masm.bind(ool->rejoin());
 }
 
-void CodeGenerator::visitOutOfLineIsCallable(OutOfLineIsCallable* ool) {
-  Register object = ool->object();
-  Register output = ool->output();
-
-  saveVolatile(output);
-  using Fn = bool (*)(JSObject* obj);
-  masm.setupAlignedABICall();
-  masm.passABIArg(object);
-  masm.callWithABI<Fn, ObjectIsCallable>();
-  masm.storeCallBoolResult(output);
-  restoreVolatile(output);
-  masm.jump(ool->rejoin());
-}
-
-class OutOfLineIsConstructor : public OutOfLineCodeBase<CodeGenerator> {
-  LIsConstructor* ins_;
-
- public:
-  explicit OutOfLineIsConstructor(LIsConstructor* ins) : ins_(ins) {}
-
-  void accept(CodeGenerator* codegen) override {
-    codegen->visitOutOfLineIsConstructor(this);
-  }
-  LIsConstructor* ins() const { return ins_; }
-};
-
 void CodeGenerator::visitIsConstructor(LIsConstructor* ins) {
   Register object = ToRegister(ins->object());
   Register output = ToRegister(ins->output());
 
-  OutOfLineIsConstructor* ool = new (alloc()) OutOfLineIsConstructor(ins);
+  auto* ool = new (alloc()) LambdaOutOfLineCode([=](OutOfLineCode& ool) {
+    saveVolatile(output);
+    using Fn = bool (*)(JSObject* obj);
+    masm.setupAlignedABICall();
+    masm.passABIArg(object);
+    masm.callWithABI<Fn, ObjectIsConstructor>();
+    masm.storeCallBoolResult(output);
+    restoreVolatile(output);
+    masm.jump(ool.rejoin());
+  });
   addOutOfLineCode(ool, ins->mir());
 
   masm.isConstructor(object, output, ool->entry());
 
   masm.bind(ool->rejoin());
-}
-
-void CodeGenerator::visitOutOfLineIsConstructor(OutOfLineIsConstructor* ool) {
-  LIsConstructor* ins = ool->ins();
-  Register object = ToRegister(ins->object());
-  Register output = ToRegister(ins->output());
-
-  saveVolatile(output);
-  using Fn = bool (*)(JSObject* obj);
-  masm.setupAlignedABICall();
-  masm.passABIArg(object);
-  masm.callWithABI<Fn, ObjectIsConstructor>();
-  masm.storeCallBoolResult(output);
-  restoreVolatile(output);
-  masm.jump(ool->rejoin());
 }
 
 void CodeGenerator::visitIsCrossRealmArrayConstructor(
@@ -20265,33 +19813,15 @@ void CodeGenerator::visitInterruptCheck(LInterruptCheck* lir) {
   masm.bind(ool->rejoin());
 }
 
-void CodeGenerator::visitOutOfLineResumableWasmTrap(
-    OutOfLineResumableWasmTrap* ool) {
-  LInstruction* lir = ool->lir();
-  masm.wasmTrap(ool->trap(), ool->trapSiteDesc());
-
-  markSafepointAt(masm.currentOffset(), lir);
-
-  // Note that masm.framePushed() doesn't include the register dump area.
-  // That will be taken into account when the StackMap is created from the
-  // LSafepoint.
-  lir->safepoint()->setFramePushedAtStackMapBase(ool->framePushed());
-  lir->safepoint()->setWasmSafepointKind(WasmSafepointKind::Trap);
-
-  masm.jump(ool->rejoin());
-}
-
-void CodeGenerator::visitOutOfLineAbortingWasmTrap(
-    OutOfLineAbortingWasmTrap* ool) {
-  masm.wasmTrap(ool->trap(), ool->trapSiteDesc());
-}
-
 void CodeGenerator::visitWasmInterruptCheck(LWasmInterruptCheck* lir) {
   MOZ_ASSERT(gen->compilingWasm());
 
-  OutOfLineResumableWasmTrap* ool = new (alloc()) OutOfLineResumableWasmTrap(
-      lir, masm.framePushed(), lir->mir()->trapSiteDesc(),
-      wasm::Trap::CheckInterrupt);
+  auto* ool = new (alloc()) LambdaOutOfLineCode([=](OutOfLineCode& ool) {
+    emitResumableWasmTrapOOL(lir, masm.framePushed(),
+                             lir->mir()->trapSiteDesc(),
+                             wasm::Trap::CheckInterrupt);
+    masm.jump(ool.rejoin());
+  });
   addOutOfLineCode(ool, lir->mir());
   masm.branch32(
       Assembler::NotEqual,
@@ -20439,41 +19969,6 @@ void CodeGenerator::callWasmStructAllocFun(
                                     trapSiteDesc);
 }
 
-// Out-of-line path to allocate wasm GC structs
-class OutOfLineWasmNewStruct : public OutOfLineCodeBase<CodeGenerator> {
-  LInstruction* lir_;
-  wasm::SymbolicAddress fun_;
-  Register typeDefData_;
-  Register output_;
-  wasm::TrapSiteDesc trapSiteDesc_;
-
- public:
-  OutOfLineWasmNewStruct(LInstruction* lir, wasm::SymbolicAddress fun,
-                         Register typeDefData, Register output,
-                         const wasm::TrapSiteDesc& trapSiteDesc)
-      : lir_(lir),
-        fun_(fun),
-        typeDefData_(typeDefData),
-        output_(output),
-        trapSiteDesc_(trapSiteDesc) {}
-
-  void accept(CodeGenerator* codegen) override {
-    codegen->visitOutOfLineWasmNewStruct(this);
-  }
-
-  LInstruction* lir() const { return lir_; }
-  wasm::SymbolicAddress fun() const { return fun_; }
-  Register typeDefData() const { return typeDefData_; }
-  Register output() const { return output_; }
-  const wasm::TrapSiteDesc& trapSiteDesc() const { return trapSiteDesc_; }
-};
-
-void CodeGenerator::visitOutOfLineWasmNewStruct(OutOfLineWasmNewStruct* ool) {
-  callWasmStructAllocFun(ool->lir(), ool->fun(), ool->typeDefData(),
-                         ool->output(), ool->trapSiteDesc());
-  masm.jump(ool->rejoin());
-}
-
 void CodeGenerator::visitWasmNewStructObject(LWasmNewStructObject* lir) {
   MOZ_ASSERT(gen->compilingWasm());
 
@@ -20495,8 +19990,11 @@ void CodeGenerator::visitWasmNewStructObject(LWasmNewStructObject* lir) {
     Register instance = ToRegister(lir->instance());
     MOZ_ASSERT(instance == InstanceReg);
 
-    auto* ool = new (alloc()) OutOfLineWasmNewStruct(
-        lir, fun, typeDefData, output, mir->trapSiteDesc());
+    auto* ool = new (alloc()) LambdaOutOfLineCode([=](OutOfLineCode& ool) {
+      callWasmStructAllocFun(lir, fun, typeDefData, output,
+                             mir->trapSiteDesc());
+      masm.jump(ool.rejoin());
+    });
     addOutOfLineCode(ool, lir->mir());
 
     Register temp1 = ToRegister(lir->temp0());
@@ -20547,52 +20045,6 @@ void CodeGenerator::callWasmArrayAllocFun(
                                     trapSiteDesc);
 }
 
-// Out-of-line path to allocate wasm GC arrays
-class OutOfLineWasmNewArray : public OutOfLineCodeBase<CodeGenerator> {
-  LInstruction* lir_;
-  wasm::SymbolicAddress fun_;
-  Register numElementsReg_;
-  mozilla::Maybe<uint32_t> numElements_;
-  Register typeDefData_;
-  Register output_;
-  wasm::TrapSiteDesc trapSiteDesc_;
-
- public:
-  OutOfLineWasmNewArray(LInstruction* lir, wasm::SymbolicAddress fun,
-                        Register numElementsReg,
-                        mozilla::Maybe<uint32_t> numElements,
-                        Register typeDefData, Register output,
-                        const wasm::TrapSiteDesc& trapSiteDesc)
-      : lir_(lir),
-        fun_(fun),
-        numElementsReg_(numElementsReg),
-        numElements_(numElements),
-        typeDefData_(typeDefData),
-        output_(output),
-        trapSiteDesc_(trapSiteDesc) {}
-
-  void accept(CodeGenerator* codegen) override {
-    codegen->visitOutOfLineWasmNewArray(this);
-  }
-
-  LInstruction* lir() const { return lir_; }
-  wasm::SymbolicAddress fun() const { return fun_; }
-  Register numElementsReg() const { return numElementsReg_; }
-  mozilla::Maybe<uint32_t> numElements() const { return numElements_; }
-  Register typeDefData() const { return typeDefData_; }
-  Register output() const { return output_; }
-  const wasm::TrapSiteDesc& trapSiteDesc() const { return trapSiteDesc_; }
-};
-
-void CodeGenerator::visitOutOfLineWasmNewArray(OutOfLineWasmNewArray* ool) {
-  if (ool->numElements().isSome()) {
-    masm.move32(Imm32(ool->numElements().value()), ool->numElementsReg());
-  }
-  callWasmArrayAllocFun(ool->lir(), ool->fun(), ool->numElementsReg(),
-                        ool->typeDefData(), ool->output(), ool->trapSiteDesc());
-  masm.jump(ool->rejoin());
-}
-
 void CodeGenerator::visitWasmNewArrayObject(LWasmNewArrayObject* lir) {
   MOZ_ASSERT(gen->compilingWasm());
 
@@ -20626,9 +20078,12 @@ void CodeGenerator::visitWasmNewArrayObject(LWasmNewArrayObject* lir) {
       Register instance = ToRegister(lir->instance());
       MOZ_ASSERT(instance == InstanceReg);
 
-      auto ool = new (alloc())
-          OutOfLineWasmNewArray(lir, fun, temp1, mozilla::Some(numElements),
-                                typeDefData, output, mir->trapSiteDesc());
+      auto* ool = new (alloc()) LambdaOutOfLineCode([=](OutOfLineCode& ool) {
+        masm.move32(Imm32(numElements), temp1);
+        callWasmArrayAllocFun(lir, fun, temp1, typeDefData, output,
+                              mir->trapSiteDesc());
+        masm.jump(ool.rejoin());
+      });
       addOutOfLineCode(ool, lir->mir());
 
       masm.wasmNewArrayObjectFixed(instance, output, typeDefData, temp1, temp2,
@@ -20644,9 +20099,11 @@ void CodeGenerator::visitWasmNewArrayObject(LWasmNewArrayObject* lir) {
     MOZ_ASSERT(instance == InstanceReg);
     Register numElements = ToRegister(lir->numElements());
 
-    auto ool = new (alloc())
-        OutOfLineWasmNewArray(lir, fun, numElements, mozilla::Nothing(),
-                              typeDefData, output, mir->trapSiteDesc());
+    auto* ool = new (alloc()) LambdaOutOfLineCode([=](OutOfLineCode& ool) {
+      callWasmArrayAllocFun(lir, fun, numElements, typeDefData, output,
+                            mir->trapSiteDesc());
+      masm.jump(ool.rejoin());
+    });
     addOutOfLineCode(ool, lir->mir());
 
     masm.wasmNewArrayObject(instance, output, numElements, typeDefData, temp1,
@@ -20664,6 +20121,20 @@ void CodeGenerator::visitWasmHeapReg(LWasmHeapReg* ins) {
 #endif
 }
 
+void CodeGenerator::emitResumableWasmTrapOOL(
+    LInstruction* lir, size_t framePushed,
+    const wasm::TrapSiteDesc& trapSiteDesc, wasm::Trap trap) {
+  masm.wasmTrap(trap, trapSiteDesc);
+
+  markSafepointAt(masm.currentOffset(), lir);
+
+  // Note that masm.framePushed() doesn't include the register dump area.
+  // That will be taken into account when the StackMap is created from the
+  // LSafepoint.
+  lir->safepoint()->setFramePushedAtStackMapBase(framePushed);
+  lir->safepoint()->setWasmSafepointKind(WasmSafepointKind::Trap);
+}
+
 void CodeGenerator::visitWasmBoundsCheck(LWasmBoundsCheck* ins) {
   const MWasmBoundsCheck* mir = ins->mir();
   Register ptr = ToRegister(ins->ptr());
@@ -20677,8 +20148,9 @@ void CodeGenerator::visitWasmBoundsCheck(LWasmBoundsCheck* ins) {
     masm.wasmTrap(wasm::Trap::OutOfBounds, mir->trapSiteDesc());
     masm.bind(&ok);
   } else {
-    OutOfLineAbortingWasmTrap* ool = new (alloc())
-        OutOfLineAbortingWasmTrap(mir->trapSiteDesc(), wasm::Trap::OutOfBounds);
+    auto* ool = new (alloc()) LambdaOutOfLineCode([=](OutOfLineCode& ool) {
+      masm.wasmTrap(wasm::Trap::OutOfBounds, mir->trapSiteDesc());
+    });
     addOutOfLineCode(ool, mir);
     masm.wasmBoundsCheck32(Assembler::AboveOrEqual, ptr, boundsCheckLimit,
                            ool->entry());
@@ -20696,8 +20168,9 @@ void CodeGenerator::visitWasmBoundsCheck64(LWasmBoundsCheck64* ins) {
     masm.wasmTrap(wasm::Trap::OutOfBounds, mir->trapSiteDesc());
     masm.bind(&ok);
   } else {
-    OutOfLineAbortingWasmTrap* ool = new (alloc())
-        OutOfLineAbortingWasmTrap(mir->trapSiteDesc(), wasm::Trap::OutOfBounds);
+    auto* ool = new (alloc()) LambdaOutOfLineCode([=](OutOfLineCode& ool) {
+      masm.wasmTrap(wasm::Trap::OutOfBounds, mir->trapSiteDesc());
+    });
     addOutOfLineCode(ool, mir);
     masm.wasmBoundsCheck64(Assembler::AboveOrEqual, ptr, boundsCheckLimit,
                            ool->entry());
@@ -20717,8 +20190,9 @@ void CodeGenerator::visitWasmBoundsCheckRange32(LWasmBoundsCheckRange32* ins) {
 void CodeGenerator::visitWasmAlignmentCheck(LWasmAlignmentCheck* ins) {
   const MWasmAlignmentCheck* mir = ins->mir();
   Register ptr = ToRegister(ins->ptr());
-  OutOfLineAbortingWasmTrap* ool = new (alloc()) OutOfLineAbortingWasmTrap(
-      mir->trapSiteDesc(), wasm::Trap::UnalignedAccess);
+  auto* ool = new (alloc()) LambdaOutOfLineCode([=](OutOfLineCode& ool) {
+    masm.wasmTrap(wasm::Trap::UnalignedAccess, mir->trapSiteDesc());
+  });
   addOutOfLineCode(ool, mir);
   masm.branchTest32(Assembler::NonZero, ptr, Imm32(mir->byteSize() - 1),
                     ool->entry());
@@ -20732,8 +20206,9 @@ void CodeGenerator::visitWasmAlignmentCheck64(LWasmAlignmentCheck64* ins) {
 #else
   Register r = ptr.low;
 #endif
-  OutOfLineAbortingWasmTrap* ool = new (alloc()) OutOfLineAbortingWasmTrap(
-      mir->trapSiteDesc(), wasm::Trap::UnalignedAccess);
+  auto* ool = new (alloc()) LambdaOutOfLineCode([=](OutOfLineCode& ool) {
+    masm.wasmTrap(wasm::Trap::UnalignedAccess, mir->trapSiteDesc());
+  });
   addOutOfLineCode(ool, mir);
   masm.branchTestPtr(Assembler::NonZero, r, Imm32(mir->byteSize() - 1),
                      ool->entry());
@@ -21184,28 +20659,14 @@ void CodeGenerator::visitReinterpretCastToI64(LReinterpretCastToI64* lir) {
   masm.moveDoubleToGPR64(ToFloatRegister(lir->input()), ToOutRegister64(lir));
 }
 
-class OutOfLineNaNToZero : public OutOfLineCodeBase<CodeGenerator> {
-  LNaNToZero* lir_;
-
- public:
-  explicit OutOfLineNaNToZero(LNaNToZero* lir) : lir_(lir) {}
-
-  void accept(CodeGenerator* codegen) override {
-    codegen->visitOutOfLineNaNToZero(this);
-  }
-  LNaNToZero* lir() const { return lir_; }
-};
-
-void CodeGenerator::visitOutOfLineNaNToZero(OutOfLineNaNToZero* ool) {
-  FloatRegister output = ToFloatRegister(ool->lir()->output());
-  masm.loadConstantDouble(0.0, output);
-  masm.jump(ool->rejoin());
-}
-
 void CodeGenerator::visitNaNToZero(LNaNToZero* lir) {
   FloatRegister input = ToFloatRegister(lir->input());
 
-  OutOfLineNaNToZero* ool = new (alloc()) OutOfLineNaNToZero(lir);
+  auto* ool = new (alloc()) LambdaOutOfLineCode([=](OutOfLineCode& ool) {
+    FloatRegister output = ToFloatRegister(lir->output());
+    masm.loadConstantDouble(0.0, output);
+    masm.jump(ool.rejoin());
+  });
   addOutOfLineCode(ool, lir->mir());
 
   if (lir->mir()->operandIsNeverNegativeZero()) {

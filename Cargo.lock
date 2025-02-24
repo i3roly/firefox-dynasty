@@ -1621,6 +1621,7 @@ version = "0.1.0"
 dependencies = [
  "nsstring",
  "percent-encoding",
+ "rayon",
  "thin-vec",
 ]
 
@@ -2267,7 +2268,7 @@ dependencies = [
 
 [[package]]
 name = "geckodriver"
-version = "0.35.0"
+version = "0.36.0"
 dependencies = [
  "anyhow",
  "base64 0.21.3",
@@ -3691,7 +3692,7 @@ dependencies = [
 
 [[package]]
 name = "marionette"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -4205,7 +4206,7 @@ version = "0.1.0"
 
 [[package]]
 name = "mozdevice"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "log",
  "once_cell",
@@ -4315,7 +4316,7 @@ dependencies = [
 
 [[package]]
 name = "mozprofile"
-version = "0.9.3"
+version = "0.9.4"
 dependencies = [
  "tempfile",
  "thiserror 1.999.999",
@@ -4323,7 +4324,7 @@ dependencies = [
 
 [[package]]
 name = "mozrunner"
-version = "0.15.3"
+version = "0.15.4"
 dependencies = [
  "dirs",
  "log",
@@ -7117,7 +7118,7 @@ version = "0.3.100"
 
 [[package]]
 name = "webdriver"
-version = "0.51.0"
+version = "0.52.0"
 dependencies = [
  "base64 0.21.3",
  "bytes",

@@ -872,6 +872,9 @@ pref("browser.shopping.experience2023.autoOpen.enabled", false);
 // Opens the shopping sidebar automatically when viewing a PDP.
 pref("browser.shopping.experience2023.autoOpen.userEnabled", true);
 
+// Close the shopping sidebar automatically when viewing an unsupported site.
+pref("browser.shopping.experience2023.autoClose.userEnabled", true);
+
 // Number of times the sidebar has been closed in a session
 pref("browser.shopping.experience2023.sidebarClosedCount", 0);
 
@@ -1821,8 +1824,6 @@ pref("browser.newtabpage.activity-stream.newtabWallpapers.customColor.enabled", 
 pref("browser.newtabpage.activity-stream.newtabWallpapers.customWallpaper.enabled", false);
 
 // Current new tab page background images.
-pref("browser.newtabpage.activity-stream.newtabWallpapers.wallpaper-light", "");
-pref("browser.newtabpage.activity-stream.newtabWallpapers.wallpaper-dark", "");
 pref("browser.newtabpage.activity-stream.newtabWallpapers.wallpaper", "");
 
 // Preference to show feature highlight about wallpaper on new tab page

@@ -5308,6 +5308,21 @@ bool CacheIRCompiler::emitGuardArgumentsObjectFlags(ObjOperandId objId,
   return true;
 }
 
+bool CacheIRCompiler::emitGuardObjectHasSameRealm(ObjOperandId objId) {
+  JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
+
+  Register obj = allocator.useRegister(masm, objId);
+  AutoScratchRegister scratch(allocator, masm);
+
+  FailurePath* failure;
+  if (!addFailurePath(&failure)) {
+    return false;
+  }
+
+  masm.guardObjectHasSameRealm(obj, scratch, failure->label());
+  return true;
+}
+
 bool CacheIRCompiler::emitLoadDenseElementHoleResult(ObjOperandId objId,
                                                      Int32OperandId indexId) {
   JitSpew(JitSpew_Codegen, "%s", __FUNCTION__);
@@ -9533,21 +9548,33 @@ bool CacheIRCompiler::emitCallInt32ToString(Int32OperandId inputId,
     return false;
   }
 
-  LiveRegisterSet volatileRegs = liveVolatileRegs();
-  volatileRegs.takeUnchecked(result);
-  masm.PushRegsInMask(volatileRegs);
+  Label done, callVM;
 
-  using Fn = JSLinearString* (*)(JSContext* cx, int32_t i);
-  masm.setupUnalignedABICall(result);
-  masm.loadJSContext(result);
-  masm.passABIArg(result);
-  masm.passABIArg(input);
-  masm.callWithABI<Fn, js::Int32ToStringPure>();
+  {
+    masm.lookupStaticIntString(input, result, cx_->staticStrings(), &callVM);
+    masm.jump(&done);
+  }
 
-  masm.storeCallPointerResult(result);
-  masm.PopRegsInMask(volatileRegs);
+  {
+    masm.bind(&callVM);
+    LiveRegisterSet volatileRegs = liveVolatileRegs();
+    volatileRegs.takeUnchecked(result);
+    masm.PushRegsInMask(volatileRegs);
 
-  masm.branchPtr(Assembler::Equal, result, ImmPtr(nullptr), failure->label());
+    using Fn = JSLinearString* (*)(JSContext* cx, int32_t i);
+    masm.setupUnalignedABICall(result);
+    masm.loadJSContext(result);
+    masm.passABIArg(result);
+    masm.passABIArg(input);
+    masm.callWithABI<Fn, js::Int32ToStringPure>();
+
+    masm.storeCallPointerResult(result);
+    masm.PopRegsInMask(volatileRegs);
+
+    masm.branchPtr(Assembler::Equal, result, ImmPtr(nullptr), failure->label());
+  }
+
+  masm.bind(&done);
   return true;
 }
 

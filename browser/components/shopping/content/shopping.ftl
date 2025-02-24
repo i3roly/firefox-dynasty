@@ -24,9 +24,35 @@ shopping-empty-state-supported-site = View a product and { -brand-product-name }
 # This string will be displayed above the list of sites. The list will be hardcoded and does not require localization.
 shopping-empty-state-non-supported-site = Review Checker works when you shop on:
 
+## Confirm disabling Review Checker for newly opted out users
+
+shopping-integrated-callout-opted-out-title = Review Checker is off
+shopping-integrated-callout-opted-out-subtitle = To turn it back on, select the price tag in the sidebar and turn on Review Checker.
+
 ## Callout for where to find Review Checker when the sidebar closes
 
 shopping-integrated-callout-sidebar-closed-title = Get back to Review Checker
 shopping-integrated-callout-sidebar-closed-subtitle = Select the price tag in the sidebar to see if you can trust a product’s reviews.
 
-##
+## Pref confirmation callout for auto-open
+
+shopping-integrated-callout-disabled-auto-open-title = Get back to Review Checker
+shopping-integrated-callout-disabled-auto-open-subtitle = Select the price tag in the sidebar to see if you can trust a product’s reviews.
+shopping-integrated-callout-no-logo-disabled-auto-open-subtitle = Select the sidebar button to see if you can trust a product’s reviews.
+
+## Auto-close toggle in settings
+
+shopping-settings-auto-close-toggle =
+    .label = Automatically close Review Checker
+
+# Description text for regions where we support three sites. Sites are limited to Amazon, Walmart and Best Buy.
+# Variables:
+#   $firstSite (String) - The first shopping page name
+#   $secondSite (String) - The second shopping page name
+#   $thirdSite (String) - The third shopping page name
+shopping-settings-auto-close-description-three-sites = When leaving { $firstSite }, { $secondSite }, and { $thirdSite }
+
+# Description text for regions where we support only one site (e.g. currently used in FR/DE with Amazon).
+# Variables:
+#   $currentSite (String) - The current shopping page name
+shopping-settings-auto-close-description-single-site = When leaving { $currentSite }

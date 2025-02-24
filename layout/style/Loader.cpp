@@ -626,25 +626,19 @@ NotNull<const Encoding*> SheetLoadData::DetermineNonBOMEncoding(
   return mGuessedEncoding;
 }
 
-static nsresult VerifySheetIntegrity(const SRIMetadata& aMetadata,
-                                     nsIChannel* aChannel,
-                                     const nsACString& aFirst,
-                                     const nsACString& aSecond,
-                                     const nsACString& aSourceFileURI,
-                                     nsIConsoleReportCollector* aReporter) {
+static nsresult VerifySheetIntegrity(
+    const SRIMetadata& aMetadata, nsIChannel* aChannel, LoadTainting aTainting,
+    const nsACString& aFirst, const nsACString& aSecond,
+    const nsACString& aSourceFileURI, nsIConsoleReportCollector* aReporter) {
   NS_ENSURE_ARG_POINTER(aReporter);
   MOZ_LOG(SRILogHelper::GetSriLog(), LogLevel::Debug,
           ("VerifySheetIntegrity (unichar stream)"));
 
   SRICheckDataVerifier verifier(aMetadata, aSourceFileURI, aReporter);
-  nsresult rv =
-      verifier.Update(aFirst.Length(), (const uint8_t*)aFirst.BeginReading());
-  NS_ENSURE_SUCCESS(rv, rv);
-  rv =
-      verifier.Update(aSecond.Length(), (const uint8_t*)aSecond.BeginReading());
-  NS_ENSURE_SUCCESS(rv, rv);
-
-  return verifier.Verify(aMetadata, aChannel, aSourceFileURI, aReporter);
+  MOZ_TRY(verifier.Update(aFirst));
+  MOZ_TRY(verifier.Update(aSecond));
+  return verifier.Verify(aMetadata, aChannel, aTainting, aSourceFileURI,
+                         aReporter);
 }
 
 static bool AllLoadsCanceled(const SheetLoadData& aData) {
@@ -674,6 +668,9 @@ void SheetLoadData::OnStartRequest(nsIRequest* aRequest) {
   if (!channel) {
     return;
   }
+
+  nsCOMPtr<nsILoadInfo> loadInfo = channel->LoadInfo();
+  mTainting = loadInfo->GetTainting();
 
   nsCOMPtr<nsIURI> originalURI;
   channel->GetOriginalURI(getter_AddRefs(originalURI));
@@ -723,49 +720,15 @@ nsresult SheetLoadData::VerifySheetReadyToParse(nsresult aStatus,
   LOG(("SheetLoadData::VerifySheetReadyToParse"));
   NS_ASSERTION((!NS_IsMainThread() || !mLoader->mSyncCallback),
                "Synchronous callback from necko");
+  MOZ_DIAGNOSTIC_ASSERT_IF(mRecordErrors, NS_IsMainThread());
+  MOZ_DIAGNOSTIC_ASSERT(aChannel);
 
   if (AllLoadsCanceled(*this)) {
-    if (NS_IsMainThread()) {
-      LOG_WARN(("  All loads are canceled, dropping"));
-      mLoader->SheetComplete(*this, NS_BINDING_ABORTED);
-    }
-    return NS_OK;
-  }
-
-  if (!NS_IsMainThread() && mRecordErrors) {
-    // we cannot parse sheet OMT if we need to record errors
-    return NS_OK;
+    return NS_BINDING_ABORTED;
   }
 
   if (NS_FAILED(aStatus)) {
-    if (NS_IsMainThread()) {
-      LOG_WARN(
-          ("  Load failed: status 0x%" PRIx32, static_cast<uint32_t>(aStatus)));
-      // Handle sheet not loading error because source was a tracking URL (or
-      // fingerprinting, cryptomining, etc).
-      // We make a note of this sheet node by including it in a dedicated
-      // array of blocked tracking nodes under its parent document.
-      //
-      // Multiple sheet load instances might be tied to this request,
-      // we annotate each one linked to a valid owning element (node).
-      if (net::UrlClassifierFeatureFactory::IsClassifierBlockingErrorCode(
-              aStatus)) {
-        if (Document* doc = mLoader->GetDocument()) {
-          for (SheetLoadData* data = this; data; data = data->mNext) {
-            // owner node may be null but AddBlockTrackingNode can cope
-            doc->AddBlockedNodeByClassifier(data->mSheet->GetOwnerNode());
-          }
-        }
-      }
-      mLoader->SheetComplete(*this, aStatus);
-    }
-    return NS_OK;
-  }
-
-  if (!aChannel) {
-    MOZ_ASSERT(NS_IsMainThread());
-    mLoader->SheetComplete(*this, NS_OK);
-    return NS_OK;
+    return aStatus;
   }
 
   // If it's an HTTP channel, we want to make sure this is not an
@@ -774,11 +737,7 @@ nsresult SheetLoadData::VerifySheetReadyToParse(nsresult aStatus,
     bool requestSucceeded;
     nsresult result = httpChannel->GetRequestSucceeded(&requestSucceeded);
     if (NS_SUCCEEDED(result) && !requestSucceeded) {
-      if (NS_IsMainThread()) {
-        LOG(("  Load returned an error page"));
-        mLoader->SheetComplete(*this, NS_ERROR_NOT_AVAILABLE);
-      }
-      return NS_OK;
+      return NS_ERROR_NOT_AVAILABLE;
     }
   }
 
@@ -795,78 +754,44 @@ nsresult SheetLoadData::VerifySheetReadyToParse(nsresult aStatus,
                          contentType.IsEmpty();
 
   if (!validType) {
-    if (!NS_IsMainThread()) {
-      return NS_OK;
-    }
-    const char* errorMessage;
-    uint32_t errorFlag;
-    bool sameOrigin = true;
-
-    bool subsumed;
-    nsresult result =
-        mTriggeringPrincipal->Subsumes(mSheet->Principal(), &subsumed);
-    if (NS_FAILED(result) || !subsumed) {
-      sameOrigin = false;
-    }
-
-    if (sameOrigin && mCompatMode == eCompatibility_NavQuirks) {
-      errorMessage = "MimeNotCssWarn";
-      errorFlag = nsIScriptError::warningFlag;
-    } else {
-      errorMessage = "MimeNotCss";
-      errorFlag = nsIScriptError::errorFlag;
-    }
-
-    AutoTArray<nsString, 2> strings;
-    CopyUTF8toUTF16(mSheet->GetSheetURI()->GetSpecOrDefault(),
-                    *strings.AppendElement());
-    CopyASCIItoUTF16(contentType, *strings.AppendElement());
+    const bool sameOrigin = mTriggeringPrincipal->Subsumes(mSheet->Principal());
+    const auto flag = sameOrigin && mCompatMode == eCompatibility_NavQuirks
+                          ? nsIScriptError::warningFlag
+                          : nsIScriptError::errorFlag;
+    const auto errorMessage = flag == nsIScriptError::errorFlag
+                                  ? "MimeNotCss"_ns
+                                  : "MimeNotCssWarn"_ns;
+    NS_ConvertUTF8toUTF16 sheetUri(mSheet->GetSheetURI()->GetSpecOrDefault());
+    NS_ConvertUTF8toUTF16 contentType16(contentType);
 
     nsCOMPtr<nsIURI> referrer = ReferrerInfo()->GetOriginalReferrer();
-    nsContentUtils::ReportToConsole(
-        errorFlag, "CSS Loader"_ns, mLoader->mDocument,
-        nsContentUtils::eCSS_PROPERTIES, errorMessage, strings,
-        SourceLocation(referrer.get()));
-
-    if (errorFlag == nsIScriptError::errorFlag) {
+    nsAutoCString referrerSpec;
+    referrer->GetSpec(referrerSpec);
+    mLoader->mReporter->AddConsoleReport(
+        flag, "CSS Loader"_ns, nsContentUtils::eCSS_PROPERTIES, referrerSpec, 0,
+        0, errorMessage, {sheetUri, contentType16});
+    if (flag == nsIScriptError::errorFlag) {
       LOG_WARN(
           ("  Ignoring sheet with improper MIME type %s", contentType.get()));
-      mLoader->SheetComplete(*this, NS_ERROR_NOT_AVAILABLE);
-      return NS_OK;
+      return NS_ERROR_NOT_AVAILABLE;
     }
   }
 
   SRIMetadata sriMetadata;
   mSheet->GetIntegrity(sriMetadata);
   if (!sriMetadata.IsEmpty()) {
-    if (!NS_IsMainThread()) {
-      // We dont process any further in OMT.
-      // This is because we have some main-thread only accesses below.
-      // We need to find a way to optimize this handling.
-      // See Bug 1882046.
-      return NS_OK;
-    }
     nsAutoCString sourceUri;
-    if (mLoader->mDocument && mLoader->mDocument->GetDocumentURI()) {
-      mLoader->mDocument->GetDocumentURI()->GetAsciiSpec(sourceUri);
+    if (nsCOMPtr<nsIURI> uri = mReferrerInfo->GetOriginalReferrer()) {
+      uri->GetAsciiSpec(sourceUri);
     }
-    nsresult rv = VerifySheetIntegrity(sriMetadata, aChannel, aBytes1, aBytes2,
-                                       sourceUri, mLoader->mReporter);
-
-    nsCOMPtr<nsILoadGroup> loadGroup;
-    aChannel->GetLoadGroup(getter_AddRefs(loadGroup));
-    if (loadGroup) {
-      mLoader->mReporter->FlushConsoleReports(loadGroup);
-    } else {
-      mLoader->mReporter->FlushConsoleReports(mLoader->mDocument);
-    }
-
+    nsresult rv =
+        VerifySheetIntegrity(sriMetadata, aChannel, mTainting, aBytes1, aBytes2,
+                             sourceUri, mLoader->mReporter);
     if (NS_FAILED(rv)) {
       LOG(("  Load was blocked by SRI"));
       MOZ_LOG(gSriPRLog, LogLevel::Debug,
               ("css::Loader::OnStreamComplete, bad metadata"));
-      mLoader->SheetComplete(*this, NS_ERROR_SRI_CORRUPT);
-      return NS_OK;
+      return NS_ERROR_SRI_CORRUPT;
     }
   }
   return NS_OK_PARSE_SHEET;
@@ -1775,6 +1700,9 @@ void Loader::NotifyObservers(SheetLoadData& aData, nsresult aStatus) {
 void Loader::SheetComplete(SheetLoadData& aLoadData, nsresult aStatus) {
   LOG(("css::Loader::SheetComplete, status: 0x%" PRIx32,
        static_cast<uint32_t>(aStatus)));
+  if (aLoadData.mURI) {
+    mReporter->FlushConsoleReports(mDocument);
+  }
   SharedStyleSheetCache::LoadCompleted(mSheets.get(), aLoadData, aStatus);
 }
 

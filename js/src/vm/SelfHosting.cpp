@@ -89,7 +89,6 @@
 #include "vm/JSFunction.h"
 #include "vm/JSObject.h"
 #include "vm/Logging.h"
-#include "vm/PIC.h"
 #include "vm/PlainObject.h"  // js::PlainObject
 #include "vm/Realm.h"
 #include "vm/RegExpObject.h"
@@ -720,15 +719,7 @@ static bool intrinsic_ArrayIteratorPrototypeOptimizable(JSContext* cx,
   CallArgs args = CallArgsFromVp(argc, vp);
   MOZ_ASSERT(args.length() == 0);
 
-  ForOfPIC::Chain* stubChain = ForOfPIC::getOrCreate(cx);
-  if (!stubChain) {
-    return false;
-  }
-
-  bool optimized;
-  if (!stubChain->tryOptimizeArrayIteratorNext(cx, &optimized)) {
-    return false;
-  }
+  bool optimized = HasOptimizableArrayIteratorPrototype(cx);
   args.rval().setBoolean(optimized);
   return true;
 }

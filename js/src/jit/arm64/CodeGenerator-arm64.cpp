@@ -72,8 +72,9 @@ void CodeGeneratorARM64::emitBranch(Assembler::Condition cond,
   }
 }
 
-void OutOfLineBailout::accept(CodeGeneratorARM64* codegen) {
-  codegen->visitOutOfLineBailout(this);
+void CodeGeneratorARM64::emitBailoutOOL(LSnapshot* snapshot) {
+  masm.push(Imm32(snapshot->snapshotOffset()));
+  masm.B(&deoptLabel_);
 }
 
 void CodeGeneratorARM64::bailoutIf(Assembler::Condition condition,
@@ -81,7 +82,8 @@ void CodeGeneratorARM64::bailoutIf(Assembler::Condition condition,
   encode(snapshot);
 
   InlineScriptTree* tree = snapshot->mir()->block()->trackedTree();
-  OutOfLineBailout* ool = new (alloc()) OutOfLineBailout(snapshot);
+  auto* ool = new (alloc()) LambdaOutOfLineCode(
+      [=](OutOfLineCode& ool) { emitBailoutOOL(snapshot); });
   addOutOfLineCode(ool,
                    new (alloc()) BytecodeSite(tree, tree->script()->code()));
 
@@ -95,7 +97,8 @@ void CodeGeneratorARM64::bailoutFrom(Label* label, LSnapshot* snapshot) {
   encode(snapshot);
 
   InlineScriptTree* tree = snapshot->mir()->block()->trackedTree();
-  OutOfLineBailout* ool = new (alloc()) OutOfLineBailout(snapshot);
+  auto* ool = new (alloc()) LambdaOutOfLineCode(
+      [=](OutOfLineCode& ool) { emitBailoutOOL(snapshot); });
   addOutOfLineCode(ool,
                    new (alloc()) BytecodeSite(tree, tree->script()->code()));
 
@@ -106,11 +109,6 @@ void CodeGeneratorARM64::bailout(LSnapshot* snapshot) {
   Label label;
   masm.b(&label);
   bailoutFrom(&label, snapshot);
-}
-
-void CodeGeneratorARM64::visitOutOfLineBailout(OutOfLineBailout* ool) {
-  masm.push(Imm32(ool->snapshot()->snapshotOffset()));
-  masm.B(&deoptLabel_);
 }
 
 void CodeGenerator::visitMinMaxD(LMinMaxD* ins) {
@@ -2268,8 +2266,9 @@ void CodeGenerator::visitWasmAddOffset(LWasmAddOffset* lir) {
 
   masm.Adds(ARMRegister(out, 32), ARMRegister(base, 32),
             Operand(mir->offset()));
-  OutOfLineAbortingWasmTrap* ool = new (alloc())
-      OutOfLineAbortingWasmTrap(mir->trapSiteDesc(), wasm::Trap::OutOfBounds);
+  auto* ool = new (alloc()) LambdaOutOfLineCode([=](OutOfLineCode& ool) {
+    masm.wasmTrap(wasm::Trap::OutOfBounds, mir->trapSiteDesc());
+  });
   addOutOfLineCode(ool, mir);
   masm.j(Assembler::CarrySet, ool->entry());
 }
@@ -2281,8 +2280,9 @@ void CodeGenerator::visitWasmAddOffset64(LWasmAddOffset64* lir) {
 
   masm.Adds(ARMRegister(out.reg, 64), ARMRegister(base.reg, 64),
             Operand(mir->offset()));
-  OutOfLineAbortingWasmTrap* ool = new (alloc())
-      OutOfLineAbortingWasmTrap(mir->trapSiteDesc(), wasm::Trap::OutOfBounds);
+  auto* ool = new (alloc()) LambdaOutOfLineCode([=](OutOfLineCode& ool) {
+    masm.wasmTrap(wasm::Trap::OutOfBounds, mir->trapSiteDesc());
+  });
   addOutOfLineCode(ool, mir);
   masm.j(Assembler::CarrySet, ool->entry());
 }

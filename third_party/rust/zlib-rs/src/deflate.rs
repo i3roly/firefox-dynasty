@@ -810,7 +810,7 @@ pub fn tune(
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct Value {
+pub struct Value {
     a: u16,
     b: u16,
 }
@@ -1175,7 +1175,7 @@ impl<'a> BitWriter<'a> {
 }
 
 #[repr(C)]
-pub(crate) struct State<'a> {
+pub struct State<'a> {
     status: Status,
 
     last_flush: i8, /* value of flush param for previous deflate call */
@@ -1572,7 +1572,7 @@ const fn rank_flush(f: i8) -> i8 {
 }
 
 #[derive(Debug)]
-pub(crate) enum BlockState {
+pub enum BlockState {
     /// block not completed, need more input or more output
     NeedMore = 0,
     /// block flush performed
@@ -1628,7 +1628,7 @@ pub(crate) fn read_buf_window(stream: &mut DeflateStream, offset: usize, size: u
     len
 }
 
-pub(crate) enum BlockType {
+pub enum BlockType {
     StoredBlock = 0,
     StaticTrees = 1,
     DynamicTrees = 2,
@@ -1771,7 +1771,7 @@ pub(crate) fn fill_window(stream: &mut DeflateStream) {
     );
 }
 
-pub(crate) struct StaticTreeDesc {
+pub struct StaticTreeDesc {
     /// static tree or NULL
     pub(crate) static_tree: &'static [Value],
     /// extra bits for each code or NULL
@@ -1839,7 +1839,7 @@ impl StaticTreeDesc {
 }
 
 #[derive(Clone)]
-pub(crate) struct TreeDesc<const N: usize> {
+pub struct TreeDesc<const N: usize> {
     dyn_tree: [Value; N],
     max_code: usize,
     stat_desc: &'static StaticTreeDesc,
