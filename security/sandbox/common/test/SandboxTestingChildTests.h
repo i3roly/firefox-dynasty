@@ -17,6 +17,7 @@
 #  include <fcntl.h>
 #  include <netdb.h>
 #  ifdef XP_LINUX
+#    include <arpa/inet.h>
 #    include <linux/mempolicy.h>
 #    include <sched.h>
 #    include <sys/ioctl.h>

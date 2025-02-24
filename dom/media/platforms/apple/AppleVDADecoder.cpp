@@ -572,7 +572,6 @@ AppleVDADecoder::CreateDecoderSpecification()
                                 AppleVDALinker::skPropHeight,
                                 AppleVDALinker::skPropSourceFormat,
                                 AppleVDALinker::skPropAVCCData };
-
   const void* decoderValue[] = { avc_width,
                                  avc_height,
                                  avc_format,

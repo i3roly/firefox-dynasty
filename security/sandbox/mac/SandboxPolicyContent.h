@@ -241,7 +241,7 @@ static const char SandboxPolicyContent[] = R"SANDBOX_LITERAL(
   ; added by haik on 26 june 2024 and seems to be for arm-only
   ; (big surprise), so limit to big sur and above.
   (if (defined? 'iokit-get-properties)
-     (if (>= macosVersion 1100)    
+     (if (>= macosVersion 1100)
        (with-filter (iokit-registry-entry-class "IOPlatformDevice")
         (allow iokit-get-properties
           (iokit-property "product-id")

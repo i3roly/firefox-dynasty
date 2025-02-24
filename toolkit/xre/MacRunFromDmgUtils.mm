@@ -17,7 +17,6 @@
 #include "MacLaunchHelper.h"
 
 #include "mozilla/ErrorResult.h"
-#include "mozilla/glean/GleanMetrics.h"
 #include "mozilla/intl/Localization.h"
 #include "mozilla/Telemetry.h"
 #include "nsCocoaFeatures.h"
