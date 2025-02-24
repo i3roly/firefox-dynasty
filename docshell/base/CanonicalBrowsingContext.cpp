@@ -3247,6 +3247,17 @@ bool CanonicalBrowsingContext::CanOpenModalPicker() {
     return false;
   }
 
+  mozilla::dom::Element* topFrameElement = GetTopFrameElement();
+  if (!mozilla::StaticPrefs::
+          browser_disable_pickers_in_hidden_extension_pages() &&
+      Windowless()) {
+    WindowGlobalParent* wgp = GetCurrentWindowGlobal();
+    if (wgp && BasePrincipal::Cast(wgp->DocumentPrincipal())->AddonPolicy()) {
+      // This may be a HiddenExtensionPage, e.g. an extension background page.
+      return true;
+    }
+  }
+
   RefPtr<Document> chromeDoc = TopCrossChromeBoundary()->GetExtantDocument();
   if (!chromeDoc || !chromeDoc->HasFocus(mozilla::IgnoreErrors())) {
     return false;
@@ -3255,8 +3266,18 @@ bool CanonicalBrowsingContext::CanOpenModalPicker() {
   // Only allow web content to open a picker when it has focus. For example, if
   // the focus is on the URL bar, web content cannot open a picker, even if it
   // is the foreground tab.
-  mozilla::dom::Element* topFrameElement = GetTopFrameElement();
-  return !topFrameElement || topFrameElement == chromeDoc->GetActiveElement();
+  // topFrameElement may be a <browser> embedded in another <browser>. In that
+  // case, verify that the full chain of <browser> elements has focus.
+  while (topFrameElement) {
+    RefPtr<Document> doc = topFrameElement->OwnerDoc();
+    if (doc->GetActiveElement() != topFrameElement) {
+      return false;
+    }
+    topFrameElement = doc->GetBrowsingContext()->GetTopFrameElement();
+    // Eventually topFrameElement == nullptr, implying that we have reached the
+    // top browser window (and chromeDoc == doc).
+  }
+  return true;
 }
 
 NS_IMPL_CYCLE_COLLECTION_CLASS(CanonicalBrowsingContext)
