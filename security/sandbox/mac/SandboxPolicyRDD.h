@@ -29,10 +29,12 @@ static const char SandboxPolicyRDD[] = R"SANDBOX_LITERAL(
   (moz-deny default)
   ;;; older macs need this to let the VT decoder get through
   ;;; i have no idea what service it is on sub 1013 systems
-  (if (<= macosVersion 1012) 
+  ;;; as of firefox 136, 10.13/10.14 also need the defaults allowed
+  ;;; to allow HEVC decoding. 
+  (if (<= macosVersion 1014)
    (allow default))
   ; These are not included in (deny default)
-  (if (>= macosVersion 1009) 
+  (if (>= macosVersion 1009)
   (moz-deny process-info*))
   ; This isn't available in some older macOS releases.
   (if (defined? 'nvram*)
