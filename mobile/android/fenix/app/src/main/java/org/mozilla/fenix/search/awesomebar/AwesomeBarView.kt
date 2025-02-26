@@ -194,7 +194,14 @@ class AwesomeBarView(
                 limit = 4,
                 engine = engineForSpeculativeConnects,
                 icon = searchBitmap,
-                suggestionsHeader = activity.getString(R.string.trending_searches_header),
+                suggestionsHeader = components.core.store.state.search
+                    .selectedOrDefaultSearchEngine?.name?.let { searchEngineName ->
+                        getString(
+                            activity,
+                            R.string.trending_searches_header_2,
+                            searchEngineName,
+                        )
+                    },
             )
 
         defaultSearchActionProvider =
@@ -292,6 +299,7 @@ class AwesomeBarView(
         state: SearchProviderState,
     ): MutableSet<AwesomeBar.SuggestionProvider> {
         val providersToAdd = mutableSetOf<AwesomeBar.SuggestionProvider>()
+        val isPrivate = activity.browsingModeManager.mode.isPrivate
 
         when (state.searchEngineSource) {
             is SearchEngineSource.History -> {
@@ -307,7 +315,7 @@ class AwesomeBarView(
         if (state.showSearchTermHistory) {
             getSearchTermSuggestionsProvider(
                 state.searchEngineSource,
-                activity.settings().shouldShowTrendingSearchSuggestions,
+                activity.settings().shouldShowTrendingSearchSuggestions(isPrivate),
             )?.let { providersToAdd.add(it) }
         }
 
@@ -395,7 +403,7 @@ class AwesomeBarView(
 
         providersToAdd.add(searchEngineSuggestionProvider)
 
-        if (activity.settings().shouldShowTrendingSearchSuggestions) {
+        if (activity.settings().shouldShowTrendingSearchSuggestions(isPrivate)) {
             providersToAdd.add(defaultTopSitesSuggestionProvider)
             providersToAdd.add(defaultTrendingSearchProvider)
         }

@@ -12530,21 +12530,10 @@ bool InitOptionParser(OptionParser& op) {
       !op.addBoolOption('\0', "enable-shadow-realms", "Enable ShadowRealms") ||
       !op.addBoolOption('\0', "disable-array-grouping",
                         "Disable Object.groupBy and Map.groupBy") ||
-      !op.addBoolOption('\0', "disable-well-formed-unicode-strings",
-                        "Disable String.prototype.{is,to}WellFormed() methods"
-                        "(Well-Formed Unicode Strings) (default: Enabled)") ||
-      !op.addBoolOption('\0', "enable-new-set-methods",
-                        "Enable New Set methods") ||
-      !op.addBoolOption('\0', "disable-arraybuffer-transfer",
-                        "Disable ArrayBuffer.prototype.transfer() methods") ||
       !op.addBoolOption('\0', "enable-symbols-as-weakmap-keys",
                         "Enable Symbols As WeakMap keys") ||
-      !op.addBoolOption(
-          '\0', "enable-arraybuffer-resizable",
-          "Enable resizable ArrayBuffers and growable SharedArrayBuffers") ||
       !op.addBoolOption('\0', "enable-uint8array-base64",
                         "Enable Uint8Array base64/hex methods") ||
-      !op.addBoolOption('\0', "enable-float16array", "Enable Float16Array") ||
       !op.addBoolOption('\0', "enable-regexp-duplicate-named-groups",
                         "Enable Duplicate Named Capture Groups") ||
       !op.addBoolOption('\0', "enable-regexp-modifiers",
@@ -12934,40 +12923,17 @@ bool SetGlobalOptionsPreJSInit(const OptionParser& op) {
 
   // Override pref values for prefs that have a custom shell flag.
   // If you're adding a new feature, consider using --setpref instead.
-
-  if (op.getBoolOption("disable-array-grouping")) {
-    JS::Prefs::setAtStartup_array_grouping(false);
-  }
-  if (op.getBoolOption("disable-arraybuffer-transfer")) {
-    JS::Prefs::setAtStartup_arraybuffer_transfer(false);
-  }
   if (op.getBoolOption("enable-shadow-realms")) {
     JS::Prefs::set_experimental_shadow_realms(true);
   }
-  if (op.getBoolOption("disable-well-formed-unicode-strings")) {
-    JS::Prefs::setAtStartup_well_formed_unicode_strings(false);
-  }
-  if (op.getBoolOption("enable-arraybuffer-resizable")) {
-    JS::Prefs::setAtStartup_experimental_arraybuffer_resizable(true);
-    JS::Prefs::setAtStartup_experimental_sharedarraybuffer_growable(true);
-  }
   if (op.getBoolOption("enable-regexp-duplicate-named-groups")) {
     JS::Prefs::setAtStartup_experimental_regexp_duplicate_named_groups(true);
-  }
-  if (op.getBoolOption("enable-float16array")) {
-    JS::Prefs::setAtStartup_experimental_float16array(true);
-  }
-  if (op.getBoolOption("enable-new-set-methods")) {
-    JS::Prefs::setAtStartup_experimental_new_set_methods(true);
   }
   if (op.getBoolOption("enable-regexp-modifiers")) {
     JS::Prefs::setAtStartup_experimental_regexp_modifiers(true);
   }
   if (op.getBoolOption("enable-uint8array-base64")) {
     JS::Prefs::setAtStartup_experimental_uint8array_base64(true);
-  }
-  if (op.getBoolOption("enable-regexp-escape")) {
-    JS::Prefs::setAtStartup_experimental_regexp_escape(true);
   }
   if (op.getBoolOption("enable-promise-try")) {
     JS::Prefs::setAtStartup_experimental_promise_try(true);

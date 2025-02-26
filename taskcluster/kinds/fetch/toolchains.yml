@@ -311,7 +311,7 @@ mingw-w64:
     fetch:
         type: git
         repo: https://git.code.sf.net/p/mingw-w64/mingw-w64
-        revision: c0313ec3381521db6c5e3aca746ff1e3e29208d7
+        revision: 3346c0eb95c34e2ac0c5f157da8965ee292c64e8
 
 mingw-w64-trunk:
     description: mingw-w64 master branch source code
@@ -361,6 +361,13 @@ clang-19:
         repo: https://github.com/llvm/llvm-project
         revision: cd708029e0b2869e80abe31ddb175f7c35361f90
 
+clang-20:
+    description: clang 20.1.0-rc2 source code
+    fetch:
+        type: git
+        repo: https://github.com/llvm/llvm-project
+        revision: 20621e2609ac49dcf01c4353dbfd69626cea3015
+
 clang-trunk:
     description: clang main branch source code
     attributes:
@@ -379,7 +386,10 @@ rust-1.81.0:
         type: git
         include-dot-git: true
         repo: https://github.com/rust-lang/rust/
-        revision: eeb90cda1969383f56a2637cbd3037bdf598841c
+        # NOTE: This is 1.81.0 and then some, to accommodate compiling some 1.82.0 code without
+        # breaking patches we use for sanitizers. See
+        # <https://bugzilla.mozilla.org/show_bug.cgi?id=1915537> for follow-up.
+        revision: ab1527f1d6560168f9fd36fa8cd7ba677c1d36ad
 
 rust-nightly:
     description: Rust nightly source code
@@ -641,7 +651,7 @@ cargo-vet:
     fetch:
         type: git
         repo: https://github.com/mozilla/cargo-vet
-        revision: a8f88ddd75f4a10ab9427e8c4a8bec1603ef860b
+        revision: c178261c96c9f820f67817e9c5458db655ddc21f
 
 symbol-scrapers:
     description: System symbols scraper source

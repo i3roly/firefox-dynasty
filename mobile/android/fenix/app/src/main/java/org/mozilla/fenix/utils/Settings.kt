@@ -1085,13 +1085,18 @@ class Settings(private val appContext: Context) : PreferencesHolder {
     /**
      * Indicates if the user have enabled trending search in search suggestions.
      */
-    var trendingSearchSuggestionsEnabled by booleanPreference(
+    @VisibleForTesting
+    internal var trendingSearchSuggestionsEnabled by booleanPreference(
         appContext.getPreferenceKey(R.string.pref_key_show_trending_search_suggestions),
         default = false,
     )
 
-    val shouldShowTrendingSearchSuggestions
-        get() = trendingSearchSuggestionsEnabled && isTrendingSearchesVisible
+    /**
+     * Returns true if trending searches should be shown to the user.
+     */
+    fun shouldShowTrendingSearchSuggestions(isPrivate: Boolean) =
+        trendingSearchSuggestionsEnabled && isTrendingSearchesVisible &&
+            (!isPrivate || shouldShowSearchSuggestionsInPrivate)
 
     var showSearchSuggestionsInPrivateOnboardingFinished by booleanPreference(
         appContext.getPreferenceKey(R.string.pref_key_show_search_suggestions_in_private_onboarding),
@@ -2310,5 +2315,13 @@ class Settings(private val appContext: Context) : PreferencesHolder {
     var lastSavedInFolderGuid by stringPreference(
         key = appContext.getPreferenceKey(R.string.pref_last_folder_saved_in),
         default = "",
+    )
+
+    /**
+     * Indicates whether or not to show the entry point for the DNS over HTTPS settings
+     */
+    val showDohEntryPoint by booleanPreference(
+        key = appContext.getPreferenceKey(R.string.pref_key_doh_settings_enabled),
+        default = false,
     )
 }

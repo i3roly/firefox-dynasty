@@ -7,7 +7,7 @@ import { DSEmptyState } from "../DSEmptyState/DSEmptyState";
 import { DSCard, PlaceholderDSCard } from "../DSCard/DSCard";
 import { useSelector } from "react-redux";
 import { actionCreators as ac, actionTypes as at } from "common/Actions.mjs";
-import { useIntersectionObserver } from "../../../lib/hooks";
+import { useIntersectionObserver } from "../../../lib/utils";
 import { SectionContextMenu } from "../SectionContextMenu/SectionContextMenu";
 import { InterestPicker } from "../InterestPicker/InterestPicker";
 
@@ -260,6 +260,7 @@ function CardSection({
               flightId={rec.flight_id}
               image_src={rec.image_src}
               raw_image_src={rec.raw_image_src}
+              icon_src={rec.icon_src}
               word_count={rec.word_count}
               time_to_read={rec.time_to_read}
               title={rec.title}
@@ -365,13 +366,23 @@ function CardSections({
     />
   ));
 
-  if (interestPickerEnabled && personalizationEnabled && interestPicker) {
+  // check that the interest picker is enabled and has data needed to render
+  if (
+    interestPickerEnabled &&
+    personalizationEnabled &&
+    interestPicker?.sections
+  ) {
     const index = interestPicker.receivedFeedRank - 1;
 
     sectionsToRender.splice(
       Math.min(sectionsToRender.length - 1, index),
       0,
-      <InterestPicker data={interestPicker} />
+      <InterestPicker
+        title={interestPicker.title}
+        subtitle={interestPicker.subtitle}
+        interests={interestPicker.sections || []}
+        receivedFeedRank={interestPicker.receivedFeedRank}
+      />
     );
   }
 

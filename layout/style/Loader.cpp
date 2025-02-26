@@ -626,19 +626,20 @@ NotNull<const Encoding*> SheetLoadData::DetermineNonBOMEncoding(
   return mGuessedEncoding;
 }
 
-static nsresult VerifySheetIntegrity(
-    const SRIMetadata& aMetadata, nsIChannel* aChannel, LoadTainting aTainting,
-    const nsACString& aFirst, const nsACString& aSecond,
-    const nsACString& aSourceFileURI, nsIConsoleReportCollector* aReporter) {
+static nsresult VerifySheetIntegrity(const SRIMetadata& aMetadata,
+                                     nsIChannel* aChannel,
+                                     LoadTainting aTainting,
+                                     const nsACString& aFirst,
+                                     const nsACString& aSecond,
+                                     nsIConsoleReportCollector* aReporter) {
   NS_ENSURE_ARG_POINTER(aReporter);
   MOZ_LOG(SRILogHelper::GetSriLog(), LogLevel::Debug,
           ("VerifySheetIntegrity (unichar stream)"));
 
-  SRICheckDataVerifier verifier(aMetadata, aSourceFileURI, aReporter);
+  SRICheckDataVerifier verifier(aMetadata, aChannel, aReporter);
   MOZ_TRY(verifier.Update(aFirst));
   MOZ_TRY(verifier.Update(aSecond));
-  return verifier.Verify(aMetadata, aChannel, aTainting, aSourceFileURI,
-                         aReporter);
+  return verifier.Verify(aMetadata, aChannel, aTainting, aReporter);
 }
 
 static bool AllLoadsCanceled(const SheetLoadData& aData) {
@@ -780,13 +781,8 @@ nsresult SheetLoadData::VerifySheetReadyToParse(nsresult aStatus,
   SRIMetadata sriMetadata;
   mSheet->GetIntegrity(sriMetadata);
   if (!sriMetadata.IsEmpty()) {
-    nsAutoCString sourceUri;
-    if (nsCOMPtr<nsIURI> uri = mReferrerInfo->GetOriginalReferrer()) {
-      uri->GetAsciiSpec(sourceUri);
-    }
-    nsresult rv =
-        VerifySheetIntegrity(sriMetadata, aChannel, mTainting, aBytes1, aBytes2,
-                             sourceUri, mLoader->mReporter);
+    nsresult rv = VerifySheetIntegrity(sriMetadata, aChannel, mTainting,
+                                       aBytes1, aBytes2, mLoader->mReporter);
     if (NS_FAILED(rv)) {
       LOG(("  Load was blocked by SRI"));
       MOZ_LOG(gSriPRLog, LogLevel::Debug,
@@ -1042,62 +1038,23 @@ void Loader::InsertSheetInTree(StyleSheet& aSheet) {
   LOG(("css::Loader::InsertSheetInTree"));
   MOZ_ASSERT(mDocument, "Must have a document to insert into");
 
+  // If our owning node is null, we come from a link header.
   nsINode* owningNode = aSheet.GetOwnerNode();
-  MOZ_ASSERT(!owningNode || owningNode->IsInUncomposedDoc() ||
-                 owningNode->IsInShadowTree(),
-             "Why would we insert it anywhere?");
-  ShadowRoot* shadow = owningNode ? owningNode->GetContainingShadow() : nullptr;
+  MOZ_ASSERT_IF(owningNode, owningNode->OwnerDoc() == mDocument);
+  DocumentOrShadowRoot* target =
+      owningNode ? owningNode->GetContainingDocumentOrShadowRoot() : mDocument;
+  MOZ_ASSERT(target, "Where should we insert it?");
 
-  auto& target = shadow ? static_cast<DocumentOrShadowRoot&>(*shadow)
-                        : static_cast<DocumentOrShadowRoot&>(*mDocument);
-
-  // XXX Need to cancel pending sheet loads for this element, if any
-
-  int32_t sheetCount = target.SheetCount();
-
-  /*
-   * Start the walk at the _end_ of the list, since in the typical
-   * case we'll just want to append anyway.  We want to break out of
-   * the loop when insertionPoint points to just before the index we
-   * want to insert at.  In other words, when we leave the loop
-   * insertionPoint is the index of the stylesheet that immediately
-   * precedes the one we're inserting.
-   */
-  int32_t insertionPoint = sheetCount - 1;
-  for (; insertionPoint >= 0; --insertionPoint) {
-    nsINode* sheetOwner = target.SheetAt(insertionPoint)->GetOwnerNode();
-    if (sheetOwner && !owningNode) {
-      // Keep moving; all sheets with a sheetOwner come after all
-      // sheets without a linkingNode
-      continue;
-    }
-
-    if (!sheetOwner) {
-      // Aha!  The current sheet has no sheet owner, so we want to insert after
-      // it no matter whether we have a linking content or not.
-      break;
-    }
-
-    MOZ_ASSERT(owningNode != sheetOwner, "Why do we still have our old sheet?");
-
-    // Have to compare
-    if (nsContentUtils::PositionIsBefore(sheetOwner, owningNode)) {
-      // The current sheet comes before us, and it better be the first
-      // such, because now we break
-      break;
-    }
-  }
-
-  ++insertionPoint;
-
-  if (shadow) {
+  size_t insertionPoint = target->FindSheetInsertionPointInTree(aSheet);
+  if (auto* shadow = ShadowRoot::FromNode(target->AsNode())) {
     shadow->InsertSheetAt(insertionPoint, aSheet);
   } else {
+    MOZ_ASSERT(&target->AsNode() == mDocument);
     mDocument->InsertSheetAt(insertionPoint, aSheet);
   }
 
-  LOG(("  Inserting into target (doc: %d) at position %d",
-       target.AsNode().IsDocument(), insertionPoint));
+  LOG(("  Inserting into target (doc: %d) at position %zu",
+       target->AsNode().IsDocument(), insertionPoint));
 }
 
 /**

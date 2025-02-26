@@ -265,6 +265,7 @@ for (const type of [
   "WALLPAPERS_SET",
   "WALLPAPER_CATEGORY_CLICK",
   "WALLPAPER_CLICK",
+  "WALLPAPER_UPLOAD",
   "WEATHER_IMPRESSION",
   "WEATHER_LOAD_ERROR",
   "WEATHER_LOCATION_DATA_UPDATE",
@@ -3102,7 +3103,8 @@ const DSSource = ({
   newSponsoredLabel,
   context,
   sponsor,
-  sponsored_by_override
+  sponsored_by_override,
+  icon_src
 }) => {
   // First try to display sponsored label or time to read here.
   if (newSponsoredLabel) {
@@ -3135,7 +3137,12 @@ const DSSource = ({
   // Otherwise display a default source.
   return /*#__PURE__*/external_React_default().createElement("p", {
     className: "source clamp"
-  }, source);
+  }, icon_src && /*#__PURE__*/external_React_default().createElement("img", {
+    src: icon_src,
+    height: "16",
+    width: "16",
+    alt: ""
+  }), source);
 };
 const DefaultMeta = ({
   source,
@@ -3160,7 +3167,8 @@ const DefaultMeta = ({
   format,
   topic,
   isSectionsCard,
-  showTopics
+  showTopics,
+  icon_src
 }) => {
   const shouldHaveThumbs = !isListCard && format !== "rectangle" && mayHaveSectionsCards && mayHaveThumbsUpDown;
   const shouldHaveFooterSection = isSectionsCard && (shouldHaveThumbs || showTopics);
@@ -3174,7 +3182,8 @@ const DefaultMeta = ({
     newSponsoredLabel: newSponsoredLabel,
     context: context,
     sponsor: sponsor,
-    sponsored_by_override: sponsored_by_override
+    sponsored_by_override: sponsored_by_override,
+    icon_src: icon_src
   }), format !== "rectangle" && /*#__PURE__*/external_React_default().createElement((external_React_default()).Fragment, null, /*#__PURE__*/external_React_default().createElement("h3", {
     className: "title clamp"
   }, title), excerpt && /*#__PURE__*/external_React_default().createElement("p", {
@@ -3625,6 +3634,7 @@ class _DSCard extends (external_React_default()).PureComponent {
     const sectionsEnabled = Prefs.values["discoverystream.sections.enabled"];
     const layoutsVariantAorB = layoutsVariantAEnabled || layoutsVariantBEnabled;
     const smartCrop = Prefs.values["images.smart"];
+    const faviconEnabled = Prefs.values["discoverystream.publisherFavicon.enabled"];
     const excerpt = !hideDescriptions ? this.props.excerpt : "";
     let timeToRead;
     if (displayReadTime) {
@@ -3749,7 +3759,8 @@ class _DSCard extends (external_React_default()).PureComponent {
       showTopics: this.props.showTopics,
       isSectionsCard: this.props.mayHaveSectionsCards && this.props.topic && !isListCard,
       format: format,
-      topic: this.props.topic
+      topic: this.props.topic,
+      icon_src: faviconEnabled && this.props.icon_src
     })), /*#__PURE__*/external_React_default().createElement("div", {
       className: "card-stp-button-hover-background"
     }, /*#__PURE__*/external_React_default().createElement("div", {
@@ -4556,6 +4567,7 @@ function RecentSavesContainer({
       type: source,
       image_src: rec.image_src,
       raw_image_src: rec.raw_image_src,
+      icon_src: rec.icon_src,
       word_count: rec.word_count,
       time_to_read: rec.time_to_read,
       title: rec.title,
@@ -4659,6 +4671,7 @@ class _CardGrid extends (external_React_default()).PureComponent {
         flightId: rec.flight_id,
         image_src: rec.image_src,
         raw_image_src: rec.raw_image_src,
+        icon_src: rec.icon_src,
         word_count: rec.word_count,
         time_to_read: rec.time_to_read,
         title: rec.title,
@@ -9956,7 +9969,7 @@ const selectLayoutRender = ({ state = {}, prefs = {} }) => {
   return { layoutRender };
 };
 
-;// CONCATENATED MODULE: ./content-src/lib/hooks.jsx
+;// CONCATENATED MODULE: ./content-src/lib/utils.jsx
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
@@ -10082,7 +10095,10 @@ const PREF_VISIBLE_SECTIONS = "discoverystream.sections.interestPicker.visibleSe
  * @returns {React.Element}
  */
 function InterestPicker({
-  data
+  title,
+  subtitle,
+  interests,
+  receivedFeedRank
 }) {
   const dispatch = (0,external_ReactRedux_namespaceObject.useDispatch)();
   const focusedRef = (0,external_React_namespaceObject.useRef)(null);
@@ -10090,14 +10106,6 @@ function InterestPicker({
   const [focusedIndex, setFocusedIndex] = (0,external_React_namespaceObject.useState)(0);
   const prefs = (0,external_ReactRedux_namespaceObject.useSelector)(state => state.Prefs.values);
   const visibleSections = prefs[PREF_VISIBLE_SECTIONS]?.split(",").map(item => item.trim()).filter(item => item);
-  const {
-    title,
-    subtitle,
-    receivedFeedRank,
-    sections
-  } = data;
-  // if undefined or null, assign as empty array to avoid an error
-  const interests = sections ?? [];
   const following = prefs[PREF_FOLLOWED_SECTIONS] ? prefs[PREF_FOLLOWED_SECTIONS].split(",") : [];
   const handleIntersection = (0,external_React_namespaceObject.useCallback)(() => {
     dispatch(actionCreators.AlsoToMain({
@@ -10163,13 +10171,19 @@ function InterestPicker({
     dispatch(actionCreators.SetPref(PREF_FOLLOWED_SECTIONS, updatedTopics.join(",")));
   }
   return /*#__PURE__*/external_React_default().createElement("section", {
-    className: "inline-selection-wrapper",
+    className: "inline-selection-wrapper ds-section",
     ref: el => {
       ref.current = [el];
     }
-  }, /*#__PURE__*/external_React_default().createElement("h2", null, title), /*#__PURE__*/external_React_default().createElement("p", {
-    className: "inline-selection-copy"
-  }, subtitle), /*#__PURE__*/external_React_default().createElement("ul", {
+  }, /*#__PURE__*/external_React_default().createElement("div", {
+    className: "section-heading"
+  }, /*#__PURE__*/external_React_default().createElement("div", {
+    className: "section-title-wrapper"
+  }, /*#__PURE__*/external_React_default().createElement("h2", {
+    className: "section-title"
+  }, title), /*#__PURE__*/external_React_default().createElement("p", {
+    className: "section-subtitle"
+  }, subtitle))), /*#__PURE__*/external_React_default().createElement("ul", {
     className: "topic-list",
     onFocus: onWrapperFocus,
     onBlur: onWrapperBlur,
@@ -10177,7 +10191,7 @@ function InterestPicker({
   }, interests.map((interest, index) => {
     const checked = following.includes(interest.sectionId);
     return /*#__PURE__*/external_React_default().createElement("li", {
-      key: interest.id,
+      key: interest.sectionId,
       ref: index === focusedIndex ? focusedRef : null
     }, /*#__PURE__*/external_React_default().createElement("label", null, /*#__PURE__*/external_React_default().createElement("input", {
       type: "checkbox",
@@ -10191,9 +10205,8 @@ function InterestPicker({
         onItemFocus(index);
       }
     }), /*#__PURE__*/external_React_default().createElement("span", {
-      className: "topic-item-label",
-      "data-l10n-id": `newtab-topic-label-${interest.sectionId}`
-    }), /*#__PURE__*/external_React_default().createElement("div", {
+      className: "topic-item-label"
+    }, interest.title || ""), /*#__PURE__*/external_React_default().createElement("div", {
       className: `topic-item-icon icon ${checked ? "icon-check-filled" : "icon-add-circle-fill"}`
     })));
   })), /*#__PURE__*/external_React_default().createElement("p", {
@@ -10423,6 +10436,7 @@ function CardSection({
       flightId: rec.flight_id,
       image_src: rec.image_src,
       raw_image_src: rec.raw_image_src,
+      icon_src: rec.icon_src,
       word_count: rec.word_count,
       time_to_read: rec.time_to_read,
       title: rec.title,
@@ -10516,10 +10530,15 @@ function CardSections({
     ctaButtonVariant: ctaButtonVariant,
     ctaButtonSponsors: ctaButtonSponsors
   }));
-  if (interestPickerEnabled && personalizationEnabled && interestPicker) {
+
+  // check that the interest picker is enabled and has data needed to render
+  if (interestPickerEnabled && personalizationEnabled && interestPicker?.sections) {
     const index = interestPicker.receivedFeedRank - 1;
     sectionsToRender.splice(Math.min(sectionsToRender.length - 1, index), 0, /*#__PURE__*/external_React_default().createElement(InterestPicker, {
-      data: interestPicker
+      title: interestPicker.title,
+      subtitle: interestPicker.subtitle,
+      interests: interestPicker.sections || [],
+      receivedFeedRank: interestPicker.receivedFeedRank
     }));
   }
   const isEmpty = sectionsToRender.length === 0;
@@ -11216,9 +11235,28 @@ const WallpapersSection = (0,external_ReactRedux_namespaceObject.connect)(state 
 
 // eslint-disable-next-line no-shadow
 
+const PREF_WALLPAPER_UPLOADED_PREVIOUSLY = "newtabWallpapers.customWallpaper.uploadedPreviously";
+
+// Returns a function will not be continuously triggered when called. The
+// function will be triggered if called again after `wait` milliseconds.
+function debounce(func, wait) {
+  let timer;
+  return (...args) => {
+    if (timer) {
+      return;
+    }
+    let wakeUp = () => {
+      timer = null;
+    };
+    timer = setTimeout(wakeUp, wait);
+    func.apply(this, args);
+  };
+}
 class _WallpaperCategories extends (external_React_default()).PureComponent {
   constructor(props) {
     super(props);
+    this.handleColorInput = this.handleColorInput.bind(this);
+    this.debouncedHandleChange = debounce(this.handleChange.bind(this), 999);
     this.handleChange = this.handleChange.bind(this);
     this.handleReset = this.handleReset.bind(this);
     this.handleCategory = this.handleCategory.bind(this);
@@ -11240,18 +11278,41 @@ class _WallpaperCategories extends (external_React_default()).PureComponent {
   componentDidMount() {
     this.prefersDarkQuery = globalThis.matchMedia("(prefers-color-scheme: dark)");
   }
+  componentDidUpdate(prevProps) {
+    // Walllpaper category subpanel should close when parent menu is closed
+    if (this.props.exitEventFired && this.props.exitEventFired !== prevProps.exitEventFired) {
+      this.handleBack();
+    }
+  }
+  handleColorInput(event) {
+    let {
+      id
+    } = event.target;
+    // Set ID to include hex value of custom color
+    id = `solid-color-picker-${event.target.value}`;
+    const rgbColors = this.getRGBColors(event.target.value);
+
+    // Set background color to custom color
+    event.target.style.backgroundColor = `rgb(${rgbColors.toString()})`;
+    this.setState({
+      customHexValue: event.target.style.backgroundColor
+    });
+
+    // Setting this now so when we remove v1 we don't have to migrate v1 values.
+    this.props.setPref("newtabWallpapers.wallpaper", id);
+  }
+
+  // Note: There's a separate event (debouncedHandleChange) that fires the handleChange
+  // event but is delayed so that it doesn't fire multiple events when a user
+  // is selecting a custom color background
   handleChange(event) {
     let {
       id
     } = event.target;
+
+    // Set ID to include hex value of custom color
     if (id === "solid-color-picker") {
       id = `solid-color-picker-${event.target.value}`;
-      const rgbColors = this.getRGBColors(event.target.value);
-      event.target.style.backgroundColor = `rgb(${rgbColors.toString()})`;
-      event.target.checked = true;
-      this.setState({
-        customHexValue: event.target.style.backgroundColor
-      });
     }
     this.props.setPref("newtabWallpapers.wallpaper", id);
     this.handleUserEvent(actionTypes.WALLPAPER_CLICK, {
@@ -11354,8 +11415,17 @@ class _WallpaperCategories extends (external_React_default()).PureComponent {
   };
   handleUpload() {
     // TODO: Bug 1947645: Add custom image upload functionality
-    // TODO: Bug 1943663: Add telemetry
     // TODO: Bug 1947813: Add image upload error states/UI
+
+    // TODO: Once Bug 1947813 has landed, we may need a separate event
+    // for selecting previously uploaded wallpaper, rather than uploading a new one.
+    // The plan would be to reuse at.WALLPAPER_CLICK for this use case
+    const uploadedPreviously = this.props.Prefs.values[PREF_WALLPAPER_UPLOADED_PREVIOUSLY];
+    this.handleUserEvent(actionTypes.WALLPAPER_UPLOAD, {
+      had_uploaded_previously: !!uploadedPreviously,
+      had_previous_wallpaper: !!this.props.activeWallpaper
+    });
+    this.props.setPref(PREF_WALLPAPER_UPLOADED_PREVIOUSLY, true);
   }
   handleBack() {
     this.setState({
@@ -11401,7 +11471,14 @@ class _WallpaperCategories extends (external_React_default()).PureComponent {
     const {
       activeCategoryFluentID
     } = this.state;
-    const filteredWallpapers = wallpaperList.filter(wallpaper => wallpaper.category === activeCategory);
+    let filteredWallpapers = wallpaperList.filter(wallpaper => wallpaper.category === activeCategory);
+    function reduceColorsToFitCustomColorInput(arr) {
+      // Reduce the amount of custom colors to make space for the custom color picker
+      while (arr.length % 3 !== 2) {
+        arr.pop();
+      }
+      return arr;
+    }
     let categorySectionClassname = "category wallpaper-list";
     if (prefs["newtabWallpapers.v2.enabled"]) {
       categorySectionClassname += " ignore-color-mode";
@@ -11418,14 +11495,20 @@ class _WallpaperCategories extends (external_React_default()).PureComponent {
       [wallpaperCustomSolidColorHex] = selectedWallpaper.match(regex);
     }
 
-    // Enable custom color select if preffed on
-    if (prefs["newtabWallpapers.customColor.enabled"]) {
-      this.setState({
-        showColorPicker: true
-      });
+    // Enable custom color select if pref'ed on
+    this.setState({
+      showColorPicker: prefs["newtabWallpapers.customColor.enabled"]
+    });
+
+    // Remove last item of solid colors to make space for custom color picker
+    if (prefs["newtabWallpapers.customColor.enabled"] && activeCategory === "solid-colors") {
+      filteredWallpapers = reduceColorsToFitCustomColorInput(filteredWallpapers);
     }
-    let colorPickerInput = showColorPicker && activeCategory === "solid-colors" ? /*#__PURE__*/external_React_default().createElement((external_React_default()).Fragment, null, /*#__PURE__*/external_React_default().createElement("input", {
-      onChange: this.handleChange,
+    let colorPickerInput = showColorPicker && activeCategory === "solid-colors" ? /*#__PURE__*/external_React_default().createElement("div", {
+      className: "theme-custom-color-picker"
+    }, /*#__PURE__*/external_React_default().createElement("input", {
+      onInput: this.handleColorInput,
+      onChange: this.debouncedHandleChange,
       onClick: () => this.setActiveId("solid-color-picker") //
       ,
       type: "color",
@@ -11437,14 +11520,12 @@ class _WallpaperCategories extends (external_React_default()).PureComponent {
       // If nothing selected, default to Zilla Green
       ,
       value: wallpaperCustomSolidColorHex || "#00d230",
-      className: `wallpaper-input theme-solid-color-picker
+      className: `wallpaper-input
               ${this.state.activeId === "solid-color-picker" ? "active" : ""}`
     }), /*#__PURE__*/external_React_default().createElement("label", {
       htmlFor: "solid-color-picker",
-      className: "sr-only"
-      // TODO: Add Fluent string
-      // data-l10n-id={fluent_id}
-    }, "Solid Color Picker")) : "";
+      "data-l10n-id": "newtab-wallpaper-custom-color"
+    })) : "";
     return /*#__PURE__*/external_React_default().createElement("div", null, /*#__PURE__*/external_React_default().createElement("div", {
       className: "category-header"
     }, /*#__PURE__*/external_React_default().createElement("h2", {
@@ -11687,7 +11768,8 @@ class ContentSection extends (external_React_default()).PureComponent {
       className: "wallpapers-section"
     }, /*#__PURE__*/external_React_default().createElement(WallpaperCategories, {
       setPref: setPref,
-      activeWallpaper: activeWallpaper
+      activeWallpaper: activeWallpaper,
+      exitEventFired: exitEventFired
     })), /*#__PURE__*/external_React_default().createElement("span", {
       className: "divider",
       role: "separator"
@@ -13034,7 +13116,7 @@ const PrefsButton = ({
 
 // Returns a function will not be continuously triggered when called. The
 // function will be triggered if called again after `wait` milliseconds.
-function debounce(func, wait) {
+function Base_debounce(func, wait) {
   let timer;
   return (...args) => {
     if (timer) {
@@ -13098,7 +13180,7 @@ class BaseContent extends (external_React_default()).PureComponent {
     this.openCustomizationMenu = this.openCustomizationMenu.bind(this);
     this.closeCustomizationMenu = this.closeCustomizationMenu.bind(this);
     this.handleOnKeyDown = this.handleOnKeyDown.bind(this);
-    this.onWindowScroll = debounce(this.onWindowScroll.bind(this), 5);
+    this.onWindowScroll = Base_debounce(this.onWindowScroll.bind(this), 5);
     this.setPref = this.setPref.bind(this);
     this.shouldShowWallpapersHighlight = this.shouldShowWallpapersHighlight.bind(this);
     this.updateWallpaper = this.updateWallpaper.bind(this);

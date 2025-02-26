@@ -50,89 +50,57 @@ XPCOMUtils.defineLazyPreferenceGetter(
   true
 );
 
-/**
- * A class that groups browsing contexts by their top-level one.
- * This is necessary because if there may be a subframe that
- * is showing a "DLP request busy" dialog when another subframe
- * (other than the outer frame) wants to show one. This is also needed
- * because there may be multiple requests active for a given top-level
- * or subframe.
- *
- * This class makes it convenient to find if another frame with
- * the same top browsing context is currently showing a dialog, and
- * also to find if there are any pending dialogs to show when one closes.
- */
-class MapByTopBrowsingContext {
+class RequestInfos {
   /**
-   * A map from top-level browsing context to
-   *    a map from browsing context to a list of entries
+   * A map from request token to an entry
    *
-   * @type {Map<BrowsingContext, Map<BrowsingContext, Array<object>>>}
+   * @type {Map<string, object>}
    */
   #map;
   constructor() {
     this.#map = new Map();
   }
   /**
-   * Gets a specific request associated with the browsing context
+   * Gets the request with the specified request token and removes
+   * it from the map.
    *
-   * @param {BrowsingContext} aBrowsingContext the browsing context to search for
    * @param {string} aRequestToken the request token to search for
    * @returns {object | undefined} the existing data, or `undefined` if there is none
    */
-  getAndRemoveEntry(aBrowsingContext, aRequestToken) {
-    const topEntry = this.#map.get(aBrowsingContext.top);
-    if (!topEntry) {
-      return undefined;
-    }
-    const browsingContextEntries = topEntry.get(aBrowsingContext);
-    if (!browsingContextEntries) {
-      return undefined;
-    }
-    for (let i = 0; i < browsingContextEntries.length; i++) {
-      if (browsingContextEntries[i].request.requestToken === aRequestToken) {
-        // Remove and return this entry
-        return browsingContextEntries.splice(i, 1)[0];
-      }
-    }
-    return undefined;
+  getAndRemoveEntry(aRequestToken) {
+    const entry = this.#map.get(aRequestToken);
+    this.#map.delete(aRequestToken);
+    return entry;
   }
 
   /**
-   * Adds or replaces the associated entry for the browsing context
+   * Adds or replaces the associated entry.
    *
-   * @param {BrowsingContext} aBrowsingContext the browsing context to set the data for
    * @param {object} aValue the data to associated with the browsing context
-   * @returns {MapByTopBrowsingContext} this
    */
-  addOrReplaceEntry(aBrowsingContext, aValue) {
+  addOrReplaceEntry(aValue) {
     if (!aValue.request) {
       console.error(
         "MapByTopBrowsingContext.setEntry() called with a value without a request!"
       );
     }
-    let topEntry = this.#map.get(aBrowsingContext.top);
-    if (!topEntry) {
-      topEntry = new Map();
-      this.#map.set(aBrowsingContext.top, topEntry);
-    }
+    this.#map.set(aValue.request.requestToken, aValue);
+  }
 
-    let existingEntries = topEntry.get(aBrowsingContext);
-    if (existingEntries) {
-      for (let i = 0; i < existingEntries.length; ++i) {
-        let existingEntry = existingEntries[i];
-        if (
-          existingEntry.request.requestToken === aValue.request.requestToken
-        ) {
-          existingEntries[i] = aValue;
-          return this;
-        }
-      }
-      existingEntries.push(aValue);
-    } else {
-      topEntry.set(aBrowsingContext, [aValue]);
-    }
-    return this;
+  /**
+   * Returns all requests that have the passed-in userActionId and
+   * removes them from the map.
+   *
+   * @param {string} aUserActionId the user action id to search for
+   * @returns {Array<object>} any data that matches the user action id
+   */
+  getAndRemoveEntriesByUserActionId(aUserActionId) {
+    const entries = this.#map
+      .values()
+      .filter(entry => entry.request.userActionId == aUserActionId)
+      .toArray();
+    entries.forEach(entry => this.#map.delete(entry.request.requestToken));
+    return entries;
   }
 
   /**
@@ -141,15 +109,7 @@ class MapByTopBrowsingContext {
    * @returns {Array<object>} all the requests
    */
   getAllRequests() {
-    let requests = [];
-    this.#map.forEach(topBrowsingContext => {
-      for (const entries of topBrowsingContext.values()) {
-        for (const entry of entries) {
-          requests.push(entry.request);
-        }
-      }
-    });
-    return requests;
+    return this.#map.values();
   }
 }
 
@@ -170,7 +130,7 @@ export const ContentAnalysis = {
 
   isInitialized: false,
 
-  dlpBusyViewsByTopBrowsingContext: new MapByTopBrowsingContext(),
+  requestInfos: new RequestInfos(),
 
   /**
    * @type {Map<string, {browsingContext: BrowsingContext, resourceNameOrOperationType: object}>}
@@ -200,11 +160,13 @@ export const ContentAnalysis = {
 
     // Do this even if initialized so the icon shows up on new windows, not just the
     // first one.
-    doc.l10n.setAttributes(
-      doc.getElementById("content-analysis-indicator"),
-      "content-analysis-indicator-tooltip",
-      { agentName: lazy.agentName }
-    );
+    for (let indicator of doc.getElementsByClassName(
+      "content-analysis-indicator"
+    )) {
+      doc.l10n.setAttributes(indicator, "content-analysis-indicator-tooltip", {
+        agentName: lazy.agentName,
+      });
+    }
     doc.documentElement.setAttribute("contentanalysisactive", "true");
   },
 
@@ -230,8 +192,7 @@ export const ContentAnalysis = {
     switch (aTopic) {
       case "quit-application-requested": {
         let quitCancelled = false;
-        let pendingRequests =
-          this.dlpBusyViewsByTopBrowsingContext.getAllRequests();
+        let pendingRequests = this.requestInfos.getAllRequests();
         if (pendingRequests.length) {
           let messageBody = this.l10n.formatValueSync(
             "contentanalysis-inprogress-quit-message"
@@ -311,26 +272,20 @@ export const ContentAnalysis = {
             browsingContext,
             resourceNameOrOperationType,
           });
-          this.dlpBusyViewsByTopBrowsingContext.addOrReplaceEntry(
-            browsingContext,
-            {
-              timer: lazy.setTimeout(() => {
-                this.dlpBusyViewsByTopBrowsingContext.addOrReplaceEntry(
-                  browsingContext,
-                  {
-                    notification: this._showSlowCAMessage(
-                      analysisType,
-                      request,
-                      resourceNameOrOperationType,
-                      browsingContext
-                    ),
-                    request,
-                  }
-                );
-              }, slowTimeoutMs),
-              request,
-            }
-          );
+          this.requestInfos.addOrReplaceEntry({
+            timer: lazy.setTimeout(() => {
+              this.requestInfos.addOrReplaceEntry({
+                notification: this._showSlowCAMessage(
+                  analysisType,
+                  request,
+                  resourceNameOrOperationType,
+                  browsingContext
+                ),
+                request,
+              });
+            }, slowTimeoutMs),
+            request,
+          });
         }
         break;
       case "dlp-response": {
@@ -355,11 +310,9 @@ export const ContentAnalysis = {
           return;
         }
         this.requestTokenToRequestInfo.delete(response.requestToken);
-        let dlpBusyView =
-          this.dlpBusyViewsByTopBrowsingContext.getAndRemoveEntry(
-            windowAndResourceNameOrOperationType.browsingContext,
-            response.requestToken
-          );
+        let dlpBusyView = this.requestInfos.getAndRemoveEntry(
+          response.requestToken
+        );
         this._disconnectFromView(dlpBusyView);
         const responseResult =
           response?.action ?? Ci.nsIContentAnalysisResponse.eUnspecified;
@@ -369,6 +322,7 @@ export const ContentAnalysis = {
             windowAndResourceNameOrOperationType.resourceNameOrOperationType,
             windowAndResourceNameOrOperationType.browsingContext,
             response.requestToken,
+            response.userActionId,
             responseResult,
             response.cancelError
           );
@@ -654,11 +608,7 @@ export const ContentAnalysis = {
         // in which case we need to cancel the request.
         if (this.requestTokenToRequestInfo.delete(aRequestToken)) {
           lazy.gContentAnalysis.cancelRequestsByRequestToken(aRequestToken);
-          let dlpBusyView =
-            this.dlpBusyViewsByTopBrowsingContext.getAndRemoveEntry(
-              aBrowsingContext,
-              aRequestToken
-            );
+          let dlpBusyView = this.requestInfos.getAndRemoveEntry(aRequestToken);
           this._disconnectFromView(dlpBusyView);
         }
       });
@@ -677,6 +627,7 @@ export const ContentAnalysis = {
     aResourceNameOrOperationType,
     aBrowsingContext,
     aRequestToken,
+    aUserActionId,
     aCAResult,
     aRequestCancelError
   ) {
@@ -862,6 +813,18 @@ export const ContentAnalysis = {
               );
               messageId = "contentanalysis-unspecified-error-message-content";
               break;
+          }
+          // We got an error with this request, so close any dialogs for any other request
+          // with the same user action id.
+          const otherEntries =
+            this.requestInfos.getAndRemoveEntriesByUserActionId(aUserActionId);
+          otherEntries.forEach(entry => this._disconnectFromView(entry));
+          if (otherEntries.length === 0) {
+            // Only show one error dialog for each userActionId. The call to
+            // getAndRemoveEntriesByUserActionId() ensures that when those entries
+            // error too, there won't be an entry for them in this.requestInfos, so
+            // we won't show another dialog.
+            return null;
           }
           message = await this.l10n.formatValue(messageId, {
             agent: lazy.agentName,

@@ -1526,136 +1526,6 @@ function PageProxyClickHandler(aEvent) {
   }
 }
 
-/**
- * Handle command events bubbling up from error page content
- * or from about:newtab or from remote error pages that invoke
- * us via async messaging.
- */
-var BrowserOnClick = {
-  async ignoreWarningLink(reason, blockedInfo, browsingContext) {
-    // Add a notify bar before allowing the user to continue through to the
-    // site, so that they don't lose track after, e.g., tab switching.
-    // We can't use browser.contentPrincipal which is principal of about:blocked
-    // Create one from uri with current principal origin attributes
-    let principal = Services.scriptSecurityManager.createContentPrincipal(
-      Services.io.newURI(blockedInfo.uri),
-      browsingContext.currentWindowGlobal.documentPrincipal.originAttributes
-    );
-    Services.perms.addFromPrincipal(
-      principal,
-      "safe-browsing",
-      Ci.nsIPermissionManager.ALLOW_ACTION,
-      Ci.nsIPermissionManager.EXPIRE_SESSION
-    );
-
-    let buttons = [
-      {
-        label: gNavigatorBundle.getString(
-          "safebrowsing.getMeOutOfHereButton.label"
-        ),
-        accessKey: gNavigatorBundle.getString(
-          "safebrowsing.getMeOutOfHereButton.accessKey"
-        ),
-        callback() {
-          getMeOutOfHere(browsingContext);
-        },
-      },
-    ];
-
-    let title;
-    if (reason === "malware") {
-      let reportUrl = gSafeBrowsing.getReportURL("MalwareMistake", blockedInfo);
-      title = gNavigatorBundle.getString("safebrowsing.reportedAttackSite");
-      // There's no button if we can not get report url, for example if the provider
-      // of blockedInfo is not Google
-      if (reportUrl) {
-        buttons[1] = {
-          label: gNavigatorBundle.getString(
-            "safebrowsing.notAnAttackButton.label"
-          ),
-          accessKey: gNavigatorBundle.getString(
-            "safebrowsing.notAnAttackButton.accessKey"
-          ),
-          callback() {
-            openTrustedLinkIn(reportUrl, "tab");
-          },
-        };
-      }
-    } else if (reason === "phishing") {
-      let reportUrl = gSafeBrowsing.getReportURL("PhishMistake", blockedInfo);
-      title = gNavigatorBundle.getString("safebrowsing.deceptiveSite");
-      // There's no button if we can not get report url, for example if the provider
-      // of blockedInfo is not Google
-      if (reportUrl) {
-        buttons[1] = {
-          label: gNavigatorBundle.getString(
-            "safebrowsing.notADeceptiveSiteButton.label"
-          ),
-          accessKey: gNavigatorBundle.getString(
-            "safebrowsing.notADeceptiveSiteButton.accessKey"
-          ),
-          callback() {
-            openTrustedLinkIn(reportUrl, "tab");
-          },
-        };
-      }
-    } else if (reason === "unwanted") {
-      title = gNavigatorBundle.getString("safebrowsing.reportedUnwantedSite");
-      // There is no button for reporting errors since Google doesn't currently
-      // provide a URL endpoint for these reports.
-    } else if (reason === "harmful") {
-      title = gNavigatorBundle.getString("safebrowsing.reportedHarmfulSite");
-      // There is no button for reporting errors since Google doesn't currently
-      // provide a URL endpoint for these reports.
-    }
-
-    await SafeBrowsingNotificationBox.show(title, buttons);
-
-    // Allow users to override and continue through to the site.
-    // Note that we have to use the passed URI info and can't just
-    // rely on the document URI, because the latter contains
-    // additional query parameters that should be stripped.
-    let triggeringPrincipal =
-      blockedInfo.triggeringPrincipal ||
-      _createNullPrincipalFromTabUserContextId();
-
-    browsingContext.fixupAndLoadURIString(blockedInfo.uri, {
-      triggeringPrincipal,
-      loadFlags: Ci.nsIWebNavigation.LOAD_FLAGS_BYPASS_CLASSIFIER,
-    });
-  },
-};
-
-/**
- * Re-direct the browser to a known-safe page.  This function is
- * used when, for example, the user browses to a known malware page
- * and is presented with about:blocked.  The "Get me out of here!"
- * button should take the user to the default start page so that even
- * when their own homepage is infected, we can get them somewhere safe.
- */
-function getMeOutOfHere(browsingContext) {
-  browsingContext.top.fixupAndLoadURIString(getDefaultHomePage(), {
-    triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal(), // Also needs to load homepage
-  });
-}
-
-/**
- * Return the default start page for the cases when the user's own homepage is
- * infected, so we can get them somewhere safe.
- */
-function getDefaultHomePage() {
-  let url = BROWSER_NEW_TAB_URL;
-  if (PrivateBrowsingUtils.isWindowPrivate(window)) {
-    return url;
-  }
-  url = HomePage.getDefault();
-  // If url is a pipe-delimited set of pages, just take the first one.
-  if (url.includes("|")) {
-    url = url.split("|")[0];
-  }
-  return url;
-}
-
 var browserDragAndDrop = {
   canDropLink: aEvent => Services.droppedLinkHandler.canDropLink(aEvent, true),
 
@@ -2777,8 +2647,6 @@ var XULBrowserWindow = {
     gProtectionsHandler.onLocationChange();
 
     BrowserPageActions.onLocationChange();
-
-    SafeBrowsingNotificationBox.onLocationChange(aLocationURI);
 
     SaveToPocket.onLocationChange(window);
 
@@ -5080,45 +4948,6 @@ function undoCloseWindow(aIndex) {
   return window;
 }
 
-function ReportFalseDeceptiveSite() {
-  let contextsToVisit = [gBrowser.selectedBrowser.browsingContext];
-  while (contextsToVisit.length) {
-    let currentContext = contextsToVisit.pop();
-    let global = currentContext.currentWindowGlobal;
-
-    if (!global) {
-      continue;
-    }
-    let docURI = global.documentURI;
-    // Ensure the page is an about:blocked pagae before handling.
-    if (docURI && docURI.spec.startsWith("about:blocked?e=deceptiveBlocked")) {
-      let actor = global.getActor("BlockedSite");
-      actor.sendQuery("DeceptiveBlockedDetails").then(data => {
-        let reportUrl = gSafeBrowsing.getReportURL(
-          "PhishMistake",
-          data.blockedInfo
-        );
-        if (reportUrl) {
-          openTrustedLinkIn(reportUrl, "tab");
-        } else {
-          let bundle = Services.strings.createBundle(
-            "chrome://browser/locale/safebrowsing/safebrowsing.properties"
-          );
-          Services.prompt.alert(
-            window,
-            bundle.GetStringFromName("errorReportFalseDeceptiveTitle"),
-            bundle.formatStringFromName("errorReportFalseDeceptiveMessage", [
-              data.blockedInfo.provider,
-            ])
-          );
-        }
-      });
-    }
-
-    contextsToVisit.push(...currentContext.children);
-  }
-}
-
 /**
  * This is a temporary hack to connect a Help menu item for reporting
  * site issues to the WebCompat team's Site Compatability Reporter
@@ -5827,64 +5656,6 @@ var PanicButtonNotifier = {
       popup.openPopup(anchor, popup.getAttribute("position"));
     } catch (ex) {
       console.error(ex);
-    }
-  },
-};
-
-const SafeBrowsingNotificationBox = {
-  _currentURIBaseDomain: null,
-  async show(title, buttons) {
-    let uri = gBrowser.currentURI;
-
-    // start tracking host so that we know when we leave the domain
-    try {
-      this._currentURIBaseDomain = Services.eTLD.getBaseDomain(uri);
-    } catch (e) {
-      // If we can't get the base domain, fallback to use host instead. However,
-      // host is sometimes empty when the scheme is file. In this case, just use
-      // spec.
-      this._currentURIBaseDomain = uri.asciiHost || uri.asciiSpec;
-    }
-
-    let notificationBox = gBrowser.getNotificationBox();
-    let value = "blocked-badware-page";
-
-    let previousNotification = notificationBox.getNotificationWithValue(value);
-    if (previousNotification) {
-      notificationBox.removeNotification(previousNotification);
-    }
-
-    let notification = await notificationBox.appendNotification(
-      value,
-      {
-        label: title,
-        image: "chrome://global/skin/icons/blocked.svg",
-        priority: notificationBox.PRIORITY_CRITICAL_HIGH,
-      },
-      buttons
-    );
-    // Persist the notification until the user removes so it
-    // doesn't get removed on redirects.
-    notification.persistence = -1;
-  },
-  onLocationChange(aLocationURI) {
-    // take this to represent that you haven't visited a bad place
-    if (!this._currentURIBaseDomain) {
-      return;
-    }
-
-    let newURIBaseDomain = Services.eTLD.getBaseDomain(aLocationURI);
-
-    if (newURIBaseDomain !== this._currentURIBaseDomain) {
-      let notificationBox = gBrowser.getNotificationBox();
-      let notification = notificationBox.getNotificationWithValue(
-        "blocked-badware-page"
-      );
-      if (notification) {
-        notificationBox.removeNotification(notification, false);
-      }
-
-      this._currentURIBaseDomain = null;
     }
   },
 };

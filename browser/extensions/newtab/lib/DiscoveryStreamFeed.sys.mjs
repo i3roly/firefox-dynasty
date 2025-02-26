@@ -1638,6 +1638,7 @@ export class DiscoveryStreamFeed {
             raw_image_src: item.imageUrl,
             received_rank: item.receivedRank,
             recommended_at: feedResponse.recommendedAt,
+            icon_src: item.iconUrl,
           }));
           if (feedResponse.feeds && selectedFeedPref && !sectionsEnabled) {
             isFakespot = selectedFeedPref === "fakespot";
@@ -1663,6 +1664,7 @@ export class DiscoveryStreamFeed {
                 // property to determine if rec is used in ListFeed or not
                 feedName: selectedFeedPref,
                 category: item.category,
+                icon_src: item.iconUrl,
               })
             );
 
@@ -1700,6 +1702,7 @@ export class DiscoveryStreamFeed {
                     recommended_at: feedResponse.recommendedAt,
                     // property to determine if rec is used in ListFeed or not
                     section: sectionKey,
+                    icon_src: item.iconUrl,
                   });
                 }
                 sections.push({
@@ -1743,6 +1746,22 @@ export class DiscoveryStreamFeed {
           this.store.dispatch(
             ac.SetPref(PREF_VISIBLE_SECTIONS, visibleSections)
           );
+        }
+
+        // This assigns the section title to the interestPicker.sections
+        // object to more easily access the title in JSX files
+        if (
+          feedResponse.interestPicker &&
+          feedResponse.interestPicker.sections
+        ) {
+          feedResponse.interestPicker.sections =
+            feedResponse.interestPicker.sections.map(section => {
+              const { sectionId } = section;
+              const title = sections.find(
+                ({ sectionKey }) => sectionKey === sectionId
+              )?.title;
+              return { sectionId, title };
+            });
         }
 
         // We can cleanup any impressions we have that are old before we rotate.

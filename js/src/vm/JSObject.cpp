@@ -2230,49 +2230,11 @@ JS_PUBLIC_API bool js::ShouldIgnorePropertyDefinition(JSContext* cx,
   // to realize is that this is a -constructor function-, not a function
   // on the prototype; and the proto of the constructor is JSProto_Function.
   if (key == JSProto_Function) {
-    if (!JS::Prefs::array_grouping() && (id == NameToId(cx->names().groupBy))) {
-      return true;
-    }
-
     if (!JS::Prefs::experimental_uint8array_base64() &&
         (id == NameToId(cx->names().fromBase64) ||
          id == NameToId(cx->names().fromHex))) {
       return true;
     }
-  }
-
-  if (key == JSProto_Set && !JS::Prefs::experimental_new_set_methods() &&
-      (id == NameToId(cx->names().union_) ||
-       id == NameToId(cx->names().difference) ||
-       id == NameToId(cx->names().intersection) ||
-       id == NameToId(cx->names().isSubsetOf) ||
-       id == NameToId(cx->names().isSupersetOf) ||
-       id == NameToId(cx->names().isDisjointFrom) ||
-       id == NameToId(cx->names().symmetricDifference))) {
-    return true;
-  }
-
-  if (key == JSProto_ArrayBuffer &&
-      !JS::Prefs::experimental_arraybuffer_resizable() &&
-      (id == NameToId(cx->names().maxByteLength) ||
-       id == NameToId(cx->names().resizable) ||
-       id == NameToId(cx->names().resize))) {
-    return true;
-  }
-
-  if (key == JSProto_SharedArrayBuffer &&
-      !JS::Prefs::experimental_sharedarraybuffer_growable() &&
-      (id == NameToId(cx->names().maxByteLength) ||
-       id == NameToId(cx->names().growable) ||
-       id == NameToId(cx->names().grow))) {
-    return true;
-  }
-
-  if (key == JSProto_ArrayBuffer && !JS::Prefs::arraybuffer_transfer() &&
-      (id == NameToId(cx->names().transfer) ||
-       id == NameToId(cx->names().transferToFixedLength) ||
-       id == NameToId(cx->names().detached))) {
-    return true;
   }
 
   if (key == JSProto_Uint8Array &&
@@ -2295,10 +2257,6 @@ JS_PUBLIC_API bool js::ShouldIgnorePropertyDefinition(JSContext* cx,
     }
     if (!JS::Prefs::experimental_promise_try() &&
         id == NameToId(cx->names().try_)) {
-      return true;
-    }
-    if (!JS::Prefs::experimental_regexp_escape() &&
-        id == NameToId(cx->names().escape)) {
       return true;
     }
   }
@@ -2352,16 +2310,6 @@ JS_PUBLIC_API bool js::ShouldIgnorePropertyDefinition(JSContext* cx,
       !JS::Prefs::experimental_json_parse_with_source() &&
       (id == NameToId(cx->names().isRawJSON) ||
        id == NameToId(cx->names().rawJSON))) {
-    return true;
-  }
-
-  if (key == JSProto_Math && !JS::Prefs::experimental_float16array() &&
-      (id == NameToId(cx->names().f16round))) {
-    return true;
-  }
-  if (key == JSProto_DataView && !JS::Prefs::experimental_float16array() &&
-      (id == NameToId(cx->names().getFloat16) ||
-       id == NameToId(cx->names().setFloat16))) {
     return true;
   }
 

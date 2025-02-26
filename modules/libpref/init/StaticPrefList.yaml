@@ -1792,7 +1792,7 @@
 # Whether to only classify top-level channels for safe browsing.
 - name: browser.safebrowsing.only_top_level
   type: bool
-  value: false
+  value: @IS_NIGHTLY_BUILD@
   mirror: always
 
 # SessionStore prefs
@@ -8411,57 +8411,8 @@
   # Non-startup pref because the WPT test harness sets prefs after startup.
   set_spidermonkey_pref: always
 
-# Support for String.prototype.{is,to}WellFormed in JavaScript.
-- name: javascript.options.well_formed_unicode_strings
-  type: bool
-  value: true
-  mirror: always
-  set_spidermonkey_pref: startup
-
-# Support for Object.groupBy/Map.groupBy in JavaScript.
-- name: javascript.options.array_grouping
-  type: bool
-  value: true
-  mirror: always
-  set_spidermonkey_pref: startup
-
-# Experimental support for ArrayBuffer.prototype.transfer{,ToFixedLength}() in JavaScript.
-- name: javascript.options.arraybuffer_transfer
-  type: bool
-  value: true
-  mirror: always
-  set_spidermonkey_pref: startup
-
-# Experimental support for New Set methods
-- name: javascript.options.experimental.new_set_methods
-  type: bool
-  value: true
-  mirror: always
-  set_spidermonkey_pref: startup
-
-# Experimental support for resizable ArrayBuffers in JavaScript.
-- name: javascript.options.experimental.arraybuffer_resizable
-  type: bool
-  value: true
-  mirror: always
-  set_spidermonkey_pref: startup
-
-# Experimental support for growable SharedArrayBuffers in JavaScript.
-- name: javascript.options.experimental.sharedarraybuffer_growable
-  type: bool
-  value: true
-  mirror: always
-  set_spidermonkey_pref: startup
-
 # Experimental support for Duplicate Named Capture Groups in JavaScript.
 - name: javascript.options.experimental.regexp_duplicate_named_groups
-  type: bool
-  value: true
-  mirror: always
-  set_spidermonkey_pref: startup
-
-# Experimental support for Float16Array in JavaScript.
-- name: javascript.options.experimental.float16array
   type: bool
   value: true
   mirror: always
@@ -8488,14 +8439,7 @@
   mirror: always
   set_spidermonkey_pref: startup
 
-# Experimental support for RegExp.escape in JavaScript.
-- name: javascript.options.experimental.regexp_escape
-  type: bool
-  value: true
-  mirror: always
-  set_spidermonkey_pref: startup
-
-  # Experimental support for Math.sumPrecise in JavaScript.
+# Experimental support for Math.sumPrecise in JavaScript.
 - name: javascript.options.experimental.math_sumprecise
   type: bool
   value: true
@@ -11590,15 +11534,7 @@
 
 - name: media.hevc.enabled
   type: RelaxedAtomicBool
-#if defined(XP_WIN)
   value: true
-#elif defined(XP_MACOSX)
-  value: true
-#elif defined(ANDROID)
-  value: true
-#else
-  value: false
-#endif
   mirror: always
 
 - name: media.decoder-doctor.testing
@@ -16516,7 +16452,7 @@
 # 3: Consult CRLite and enforce "Not Revoked" results, but defer to OCSP for "Revoked".
 - name: security.pki.crlite_mode
   type: RelaxedAtomicUint32
-#ifdef NIGHTLY_BUILD
+#if defined(EARLY_BETA_OR_EARLIER)
   value: 2
 #else
   value: 3
@@ -18451,6 +18387,19 @@
 
 # Whether we use the mica backdrop for popups. Off by default for now.
 - name: widget.windows.mica.popups
+  type: RelaxedAtomicBool
+  value: false
+  mirror: always
+
+# Whether we expand the client area into the taskbar hidden edge on maximized
+# windows.
+- name: widget.windows.hidden-taskbar-hack.size
+  type: bool
+  value: false
+  mirror: always
+
+# Whether we paint the bottom taskbar edge on maximized windows.
+- name: widget.windows.hidden-taskbar-hack.paint
   type: bool
   value: false
   mirror: always

@@ -462,6 +462,14 @@ export const PREFS_CONFIG = new Map([
     },
   ],
   [
+    "newtabWallpapers.customWallpaper.uploadedPreviously",
+    {
+      title:
+        "Boolean flag to track if a user has previously uploaded a custom wallpaper",
+      value: false,
+    },
+  ],
+  [
     "newtabAdSize.variant-a",
     {
       title: "Boolean flag to turn ad size variant A on and off",
@@ -1004,6 +1012,13 @@ export const PREFS_CONFIG = new Map([
     {
       title: "cta link for fakespot feed",
       value: "",
+    },
+  ],
+  [
+    "discoverystream.publisherFavicon.enabled",
+    {
+      title: "Enables publihser favicons on recommended stories",
+      value: false,
     },
   ],
   [
