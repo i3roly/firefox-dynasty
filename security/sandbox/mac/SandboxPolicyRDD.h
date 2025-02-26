@@ -94,9 +94,10 @@ static const char SandboxPolicyRDD[] = R"SANDBOX_LITERAL(
   (allow file-read* 
     (subpath "/var")
     (subpath "/private/var/db/mds"))
-  (allow file-write*
-    (subpath "/private/var/folders"))
-  
+  ;; the following line ensures all audio/video decoding can write to /private/var/folders/*/*/*/*/mds.lock
+  ;; which is better than allowing the defaults through the sandbox to allow media playback
+      "    (allow file-write* (var-folders2-regex \"/mds\\.lock\"))\n"
+
   ; Timezone
   (allow file-read*
     (subpath "/private/var/db/timezone")
