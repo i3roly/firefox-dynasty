@@ -18,7 +18,19 @@ static const char SandboxPolicyRDD[] = R"SANDBOX_LITERAL(
   (define home-path (param "HOME_PATH"))
   (define crashPort (param "CRASH_PORT"))
   (define isRosettaTranslated (param "IS_ROSETTA_TRANSLATED"))
-   
+  (define resolving-regex regex)
+
+  "    (define var-folders-re \"^/private/var/folders/[^/][^/]\")\n"
+  "    (define var-folders2-re (string-append var-folders-re \"/[^/]+/[^/]\"))\n"
+  "    (define (var-folders-regex var-folders-relative-regex)\n"
+  "      (resolving-regex (string-append var-folders-re var-folders-relative-regex)))\n"
+  "    (define (var-folders2-regex var-folders2-relative-regex)\n"
+  "      (resolving-regex (string-append var-folders2-re var-folders2-relative-regex)))\n"
+  
+  (define (var-folders-regex var-folders-relative-regex)
+    (resolving-regex (string-append var-folders-re var-folders-relative-regex)))
+  (define (var-folders2-regex var-folders2-relative-regex)
+    (resolving-regex (string-append var-folders2-re var-folders2-relative-regex)))
 
   (define (moz-deny feature)
     (if (string=? should-log "TRUE")
@@ -27,14 +39,9 @@ static const char SandboxPolicyRDD[] = R"SANDBOX_LITERAL(
 
   
   (moz-deny default)
-  ;;; older macs need this to let the VT decoder get through
-  ;;; i have no idea what service it is on sub 1013 systems
-  ;;; as of firefox 136, 10.13/10.14 also need the defaults allowed
-  ;;; to allow HEVC decoding. 
-  (if (<= macosVersion 1014)
-   (allow default))
+
   ; These are not included in (deny default)
-  (if (>= macosVersion 1009)
+  (if (>= macosVersion 1009) 
   (moz-deny process-info*))
   ; This isn't available in some older macOS releases.
   (if (defined? 'nvram*)
@@ -83,6 +90,13 @@ static const char SandboxPolicyRDD[] = R"SANDBOX_LITERAL(
     (literal "/dev/urandom")
     (subpath "/usr/share/icu"))
 
+  ;; required for media decoding passing through rdd sandbox
+  (allow file-read* 
+    (subpath "/var")
+    (subpath "/private/var/db/mds"))
+  (allow file-write*
+    (subpath "/private/var/folders"))
+  
   ; Timezone
   (allow file-read*
     (subpath "/private/var/db/timezone")
@@ -162,15 +176,42 @@ static const char SandboxPolicyRDD[] = R"SANDBOX_LITERAL(
       (subpath "/Library/ColorSync/Profiles")
       (literal "/")
       (literal "/private/tmp")
-      (literal "/private/var/tmp")
+      (literal "/private/var")
       (home-subpath "/Library/Colors")
       (home-subpath "/Library/ColorSync/Profiles"))
 
   (if (>= macosVersion 1013)
     (allow mach-lookup
       ; bug 1392988
+      (xpc-service-name "com.apple.ViewBridgeAuxiliary")
+      (xpc-service-name "com.apple.accessibility.mediaaccessibilityd")
+      (xpc-service-name "com.apple.appkit.xpc.openAndSavePanelService")
+      (xpc-service-name "com.apple.appstore.PluginXPCService") ; <rdar://problem/35940948>
+      (xpc-service-name "com.apple.audio.SandboxHelper")
       (xpc-service-name "com.apple.coremedia.videodecoder")
-      (xpc-service-name "com.apple.coremedia.videoencoder")))
+      (xpc-service-name "com.apple.coremedia.videoencoder")
+      (xpc-service-name-regex #"\.apple-extension-service$")
+      (xpc-service-name "com.apple.hiservices-xpcservice")
+      (xpc-service-name "com.apple.print.normalizerd")))
+
+  (allow mach-lookup
+       (global-name "com.apple.appsleep")
+       (global-name "com.apple.bsd.dirhelper")
+       (global-name "com.apple.cfprefsd.agent")
+       (global-name "com.apple.cfprefsd.daemon")
+       (global-name "com.apple.diagnosticd")
+       (global-name "com.apple.espd")
+       (global-name "com.apple.secinitd")
+       (global-name "com.apple.system.DirectoryService.libinfo_v1")
+       (global-name "com.apple.system.logger")
+       (global-name "com.apple.system.notification_center")
+       (global-name "com.apple.system.opendirectoryd.libinfo")
+       (global-name "com.apple.system.opendirectoryd.membership")
+       (global-name "com.apple.trustd")
+       (global-name "com.apple.trustd.agent")
+       (global-name "com.apple.xpc.activity.unmanaged")
+       (global-name "com.apple.xpcd")
+       (local-name "com.apple.cfprefsd.agent"))
 
   (if (>= macosVersion 1100)
     (allow mach-lookup
@@ -219,9 +260,42 @@ static const char SandboxPolicyRDD[] = R"SANDBOX_LITERAL(
 
   (if (>= macosVersion 1013)
    (allow mach-lookup
-     (global-name "com.apple.audio.AudioComponentRegistrar")))
+     (global-name "com.apple.audio.AudioComponentRegistrar"))
+     (global-name "com.apple.assertiond.processassertionconnection"))
 
-
+  ;; Various services required by AppKit and other frameworks
+  (allow mach-lookup
+      (global-name "com.apple.audio.AudioComponentRegistrar")
+      (global-name "com.apple.assertiond.processassertionconnection")
+      (global-name "com.apple.CoreServices.coreservicesd")
+      (global-name "com.apple.DiskArbitration.diskarbitrationd")
+      (global-name "com.apple.FileCoordination")
+      (global-name "com.apple.FontObjectsServer")
+      (global-name "com.apple.ImageCaptureExtension2.presence")
+      (global-name "com.apple.PowerManagement.control")
+      (global-name "com.apple.SecurityServer")
+      (global-name "com.apple.SystemConfiguration.PPPController")
+      (global-name "com.apple.SystemConfiguration.configd")
+      (global-name "com.apple.UNCUserNotification")
+      (global-name "com.apple.analyticsd")
+      (global-name "com.apple.audio.audiohald")
+      (global-name "com.apple.audio.coreaudiod")
+      (global-name "com.apple.cfnetwork.AuthBrokerAgent")
+      (global-name "com.apple.cmio.VDCAssistant")
+      (global-name "com.apple.cookied") ;; FIXME: <rdar://problem/10790768> Limit access to cookies.
+      (global-name "com.apple.coreservices.launchservicesd")
+      (global-name "com.apple.fonts")
+      (global-name "com.apple.lsd.mapdb")
+      (global-name "com.apple.ocspd")
+      (global-name "com.apple.pasteboard.1")
+      (global-name "com.apple.pbs.fetch_services")
+      (global-name "com.apple.tccd")
+      (global-name "com.apple.tccd.system")
+      (global-name "com.apple.tsm.uiserver")
+      (global-name "com.apple.window_proxies")
+      (global-name "com.apple.windowserver.active")
+      (local-name "com.apple.tsm.portname")
+      (global-name-regex #"_OpenStep$"))
 
 )SANDBOX_LITERAL";
 
