@@ -359,7 +359,10 @@ ProcessStatus WaitForProcess(ProcessHandle handle, BlockingWait blocking,
   const int maybe_wnohang = (blocking == BlockingWait::No) ? WNOHANG : 0;
 
 #ifdef HAVE_WAITID
-
+#ifdef XP_MACOSX
+  //10.8 and higher have a working waitid, broken on 10.7 and lower
+  if (__builtin_available(macOS 10.8, *)) {
+#endif
   // We use `WNOWAIT` to read the process status without
   // side-effecting it, in case it's something unexpected like a
   // ptrace-stop for the crash reporter.  If is an exit, the call is
@@ -425,6 +428,38 @@ ProcessStatus WaitForProcess(ProcessHandle handle, BlockingWait blocking,
   DCHECK(si.si_code == old_si_code);
   return status;
 
+#ifdef XP_MACOSX
+  } else {
+    //use the exact same code jed put below for openbsd, for 10.7 and lower
+    //it's redundant, but nothing else we can do.
+    int status;
+    const int result = waitpid(handle, &status, maybe_wnohang);
+    if (result == -1) {
+      *info_out = errno;
+      if (auto forkServerReturn = handleForkServer()) {
+        return *forkServerReturn;
+      }
+
+      CHROMIUM_LOG(ERROR) << "waitpid failed pid:" << handle
+                          << " errno:" << errno;
+      return ProcessStatus::Error;
+    }
+    if (result == 0) {
+      return ProcessStatus::Running;
+    }
+
+    if (WIFEXITED(status)) {
+      *info_out = WEXITSTATUS(status);
+      return ProcessStatus::Exited;
+    }
+    if (WIFSIGNALED(status)) {
+      *info_out = WTERMSIG(status);
+      return ProcessStatus::Killed;
+    }
+    LOG_AND_ASSERT << "unexpected wait status: " << status;
+    return ProcessStatus::Error;
+  }
+#endif
 #else  // no waitid
 
   int status;
