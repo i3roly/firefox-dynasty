@@ -822,18 +822,8 @@ nsresult ShutdownXPCOM(nsIServiceManager* aServMgr) {
 
   NS_IF_RELEASE(gDebug);
 
-#ifdef XP_MACOSX
-  // for some weird reason or another, 10.7 will hang trying to join these threads
-  // and it is exposed when the profile compatibility is checked, leaving users
-  // with no ability to create a new profile since it hangs.
-  // hopefully this "solution" is temporary.
-  if (__builtin_available(macOS 10.8, *)) {
-#endif
   delete sIOThread;
   sIOThread = nullptr;
-#ifdef XP_MACOSX
-  }
-#endif
 
   delete sMessageLoop;
   sMessageLoop = nullptr;
