@@ -1443,6 +1443,7 @@ already_AddRefed<WebRenderLayerManager> nsBaseWidget::CreateCompositorSession(
       options.SetAllowSoftwareWebRenderOGL(
           gfx::gfxVars::AllowSoftwareWebRenderOGL());
     }
+    options.SetAllowNativeCompositor(WidgetTypeSupportsNativeCompositing());
 #endif
 
 #ifdef MOZ_WIDGET_ANDROID

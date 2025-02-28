@@ -1383,6 +1383,19 @@
   value: ""
   mirror: always
 
+# Control whether we enable the feature of crash pull at all
+# Disabled by default for now until further notice
+- name: browser.crashReports.crashPull
+  type: bool
+  value: false
+  mirror: always
+
+# Should we prompt the user to send targetted crash report requested by devs?
+- name: browser.crashReports.requestedNeverShowAgain
+  type: bool
+  value: false
+  mirror: always
+
 # Min font device pixel size at which to turn on high quality.
 - name: browser.display.auto_quality_min_font_size
   type: RelaxedAtomicUint32
@@ -2521,12 +2534,6 @@
 - name: dom.compositionevent.allow_control_characters
   type: bool
   value: false
-  mirror: always
-
-# Compression Streams (CompressionStream/DecompressionStream)
-- name: dom.compression_streams.enabled
-  type: RelaxedAtomicBool
-  value: true
   mirror: always
 
 # Disable cookie-store API
@@ -4215,7 +4222,7 @@
 # request for HTTPS-Only and HTTPS-First
 - name: dom.security.https_only_fire_http_request_background_timer_ms
   type: RelaxedAtomicUint32
-  value: 1500
+  value: 2200
   mirror: always
 
 # If true, tries to break upgrade downgrade cycles where https-only tries
@@ -4456,6 +4463,15 @@
 - name: dom.serviceWorkers.mitigations.group_usage_headroom_kb
   type: uint32_t
   value: 400 * 1024
+  mirror: always
+
+# Enable ServiceWorkers in Private Browsing Mode (PBM).  This requires
+# dom.cache.privateBrowsing.enabled to be enabled as well.  Registrations are
+# not persisted to disk; installed scripts are stored in Cache API storage which
+# is encrypted in PBM.
+- name: dom.serviceWorkers.privateBrowsing.enabled
+  type: RelaxedAtomicBool
+  value: @IS_NIGHTLY_BUILD@
   mirror: always
 
 - name: dom.serviceWorkers.testing.enabled
@@ -15004,6 +15020,13 @@
   value: false
   mirror: always
 
+# Whether to redirect a failing request to an essential domain
+# to a fallback domain that hosts the same content.
+- name: network.essential_domains_fallback
+  type: RelaxedAtomicBool
+  value: false
+  mirror: always
+
 #---------------------------------------------------------------------------
 # Prefs starting with "nglayout."
 #---------------------------------------------------------------------------
@@ -16091,11 +16114,16 @@
     value: true
     mirror: always
 
-  # Note: win32k is currently _not_ disabled for GMP due to intermittent test
-  # failures, where the GMP process fails very early. See bug 1449348.
+  # Whether win32k is disabled for compatible plugins.
 -   name: security.sandbox.gmp.win32k-disable
     type: RelaxedAtomicBool
-    value: false
+    value: @IS_NIGHTLY_BUILD@
+    mirror: always
+
+  # Whether ACG is enabled (dynamic code blocked) for compatible plugins.
+-   name: security.sandbox.gmp.acg.enabled
+    type: RelaxedAtomicBool
+    value: @IS_NIGHTLY_BUILD@
     mirror: always
 
   # Whether win32k is disabled for socket processes.
@@ -16938,6 +16966,11 @@
 - name: telemetry.fog.artifact_build
   type: RelaxedAtomicBool
   value: false
+  mirror: always
+
+- name: telemetry.fog.init_on_shutdown
+  type: RelaxedAtomicBool
+  value: true
   mirror: always
 
 #---------------------------------------------------------------------------

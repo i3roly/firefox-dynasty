@@ -891,6 +891,12 @@ pref("browser.shopping.experience2023.integratedSidebar", false);
 // the Review Checker sidebar panel.
 pref("browser.shopping.experience2023.shoppingSidebar", true);
 
+// If true, users have already seen a card in the Review Checker sidebar panel
+// notifying users of the feature's new location and asking if they want to
+// move the sidebar to the left or right side. Else if false, users are yet to
+// see the card.
+pref("browser.shopping.experience2023.newPositionCard.hasSeen", false);
+
 // Spin the cursor while the page is loading
 pref("browser.spin_cursor_while_busy", false);
 
@@ -1792,6 +1798,10 @@ pref("browser.partnerlink.campaign.topsites", "amzn_2020_a1");
 
 // Activates preloading of the new tab url.
 pref("browser.newtab.preload", true);
+
+// If an on-train limited rollout of the preonboarding modal is enabled, the
+// percentage of the Mac, Linux, and MSIX population to enroll
+pref("browser.preonboarding.onTrainRolloutPopulation",  0);
 
 // Mozilla Ad Routing Service (MARS) unified ads service
 pref("browser.newtabpage.activity-stream.unifiedAds.tiles.enabled", true);
@@ -2916,7 +2926,6 @@ pref("devtools.serviceWorkers.testing.enabled", false);
 // Enable the Network Monitor
 pref("devtools.netmonitor.enabled", true);
 
-pref("devtools.netmonitor.features.search", true);
 pref("devtools.netmonitor.features.requestBlocking", true);
 
 // Enable the Application panel
